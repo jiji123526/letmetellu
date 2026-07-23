@@ -395,13 +395,13 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {/* Guide panel */}
         {view === "guide" && (
-          <div style={{ padding: "12px 18px", fontSize: "13px", lineHeight: 1.6, color: "#444", maxHeight: "60vh", overflowY: "auto" }}>
+          <div style={{ padding: "12px 18px", fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.6, color: "#444", maxHeight: "60vh", overflowY: "auto" }}>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>관리자 설정 열기</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>관리자 설정 열기</h4>
               <p style={{ color: "#888", margin: 0 }}>우측 상단 ⋮ 메뉴 → 관리자 설정에서 모든 채널 설정을 관리할 수 있습니다.</p>
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>채널 설정</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>채널 설정</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>프로필</strong> — 채널 이름과 프로필 사진 변경. 정사각형 크롭 후 업로드</li>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>색상</strong> — 말풍선 기본 색상. 7가지 프리셋 또는 커스텀</li>
@@ -411,7 +411,7 @@ export function AdminPanel(props: AdminPanelProps) {
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>사용자 관리</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>사용자 관리</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>신고 접수</strong> — 사용자가 메시지를 꾹 눌러 신고하면 🚨 표시로 나타남</li>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>차단</strong> — 메시지를 꾹 눌러 즉시 차단. UID + 기기 지문으로 식별</li>
@@ -422,13 +422,13 @@ export function AdminPanel(props: AdminPanelProps) {
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>특수 기능</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>특수 기능</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>얼리기</strong> — 일반 채팅 중단. 관리자만 보낼 수 있고 사용자는 DM만 가능</li>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>라이브</strong> — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제</li>
               </ul>
             </div>
-            <div style={{ padding: "10px 12px", background: "#f0f7ff", borderRadius: "10px", fontSize: "12px", color: "#3b8df0", lineHeight: 1.5 }}>
+            <div style={{ padding: "10px 12px", background: "#f0f7ff", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "#3b8df0", lineHeight: 1.5 }}>
               💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다.
             </div>
           </div>
