@@ -34,6 +34,48 @@ function getOrCreateUid(): string {
   return uid;
 }
 
+function formatTime(dateStr: string) {
+  const d = new Date(dateStr + "Z");
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function isSameGroup(a: Message, b: Message) {
+  return a.uid === b.uid;
+}
+
+// Skeleton loading component
+function SkeletonLoading() {
+  const rows = [
+    { side: "recv", width: "25%" },
+    { side: "recv", width: "45%" },
+    { side: "sent", width: "35%" },
+    { side: "recv", width: "40%" },
+    { side: "sent", width: "25%" },
+    { side: "sent", width: "55%" },
+    { side: "recv", width: "30%" },
+    { side: "sent", width: "40%" },
+    { side: "recv", width: "55%" },
+    { side: "sent", width: "25%" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-[3px] p-3 animate-pulse">
+      {rows.map((row, i) => (
+        <div key={i} className={`flex ${row.side === "sent" ? "justify-end" : "justify-start"}`}>
+          <div
+            className="rounded-[18px] h-[44px]"
+            style={{
+              width: row.width,
+              background: row.side === "sent" ? "var(--bubble-sent)" : "var(--gray-bubble)",
+              opacity: row.side === "sent" ? 0.5 : 1,
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -41,29 +83,33 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(true);
   const [uid] = useState(getOrCreateUid);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { connected, presence, subscribe } = useRealtime(channelId, uid);
 
   // Load initial data
   useEffect(() => {
-    fetchInit(channelId).then((data) => {
-      setChannel(data.channel);
-      setMessages(data.messages);
-      setLoading(false);
-    }).catch(console.error);
+    fetchInit(channelId)
+      .then((data) => {
+        setChannel(data.channel);
+        setMessages(data.messages);
+        setLoading(false);
+      })
+      .catch(console.error);
   }, [channelId]);
 
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed") {
-        // Re-fetch messages
         fetchInit(channelId).then((data) => {
           setMessages(data.messages);
         });
       }
       if (event.type === "freeze-change") {
-        setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
+        setChannel((prev) =>
+          prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null
+        );
       }
     });
   }, [subscribe, channelId]);
@@ -73,11 +119,22 @@ export function ChatView({ channelId }: { channelId: string }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Auto-resize textarea
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 80) + "px";
+  };
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || channel?.is_frozen) return;
 
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
 
     // Optimistic update
     const optimistic: Message = {
@@ -96,86 +153,272 @@ export function ChatView({ channelId }: { channelId: string }) {
     await sendMessageApi({ uid, text, channel_id: channelId });
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="animate-pulse text-gray-400">Loading...</div>
+      <div className="h-dvh flex flex-col" style={{ background: "var(--bg)" }}>
+        <header
+          className="flex items-center px-4 border-b relative"
+          style={{
+            background: "var(--header-bg)",
+            backdropFilter: "saturate(180%) blur(20px)",
+            WebkitBackdropFilter: "saturate(180%) blur(20px)",
+            borderColor: "var(--hairline)",
+            padding: "10px 16px",
+          }}
+        >
+          <div className="flex-1 flex flex-col items-center gap-[6px]">
+            <div
+              className="w-[41px] h-[41px] rounded-full"
+              style={{ background: "var(--gray-bubble)" }}
+            />
+            <div
+              className="h-3 w-16 rounded"
+              style={{ background: "var(--gray-bubble)" }}
+            />
+          </div>
+        </header>
+        <div className="flex-1 overflow-hidden">
+          <SkeletonLoading />
+        </div>
       </div>
     );
   }
 
   return (
-    <>
+    <div className="h-dvh flex flex-col" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       {/* Header */}
-      <header className="flex items-center gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
-        {channel?.profile_image && (
-          <img src={channel.profile_image} alt="" className="w-9 h-9 rounded-full object-cover" />
-        )}
-        <div>
-          <h1 className="font-semibold text-lg">{channel?.name}</h1>
-          <span className="text-xs text-gray-500">
-            {connected ? `${presence} online` : "connecting..."}
-          </span>
+      <header
+        className="flex-none flex items-center px-4 relative"
+        style={{
+          background: "var(--header-bg)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          borderBottom: "0.5px solid var(--hairline)",
+          padding: "10px 16px",
+          zIndex: 5,
+        }}
+      >
+        {/* Notice button */}
+        <button
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          style={{ color: channel?.bubble_color || "var(--bubble-sent)" }}
+        >
+          <svg viewBox="0 0 24 24" width="23" height="23">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 16v-4M12 8h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+
+        {/* Center - avatar + name */}
+        <div className="flex-1 flex flex-col items-center gap-[6px]">
+          <div className="w-[41px] h-[41px] rounded-full overflow-hidden relative top-[3px]">
+            {channel?.profile_image ? (
+              <img
+                src={channel.profile_image}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center text-lg"
+                style={{ background: "var(--gray-bubble)" }}
+              >
+                💬
+              </div>
+            )}
+          </div>
+          <div className="text-xs font-normal flex items-center gap-[2px]" style={{ color: "var(--gray-text)" }}>
+            {channel?.name}
+            {connected && (
+              <span className="ml-1 text-[10px]" style={{ color: "var(--meta)" }}>
+                {presence}
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Search button */}
+        <button
+          className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          style={{ color: channel?.bubble_color || "var(--bubble-sent)" }}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M21 21l-4.35-4.35" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+
+        {/* Menu button */}
+        <button
+          className="absolute right-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          style={{ color: channel?.bubble_color || "var(--bubble-sent)" }}
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22">
+            <circle cx="12" cy="5" r="1.8" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+            <circle cx="12" cy="19" r="1.8" fill="currentColor" />
+          </svg>
+        </button>
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.uid === uid ? "justify-end" : "justify-start"}`}
-          >
+      <main
+        className="messages-scroll flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
+        style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
+      >
+        {messages.map((msg, i) => {
+          const isSent = msg.uid === uid;
+          const prev = messages[i - 1];
+          const isGroupStart = !prev || !isSameGroup(prev, msg);
+          const isLast = !messages[i + 1] || !isSameGroup(msg, messages[i + 1]);
+
+          return (
             <div
-              className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                msg.uid === uid
-                  ? "text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              }`}
-              style={msg.uid === uid ? { backgroundColor: channel?.bubble_color || "#3b8df0" } : undefined}
+              key={msg.id}
+              className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
+              style={{ paddingTop: isGroupStart ? "7px" : "3px" }}
             >
-              {msg.nick && msg.uid !== uid && (
-                <div className="text-xs font-medium opacity-70 mb-1">{msg.nick}</div>
-              )}
-              <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
-              <time className="text-[10px] opacity-50 mt-1 block">
-                {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </time>
+              <div className={`flex flex-col max-w-[74%] ${isSent ? "items-end" : "items-start"}`}>
+                {/* Sender name for received messages at group start */}
+                {!isSent && isGroupStart && msg.nick && (
+                  <div className="text-[10px] mb-[2px] ml-3" style={{ color: "var(--meta)" }}>
+                    {msg.nick}
+                  </div>
+                )}
+
+                {/* Bubble */}
+                <div
+                  className="relative px-[14px] py-[10px] max-w-full break-words whitespace-pre-wrap"
+                  style={{
+                    fontSize: "var(--bubble-font-size)",
+                    lineHeight: 1.38,
+                    overflowWrap: "anywhere",
+                    borderRadius: isLast
+                      ? isSent
+                        ? "20px 20px 4px 20px"
+                        : "20px 20px 20px 4px"
+                      : "20px",
+                    background: isSent
+                      ? channel?.bubble_color || "var(--bubble-sent)"
+                      : "var(--gray-bubble)",
+                    color: isSent ? "#fff" : "var(--gray-text)",
+                  }}
+                >
+                  {msg.text}
+                </div>
+
+                {/* Timestamp on last message in group */}
+                {isLast && (
+                  <div
+                    className="text-[10px] mt-[2px] px-1"
+                    style={{ color: "var(--meta)" }}
+                  >
+                    {formatTime(msg.created_at)}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
-      </div>
+      </main>
 
       {/* Frozen banner */}
       {channel?.is_frozen ? (
-        <div className="p-3 text-center text-sm text-gray-500 bg-gray-50 dark:bg-gray-900 border-t">
+        <div
+          className="flex-none text-center text-sm py-3"
+          style={{
+            background: "var(--composer-bg)",
+            color: "var(--meta)",
+            borderTop: "0.5px solid var(--hairline)",
+          }}
+        >
           채팅이 일시 중지되었습니다
         </div>
       ) : (
         /* Composer */
-        <form
-          onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-          className="flex items-center gap-2 p-3 border-t border-gray-200 dark:border-gray-700"
+        <footer
+          className="flex-none flex items-end gap-2"
+          style={{
+            padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
+            background: "var(--composer-bg)",
+            backdropFilter: "saturate(180%) blur(20px)",
+            WebkitBackdropFilter: "saturate(180%) blur(20px)",
+            borderTop: "0.5px solid var(--hairline)",
+          }}
         >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="메시지를 입력하세요..."
-            className="flex-1 rounded-full px-4 py-2 bg-gray-100 dark:bg-gray-800 outline-none text-sm"
-          />
+          {/* Plus/photo button */}
           <button
-            type="submit"
-            disabled={!input.trim()}
-            className="rounded-full w-9 h-9 flex items-center justify-center bg-blue-500 text-white disabled:opacity-40"
+            className="flex-none w-8 h-8 border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
+            style={{ color: "var(--meta)" }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path d="M3.105 3.29a.75.75 0 01.814-.18l13.5 5.25a.75.75 0 010 1.38l-13.5 5.25a.75.75 0 01-1.029-.84l1.2-5.4a.75.75 0 01.6-.575L9 8.75l-4.31-.425a.75.75 0 01-.6-.575l-1.2-5.4a.75.75 0 01.215-.66z" />
+            <svg viewBox="0 0 24 24" width="28" height="28">
+              <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12 7v10M7 12h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </button>
-        </form>
+
+          {/* Input wrap */}
+          <div
+            className="flex-1 flex items-center relative min-h-[36px] px-[14px] pr-[6px]"
+            style={{
+              background: "var(--input-bg)",
+              border: "1px solid var(--input-border)",
+              borderRadius: "20px",
+            }}
+          >
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              placeholder="메시지를 입력하세요"
+              className="flex-1 border-none bg-transparent outline-none resize-none"
+              style={{
+                fontSize: "var(--bubble-font-size)",
+                color: "var(--gray-text)",
+                padding: "8px 0",
+                caretColor: "var(--tint)",
+                fontFamily: "inherit",
+                lineHeight: 1.4,
+                maxHeight: "80px",
+                overflowY: "auto",
+              }}
+            />
+            {input.trim() && (
+              <button
+                onClick={handleSend}
+                className="flex-none flex items-center justify-center border-none cursor-pointer"
+                style={{
+                  width: "26px",
+                  height: "26px",
+                  borderRadius: "50%",
+                  background: channel?.bubble_color || "var(--bubble-sent)",
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path
+                    d="M12 20V5m0 0l-6 6m6-6l6 6"
+                    fill="none"
+                    stroke="#fff"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        </footer>
       )}
-    </>
+    </div>
   );
 }

@@ -1,9 +1,57 @@
 @import "tailwindcss";
 
 :root {
-  --bubble-color: #3b8df0;
+  --bubble-sent: #3b8df0;
+  --bubble-sent-hi: #2d7de0;
+  --gray-bubble: #e8e8ed;
+  --gray-text: #000;
+  --bg: #ffffff;
+  --meta: #8e8e93;
+  --hairline: rgba(0, 0, 0, 0.12);
+  --header-bg: rgba(249, 249, 249, 0.82);
+  --composer-bg: rgba(249, 249, 249, 0.9);
+  --input-bg: #ffffff;
+  --input-border: #c9c9ce;
+  --icon: #8e8e93;
+  --placeholder: #a4a4a9;
+  --tint: #007aff;
+  --bubble-font-size: 17px;
+}
+
+.dark {
+  --gray-bubble: #26262a;
+  --gray-text: #fff;
+  --bg: #000000;
+  --meta: #8e8e93;
+  --hairline: rgba(255, 255, 255, 0.14);
+  --header-bg: rgba(22, 22, 24, 0.82);
+  --composer-bg: rgba(18, 18, 20, 0.92);
+  --input-bg: #1c1c1e;
+  --input-border: #38383c;
+  --icon: #8e8e93;
+  --placeholder: #8a8a8e;
+  --tint: #0a84ff;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: var(--bubble-font-size);
+  background: var(--bg);
+  color: var(--gray-text);
 }
 
 body {
-  @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+  height: 100dvh;
+}
+
+/* Scrollbar */
+.messages-scroll::-webkit-scrollbar {
+  width: 0;
 }
