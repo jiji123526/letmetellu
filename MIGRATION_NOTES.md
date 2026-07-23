@@ -54,3 +54,51 @@ When porting a CSS component to TSX:
 4. Use `calc(var(--bubble-font-size) ± Xpx)` for all scalable dimensions
 5. Use `var(--hairline)`, `var(--meta)`, `var(--gray-text)` etc. in inline styles
 6. Don't use Tailwind utility classes for dimensions that need to scale with font settings
+
+
+---
+
+## Progress Log
+
+### Session 1 (2026-07-23)
+
+**Infrastructure:**
+- Created Next.js 16 project with App Router + Tailwind
+- Created Cloudflare Worker with D1 + Durable Objects
+- Deployed both (Vercel + Workers)
+- D1 schema applied (channels, messages, blocked, dm, gallery, config, FTS5)
+- Test channel seeded
+
+**UI (all working in mock mode):**
+- ChatView with iMessage-style bubbles, fully scalable with `--bubble-font-size`
+- Context menu (reply, report/unreport, edit, delete) with reaction bar
+- Emoji picker (emoji-picker-element, positioned dynamically)
+- Reaction badges (Slack-style pills, toggle on/off)
+- Reply threading (arrows, indentation, follows parent side)
+- DM mode (purple styling, plus menu toggle, admin-only visibility)
+- Photo staging (compress, preview thumbnails, caption, multi-select)
+- Report system (local marking + report message to admin)
+- Admin panel with full navigation (채널/관리 categories)
+- Channel settings: profile image, name, color picker, passcode, rules editor
+- Manage settings: banned words (with duration), blocked users, petition/DM toggles
+- Settings panel (font size, bubble color)
+- Header menu, plus menu, notice panel, gallery panel, links panel
+- Welcome popup, scroll-to-bottom, frozen banner, toast banners
+- Korean IME fix, admin view toggle with return banner
+
+**Key Decisions:**
+- Mock mode (`NEXT_PUBLIC_MOCK=true`) for local dev without Worker
+- `wrangler dev` doesn't work in this environment (glibc issue) — develop against remote Worker
+- All dimensions use `calc(var(--bubble-font-size) ± offset)` for scalability
+- No message grouping (every message independent)
+- Non-admin: all non-admin messages on right, admin on left
+- Admin: all admin messages on right, others on left
+- Replies always follow parent's side
+
+**Not Yet Wired (next session):**
+- Messages don't persist (mock mode only)
+- Auth (admin is triple-click, not ownership)
+- Image upload to R2
+- WebSocket realtime loop
+- Embeds, search, typing indicator
+- Dashboard, login, onboarding pages
