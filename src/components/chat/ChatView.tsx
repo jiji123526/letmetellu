@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction } from "@/lib/api";
+import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { ContextMenu } from "./ContextMenu";
@@ -144,6 +145,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [uid] = useState(getOrCreateUid);
+  const [myFingerprint] = useState(() => typeof window !== "undefined" ? generateFingerprint() : "");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -314,6 +316,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       channel_id: channelId,
       image: photos.length > 0 ? photos[0].previewUrl : undefined,
       reply_to: replyingTo?.id,
+      fingerprint: myFingerprint,
     });
   };
 

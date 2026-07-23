@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { checkRateLimit, checkMessageLength, checkBannedWords } from "../lib/validation";
 
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
@@ -9,6 +10,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
+    // Rate limit check
+    if (!checkRateLimit(uid as string)) {
+      return Response.json({ error: "rate_limited" }, { status: 429 });
+    }
+
+    // Message length check
+    if (text && !checkMessageLength(text as string)) {
+      return Response.json({ error: "message_too_long" }, { status: 400 });
+    }
+
     // Check channel exists
     const channel = await env.DB.prepare("SELECT id, is_frozen FROM channels WHERE id = ?")
       .bind(channel_id).first();
@@ -16,9 +27,15 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (channel.is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
 
     // Check if user is blocked
-    const blocked = await env.DB.prepare("SELECT 1 FROM blocked WHERE uid = ? AND channel_id = ?")
-      .bind(uid, channel_id).first();
+    const blocked = await env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
+      .bind(uid, fingerprint || "", channel_id).first();
     if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
+
+    // Banned words check
+    if (text) {
+      const allowed = await checkBannedWords(text as string, channel_id as string, env);
+      if (!allowed) return Response.json({ error: "banned_word" }, { status: 403 });
+    }
 
     // Insert message
     const id = crypto.randomUUID();
