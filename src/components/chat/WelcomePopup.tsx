@@ -46,7 +46,7 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
       style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
       onClick={(e) => { if (e.target === e.currentTarget) setShow(false); }}
     >
-      <div className="w-full max-w-[320px] rounded-[20px] p-7 text-center" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
+      <div className="w-full max-w-[320px] rounded-[20px] p-7 text-center" style={{ background: "var(--bg)", color: "var(--gray-text)", border: `2px solid ${bubbleColor || "var(--bubble-sent, #3b8df0)"}`, boxShadow: "0 12px 40px rgba(0,0,0,.15)" }}>
         <div className="text-[40px] mb-3">{config.icon}</div>
         <div className="text-[19px] font-bold mb-4">{config.title}</div>
         <ul className="text-left flex flex-col gap-[10px] mb-5 list-none p-0">
