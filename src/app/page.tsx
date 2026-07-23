@@ -1,6 +1,11 @@
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
-export default function Home() {
-  // TODO: Check auth session, redirect to dashboard if logged in
-  redirect("/login");
+export default async function Home() {
+  const session = await auth();
+  if (session) {
+    redirect("/dashboard");
+  } else {
+    redirect("/login");
+  }
 }
