@@ -375,6 +375,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>색상</strong> — 말풍선 기본 색상. 7가지 프리셋 또는 커스텀</li>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>비밀번호</strong> — 설정하면 입장 시 비밀번호 필요. 비우면 해제</li>
                 <li>• <strong style={{ fontWeight: 500, color: "#555" }}>규칙</strong> — ℹ️ 버튼에 표시되는 채널 규칙. 여러 섹션 추가 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>환영 팝업</strong> — 첫 방문자에게 표시되는 안내 팝업. 아이콘, 제목, 항목 커스텀 가능</li>
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
