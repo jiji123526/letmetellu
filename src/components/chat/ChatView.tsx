@@ -157,7 +157,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showGallery, setShowGallery] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const { isOwner } = useAuth(channel?.owner_uid);
+  const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
   const [manualAdmin, setManualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("isAdmin") === "true";
@@ -318,7 +318,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setReplyingTo(null);
 
     await sendMessageApi({
-      uid,
+      uid: effectiveAdmin && authUserId ? authUserId : uid,
       text,
       channel_id: channelId,
       image: photos.length > 0 ? await uploadImage(photos[0].blob, channelId) || undefined : undefined,
@@ -539,7 +539,17 @@ export function ChatView({ channelId }: { channelId: string }) {
           messages={messages}
           onNavigate={(msgId) => {
             const el = document.getElementById(`msg-${msgId}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              // Flash highlight
+              const bubble = el.querySelector("[class*='relative']") as HTMLElement;
+              if (bubble) {
+                const orig = bubble.style.outline;
+                bubble.style.outline = "2px solid #ffd54f";
+                bubble.style.outlineOffset = "2px";
+                setTimeout(() => { bubble.style.outline = orig; bubble.style.outlineOffset = ""; }, 2000);
+              }
+            }
           }}
           onClose={() => setShowSearch(false)}
         />

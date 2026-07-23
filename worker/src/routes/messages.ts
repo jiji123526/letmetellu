@@ -21,7 +21,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     // Check channel exists
-    const channel = await env.DB.prepare("SELECT id, is_frozen FROM channels WHERE id = ?")
+    const channel = await env.DB.prepare("SELECT id, is_frozen, owner_uid FROM channels WHERE id = ?")
       .bind(channel_id).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
     if (channel.is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
@@ -39,10 +39,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Insert message
     const id = crypto.randomUUID();
+    // Determine if sender is admin (channel owner)
+    const isAdmin = (channel as any).owner_uid && uid === (channel as any).owner_uid ? 1 : 0;
     await env.DB.prepare(`
-      INSERT INTO messages (id, uid, auth_uid, nick, text, channel_id, image, reply_to, fingerprint)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, uid, uid, nick || null, text || "", channel_id, image || null, reply_to || null, fingerprint || null).run();
+      INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, uid, uid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null).run();
 
     // Broadcast via Durable Object
     const doId = env.CHAT_ROOM.idFromName(channel_id as string);

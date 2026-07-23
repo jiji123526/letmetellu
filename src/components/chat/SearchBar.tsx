@@ -74,7 +74,7 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
         onKeyDown={handleKeyDown}
         onBlur={() => { if (query && results.length === 0) performSearch(query); }}
         placeholder="검색..."
-        style={{ flex: 1, minWidth: 0, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "8px", padding: "6px 10px", fontSize: "var(--bubble-font-size, 15px)", fontFamily: "inherit", outline: "none" }}
+        style={{ flex: 1, minWidth: 0, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "8px", padding: "6px 10px", fontSize: "var(--bubble-font-size, 15px)", fontFamily: "inherit", outline: "none", lineHeight: 1 }}
       />
       {/* Prev button */}
       <button
