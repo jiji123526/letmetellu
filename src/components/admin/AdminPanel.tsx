@@ -338,8 +338,31 @@ export function AdminPanel(props: AdminPanelProps) {
         {view === "welcome" && (
           <div style={{ padding: "12px 18px", maxHeight: "60vh", overflowY: "auto" }}>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>아이콘 (이모지)</label>
-              <input value={welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder="💬" maxLength={4} />
+              <label style={{ display: "block", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>아이콘 (이모지 또는 이미지)</label>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* Preview */}
+                <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "#f8f8f8" }}>
+                  {welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:")
+                    ? <img src={welcomeIcon} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ fontSize: "28px" }}>{welcomeIcon || "💬"}</span>
+                  }
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <input value={welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:") ? "" : welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder="이모지 입력" maxLength={4} />
+                  <button
+                    type="button"
+                    style={{ background: "#f4f4f4", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "6px 10px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", fontFamily: "inherit", color: "#555", lineHeight: 1 }}
+                    onClick={() => document.getElementById("welcomeIconInput")?.click()}
+                  >사진 업로드</button>
+                  <input id="welcomeIconInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const url = URL.createObjectURL(file);
+                    setWelcomeIcon(url);
+                    e.target.value = "";
+                  }} />
+                </div>
+              </div>
             </div>
             <div style={{ marginBottom: "14px" }}>
               <label style={{ display: "block", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>제목</label>

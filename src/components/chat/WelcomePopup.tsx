@@ -47,7 +47,12 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
       onClick={(e) => { if (e.target === e.currentTarget) setShow(false); }}
     >
       <div className="w-full max-w-[320px] rounded-[20px] p-7 text-center" style={{ background: "var(--bg)", color: "var(--gray-text)", border: `2px solid ${bubbleColor || "var(--bubble-sent, #3b8df0)"}`, boxShadow: "0 12px 40px rgba(0,0,0,.15)" }}>
-        <div className="text-[40px] mb-3">{config.icon}</div>
+        <div className="text-[40px] mb-3">
+          {config.icon.startsWith("http") || config.icon.startsWith("blob:") || config.icon.startsWith("data:")
+            ? <img src={config.icon} alt="" style={{ width: "64px", height: "64px", borderRadius: "16px", objectFit: "cover", margin: "0 auto" }} />
+            : config.icon
+          }
+        </div>
         <div className="text-[19px] font-bold mb-4">{config.title}</div>
         <ul className="text-left flex flex-col gap-[10px] mb-5 list-none p-0">
           {config.items.map((text, i) => (
