@@ -16,10 +16,10 @@ binding = "DB"
 database_name = "letsplay-db"
 database_id = "66a364d6-b00a-42df-b1b4-004e284dd686"
 
-# Uncomment when R2 is enabled on your account:
-# [[r2_buckets]]
-# binding = "MEDIA"
-# bucket_name = "letsplay-media"
+# R2 Storage
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "letmetellu-media"
 
 [vars]
 ALLOWED_ORIGIN = "*"

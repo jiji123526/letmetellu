@@ -7,6 +7,7 @@ import { handleAdmin } from "./routes/admin";
 import { handleUser } from "./routes/user";
 import { handleAuth } from "./routes/auth";
 import { handleDm } from "./routes/dm";
+import { handleUpload, handleMediaServe } from "./routes/upload";
 
 export { ChatRoom };
 
@@ -62,6 +63,11 @@ export default {
         response = await handleAuth(request, env);
       } else if (url.pathname.startsWith("/api/dm")) {
         response = await handleDm(request, env);
+      } else if (url.pathname.startsWith("/api/upload")) {
+        response = await handleUpload(request, env);
+      } else if (url.pathname.startsWith("/api/media/")) {
+        const key = url.pathname.replace("/api/media/", "");
+        response = await handleMediaServe(request, env, key);
       } else {
         response = new Response("not found", { status: 404 });
       }
