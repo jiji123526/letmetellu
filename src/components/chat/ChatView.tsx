@@ -471,6 +471,8 @@ export function ChatView({ channelId }: { channelId: string }) {
           zIndex: 5,
         }}
       >
+        {/* Notice button — only show if rules exist */}
+        {channel?.notice && channel.notice !== "[]" && (
         <button
           className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
           style={{ color: bubbleColor }}
@@ -481,6 +483,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             <path d="M12 16v-4M12 8h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
+        )}
 
         <div className="flex-1 flex flex-col items-center gap-[6px]">
           <div
