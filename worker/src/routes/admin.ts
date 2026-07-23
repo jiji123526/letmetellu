@@ -19,14 +19,29 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   const body = await request.json() as { action: string; channel_id: string; payload?: Record<string, unknown> };
   const { action, channel_id, payload } = body;
 
-  // Verify ownership
-  const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
-    .bind(channel_id).first();
-  if (!channel || channel.owner_uid !== userId) {
-    return Response.json({ error: "not owner" }, { status: 403 });
+  // Skip ownership check for create-channel (channel doesn't exist yet)
+  if (action !== "create-channel") {
+    const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+      .bind(channel_id).first();
+    if (!channel || channel.owner_uid !== userId) {
+      return Response.json({ error: "not owner" }, { status: 403 });
+    }
   }
 
   switch (action) {
+    case "create-channel": {
+      const { name } = payload || {};
+      // channel_id is the slug, userId is the owner
+      const existing = await env.DB.prepare("SELECT id FROM channels WHERE id = ?").bind(channel_id).first();
+      if (existing) return Response.json({ error: "channel already exists" }, { status: 409 });
+
+      await env.DB.prepare(
+        "INSERT INTO channels (id, owner_uid, name) VALUES (?, ?, ?)"
+      ).bind(channel_id, userId, name || "My Channel").run();
+
+      return Response.json({ ok: true, channel_id });
+    }
+
     case "freeze": {
       const frozen = payload?.frozen ? 1 : 0;
       await env.DB.prepare("UPDATE channels SET is_frozen = ? WHERE id = ?")
