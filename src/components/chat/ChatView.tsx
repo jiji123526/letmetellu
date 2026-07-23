@@ -318,6 +318,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     setMessages((prev) => [...prev, optimistic]);
     setReplyingTo(null);
 
+    // Dismiss keyboard after send (except in live mode where keyboard stays)
+    if (!inLiveMode && textareaRef.current) textareaRef.current.blur();
+
     await sendMessageApi({
       uid: effectiveAdmin && authUserId ? authUserId : uid,
       text,
@@ -337,6 +340,8 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   // Context menu handlers
   const handleBubbleLongPress = (msg: Message, isSent: boolean, el: HTMLElement) => {
+    // Dismiss keyboard
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const rect = el.getBoundingClientRect();
     const isOwn = effectiveAdmin ? !!msg.is_admin : msg.uid === uid;
     setContextMenu({ msg, isSent, isOwn, rect, bubbleEl: el });

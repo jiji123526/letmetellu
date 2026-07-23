@@ -67,6 +67,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      inputRef.current?.blur(); // dismiss keyboard on mobile
       if (results.length === 0) {
         performSearch(query);
       } else {
