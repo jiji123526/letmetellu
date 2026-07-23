@@ -122,3 +122,36 @@ When porting a CSS component to TSX:
 - Channel ownership → automatic admin detection
 - Dashboard (create/manage channels)
 - Login + onboarding pages
+
+
+### Session 1 Final (2026-07-23, late)
+
+**Auth wired:**
+- Auth.js (NextAuth v5) with Google OAuth + Credentials provider
+- Login page, dashboard, onboarding (2-step with admin guide accordion)
+- User sync to D1 `users` table on login
+- Channel creation from dashboard and onboarding
+- `useAuth` hook detects channel ownership → auto admin mode
+- Admin proxy route: Vercel checks session → Worker checks token + ownership
+- Triple-click fallback preserved for testing
+
+**Server-side security wired:**
+- Rate limiting: 5 messages / 10 seconds per UID
+- Message length cap: 5000 chars
+- Banned words: checked against `banned_words` table (with expiry support)
+- Block check: by UID AND fingerprint (double identification)
+- Freeze enforcement: already existed
+- Delete/Edit: ownership verification (msg.uid must match requester)
+- Fingerprint: canvas + UA hash, generated client-side, sent with every message
+
+**Schema additions:**
+- `users` table (id, email, name, image)
+- `banned_words` table (word, channel_id, expires)
+- Worker routes: /api/user (sync + list channels), create-channel admin action
+
+**Remaining for production:**
+- R2 for image uploads
+- Search (FTS5 wired to UI)
+- Embeds (YouTube/Twitter/link previews)
+- Channel discovery
+- Social login (Kakao, Apple)

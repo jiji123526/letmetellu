@@ -4,7 +4,7 @@ Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
 
 ## Status
 
-**Phase 1-3 complete. Real-time messaging working.** Full chat interface with persistent messages, WebSocket realtime via Durable Objects, and all UI features (non-admin + admin). Auth is next.
+**Phase 1-4 complete.** Real-time messaging, full UI, auth, channel creation, server-side validation all working. Image upload (R2) and polish features remaining.
 
 ---
 
@@ -21,9 +21,9 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 | Frontend | Next.js 16 (App Router) + Tailwind CSS | ✅ Deployed |
 | Database | Cloudflare D1 (SQLite) | ✅ Schema applied, messages persisting |
 | Realtime | Cloudflare Durable Objects + WebSocket | ✅ Working (multi-tab confirmed) |
-| Auth | Auth.js (NextAuth v5) | ⬜ Phase 2 |
+| Auth | Auth.js (NextAuth v5) | ✅ Google OAuth + email/password |
 | Storage | Cloudflare R2 | ⬜ Not enabled yet |
-| Backend API | Cloudflare Workers | ✅ Routes working (init, messages, data) |
+| Backend API | Cloudflare Workers | ✅ Full validation (rate limit, banned words, fingerprint) |
 
 ---
 
@@ -47,6 +47,27 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] WebSocket realtime via Durable Objects (multi-tab/user confirmed)
 - [x] Send → D1 insert → DO broadcast → all clients refetch
 - [x] Presence counting via DO connections
+
+### Auth & Channel Management
+- [x] Auth.js (NextAuth v5) — Google OAuth + email/password
+- [x] Login page (Korean UI)
+- [x] Dashboard — list channels, create new channel
+- [x] Onboarding page — 2-step (create channel + admin guide accordion)
+- [x] User sync — upsert to D1 `users` table on login
+- [x] Channel ownership — `channels.owner_uid` = session user ID
+- [x] Admin auto-detection via `useAuth` hook (no triple-click needed)
+- [x] Admin proxy route — Vercel verifies session → forwards to Worker with signed token
+- [x] Root `/` redirect based on auth state
+
+### Server-Side Security
+- [x] Rate limiting — 5 messages per 10 seconds per UID (429)
+- [x] Message length cap — 5000 characters max (400)
+- [x] Banned words — checked against `banned_words` table with expiry (403)
+- [x] Block check — by UID AND fingerprint (403)
+- [x] Freeze enforcement — non-admin can't send when frozen (403)
+- [x] Admin token verification — `X-Internal-Token` + `X-User-Id` + ownership check
+- [x] Delete/Edit ownership — only message sender can modify
+- [x] Fingerprint — canvas + UA hash, sent with every message, stored for ban evasion detection
 
 ### Admin Panel (complete, local state)
 - [x] Admin mode toggle (triple-click avatar)
@@ -76,13 +97,14 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 
 ## What's Next
 
-### Phase 2: Auth & Real Messages
-- [ ] Auth.js integration (Google OAuth + email/password)
-- [x] ~~Wire send/receive to Worker (messages persist in D1)~~
-- [x] ~~WebSocket realtime loop (signal + refetch)~~
-- [ ] Admin determined by channel ownership (JWT)
-- [ ] Login page + onboarding
-- [ ] Dashboard (list/create/delete channels)
+### Phase 2: Auth & Real Messages ✅
+- [x] Auth.js integration (Google OAuth + email/password)
+- [x] Wire send/receive to Worker (messages persist in D1)
+- [x] WebSocket realtime loop (signal + refetch)
+- [x] Admin determined by channel ownership
+- [x] Login page + onboarding
+- [x] Dashboard (list/create channels)
+- [x] Server-side validation (rate limit, banned words, fingerprint, message cap)
 
 ### Phase 3: Media & Polish
 - [ ] Enable R2, wire image upload
@@ -94,10 +116,10 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [ ] Auto-reload stale tabs
 
 ### Phase 4: Platform
-- [ ] Dashboard (list/create/delete channels)
-- [ ] Login/onboarding pages
-- [ ] Root `/` redirect logic
 - [ ] Channel discovery
+- [ ] Social login (Kakao, Apple)
+- [ ] SSR landing page
+- [ ] RSS feed
 
 ---
 
