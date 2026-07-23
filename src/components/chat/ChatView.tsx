@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -213,6 +213,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         if (data.bannerNotice) {
           setActiveNotice(data.bannerNotice);
         }
+        // Load welcome config from server
+        if (data.welcomeConfig) {
+          setWelcomeConfig(data.welcomeConfig);
+        }
         // Restore saved bubble color
         if (typeof window !== "undefined") {
           const saved = localStorage.getItem(`bubbleColor_${channelId}`);
@@ -317,7 +321,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       uid,
       text,
       channel_id: channelId,
-      image: photos.length > 0 ? photos[0].previewUrl : undefined,
+      image: photos.length > 0 ? await uploadImage(photos[0].blob, channelId) || undefined : undefined,
       reply_to: replyingTo?.id,
       fingerprint: myFingerprint,
     });
@@ -1122,7 +1126,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           onWelcomeChange={(config) => {
             setWelcomeConfig(config);
             localStorage.setItem(`welcomeConfig_${channelId}`, config);
-            adminAction("set-notice", channelId, { text: config });
+            adminAction("set-welcome", channelId, { config });
             setBanner({ text: "환영 팝업이 저장되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}

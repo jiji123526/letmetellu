@@ -30,6 +30,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const noticeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
     .bind(`notice_${channelId}`, channelId).first();
 
+  // Fetch welcome popup config
+  const welcomeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
+    .bind(`welcome_${channelId}`, channelId).first();
+
   // Get presence count from DO
   const doId = env.CHAT_ROOM.idFromName(channelId);
   const stub = env.CHAT_ROOM.get(doId);
@@ -42,5 +46,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     blocked,
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
+    welcomeConfig: welcomeConfig?.text || "",
   });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { adminAction } from "@/lib/api";
 
 interface AdminPanelProps {
   channelId: string;
@@ -128,6 +129,7 @@ export function AdminPanel(props: AdminPanelProps) {
     setBannedWords(next);
     setBannedInput("");
     localStorage.setItem(`bannedWords_${channelId}`, JSON.stringify(next));
+    adminAction("add-banned-word", channelId, { word, expires });
   };
 
   const renderMenuList = (items: MenuItem[]) => (
@@ -282,9 +284,11 @@ export function AdminPanel(props: AdminPanelProps) {
                       {w.expires ? (() => { const diff = new Date(w.expires).getTime() - Date.now(); return diff > 0 ? `${Math.ceil(diff / 86400000)}일 남음` : "만료됨"; })() : "영구"}
                     </span>
                     <button style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontSize: "var(--bubble-font-size, 14px)", padding: "0 4px", lineHeight: 1 }} onClick={() => {
+                      const removed = bannedWords[i];
                       const next = bannedWords.filter((_, j) => j !== i);
                       setBannedWords(next);
                       localStorage.setItem(`bannedWords_${channelId}`, JSON.stringify(next));
+                      if (removed && (removed as any).id) adminAction("remove-banned-word", channelId, { word_id: (removed as any).id });
                     }}>✕</button>
                   </div>
                 </div>
