@@ -193,8 +193,13 @@ export function AdminPanel(props: AdminPanelProps) {
               <input id="profileImgInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                const url = URL.createObjectURL(file);
-                onProfileImageChange(url);
+                // Convert to base64 data URL for persistence without R2
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const dataUrl = reader.result as string;
+                  onProfileImageChange(dataUrl);
+                };
+                reader.readAsDataURL(file);
                 e.target.value = "";
               }} />
             </div>
