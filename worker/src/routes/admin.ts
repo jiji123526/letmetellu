@@ -98,6 +98,34 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true });
     }
 
+    case "set-notice": {
+      const { text } = payload || {};
+      const noticeText = (text as string) || "";
+      // Upsert into config table
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`notice_${channel_id}`, noticeText, channel_id, noticeText).run();
+
+      // Broadcast notice change
+      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "notice-changed", channel_id, notice: noticeText }),
+      }));
+
+      return Response.json({ ok: true });
+    }
+
+    case "set-rules": {
+      const { rules } = payload || {};
+      const rulesText = (rules as string) || "[]";
+      await env.DB.prepare("UPDATE channels SET notice = ? WHERE id = ?")
+        .bind(rulesText, channel_id).run();
+
+      return Response.json({ ok: true });
+    }
+
     default:
       return Response.json({ error: "unknown action" }, { status: 400 });
   }

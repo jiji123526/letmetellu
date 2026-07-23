@@ -8,6 +8,7 @@ interface ContextMenuProps {
   msg: { id: string; uid: string; text: string; is_admin: number };
   isSent: boolean;
   anchorRect: DOMRect;
+  bubbleEl: HTMLElement;
   isAdmin: boolean;
   onReaction: (msgId: string, emoji: string) => void;
   onReply: (msgId: string) => void;
@@ -27,6 +28,7 @@ export function ContextMenu({
   msg,
   isSent,
   anchorRect,
+  bubbleEl,
   isAdmin,
   onReaction,
   onReply,
@@ -43,6 +45,43 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  // Calculate positioning first
+  const bubbleHeight = anchorRect.bottom - anchorRect.top;
+  const gap = 8;
+  const reactionBarH = 48;
+  const safeTop = 60;
+  const actionEstimate = 80;
+
+  const composerTop = typeof window !== "undefined" ? window.innerHeight - 60 : 700;
+  const normalActionY = anchorRect.bottom + gap;
+
+  const spaceAbove = anchorRect.top - safeTop;
+  const needsDownShift = spaceAbove < reactionBarH + gap;
+  const needsUpShift = normalActionY + actionEstimate > composerTop;
+
+  let reactionY: number;
+  let actionY: number;
+  let bubbleShift = 0;
+
+  if (needsDownShift && !needsUpShift) {
+    actionY = anchorRect.bottom + gap;
+    reactionY = safeTop;
+  } else if (needsUpShift) {
+    const availableForActions = composerTop - gap;
+    const targetBubbleBottom = availableForActions - actionEstimate - gap;
+    const targetBubbleTop = targetBubbleBottom - bubbleHeight;
+    bubbleShift = anchorRect.top - targetBubbleTop;
+    actionY = targetBubbleBottom + gap;
+    reactionY = Math.max(targetBubbleTop - gap - reactionBarH, safeTop);
+  } else {
+    actionY = normalActionY;
+    reactionY = anchorRect.top - gap - reactionBarH;
+  }
+
+  const positionStyle: React.CSSProperties = isSent
+    ? { right: typeof window !== "undefined" ? window.innerWidth - anchorRect.right : 0, left: "auto" }
+    : { left: anchorRect.left, right: "auto" };
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -51,13 +90,25 @@ export function ContextMenu({
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const reactionBarH = 48;
-  const gap = 8;
-  const reactionY = Math.max(anchorRect.top - gap - reactionBarH, 60);
-
-  const positionStyle: React.CSSProperties = isSent
-    ? { right: window.innerWidth - anchorRect.right, left: "auto" }
-    : { left: anchorRect.left, right: "auto" };
+  // Elevate the bubble above the overlay
+  useEffect(() => {
+    bubbleEl.style.position = "relative";
+    bubbleEl.style.zIndex = "101";
+    bubbleEl.style.boxShadow = "0 4px 20px rgba(0,0,0,.15)";
+    bubbleEl.style.filter = "brightness(1.2)";
+    if (bubbleShift > 0) {
+      bubbleEl.style.transition = "transform .2s ease";
+      bubbleEl.style.transform = `translateY(-${bubbleShift}px)`;
+    }
+    return () => {
+      bubbleEl.style.position = "";
+      bubbleEl.style.zIndex = "";
+      bubbleEl.style.boxShadow = "";
+      bubbleEl.style.filter = "";
+      bubbleEl.style.transform = "";
+      bubbleEl.style.transition = "";
+    };
+  });
 
   const actionItemStyle: React.CSSProperties = {
     display: "flex",
@@ -141,7 +192,7 @@ export function ContextMenu({
         className="absolute rounded-[14px] overflow-hidden animate-[ctxPop_0.2s_ease]"
         style={{
           ...positionStyle,
-          top: anchorRect.bottom + gap,
+          top: actionY,
           background: "rgba(255,255,255,.85)",
           backdropFilter: "saturate(180%) blur(20px)",
           WebkitBackdropFilter: "saturate(180%) blur(20px)",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { ContextMenu } from "./ContextMenu";
 import { ReactionBadge } from "./ReactionBadge";
@@ -52,6 +52,7 @@ interface ContextMenuState {
   isSent: boolean;
   isOwn: boolean;
   rect: DOMRect;
+  bubbleEl: HTMLElement;
 }
 
 function getOrCreateUid(): string {
@@ -164,7 +165,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false);
   const [showEmojiPreset, setShowEmojiPreset] = useState(false);
   const [showNoticeEdit, setShowNoticeEdit] = useState(false);
-  const [activeNotice, setActiveNotice] = useState("");
+  const [activeNotice, setActiveNotice] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(`activeNotice_${channelId}`) || "";
+  });
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
@@ -196,6 +200,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         setChannel(data.channel);
         setMessages(data.messages);
         setLoading(false);
+        // Load banner notice from server
+        if (data.bannerNotice) {
+          setActiveNotice(data.bannerNotice);
+        }
         // Restore saved bubble color
         if (typeof window !== "undefined") {
           const saved = localStorage.getItem(`bubbleColor_${channelId}`);
@@ -225,6 +233,9 @@ export function ChatView({ channelId }: { channelId: string }) {
           setInLiveMode(false);
           setShowLiveEnded(true);
         }
+      }
+      if (event.type === "notice-changed") {
+        setActiveNotice((event.notice as string) || "");
       }
     });
   }, [subscribe, channelId]);
@@ -313,7 +324,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const handleBubbleLongPress = (msg: Message, isSent: boolean, el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
     const isOwn = effectiveAdmin ? !!msg.is_admin : msg.uid === uid;
-    setContextMenu({ msg, isSent, isOwn, rect });
+    setContextMenu({ msg, isSent, isOwn, rect, bubbleEl: el });
   };
 
   const handleTouchStart = (msg: Message, isSent: boolean, el: HTMLElement) => {
@@ -902,6 +913,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           msg={contextMenu.msg}
           isSent={contextMenu.isSent}
           anchorRect={contextMenu.rect}
+          bubbleEl={contextMenu.bubbleEl}
           isAdmin={effectiveAdmin}
           onReaction={handleReaction}
           onReply={(msgId) => {
@@ -1070,6 +1082,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           }}
           onNoticeChange={(noticeStr) => {
             setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
+            adminAction("set-rules", channelId, { rules: noticeStr });
             setBanner({ text: "채널 규칙이 저장되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}
@@ -1183,12 +1196,15 @@ export function ChatView({ channelId }: { channelId: string }) {
           onSave={(title, body) => {
             if (!title) {
               setActiveNotice("");
+              localStorage.removeItem(`activeNotice_${channelId}`);
+              adminAction("set-notice", channelId, { text: "" });
               setBanner({ text: "공지가 삭제되었습니다", color: "var(--meta)" });
             } else {
               const notice = body ? JSON.stringify({ title, body }) : title;
               setActiveNotice(notice);
-              // Clear dismissed state so it shows again
+              localStorage.setItem(`activeNotice_${channelId}`, notice);
               localStorage.removeItem(`noticeDismissed_${channelId}`);
+              adminAction("set-notice", channelId, { text: notice });
               setBanner({ text: "공지가 등록되었습니다", color: "#3b8df0" });
             }
             setTimeout(() => setBanner(null), 3000);
