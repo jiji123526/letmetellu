@@ -641,6 +641,11 @@ export function ChatView({ channelId }: { channelId: string }) {
               ? parentIsSent
               : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
 
+            // For bubble COLOR: replies use their own identity, not parent's side
+            // admin view: admin reply = mine (blue), user reply = other (gray)
+            // non-admin view: user reply = mine (blue), admin reply = other (gray)
+            const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
+
             const isGroupStart = !isReply && (!prev || !isSameGroup(prev, msg, uid));
             const isLast = !isReply && (!next || !isSameGroup(msg, next, uid));
             const reactions = parseReactions(msg.reactions);
@@ -659,15 +664,15 @@ export function ChatView({ channelId }: { channelId: string }) {
                   background: reportedMsgIds.has(msg.id)
                     ? "#ffe0e0"
                     : msg.dm
-                      ? (isSent ? "#7b3fa0" : "#ddc8ed")
-                      : isSent
+                      ? (isMine ? "#7b3fa0" : "#ddc8ed")
+                      : isMine
                         ? bubbleColor
                         : "var(--gray-bubble)",
                   color: reportedMsgIds.has(msg.id)
                     ? "#a00"
                     : msg.dm
-                      ? (isSent ? "#fff" : "#5a1580")
-                      : isSent ? "#fff" : "var(--gray-text)",
+                      ? (isMine ? "#fff" : "#5a1580")
+                      : isMine ? "#fff" : "var(--gray-text)",
                   opacity: reportedMsgIds.has(msg.id) ? 0.6 : undefined,
                 }}
                 onContextMenu={(e) => {
