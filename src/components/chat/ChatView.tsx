@@ -1045,11 +1045,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           blockedUsers={[]}
           onFreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
+            adminAction("freeze", channelId, { frozen: true });
             setBanner({ text: "채팅이 얼려졌습니다 🧊", color: "#4a4d8f" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onUnfreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
+            adminAction("freeze", channelId, { frozen: false });
             setBanner({ text: "채팅이 해제되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}
@@ -1081,14 +1083,17 @@ export function ChatView({ channelId }: { channelId: string }) {
             setLocalBubbleColor(color);
             localStorage.setItem(`bubbleColor_${channelId}`, color);
             document.documentElement.style.setProperty("--bubble-sent", color);
+            adminAction("update-profile", channelId, { bubble_color: color });
           }}
           onNameChange={(name) => {
             setChannel((prev) => prev ? { ...prev, name } : null);
+            adminAction("update-profile", channelId, { name });
             setBanner({ text: "채널 이름이 변경되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onProfileImageChange={(url) => {
             setChannel((prev) => prev ? { ...prev, profile_image: url } : null);
+            adminAction("update-profile", channelId, { profile_image: url });
             setBanner({ text: "프로필 사진이 변경되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}
