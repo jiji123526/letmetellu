@@ -18,7 +18,9 @@ import { PlusMenu } from "./PlusMenu";
 import { EditDialog } from "./EditDialog";
 import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePrompt } from "./LiveMode";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { EmojiBar, spawnEmoji } from "./EmojiBar";
+import { NoticeEditDialog } from "./NoticeEditDialog";
+import { NoticeBanner } from "./NoticeBanner";
+import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { AdminPanel } from "../admin/AdminPanel";
 
 interface Message {
@@ -160,6 +162,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showLiveEnded, setShowLiveEnded] = useState(false);
   const [showLiveTitlePrompt, setShowLiveTitlePrompt] = useState(false);
   const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false);
+  const [showEmojiPreset, setShowEmojiPreset] = useState(false);
+  const [showNoticeEdit, setShowNoticeEdit] = useState(false);
+  const [activeNotice, setActiveNotice] = useState("");
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
@@ -213,6 +218,13 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "emoji-fx") {
         spawnEmoji(event.emoji as string, event.x as number, event.h as number);
+      }
+      if (event.type === "live-ended") {
+        if (inLiveMode && !effectiveAdmin) {
+          setLiveActive(false);
+          setInLiveMode(false);
+          setShowLiveEnded(true);
+        }
       }
     });
   }, [subscribe, channelId]);
@@ -533,9 +545,19 @@ export function ChatView({ channelId }: { channelId: string }) {
               setShowEndLiveConfirm(true);
             } else {
               setInLiveMode(false);
-              setMessages([]);
+              setLiveActive(false);
+              setShowLiveEnded(true);
             }
           }}
+        />
+      )}
+
+      {/* Notice Banner */}
+      {activeNotice && (
+        <NoticeBanner
+          channelId={channelId}
+          notice={activeNotice}
+          onDismiss={() => setActiveNotice("")}
         />
       )}
 
@@ -850,7 +872,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             />
             {/* Emoji bar trigger (live mode only) */}
             {inLiveMode && (
-              <EmojiBar onBroadcast={(emoji, x, h) => {
+              <EmojiBar channelId={channelId} onBroadcast={(emoji, x, h) => {
                 // TODO: broadcast via WebSocket
               }} />
             )}
@@ -1012,6 +1034,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               // End live
               setLiveActive(false);
               setInLiveMode(false);
+              fetchInit(channelId).then((data) => { setMessages(data.messages); });
               setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
               setTimeout(() => setBanner(null), 3000);
             } else {
@@ -1076,8 +1099,12 @@ export function ChatView({ channelId }: { channelId: string }) {
           anchorRect={plusMenu}
           dmMode={dmMode}
           dmEnabled={dmEnabled}
+          isAdmin={effectiveAdmin}
+          inLiveMode={inLiveMode}
           onPhoto={() => photoInputRef.current?.click()}
           onDmToggle={() => setDmMode(!dmMode)}
+          onNotice={effectiveAdmin ? () => setShowNoticeEdit(true) : undefined}
+          onEmojiPreset={() => setShowEmojiPreset(true)}
           onClose={() => setPlusMenu(null)}
         />
       )}
@@ -1123,11 +1150,49 @@ export function ChatView({ channelId }: { channelId: string }) {
             setShowEndLiveConfirm(false);
             setLiveActive(false);
             setInLiveMode(false);
-            setMessages([]);
+            fetchInit(channelId).then((data) => { setMessages(data.messages); });
             setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onCancel={() => setShowEndLiveConfirm(false)}
+        />
+      )}
+
+      {/* Live Ended Popup (shown to non-admin when kicked from live) */}
+      {showLiveEnded && (
+        <LiveEndedPopup onClose={() => {
+          setShowLiveEnded(false);
+          fetchInit(channelId).then((data) => { setMessages(data.messages); });
+        }} />
+      )}
+
+      {/* Emoji Preset Panel */}
+      {showEmojiPreset && (
+        <EmojiPresetPanel
+          channelId={channelId}
+          onClose={() => setShowEmojiPreset(false)}
+        />
+      )}
+
+      {/* Notice Edit Dialog */}
+      {showNoticeEdit && (
+        <NoticeEditDialog
+          currentTitle={(() => { try { const p = JSON.parse(activeNotice); return p.title || activeNotice; } catch { return activeNotice; } })()}
+          currentBody={(() => { try { const p = JSON.parse(activeNotice); return p.body || ""; } catch { return ""; } })()}
+          onSave={(title, body) => {
+            if (!title) {
+              setActiveNotice("");
+              setBanner({ text: "공지가 삭제되었습니다", color: "var(--meta)" });
+            } else {
+              const notice = body ? JSON.stringify({ title, body }) : title;
+              setActiveNotice(notice);
+              // Clear dismissed state so it shows again
+              localStorage.removeItem(`noticeDismissed_${channelId}`);
+              setBanner({ text: "공지가 등록되었습니다", color: "#3b8df0" });
+            }
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onClose={() => setShowNoticeEdit(false)}
         />
       )}
 

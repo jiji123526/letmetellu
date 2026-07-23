@@ -27,7 +27,7 @@ interface AdminPanelProps {
   onClose: () => void;
 }
 
-type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "passcode" | "rules" | "banned-words" | "blocked";
+type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "passcode" | "rules" | "banned-words" | "blocked" | "guide";
 
 const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 
@@ -90,6 +90,7 @@ export function AdminPanel(props: AdminPanelProps) {
       case "rules": setView("rules"); break;
       case "banned-words": setView("banned-words"); break;
       case "blocked": setView("blocked"); break;
+      case "guide": setView("guide"); break;
       case "freeze": onClose(); isFrozen ? onUnfreeze() : onFreeze(); break;
       case "live": onClose(); onLive(); break;
       case "toggle-view": onClose(); onToggleView(); break;
@@ -101,7 +102,7 @@ export function AdminPanel(props: AdminPanelProps) {
   const goBack = () => {
     if (view === "profile" || view === "color" || view === "passcode" || view === "rules") setView("channel");
     else if (view === "banned-words" || view === "blocked") setView("manage");
-    else if (view === "channel" || view === "manage") setView("main");
+    else if (view === "channel" || view === "manage" || view === "guide") setView("main");
     else onClose();
   };
 
@@ -117,7 +118,7 @@ export function AdminPanel(props: AdminPanelProps) {
   };
 
   const renderMenuList = (items: MenuItem[]) => (
-    <div style={{ padding: "0" }}>
+    <div style={{ padding: "0 0 8px" }}>
       {items.map((item, i) => (
         <button
           key={item.key}
@@ -135,7 +136,7 @@ export function AdminPanel(props: AdminPanelProps) {
   const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px", lineHeight: 1 };
   const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
 
-  const title = { main: "관리자 설정", channel: "채널", manage: "관리", profile: "채널 프로필", color: "채널 기본 색상", passcode: "채널 비밀번호", rules: "채널 규칙", "banned-words": "금지어", blocked: "차단된 사용자" }[view];
+  const title = { main: "관리자 설정", channel: "채널", manage: "관리", profile: "채널 프로필", color: "채널 기본 색상", passcode: "채널 비밀번호", rules: "채널 규칙", "banned-words": "금지어", blocked: "차단된 사용자", guide: "사용 가이드" }[view];
 
   return (
     <div
@@ -317,6 +318,46 @@ export function AdminPanel(props: AdminPanelProps) {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Guide panel */}
+        {view === "guide" && (
+          <div style={{ padding: "12px 18px", fontSize: "13px", lineHeight: 1.6, color: "#444", maxHeight: "60vh", overflowY: "auto" }}>
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>관리자 설정 열기</h4>
+              <p style={{ color: "#888", margin: 0 }}>우측 상단 ⋮ 메뉴 → 관리자 설정에서 모든 채널 설정을 관리할 수 있습니다.</p>
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>채널 설정</h4>
+              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>프로필</strong> — 채널 이름과 프로필 사진 변경. 정사각형 크롭 후 업로드</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>색상</strong> — 말풍선 기본 색상. 7가지 프리셋 또는 커스텀</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>비밀번호</strong> — 설정하면 입장 시 비밀번호 필요. 비우면 해제</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>규칙</strong> — ℹ️ 버튼에 표시되는 채널 규칙. 여러 섹션 추가 가능</li>
+              </ul>
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>사용자 관리</h4>
+              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>신고 접수</strong> — 사용자가 메시지를 꾹 눌러 신고하면 🚨 표시로 나타남</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>차단</strong> — 메시지를 꾹 눌러 즉시 차단. UID + 기기 지문으로 식별</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>차단 해제</strong> — 관리 → 차단 사용자에서 해제 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>이의 제기</strong> — 차단된 사용자의 1회 DM 허용. 관리에서 끄기 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>금지어</strong> — 특정 단어 포함 메시지 자동 차단. 기간 설정 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>메시지 삭제</strong> — 꾹 눌러 삭제. 답장도 함께 삭제됨</li>
+              </ul>
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "#222" }}>특수 기능</h4>
+              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>얼리기</strong> — 일반 채팅 중단. 관리자만 보낼 수 있고 사용자는 DM만 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>라이브</strong> — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제</li>
+              </ul>
+            </div>
+            <div style={{ padding: "10px 12px", background: "#f0f7ff", borderRadius: "10px", fontSize: "12px", color: "#3b8df0", lineHeight: 1.5 }}>
+              💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다.
+            </div>
           </div>
         )}
       </div>
