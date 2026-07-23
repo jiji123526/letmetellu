@@ -175,6 +175,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(`activeNotice_${channelId}`) || "";
   });
+  const [welcomeConfig, setWelcomeConfig] = useState("");
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
@@ -985,7 +986,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Welcome Popup */}
-      <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} />
+      <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} customConfig={welcomeConfig} />
 
       {/* Header Menu */}
       {headerMenu && (
@@ -1037,6 +1038,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           petitionEnabled={petitionEnabled}
           dmEnabled={dmEnabled}
           notice={channel?.notice || "[]"}
+          welcomeConfig={welcomeConfig}
           blockedUsers={[]}
           onFreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
@@ -1091,6 +1093,13 @@ export function ChatView({ channelId }: { channelId: string }) {
             setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
             adminAction("set-rules", channelId, { rules: noticeStr });
             setBanner({ text: "채널 규칙이 저장되었습니다", color: "#3b8df0" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onWelcomeChange={(config) => {
+            setWelcomeConfig(config);
+            localStorage.setItem(`welcomeConfig_${channelId}`, config);
+            adminAction("set-notice", channelId, { text: config });
+            setBanner({ text: "환영 팝업이 저장되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onUnblock={(uid) => {

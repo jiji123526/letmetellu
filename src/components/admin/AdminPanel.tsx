@@ -23,11 +23,13 @@ interface AdminPanelProps {
   onNameChange: (name: string) => void;
   onProfileImageChange: (url: string) => void;
   onNoticeChange: (notice: string) => void;
+  onWelcomeChange: (config: string) => void;
+  welcomeConfig: string;
   onUnblock: (uid: string) => void;
   onClose: () => void;
 }
 
-type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "passcode" | "rules" | "banned-words" | "blocked" | "guide";
+type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "passcode" | "rules" | "welcome" | "banned-words" | "blocked" | "guide";
 
 const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 
@@ -42,7 +44,7 @@ function darkenColor(hex: string, amount: number): string {
 interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; }
 
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, currentColor, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
   const [selectedColor, setSelectedColor] = useState(currentColor);
@@ -55,6 +57,15 @@ export function AdminPanel(props: AdminPanelProps) {
   });
   const [bannedInput, setBannedInput] = useState("");
   const [bannedDuration, setBannedDuration] = useState("");
+  const [welcomeIcon, setWelcomeIcon] = useState(() => {
+    try { const p = JSON.parse(welcomeConfig || "{}"); return p.icon || "💬"; } catch { return "💬"; }
+  });
+  const [welcomeTitle, setWelcomeTitle] = useState(() => {
+    try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || "환영합니다!"; } catch { return "환영합니다!"; }
+  });
+  const [welcomeItems, setWelcomeItems] = useState(() => {
+    try { const p = JSON.parse(welcomeConfig || "{}"); return (p.items || []).join("\n"); } catch { return ""; }
+  });
   const colorInputRef = useRef<HTMLInputElement>(null);
 
   const mainItems: MenuItem[] = [
@@ -71,6 +82,7 @@ export function AdminPanel(props: AdminPanelProps) {
     { key: "color", label: "채널 기본 색상", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: "›" },
     { key: "passcode", label: "채널 비밀번호", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "›" },
     { key: "rules", label: "채널 규칙", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>`, arrow: "›" },
+    { key: "welcome", label: "환영 팝업", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "›" },
   ];
 
   const manageItems: MenuItem[] = [
@@ -88,6 +100,7 @@ export function AdminPanel(props: AdminPanelProps) {
       case "color": setView("color"); break;
       case "passcode": setView("passcode"); break;
       case "rules": setView("rules"); break;
+      case "welcome": setView("welcome"); break;
       case "banned-words": setView("banned-words"); break;
       case "blocked": setView("blocked"); break;
       case "guide": setView("guide"); break;
@@ -100,7 +113,7 @@ export function AdminPanel(props: AdminPanelProps) {
   };
 
   const goBack = () => {
-    if (view === "profile" || view === "color" || view === "passcode" || view === "rules") setView("channel");
+    if (view === "profile" || view === "color" || view === "passcode" || view === "rules" || view === "welcome") setView("channel");
     else if (view === "banned-words" || view === "blocked") setView("manage");
     else if (view === "channel" || view === "manage" || view === "guide") setView("main");
     else onClose();
@@ -136,7 +149,7 @@ export function AdminPanel(props: AdminPanelProps) {
   const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px", lineHeight: 1 };
   const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
 
-  const title = { main: "관리자 설정", channel: "채널", manage: "관리", profile: "채널 프로필", color: "채널 기본 색상", passcode: "채널 비밀번호", rules: "채널 규칙", "banned-words": "금지어", blocked: "차단된 사용자", guide: "사용 가이드" }[view];
+  const title = { main: "관리자 설정", channel: "채널", manage: "관리", profile: "채널 프로필", color: "채널 기본 색상", passcode: "채널 비밀번호", rules: "채널 규칙", welcome: "환영 팝업", "banned-words": "금지어", blocked: "차단된 사용자", guide: "사용 가이드" }[view];
 
   return (
     <div
@@ -318,6 +331,33 @@ export function AdminPanel(props: AdminPanelProps) {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Welcome popup editor */}
+        {view === "welcome" && (
+          <div style={{ padding: "12px 18px", maxHeight: "60vh", overflowY: "auto" }}>
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "12px", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>아이콘 (이모지)</label>
+              <input value={welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }} placeholder="💬" maxLength={4} />
+            </div>
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "12px", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>제목</label>
+              <input value={welcomeTitle} onChange={(e) => setWelcomeTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }} placeholder="환영합니다!" />
+            </div>
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "12px", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>안내 항목 (한 줄에 하나씩)</label>
+              <textarea value={welcomeItems} onChange={(e) => setWelcomeItems(e.target.value)} rows={5} style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.5 }} placeholder="메시지를 꾹 누르면 답장, 리액션, 신고가 가능합니다" />
+            </div>
+            <button style={saveBtnStyle} onClick={() => {
+              const config = JSON.stringify({
+                icon: welcomeIcon.trim() || "💬",
+                title: welcomeTitle.trim() || "환영합니다!",
+                items: welcomeItems.split("\n").map((s: string) => s.trim()).filter(Boolean),
+              });
+              onWelcomeChange(config);
+              goBack();
+            }}>저장</button>
           </div>
         )}
 
