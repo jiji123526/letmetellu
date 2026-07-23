@@ -4,7 +4,7 @@ Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
 
 ## Status
 
-**Phase 1-3 (UI) complete.** Full chat interface with all non-admin and admin features working in mock mode. Backend wiring (real-time messages, auth, persistence) is next.
+**Phase 1-3 complete. Real-time messaging working.** Full chat interface with persistent messages, WebSocket realtime via Durable Objects, and all UI features (non-admin + admin). Auth is next.
 
 ---
 
@@ -19,11 +19,11 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 | Layer | Technology | Status |
 |-------|-----------|--------|
 | Frontend | Next.js 16 (App Router) + Tailwind CSS | ✅ Deployed |
-| Database | Cloudflare D1 (SQLite) | ✅ Schema applied |
-| Realtime | Cloudflare Durable Objects + WebSocket | ✅ Deployed |
+| Database | Cloudflare D1 (SQLite) | ✅ Schema applied, messages persisting |
+| Realtime | Cloudflare Durable Objects + WebSocket | ✅ Working (multi-tab confirmed) |
 | Auth | Auth.js (NextAuth v5) | ⬜ Phase 2 |
 | Storage | Cloudflare R2 | ⬜ Not enabled yet |
-| Backend API | Cloudflare Workers | ✅ Routes stubbed |
+| Backend API | Cloudflare Workers | ✅ Routes working (init, messages, data) |
 
 ---
 
@@ -41,6 +41,12 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Scroll-to-bottom button
 - [x] Welcome popup (first-time visitors)
 - [x] Korean IME Enter key fix
+
+### Real-time Messaging (working)
+- [x] Messages persist in Cloudflare D1
+- [x] WebSocket realtime via Durable Objects (multi-tab/user confirmed)
+- [x] Send → D1 insert → DO broadcast → all clients refetch
+- [x] Presence counting via DO connections
 
 ### Admin Panel (complete, local state)
 - [x] Admin mode toggle (triple-click avatar)
@@ -72,9 +78,11 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 
 ### Phase 2: Auth & Real Messages
 - [ ] Auth.js integration (Google OAuth + email/password)
-- [ ] Wire send/receive to Worker (messages persist in D1)
-- [ ] WebSocket realtime loop (signal + refetch)
+- [x] ~~Wire send/receive to Worker (messages persist in D1)~~
+- [x] ~~WebSocket realtime loop (signal + refetch)~~
 - [ ] Admin determined by channel ownership (JWT)
+- [ ] Login page + onboarding
+- [ ] Dashboard (list/create/delete channels)
 
 ### Phase 3: Media & Polish
 - [ ] Enable R2, wire image upload

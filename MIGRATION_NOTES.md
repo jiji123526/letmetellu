@@ -102,3 +102,23 @@ When porting a CSS component to TSX:
 - WebSocket realtime loop
 - Embeds, search, typing indicator
 - Dashboard, login, onboarding pages
+
+
+### Session 1 Completion (2026-07-23, end)
+
+**Real-time messaging wired:**
+- Messages persist in D1 (Cloudflare)
+- WebSocket via Durable Objects — realtime across multiple tabs/users confirmed working
+- Send → D1 insert → DO broadcast → all clients refetch
+- Fixed: SQLite integer fields (edited: 0) rendering as "0" in React JSX (use `!!` coercion)
+
+**Current state: Fully functional anonymous chat**
+- Visit `/ch/test` → real messages, realtime updates, persistent storage
+- Infrastructure cost: ~$5/mo (Workers Paid + D1 + DO)
+- No auth yet — admin is client-side toggle (server-side protected by internal token)
+
+**Ready for Phase 2 (Auth):**
+- Auth.js integration (Google OAuth + email/password)
+- Channel ownership → automatic admin detection
+- Dashboard (create/manage channels)
+- Login + onboarding pages
