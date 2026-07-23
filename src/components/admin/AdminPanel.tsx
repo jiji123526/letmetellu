@@ -8,12 +8,14 @@ interface AdminPanelProps {
   profileImage: string | null;
   currentColor: string;
   isFrozen: boolean;
+  liveActive: boolean;
   petitionEnabled: boolean;
   dmEnabled: boolean;
   notice: string;
   blockedUsers: { uid: string; reason: string }[];
   onFreeze: () => void;
   onUnfreeze: () => void;
+  onLive: () => void;
   onToggleView: () => void;
   onPetitionToggle: () => void;
   onDmToggle: () => void;
@@ -40,7 +42,7 @@ function darkenColor(hex: string, amount: number): string {
 interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; }
 
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, isFrozen, petitionEnabled, dmEnabled, notice, blockedUsers, onFreeze, onUnfreeze, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, currentColor, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onUnblock, onClose } = props;
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
   const [selectedColor, setSelectedColor] = useState(currentColor);
@@ -59,7 +61,7 @@ export function AdminPanel(props: AdminPanelProps) {
     { key: "channel", label: "채널", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>`, arrow: "›" },
     { key: "manage", label: "관리", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`, arrow: "›" },
     { key: "freeze", label: isFrozen ? "채팅 해제" : "채팅 얼리기", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 7l-10 10M2 12h20M7 7l10 10"/></svg>`, arrow: "●", arrowColor: isFrozen ? "#4a4d8f" : undefined },
-    { key: "live", label: "라이브 시작", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>`, arrow: "●", arrowColor: "#c0392b" },
+    { key: "live", label: liveActive ? "라이브 종료" : "라이브 시작", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>`, arrow: "●", arrowColor: liveActive ? "#c0392b" : undefined },
     { key: "guide", label: "사용 가이드", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`, arrow: "›" },
     { key: "toggle-view", label: "사용자 시점으로 보기", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`, arrow: "›" },
   ];
@@ -89,6 +91,7 @@ export function AdminPanel(props: AdminPanelProps) {
       case "banned-words": setView("banned-words"); break;
       case "blocked": setView("blocked"); break;
       case "freeze": onClose(); isFrozen ? onUnfreeze() : onFreeze(); break;
+      case "live": onClose(); onLive(); break;
       case "toggle-view": onClose(); onToggleView(); break;
       case "petition-toggle": onPetitionToggle(); break;
       case "dm-toggle": onDmToggle(); break;
@@ -129,8 +132,8 @@ export function AdminPanel(props: AdminPanelProps) {
     </div>
   );
 
-  const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px" };
-  const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit" };
+  const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px", lineHeight: 1 };
+  const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
 
   const title = { main: "관리자 설정", channel: "채널", manage: "관리", profile: "채널 프로필", color: "채널 기본 색상", passcode: "채널 비밀번호", rules: "채널 규칙", "banned-words": "금지어", blocked: "차단된 사용자" }[view];
 

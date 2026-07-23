@@ -15,6 +15,10 @@ import { EmojiPicker } from "./EmojiPicker";
 import { GalleryPanel } from "./GalleryPanel";
 import { LinksPanel } from "./LinksPanel";
 import { PlusMenu } from "./PlusMenu";
+import { EditDialog } from "./EditDialog";
+import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePrompt } from "./LiveMode";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { EmojiBar, spawnEmoji } from "./EmojiBar";
 import { AdminPanel } from "../admin/AdminPanel";
 
 interface Message {
@@ -28,6 +32,8 @@ interface Message {
   reply_to: string | null;
   created_at: string;
   dm?: boolean;
+  deleted?: boolean;
+  edited?: boolean;
 }
 
 interface Channel {
@@ -42,6 +48,7 @@ interface Channel {
 interface ContextMenuState {
   msg: Message;
   isSent: boolean;
+  isOwn: boolean;
   rect: DOMRect;
 }
 
@@ -146,10 +153,18 @@ export function ChatView({ channelId }: { channelId: string }) {
     return localStorage.getItem("isAdmin") === "true";
   });
   const [adminViewAsUser, setAdminViewAsUser] = useState(false);
+  const [liveActive, setLiveActive] = useState(false);
+  const [inLiveMode, setInLiveMode] = useState(false);
+  const [liveTitle, setLiveTitle] = useState("라이브");
+  const [showLivePopup, setShowLivePopup] = useState(false);
+  const [showLiveEnded, setShowLiveEnded] = useState(false);
+  const [showLiveTitlePrompt, setShowLiveTitlePrompt] = useState(false);
+  const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false);
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
   const [emojiPicker, setEmojiPicker] = useState<{ msgId: string; rect: DOMRect } | null>(null);
+  const [editingMsg, setEditingMsg] = useState<{ id: string; text: string } | null>(null);
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
@@ -196,6 +211,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "freeze-change") {
         setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
       }
+      if (event.type === "emoji-fx") {
+        spawnEmoji(event.emoji as string, event.x as number, event.h as number);
+      }
     });
   }, [subscribe, channelId]);
 
@@ -229,7 +247,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const handleSend = async () => {
     const text = input.trim();
-    if ((!text && pendingPhotos.length === 0) || channel?.is_frozen) return;
+    if ((!text && pendingPhotos.length === 0) || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
 
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -282,7 +300,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Context menu handlers
   const handleBubbleLongPress = (msg: Message, isSent: boolean, el: HTMLElement) => {
     const rect = el.getBoundingClientRect();
-    setContextMenu({ msg, isSent, rect });
+    const isOwn = effectiveAdmin ? !!msg.is_admin : msg.uid === uid;
+    setContextMenu({ msg, isSent, isOwn, rect });
   };
 
   const handleTouchStart = (msg: Message, isSent: boolean, el: HTMLElement) => {
@@ -338,9 +357,17 @@ export function ChatView({ channelId }: { channelId: string }) {
   const effectiveAdmin = isAdmin && !adminViewAsUser;
 
   const handleDelete = (msgId: string) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msgId ? { ...m, text: "삭제된 채팅입니다", deleted: true } as Message : m))
-    );
+    // Check if this message has replies (if so, soft delete; otherwise hard delete)
+    const hasReplies = messages.some((m) => m.reply_to === msgId);
+    if (hasReplies) {
+      // Soft delete — keep message but mark as deleted
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, text: "삭제된 채팅입니다", image: null, deleted: true } as Message : m))
+      );
+    } else {
+      // Hard delete — remove completely
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    }
     // TODO: send to backend
   };
 
@@ -492,6 +519,26 @@ export function ChatView({ channelId }: { channelId: string }) {
         </div>
       )}
 
+      {/* Live banners */}
+      {liveActive && !inLiveMode && (
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); setMessages([]); }} />
+      )}
+      {inLiveMode && (
+        <LiveExitBanner
+          isAdmin={effectiveAdmin}
+          title={liveTitle}
+          viewerCount={presence}
+          onExit={() => {
+            if (effectiveAdmin) {
+              setShowEndLiveConfirm(true);
+            } else {
+              setInLiveMode(false);
+              setMessages([]);
+            }
+          }}
+        />
+      )}
+
       {/* Messages */}
       <main
         ref={messagesContainerRef}
@@ -558,21 +605,28 @@ export function ChatView({ channelId }: { channelId: string }) {
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  handleBubbleLongPress(msg, isSent, e.currentTarget);
+                  if (!msg.deleted) handleBubbleLongPress(msg, isSent, e.currentTarget);
                 }}
-                onTouchStart={(e) => handleTouchStart(msg, isSent, e.currentTarget)}
+                onTouchStart={(e) => { if (!msg.deleted) handleTouchStart(msg, isSent, e.currentTarget); }}
                 onTouchEnd={handleTouchEnd}
                 onTouchMove={handleTouchEnd}
               >
-                {msg.image ? (
-                  <img
-                    src={msg.image}
-                    alt=""
-                    className="block w-full max-w-[260px] h-auto rounded-[15px]"
-                    style={{ objectFit: "contain" }}
-                  />
-                ) : null}
-                {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>{msg.text}</span>}
+                {msg.deleted ? (
+                  <span style={{ fontStyle: "italic", opacity: 0.5 }}>삭제된 채팅입니다</span>
+                ) : (
+                  <>
+                    {msg.image && (
+                      <img
+                        src={msg.image}
+                        alt=""
+                        className="block w-full max-w-[260px] h-auto rounded-[15px]"
+                        style={{ objectFit: "contain" }}
+                      />
+                    )}
+                    {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>{msg.text}</span>}
+                    {msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
+                  </>
+                )}
               </div>
             );
 
@@ -720,29 +774,17 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Frozen banner */}
-      {channel?.is_frozen ? (
-        <div
-          className="flex-none text-center text-sm py-3"
-          style={{
-            background: "var(--composer-bg)",
-            color: "var(--meta)",
-            borderTop: "0.5px solid var(--hairline)",
-          }}
-        >
-          채팅이 일시 중지되었습니다
-        </div>
-      ) : (
-        /* Composer */
-        <footer
-          className="flex-none flex items-end gap-2"
-          style={{
-            padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
-            background: "var(--composer-bg)",
-            backdropFilter: "saturate(180%) blur(20px)",
-            WebkitBackdropFilter: "saturate(180%) blur(20px)",
-            borderTop: "0.5px solid var(--hairline)",
-          }}
-        >
+      {/* Composer */}
+      <footer
+        className="flex-none flex items-end gap-2"
+        style={{
+          padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
+          background: "var(--composer-bg)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          borderTop: "0.5px solid var(--hairline)",
+        }}
+      >
           {/* Hidden photo input */}
           <input
             ref={photoInputRef}
@@ -769,8 +811,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             style={{
               minHeight: "calc(var(--bubble-font-size) + 19px)",
               padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
-              background: dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
-              border: dmMode ? "1px solid #7b3fa0" : "1px solid var(--input-border)",
+              background: (channel?.is_frozen && !effectiveAdmin && !dmMode)
+                ? "rgba(0,0,0,.03)"
+                : dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
+              border: (channel?.is_frozen && !effectiveAdmin && !dmMode)
+                ? "1px solid #ccc"
+                : dmMode ? "1px solid #7b3fa0" : "1px solid var(--input-border)",
               borderRadius: "20px",
             }}
           >
@@ -779,12 +825,21 @@ export function ChatView({ channelId }: { channelId: string }) {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              disabled={!!(channel?.is_frozen && !effectiveAdmin && !dmMode)}
               rows={1}
-              placeholder={dmMode ? "관리자에게 보내기" : "메시지를 입력하세요"}
+              placeholder={
+                (channel?.is_frozen && !effectiveAdmin && !dmMode)
+                  ? "채팅이 얼려져 있습니다 🧊"
+                  : (channel?.is_frozen && effectiveAdmin)
+                    ? "얼려짐 🧊"
+                    : dmMode
+                      ? "관리자에게 보내기"
+                      : "메시지를 입력하세요"
+              }
               className="flex-1 border-none bg-transparent outline-none resize-none"
               style={{
                 fontSize: "var(--bubble-font-size)",
-                color: "var(--gray-text)",
+                color: (channel?.is_frozen && !effectiveAdmin && !dmMode) ? "#999" : "var(--gray-text)",
                 padding: "8px 0",
                 caretColor: "var(--tint)",
                 fontFamily: "inherit",
@@ -793,7 +848,13 @@ export function ChatView({ channelId }: { channelId: string }) {
                 overflowY: "auto",
               }}
             />
-            {(input.trim() || pendingPhotos.length > 0) && (
+            {/* Emoji bar trigger (live mode only) */}
+            {inLiveMode && (
+              <EmojiBar onBroadcast={(emoji, x, h) => {
+                // TODO: broadcast via WebSocket
+              }} />
+            )}
+            {(input.trim() || pendingPhotos.length > 0) && !(channel?.is_frozen && !effectiveAdmin && !dmMode) && (
               <button
                 onClick={handleSend}
                 className="flex-none flex items-center justify-center border-none cursor-pointer"
@@ -811,7 +872,6 @@ export function ChatView({ channelId }: { channelId: string }) {
             )}
           </div>
         </footer>
-      )}
 
       {/* Context Menu */}
       {contextMenu && (
@@ -819,33 +879,34 @@ export function ChatView({ channelId }: { channelId: string }) {
           msg={contextMenu.msg}
           isSent={contextMenu.isSent}
           anchorRect={contextMenu.rect}
+          isAdmin={effectiveAdmin}
           onReaction={handleReaction}
           onReply={(msgId) => {
+            // Reply to top-level parent, not to a reply
             const msg = messages.find((m) => m.id === msgId);
-            if (msg) setReplyingTo(msg);
+            if (msg?.reply_to) {
+              const parent = messages.find((m) => m.id === msg.reply_to);
+              if (parent) { setReplyingTo(parent); } else { setReplyingTo(msg); }
+            } else if (msg) {
+              setReplyingTo(msg);
+            }
             textareaRef.current?.focus();
           }}
-          onReport={contextMenu.msg.uid !== uid ? () => {
+          onReport={!effectiveAdmin && !contextMenu.isOwn ? () => {
             const msgId = contextMenu.msg.id;
             const msgText = contextMenu.msg.text;
-            // Mark as reported locally
             setReportedMsgIds((prev) => {
               const next = new Set(prev);
               next.add(msgId);
               localStorage.setItem("reportedMsgIds", JSON.stringify([...next]));
               return next;
             });
-            // Send report message to admin (as a special report message)
             const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
-            sendMessageApi({
-              uid,
-              text: `🚨 신고된 채팅: "${preview}"`,
-              channel_id: channelId,
-            });
+            sendMessageApi({ uid, text: `🚨 신고된 채팅: "${preview}"`, channel_id: channelId });
             setBanner({ text: "신고가 접수되었습니다", color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
-          onUnreport={contextMenu.msg.uid !== uid ? () => {
+          onUnreport={!effectiveAdmin && !contextMenu.isOwn ? () => {
             const msgId = contextMenu.msg.id;
             setReportedMsgIds((prev) => {
               const next = new Set(prev);
@@ -857,11 +918,27 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           isReported={reportedMsgIds.has(contextMenu.msg.id)}
-          onDelete={contextMenu.msg.uid === uid ? handleDelete : undefined}
-          onEdit={contextMenu.msg.uid === uid ? () => { /* TODO */ } : undefined}
+          onDelete={contextMenu.isOwn ? handleDelete : undefined}
+          onDeleteWithReplies={effectiveAdmin && !contextMenu.isOwn ? (msgId) => {
+            // Delete message + all its replies
+            const idsToDelete = new Set([msgId]);
+            messages.forEach((m) => { if (m.reply_to === msgId) idsToDelete.add(m.id); });
+            setMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
+            setBanner({ text: "메시지가 삭제되었습니다", color: "#d32f2f" });
+            setTimeout(() => setBanner(null), 3000);
+          } : undefined}
+          onEdit={contextMenu.isOwn ? (msgId) => {
+            const msg = messages.find((m) => m.id === msgId);
+            if (msg) setEditingMsg({ id: msg.id, text: msg.text });
+          } : undefined}
+          onBlock={effectiveAdmin && !contextMenu.isOwn ? (blockUid) => {
+            setBanner({ text: `익명#${blockUid.slice(-4)} 차단됨`, color: "#d32f2f" });
+            setTimeout(() => setBanner(null), 3000);
+            // TODO: send to backend
+          } : undefined}
           onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
           onClose={() => setContextMenu(null)}
-          isMyMessage={contextMenu.msg.uid === uid}
+          isMyMessage={contextMenu.isOwn}
         />
       )}
 
@@ -914,6 +991,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           profileImage={channel?.profile_image || null}
           currentColor={bubbleColor}
           isFrozen={!!channel?.is_frozen}
+          liveActive={liveActive}
           petitionEnabled={petitionEnabled}
           dmEnabled={dmEnabled}
           notice={channel?.notice || "[]"}
@@ -929,6 +1007,18 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           }}
           onToggleView={() => setAdminViewAsUser(true)}
+          onLive={() => {
+            if (liveActive) {
+              // End live
+              setLiveActive(false);
+              setInLiveMode(false);
+              setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
+              setTimeout(() => setBanner(null), 3000);
+            } else {
+              // Show title prompt
+              setShowLiveTitlePrompt(true);
+            }
+          }}
           onPetitionToggle={() => {
             setPetitionEnabled(!petitionEnabled);
             setBanner({ text: !petitionEnabled ? "이의 제기가 허용됩니다" : "이의 제기가 차단됩니다", color: !petitionEnabled ? "#2a9d4e" : "#c0392b" });
@@ -989,6 +1079,55 @@ export function ChatView({ channelId }: { channelId: string }) {
           onPhoto={() => photoInputRef.current?.click()}
           onDmToggle={() => setDmMode(!dmMode)}
           onClose={() => setPlusMenu(null)}
+        />
+      )}
+
+      {/* Edit Dialog */}
+      {editingMsg && (
+        <EditDialog
+          currentText={editingMsg.text}
+          onSave={(newText) => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === editingMsg.id ? { ...m, text: newText, edited: true } as Message : m))
+            );
+            // TODO: send to backend
+          }}
+          onClose={() => setEditingMsg(null)}
+        />
+      )}
+
+      {/* Live Title Prompt */}
+      {showLiveTitlePrompt && (
+        <LiveTitlePrompt
+          onStart={(title) => {
+            setShowLiveTitlePrompt(false);
+            setLiveTitle(title);
+            setLiveActive(true);
+            setInLiveMode(true);
+            setMessages([]);
+            setBanner({ text: "라이브가 시작되었습니다", color: "#c0392b" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onCancel={() => setShowLiveTitlePrompt(false)}
+        />
+      )}
+
+      {/* End Live Confirm */}
+      {showEndLiveConfirm && (
+        <ConfirmDialog
+          title="라이브 종료"
+          message="라이브를 종료하시겠습니까?<br>모든 메시지가 삭제됩니다."
+          confirmLabel="종료"
+          confirmColor="#c0392b"
+          onConfirm={() => {
+            setShowEndLiveConfirm(false);
+            setLiveActive(false);
+            setInLiveMode(false);
+            setMessages([]);
+            setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onCancel={() => setShowEndLiveConfirm(false)}
         />
       )}
 
