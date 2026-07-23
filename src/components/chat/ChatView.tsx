@@ -646,7 +646,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                       />
                     )}
                     {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>{msg.text}</span>}
-                    {msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
+                    {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
                   </>
                 )}
               </div>
