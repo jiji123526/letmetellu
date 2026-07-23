@@ -29,12 +29,26 @@ export default function LoginPage() {
     if (!email || !password) { setError("모든 필드를 입력해주세요"); return; }
     if (password.length < 8 || !/\d/.test(password)) { setError("비밀번호는 8자 이상, 숫자를 포함해야 합니다"); return; }
 
-    // With Auth.js credentials, signup = login (auto-creates)
+    // Create account on Worker
+    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "";
+    const signupRes = await fetch(`${workerUrl}/api/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "signup", email, password }),
+    });
+    const signupData = await signupRes.json() as { ok?: boolean; error?: string };
+    if (!signupData.ok) {
+      if (signupData.error === "user_exists") setError("이미 가입된 이메일입니다");
+      else if (signupData.error === "weak_password") setError("비밀번호는 8자 이상, 숫자를 포함해야 합니다");
+      else setError("가입에 실패했습니다");
+      return;
+    }
+
+    // Auto sign in after signup
     const result = await signIn("credentials", { email, password, redirect: false });
     if (result?.error) {
-      setError("가입에 실패했습니다");
+      setError("가입 후 로그인에 실패했습니다");
     } else {
-      // New user → onboarding
       window.location.href = "/onboarding";
     }
   };

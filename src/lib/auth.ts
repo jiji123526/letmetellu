@@ -2,6 +2,8 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 
+const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Google({
@@ -15,16 +17,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        // TODO: validate against your user store
-        // For now, accept any email/password for testing
-        if (credentials?.email && credentials?.password) {
-          return {
-            id: credentials.email as string,
-            email: credentials.email as string,
-            name: (credentials.email as string).split("@")[0],
-          };
-        }
-        return null;
+        if (!credentials?.email || !credentials?.password) return null;
+
+        // Verify against Worker
+        const res = await fetch(`${WORKER_URL}/api/auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "login",
+            email: credentials.email,
+            password: credentials.password,
+          }),
+        });
+
+        const data = await res.json() as { ok?: boolean; id?: string; email?: string; name?: string; error?: string };
+        if (!data.ok || !data.id) return null;
+
+        return {
+          id: data.id,
+          email: data.email,
+          name: data.name,
+        };
       },
     }),
   ],

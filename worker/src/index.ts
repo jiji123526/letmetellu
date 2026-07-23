@@ -5,6 +5,7 @@ import { handleData } from "./routes/data";
 import { handleInit } from "./routes/init";
 import { handleAdmin } from "./routes/admin";
 import { handleUser } from "./routes/user";
+import { handleAuth } from "./routes/auth";
 
 export { ChatRoom };
 
@@ -56,6 +57,8 @@ export default {
         response = await handleAdmin(request, env);
       } else if (url.pathname.startsWith("/api/user")) {
         response = await handleUser(request, env);
+      } else if (url.pathname.startsWith("/api/auth")) {
+        response = await handleAuth(request, env);
       } else {
         response = new Response("not found", { status: 404 });
       }
