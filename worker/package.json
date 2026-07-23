@@ -1,0 +1,16 @@
+{
+  "name": "letsplay-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply letsplay-db --local",
+    "db:migrate:prod": "wrangler d1 migrations apply letsplay-db --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260721.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.113.0"
+  }
+}
