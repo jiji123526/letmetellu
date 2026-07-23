@@ -94,16 +94,16 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
         style={{ flex: 1, minWidth: 0, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "8px", padding: "6px 10px", fontSize: "var(--bubble-font-size, 15px)", fontFamily: "inherit", outline: "none", lineHeight: 1 }}
       />
       <button
-        disabled={results.length === 0}
+        disabled={results.length === 0 || index <= 0}
         onClick={() => navigate(-1)}
-        style={{ background: "none", border: "none", color: results.length > 0 ? "var(--tint)" : "var(--meta)", cursor: results.length > 0 ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: results.length > 0 ? 1 : 0.3 }}
+        style={{ background: "none", border: "none", color: (results.length > 0 && index > 0) ? "var(--tint)" : "var(--meta)", cursor: (results.length > 0 && index > 0) ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: (results.length > 0 && index > 0) ? 1 : 0.3 }}
       >
         <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}><path d="M18 15l-6-6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       <button
-        disabled={results.length === 0}
+        disabled={results.length === 0 || index >= results.length - 1}
         onClick={() => navigate(1)}
-        style={{ background: "none", border: "none", color: results.length > 0 ? "var(--tint)" : "var(--meta)", cursor: results.length > 0 ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: results.length > 0 ? 1 : 0.3 }}
+        style={{ background: "none", border: "none", color: (results.length > 0 && index < results.length - 1) ? "var(--tint)" : "var(--meta)", cursor: (results.length > 0 && index < results.length - 1) ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: (results.length > 0 && index < results.length - 1) ? 1 : 0.3 }}
       >
         <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
