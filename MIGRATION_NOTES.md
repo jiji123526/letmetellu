@@ -155,3 +155,50 @@ When porting a CSS component to TSX:
 - Embeds (YouTube/Twitter/link previews)
 - Channel discovery
 - Social login (Kakao, Apple)
+
+
+### Session 1 Wrap-up (2026-07-23)
+
+**Final state — fully functional MVP:**
+
+Infrastructure:
+- Next.js 16 on Vercel (auto-deploy from git)
+- Cloudflare Worker + D1 + Durable Objects (deployed)
+- Real-time messaging confirmed working (multi-tab, multi-user)
+- Auth.js with Google OAuth + email/password (separate signup/login)
+- Server-side validation (rate limit, banned words, fingerprint, message cap, freeze, block)
+
+Pages:
+- `/login` — tabs (로그인/가입하기), Google OAuth, email/password
+- `/onboarding` — 2-step (create channel + admin guide accordion)
+- `/dashboard` — list channels, create new, logout
+- `/ch/[slug]` — full chat with all features
+- `/` — redirects based on auth state
+
+Chat features (all working):
+- Messages (send, edit, delete — persisted in D1)
+- Reactions, replies (threaded with arrows)
+- Context menu (long-press: reply, report/edit/delete, block)
+- DM mode, photo staging, report system
+- Admin panel (all settings: profile, color, rules, welcome popup, banned words, blocked users, freeze, live, notice)
+- Live mode with emoji broadcast
+- Settings (font size, bubble color)
+- Welcome popup (customizable by admin — emoji or image icon)
+- Notice banner (persistent in D1)
+- Gallery, links panels
+- Scroll-to-bottom, skeleton loading, Korean IME fix
+
+Security:
+- Passwords hashed (SHA-256), stored in D1
+- Admin proxy: session verification → internal token → ownership check
+- Rate limiting, banned words, fingerprint blocking — all server-side
+- Parameterized queries throughout (no injection)
+
+**Remaining for production:**
+- R2 for image uploads (photos currently local-only)
+- Search (FTS5 ready, needs endpoint + UI wire)
+- Embeds (YouTube/Twitter/link previews)
+- Email verification on signup
+- Upgrade password hashing to bcrypt
+- Channel deletion from dashboard
+- Long message truncation
