@@ -22,6 +22,7 @@ import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePro
 import { ConfirmDialog } from "./ConfirmDialog";
 import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
+import { SearchBar } from "./SearchBar";
 import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { AdminPanel } from "../admin/AdminPanel";
 
@@ -152,6 +153,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [headerMenu, setHeaderMenu] = useState<DOMRect | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -505,6 +507,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <button
           className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
           style={{ color: bubbleColor }}
+          onClick={() => setShowSearch(!showSearch)}
         >
           <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
             <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -524,6 +527,19 @@ export function ChatView({ channelId }: { channelId: string }) {
           </svg>
         </button>
       </header>
+
+      {/* Search bar */}
+      {showSearch && (
+        <SearchBar
+          channelId={channelId}
+          messages={messages}
+          onNavigate={(msgId) => {
+            const el = document.getElementById(`msg-${msgId}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
 
       {/* Admin return banner */}
       {isAdmin && adminViewAsUser && (
