@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
+import { useAuth } from "@/hooks/useAuth";
 import { ContextMenu } from "./ContextMenu";
 import { ReactionBadge } from "./ReactionBadge";
 import { ReplyBar } from "./ReplyBar";
@@ -40,6 +41,7 @@ interface Message {
 
 interface Channel {
   id: string;
+  owner_uid: string;
   name: string;
   profile_image: string | null;
   bubble_color: string;
@@ -151,10 +153,12 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showGallery, setShowGallery] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(() => {
+  const { isOwner } = useAuth(channel?.owner_uid);
+  const [manualAdmin, setManualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("isAdmin") === "true";
   });
+  const isAdmin = isOwner || manualAdmin;
   const [adminViewAsUser, setAdminViewAsUser] = useState(false);
   const [liveActive, setLiveActive] = useState(false);
   const [inLiveMode, setInLiveMode] = useState(false);
@@ -368,8 +372,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     clickTimerRef.current = setTimeout(() => { clickCountRef.current = 0; }, 500);
     if (clickCountRef.current >= 3) {
       clickCountRef.current = 0;
-      const newAdmin = !isAdmin;
-      setIsAdmin(newAdmin);
+      const newAdmin = !manualAdmin;
+      setManualAdmin(newAdmin);
       localStorage.setItem("isAdmin", String(newAdmin));
       setBanner({ text: newAdmin ? "관리자 모드 활성화" : "관리자 모드 해제", color: newAdmin ? "#3b8df0" : "var(--meta)" });
       setTimeout(() => setBanner(null), 2000);
