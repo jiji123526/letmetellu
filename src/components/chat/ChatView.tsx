@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { ContextMenu } from "./ContextMenu";
 import { ReactionBadge } from "./ReactionBadge";
@@ -380,7 +380,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       // Hard delete — remove completely
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
     }
-    // TODO: send to backend
+    // Send to backend
+    deleteMessage({ uid, message_id: msgId, channel_id: channelId, soft: hasReplies });
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1117,7 +1118,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages((prev) =>
               prev.map((m) => (m.id === editingMsg.id ? { ...m, text: newText, edited: true } as Message : m))
             );
-            // TODO: send to backend
+            editMessageApi({ uid, message_id: editingMsg.id, channel_id: channelId, text: newText });
           }}
           onClose={() => setEditingMsg(null)}
         />

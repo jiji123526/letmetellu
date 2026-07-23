@@ -60,3 +60,35 @@ export function getWebSocketUrl(channelId: string, uid: string): string {
   const wsBase = WORKER_URL.replace("http://", "ws://").replace("https://", "wss://");
   return `${wsBase}/ws/${channelId}?uid=${uid}`;
 }
+
+export async function deleteMessage(payload: {
+  uid: string;
+  message_id: string;
+  channel_id: string;
+  soft?: boolean;
+}) {
+  if (IS_MOCK) return { ok: true };
+
+  const res = await fetch(`${WORKER_URL}/api/messages`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function editMessageApi(payload: {
+  uid: string;
+  message_id: string;
+  channel_id: string;
+  text: string;
+}) {
+  if (IS_MOCK) return { ok: true };
+
+  const res = await fetch(`${WORKER_URL}/api/messages`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
