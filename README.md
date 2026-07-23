@@ -69,6 +69,17 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Delete/Edit ownership — only message sender can modify
 - [x] Fingerprint — canvas + UA hash, sent with every message, stored for ban evasion detection
 
+### Backend-Wired Features
+- [x] Reactions — toggle via PATCH, persisted in D1 `messages.reactions`
+- [x] DM messages — persisted in D1 `dm` table, broadcast via DO
+- [x] Search — FTS5 full-text search with highlight (yellow/orange, nav arrows)
+- [x] Photo upload — R2 binary upload, served via `/api/media/{key}`
+- [x] Banned words CRUD — admin panel → D1 `banned_words` table
+- [x] Welcome popup config — D1 `config` table, loaded on init
+- [x] Notice banner — D1 `config` table, broadcast via DO
+- [x] Channel profile/name/color/freeze — all persist via admin actions
+- [x] Admin messages detection — Worker checks `owner_uid`, stores `is_admin=1`
+
 ### Admin Panel (complete, local state)
 - [x] Admin mode toggle (triple-click avatar)
 - [x] Admin/user view toggle with return banner

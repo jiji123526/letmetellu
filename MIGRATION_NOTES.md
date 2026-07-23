@@ -202,3 +202,33 @@ Security:
 - Upgrade password hashing to bcrypt
 - Channel deletion from dashboard
 - Long message truncation
+
+
+### Session 1 Extended (2026-07-23, final)
+
+**Additional features wired:**
+- Search: FTS5 full-text search with yellow/orange highlight, nav arrows gray at boundaries
+- Reactions: persisted in D1 via PATCH endpoint, toggle on/off
+- DM messages: persisted in D1 `dm` table, broadcast via DO
+- Photo upload: R2 binary upload, served via Worker `/api/media/{key}`
+- Banned words CRUD: admin panel calls `adminAction` → D1 `banned_words` table
+- Welcome popup config: persisted in D1 `config` table, loaded on init
+- Admin messages: Worker detects channel owner → stores `is_admin=1`
+- Profile/name/color/freeze: all call `adminAction("update-profile"/"freeze")` → persisted
+
+**Fixes:**
+- Cross-side replies: bubble COLOR uses sender identity (`isMine`), SIDE uses parent position
+- Keyboard dismiss: context menu open, after send (except live), search Enter
+- Search input lineHeight fix
+- Admin guide text scales with font setting
+
+**Still remaining:**
+- Emoji presets → D1 (5 min)
+- Block from context menu → D1 (5 min)
+- Report with flag (15 min)
+- Long message truncation (20 min)
+- Offline banner (15 min)
+- Gallery populate from R2 (20 min)
+- Channel deletion (15 min)
+- Live mode full backend (1-2 hrs)
+- Embeds (1-2 hrs)
