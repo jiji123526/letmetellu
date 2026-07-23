@@ -7,10 +7,11 @@ interface SearchBarProps {
   channelId: string;
   messages: { id: string; text: string }[];
   onNavigate: (msgId: string) => void;
+  onSearchState: (state: { query: string; activeId: string | null; resultIds: string[] }) => void;
   onClose: () => void;
 }
 
-export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBarProps) {
+export function SearchBar({ channelId, messages, onNavigate, onSearchState, onClose }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ id: string; text: string }[]>([]);
   const [index, setIndex] = useState(-1);
@@ -18,14 +19,20 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  const updateState = (q: string, res: { id: string }[], idx: number) => {
+    onSearchState({
+      query: q,
+      activeId: idx >= 0 && res[idx] ? res[idx].id : null,
+      resultIds: res.map((r) => r.id),
+    });
+  };
+
   const performSearch = async (q: string) => {
-    if (!q) { setResults([]); setIndex(-1); return; }
+    if (!q) { setResults([]); setIndex(-1); updateState("", [], -1); return; }
 
     const queryLower = q.toLowerCase();
-    // Local search first
     let matched = messages.filter((m) => m.text && m.text.toLowerCase().includes(queryLower));
 
-    // Server search (FTS5)
     try {
       const serverData = await searchMessages(channelId, q);
       if (serverData.results) {
@@ -40,16 +47,21 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
       const lastIdx = matched.length - 1;
       setIndex(lastIdx);
       onNavigate(matched[lastIdx].id);
+      updateState(q, matched, lastIdx);
+    } else {
+      setIndex(-1);
+      updateState(q, [], -1);
     }
   };
 
   const navigate = (dir: number) => {
     if (results.length === 0) return;
     let next = index + dir;
-    if (next < 0) next = results.length - 1;
-    if (next >= results.length) next = 0;
+    if (next < 0) next = 0;
+    if (next >= results.length) next = results.length - 1;
     setIndex(next);
     onNavigate(results[next].id);
+    updateState(query, results, next);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -61,7 +73,12 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
         navigate(-1);
       }
     }
-    if (e.key === "Escape") onClose();
+    if (e.key === "Escape") { onSearchState({ query: "", activeId: null, resultIds: [] }); onClose(); }
+  };
+
+  const handleClose = () => {
+    onSearchState({ query: "", activeId: null, resultIds: [] });
+    onClose();
   };
 
   return (
@@ -70,13 +87,12 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
         ref={inputRef}
         type="text"
         value={query}
-        onChange={(e) => { setQuery(e.target.value); setResults([]); setIndex(-1); }}
+        onChange={(e) => { setQuery(e.target.value); setResults([]); setIndex(-1); updateState("", [], -1); }}
         onKeyDown={handleKeyDown}
         onBlur={() => { if (query && results.length === 0) performSearch(query); }}
         placeholder="검색..."
         style={{ flex: 1, minWidth: 0, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "8px", padding: "6px 10px", fontSize: "var(--bubble-font-size, 15px)", fontFamily: "inherit", outline: "none", lineHeight: 1 }}
       />
-      {/* Prev button */}
       <button
         disabled={results.length === 0}
         onClick={() => navigate(-1)}
@@ -84,7 +100,6 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
       >
         <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}><path d="M18 15l-6-6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
-      {/* Next button */}
       <button
         disabled={results.length === 0}
         onClick={() => navigate(1)}
@@ -92,13 +107,26 @@ export function SearchBar({ channelId, messages, onNavigate, onClose }: SearchBa
       >
         <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
-      {/* Close button */}
       <button
-        onClick={onClose}
+        onClick={handleClose}
         style={{ background: "none", border: "none", color: "var(--meta)", cursor: "pointer", fontSize: "calc(var(--bubble-font-size) + 2px)", padding: "5px", lineHeight: 1 }}
       >
         ✕
       </button>
     </div>
+  );
+}
+
+// Helper: highlight text with search query
+export function highlightText(text: string, query: string, isActive: boolean): React.ReactNode {
+  if (!query || !text) return text;
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} style={{ background: isActive ? "#ff9800" : "#ffd54f", color: isActive ? "#fff" : "#000", borderRadius: "2px", padding: "0 1px" }}>{part}</mark>
+    ) : (
+      <span key={i}>{part}</span>
+    )
   );
 }

@@ -22,7 +22,7 @@ import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePro
 import { ConfirmDialog } from "./ConfirmDialog";
 import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
-import { SearchBar } from "./SearchBar";
+import { SearchBar, highlightText } from "./SearchBar";
 import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { AdminPanel } from "../admin/AdminPanel";
 
@@ -154,6 +154,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -539,18 +540,9 @@ export function ChatView({ channelId }: { channelId: string }) {
           messages={messages}
           onNavigate={(msgId) => {
             const el = document.getElementById(`msg-${msgId}`);
-            if (el) {
-              el.scrollIntoView({ behavior: "smooth", block: "center" });
-              // Flash highlight
-              const bubble = el.querySelector("[class*='relative']") as HTMLElement;
-              if (bubble) {
-                const orig = bubble.style.outline;
-                bubble.style.outline = "2px solid #ffd54f";
-                bubble.style.outlineOffset = "2px";
-                setTimeout(() => { bubble.style.outline = orig; bubble.style.outlineOffset = ""; }, 2000);
-              }
-            }
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
           }}
+          onSearchState={setSearchState}
           onClose={() => setShowSearch(false)}
         />
       )}
@@ -698,7 +690,11 @@ export function ChatView({ channelId }: { channelId: string }) {
                         style={{ objectFit: "contain" }}
                       />
                     )}
-                    {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>{msg.text}</span>}
+                    {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>
+                      {searchState.query && searchState.resultIds.includes(msg.id)
+                        ? highlightText(msg.text, searchState.query, msg.id === searchState.activeId)
+                        : msg.text}
+                    </span>}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
                   </>
                 )}
