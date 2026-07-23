@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { fetchInit, sendMessage as sendMessageApi } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
+import { ContextMenu } from "./ContextMenu";
+import { ReactionBadge } from "./ReactionBadge";
+import { ReplyBar } from "./ReplyBar";
+import { ScrollToBottom } from "./ScrollToBottom";
+import { WelcomePopup } from "./WelcomePopup";
+import { HeaderMenu } from "./HeaderMenu";
+import { SettingsPanel } from "./SettingsPanel";
+import { NoticePanel } from "./NoticePanel";
+import { EmojiPicker } from "./EmojiPicker";
+import { GalleryPanel } from "./GalleryPanel";
+import { LinksPanel } from "./LinksPanel";
+import { PlusMenu } from "./PlusMenu";
+import { AdminPanel } from "../admin/AdminPanel";
 
 interface Message {
   id: string;
@@ -14,6 +27,7 @@ interface Message {
   reactions: string;
   reply_to: string | null;
   created_at: string;
+  dm?: boolean;
 }
 
 interface Channel {
@@ -22,9 +36,17 @@ interface Channel {
   profile_image: string | null;
   bubble_color: string;
   is_frozen: number;
+  notice: string;
+}
+
+interface ContextMenuState {
+  msg: Message;
+  isSent: boolean;
+  rect: DOMRect;
 }
 
 function getOrCreateUid(): string {
+  if (typeof window === "undefined") return "ssr";
   const key = "letsplay_uid";
   let uid = localStorage.getItem(key);
   if (!uid) {
@@ -34,38 +56,66 @@ function getOrCreateUid(): string {
   return uid;
 }
 
-function formatTime(dateStr: string) {
-  const d = new Date(dateStr + "Z");
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function compressImage(file: File, maxWidth: number, quality: number): Promise<{ blob: Blob; width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let w = img.width, h = img.height;
+      if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
+      w = Math.round(w);
+      h = Math.round(h);
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => resolve({ blob: blob!, width: w, height: h }), "image/jpeg", quality);
+    };
+    img.src = URL.createObjectURL(file);
+  });
 }
 
-function isSameGroup(a: Message, b: Message) {
-  return a.uid === b.uid;
+function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  });
 }
 
-// Skeleton loading component
+function parseReactions(reactionsStr: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(reactionsStr);
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function isSameGroup(_a: Message, _b: Message, _myUid: string) {
+  return false;
+}
+
+// Skeleton loading
 function SkeletonLoading() {
   const rows = [
-    { side: "recv", width: "25%" },
-    { side: "recv", width: "45%" },
-    { side: "sent", width: "35%" },
-    { side: "recv", width: "40%" },
-    { side: "sent", width: "25%" },
-    { side: "sent", width: "55%" },
-    { side: "recv", width: "30%" },
-    { side: "sent", width: "40%" },
-    { side: "recv", width: "55%" },
-    { side: "sent", width: "25%" },
+    { side: "recv", width: "25%" }, { side: "recv", width: "45%" },
+    { side: "sent", width: "35%" }, { side: "recv", width: "40%" },
+    { side: "sent", width: "25%" }, { side: "sent", width: "55%" },
+    { side: "recv", width: "30%" }, { side: "sent", width: "40%" },
+    { side: "recv", width: "55%" }, { side: "sent", width: "25%" },
   ];
-
   return (
     <div className="flex flex-col gap-[3px] p-3 animate-pulse">
       {rows.map((row, i) => (
         <div key={i} className={`flex ${row.side === "sent" ? "justify-end" : "justify-start"}`}>
           <div
-            className="rounded-[18px] h-[44px]"
+            className="rounded-[18px]"
             style={{
               width: row.width,
+              height: "calc(var(--bubble-font-size) * 1.38 + 20px)",
               background: row.side === "sent" ? "var(--bubble-sent)" : "var(--gray-bubble)",
               opacity: row.side === "sent" ? 0.5 : 1,
             }}
@@ -82,8 +132,40 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [uid] = useState(getOrCreateUid);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [headerMenu, setHeaderMenu] = useState<DOMRect | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showNotice, setShowNotice] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
+  const [showLinks, setShowLinks] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("isAdmin") === "true";
+  });
+  const [adminViewAsUser, setAdminViewAsUser] = useState(false);
+  const [petitionEnabled, setPetitionEnabled] = useState(true);
+  const [dmEnabled, setDmEnabled] = useState(true);
+  const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
+  const [emojiPicker, setEmojiPicker] = useState<{ msgId: string; rect: DOMRect } | null>(null);
+  const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
+  const [dmMode, setDmMode] = useState(false);
+  const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
+  const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
+  const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try { return new Set(JSON.parse(localStorage.getItem("reportedMsgIds") || "[]")); } catch { return new Set(); }
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { connected, presence, subscribe } = useRealtime(channelId, uid);
 
@@ -94,30 +176,48 @@ export function ChatView({ channelId }: { channelId: string }) {
         setChannel(data.channel);
         setMessages(data.messages);
         setLoading(false);
+        // Restore saved bubble color
+        if (typeof window !== "undefined") {
+          const saved = localStorage.getItem(`bubbleColor_${channelId}`);
+          if (saved) setLocalBubbleColor(saved);
+        }
       })
       .catch(console.error);
   }, [channelId]);
+
+  const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
 
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed") {
-        fetchInit(channelId).then((data) => {
-          setMessages(data.messages);
-        });
+        fetchInit(channelId).then((data) => setMessages(data.messages));
       }
       if (event.type === "freeze-change") {
-        setChannel((prev) =>
-          prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null
-        );
+        setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
       }
     });
   }, [subscribe, channelId]);
 
   // Auto-scroll on new messages
   useEffect(() => {
+    if (!showScrollBtn) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, showScrollBtn]);
+
+  // Scroll detection for scroll-to-bottom button
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBtn(distanceFromBottom > 200);
+  }, []);
+
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    setShowScrollBtn(false);
+  };
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -129,35 +229,150 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || channel?.is_frozen) return;
+    if ((!text && pendingPhotos.length === 0) || channel?.is_frozen) return;
 
     setInput("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    if (dmMode) {
+      // Send as DM — not visible to sender, only admin sees it
+      setDmMode(false);
+      setPendingPhotos([]);
+      setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
+      setTimeout(() => setBanner(null), 3000);
+      // TODO: send to /api/dm endpoint
+      setReplyingTo(null);
+      return;
     }
 
-    // Optimistic update
+    // Send photos + text
+    const photos = [...pendingPhotos];
+    setPendingPhotos([]);
+
     const optimistic: Message = {
       id: crypto.randomUUID(),
       uid,
       nick: null,
       text,
-      is_admin: 0,
-      image: null,
+      is_admin: effectiveAdmin ? 1 : 0,
+      image: photos.length > 0 ? photos[0].previewUrl : null,
       reactions: "{}",
-      reply_to: null,
+      reply_to: replyingTo?.id || null,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
+    setReplyingTo(null);
 
-    await sendMessageApi({ uid, text, channel_id: channelId });
+    await sendMessageApi({
+      uid,
+      text,
+      channel_id: channelId,
+      image: photos.length > 0 ? photos[0].previewUrl : undefined,
+      reply_to: replyingTo?.id,
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Context menu handlers
+  const handleBubbleLongPress = (msg: Message, isSent: boolean, el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    setContextMenu({ msg, isSent, rect });
+  };
+
+  const handleTouchStart = (msg: Message, isSent: boolean, el: HTMLElement) => {
+    longPressTimer.current = setTimeout(() => {
+      handleBubbleLongPress(msg, isSent, el);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleReaction = (msgId: string, emoji: string) => {
+    // Optimistic reaction update
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== msgId) return m;
+        const reactions = parseReactions(m.reactions);
+        const key = `${uid}_${Date.now()}`;
+        // Check if user already reacted with this emoji
+        const existingKey = Object.entries(reactions).find(
+          ([k, v]) => k.startsWith(`${uid}_`) && v === emoji
+        )?.[0];
+        if (existingKey) {
+          delete reactions[existingKey]; // toggle off
+        } else {
+          reactions[key] = emoji; // add
+        }
+        return { ...m, reactions: JSON.stringify(reactions) };
+      })
+    );
+    // TODO: send to backend
+  };
+
+  const handleAvatarClick = () => {
+    clickCountRef.current++;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = setTimeout(() => { clickCountRef.current = 0; }, 500);
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0;
+      const newAdmin = !isAdmin;
+      setIsAdmin(newAdmin);
+      localStorage.setItem("isAdmin", String(newAdmin));
+      setBanner({ text: newAdmin ? "관리자 모드 활성화" : "관리자 모드 해제", color: newAdmin ? "#3b8df0" : "var(--meta)" });
+      setTimeout(() => setBanner(null), 2000);
+    }
+  };
+
+  // Effective admin state (false when viewing as user)
+  const effectiveAdmin = isAdmin && !adminViewAsUser;
+
+  const handleDelete = (msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, text: "삭제된 채팅입니다", deleted: true } as Message : m))
+    );
+    // TODO: send to backend
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newPhotos: typeof pendingPhotos = [];
+    for (const file of Array.from(files)) {
+      if (file.type === "image/gif") {
+        const previewUrl = URL.createObjectURL(file);
+        const dims = await getImageDimensions(file);
+        newPhotos.push({ blob: file, previewUrl, width: dims.width, height: dims.height });
+      } else {
+        const { blob, width, height } = await compressImage(file, 1200, 0.8);
+        const previewUrl = URL.createObjectURL(blob);
+        newPhotos.push({ blob, previewUrl, width, height });
+      }
+    }
+    setPendingPhotos((prev) => [...prev, ...newPhotos]);
+    // Reset input
+    e.target.value = "";
+    textareaRef.current?.focus();
+  };
+
+  const removePendingPhoto = (idx: number) => {
+    setPendingPhotos((prev) => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[idx].previewUrl);
+      updated.splice(idx, 1);
+      return updated;
+    });
   };
 
   if (loading) {
@@ -174,25 +389,17 @@ export function ChatView({ channelId }: { channelId: string }) {
           }}
         >
           <div className="flex-1 flex flex-col items-center gap-[6px]">
-            <div
-              className="w-[41px] h-[41px] rounded-full"
-              style={{ background: "var(--gray-bubble)" }}
-            />
-            <div
-              className="h-3 w-16 rounded"
-              style={{ background: "var(--gray-bubble)" }}
-            />
+            <div className="rounded-full" style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", background: "var(--gray-bubble)" }} />
+            <div className="h-3 w-16 rounded" style={{ background: "var(--gray-bubble)" }} />
           </div>
         </header>
-        <div className="flex-1 overflow-hidden">
-          <SkeletonLoading />
-        </div>
+        <div className="flex-1 overflow-hidden"><SkeletonLoading /></div>
       </div>
     );
   }
 
   return (
-    <div className="h-dvh flex flex-col" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
+    <div className="h-dvh flex flex-col relative" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       {/* Header */}
       <header
         className="flex-none flex items-center px-4 relative"
@@ -205,62 +412,50 @@ export function ChatView({ channelId }: { channelId: string }) {
           zIndex: 5,
         }}
       >
-        {/* Notice button */}
         <button
           className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: channel?.bubble_color || "var(--bubble-sent)" }}
+          style={{ color: bubbleColor }}
+          onClick={() => setShowNotice(true)}
         >
-          <svg viewBox="0 0 24 24" width="23" height="23">
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}>
             <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
             <path d="M12 16v-4M12 8h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
 
-        {/* Center - avatar + name */}
         <div className="flex-1 flex flex-col items-center gap-[6px]">
-          <div className="w-[41px] h-[41px] rounded-full overflow-hidden relative top-[3px]">
+          <div
+            className="rounded-full overflow-hidden relative top-[3px] cursor-pointer"
+            style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)" }}
+            onClick={handleAvatarClick}
+          >
             {channel?.profile_image ? (
-              <img
-                src={channel.profile_image}
-                alt=""
-                className="w-full h-full object-cover"
-              />
+              <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div
-                className="w-full h-full flex items-center justify-center text-lg"
-                style={{ background: "var(--gray-bubble)" }}
-              >
-                💬
-              </div>
+              <div className="w-full h-full flex items-center justify-center text-lg" style={{ background: "var(--gray-bubble)" }}>💬</div>
             )}
           </div>
-          <div className="text-xs font-normal flex items-center gap-[2px]" style={{ color: "var(--gray-text)" }}>
+          <div className="font-normal flex items-center gap-[2px]" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--gray-text)" }}>
             {channel?.name}
-            {connected && (
-              <span className="ml-1 text-[10px]" style={{ color: "var(--meta)" }}>
-                {presence}
-              </span>
-            )}
           </div>
         </div>
 
-        {/* Search button */}
         <button
           className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: channel?.bubble_color || "var(--bubble-sent)" }}
+          style={{ color: bubbleColor }}
         >
-          <svg viewBox="0 0 24 24" width="20" height="20">
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
             <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
             <path d="M21 21l-4.35-4.35" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
 
-        {/* Menu button */}
         <button
           className="absolute right-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: channel?.bubble_color || "var(--bubble-sent)" }}
+          style={{ color: bubbleColor }}
+          onClick={(e) => setHeaderMenu(e.currentTarget.getBoundingClientRect())}
         >
-          <svg viewBox="0 0 24 24" width="22" height="22">
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 5px)", height: "calc(var(--bubble-font-size) + 5px)" }}>
             <circle cx="12" cy="5" r="1.8" fill="currentColor" />
             <circle cx="12" cy="12" r="1.8" fill="currentColor" />
             <circle cx="12" cy="19" r="1.8" fill="currentColor" />
@@ -268,67 +463,261 @@ export function ChatView({ channelId }: { channelId: string }) {
         </button>
       </header>
 
+      {/* Admin return banner */}
+      {isAdmin && adminViewAsUser && (
+        <div
+          className="flex-none flex items-center justify-between"
+          style={{
+            padding: "6px 14px",
+            background: "rgba(59, 141, 240, 0.1)",
+            borderBottom: "1px solid rgba(59, 141, 240, 0.2)",
+            fontSize: "calc(var(--bubble-font-size) - 5px)",
+            color: "#3b8df0",
+          }}
+        >
+          <span>사용자 시점으로 보는 중</span>
+          <button
+            className="border-none rounded-lg cursor-pointer"
+            style={{
+              background: "#3b8df0",
+              color: "#fff",
+              padding: "4px 10px",
+              fontSize: "calc(var(--bubble-font-size) - 5px)",
+              fontWeight: 500,
+            }}
+            onClick={() => setAdminViewAsUser(false)}
+          >
+            관리자로 돌아가기
+          </button>
+        </div>
+      )}
+
       {/* Messages */}
       <main
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
         className="messages-scroll flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
         style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
       >
-        {messages.map((msg, i) => {
-          const isSent = msg.uid === uid;
-          const prev = messages[i - 1];
-          const isGroupStart = !prev || !isSameGroup(prev, msg);
-          const isLast = !messages[i + 1] || !isSameGroup(msg, messages[i + 1]);
+        {(() => {
+          // Separate top-level messages and replies (threaded under parent)
+          const topLevel: Message[] = [];
+          const repliesMap: Record<string, Message[]> = {};
+          const messageIds = new Set(messages.map((m) => m.id));
 
-          return (
-            <div
-              key={msg.id}
-              className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
-              style={{ paddingTop: isGroupStart ? "7px" : "3px" }}
-            >
-              <div className={`flex flex-col max-w-[74%] ${isSent ? "items-end" : "items-start"}`}>
-                {/* Sender name for received messages at group start */}
-                {!isSent && isGroupStart && msg.nick && (
-                  <div className="text-[10px] mb-[2px] ml-3" style={{ color: "var(--meta)" }}>
-                    {msg.nick}
-                  </div>
-                )}
+          messages.forEach((m) => {
+            if (m.reply_to && messageIds.has(m.reply_to)) {
+              if (!repliesMap[m.reply_to]) repliesMap[m.reply_to] = [];
+              repliesMap[m.reply_to].push(m);
+            } else {
+              topLevel.push(m);
+            }
+          });
 
-                {/* Bubble */}
-                <div
-                  className="relative px-[14px] py-[10px] max-w-full break-words whitespace-pre-wrap"
-                  style={{
-                    fontSize: "var(--bubble-font-size)",
-                    lineHeight: 1.38,
-                    overflowWrap: "anywhere",
-                    borderRadius: isLast
-                      ? isSent
-                        ? "20px 20px 4px 20px"
-                        : "20px 20px 20px 4px"
-                      : "20px",
-                    background: isSent
-                      ? channel?.bubble_color || "var(--bubble-sent)"
-                      : "var(--gray-bubble)",
-                    color: isSent ? "#fff" : "var(--gray-text)",
-                  }}
-                >
-                  {msg.text}
-                </div>
+          const renderBubble = (msg: Message, prev: Message | null, next: Message | null, isReply: boolean, parentMsg: Message | null) => {
+            // Determine parent's side (replies always follow parent's side)
+            const parentIsSent = parentMsg
+              ? (effectiveAdmin ? !!parentMsg.is_admin : !parentMsg.is_admin)
+              : false;
 
-                {/* Timestamp on last message in group */}
-                {isLast && (
-                  <div
-                    className="text-[10px] mt-[2px] px-1"
-                    style={{ color: "var(--meta)" }}
-                  >
-                    {formatTime(msg.created_at)}
-                  </div>
-                )}
+            // Reply messages follow parent's side; normal messages use their own side
+            // Non-admin view: admin messages = left (recv), all others = right (sent)
+            // Admin view: admin messages = right (sent), all others = left (recv)
+            const isSent = isReply
+              ? parentIsSent
+              : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+
+            const isGroupStart = !isReply && (!prev || !isSameGroup(prev, msg, uid));
+            const isLast = !isReply && (!next || !isSameGroup(msg, next, uid));
+            const reactions = parseReactions(msg.reactions);
+
+            const bubble = (
+              <div
+                className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                style={{
+                  padding: msg.image && !msg.text ? "4px" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                  fontSize: "var(--bubble-font-size)",
+                  lineHeight: 1.38,
+                  overflowWrap: "anywhere",
+                  borderRadius: !isReply && isLast
+                    ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
+                    : "20px",
+                  background: reportedMsgIds.has(msg.id)
+                    ? "#ffe0e0"
+                    : msg.dm
+                      ? (isSent ? "#7b3fa0" : "#ddc8ed")
+                      : isSent
+                        ? bubbleColor
+                        : "var(--gray-bubble)",
+                  color: reportedMsgIds.has(msg.id)
+                    ? "#a00"
+                    : msg.dm
+                      ? (isSent ? "#fff" : "#5a1580")
+                      : isSent ? "#fff" : "var(--gray-text)",
+                  opacity: reportedMsgIds.has(msg.id) ? 0.6 : undefined,
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  handleBubbleLongPress(msg, isSent, e.currentTarget);
+                }}
+                onTouchStart={(e) => handleTouchStart(msg, isSent, e.currentTarget)}
+                onTouchEnd={handleTouchEnd}
+                onTouchMove={handleTouchEnd}
+              >
+                {msg.image ? (
+                  <img
+                    src={msg.image}
+                    alt=""
+                    className="block w-full max-w-[260px] h-auto rounded-[15px]"
+                    style={{ objectFit: "contain" }}
+                  />
+                ) : null}
+                {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>{msg.text}</span>}
               </div>
-            </div>
-          );
-        })}
+            );
+
+            // Reply arrow SVG
+            const replyArrow = isReply ? (
+              <span
+                className="flex items-center"
+                style={{
+                  color: "var(--meta)",
+                  opacity: 0.7,
+                  marginTop: "8px",
+                  transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
+                }}
+              >
+                <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
+                  <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            ) : null;
+
+            return (
+              <div
+                key={msg.id}
+                id={`msg-${msg.id}`}
+                className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
+                style={{
+                  paddingTop: "calc(var(--bubble-font-size) * 0.18)",
+                  paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
+                  paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
+                }}
+              >
+                <div className={`flex flex-col ${isReply ? "max-w-[85%]" : "max-w-[74%]"} ${isSent ? "items-end" : "items-start"}`}>
+                  {/* Bubble with reply arrow */}
+                  {isReply ? (
+                    <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
+                      {parentIsSent ? (
+                        <>{bubble}{replyArrow}</>
+                      ) : (
+                        <>{replyArrow}{bubble}</>
+                      )}
+                    </div>
+                  ) : (
+                    bubble
+                  )}
+
+                  {/* Reactions */}
+                  <ReactionBadge
+                    reactions={reactions}
+                    myUid={uid}
+                    isSent={isSent}
+                    isReply={isReply}
+                    onReaction={(emoji) => handleReaction(msg.id, emoji)}
+                    onEmojiPicker={(rect) => setEmojiPicker({ msgId: msg.id, rect })}
+                  />
+                </div>
+              </div>
+            );
+          };
+
+          const elements: React.ReactNode[] = [];
+
+          topLevel.forEach((m, i) => {
+            const prev = topLevel[i - 1] || null;
+            const next = topLevel[i + 1] || null;
+            elements.push(renderBubble(m, prev, next, false, null));
+
+            // Render replies below parent
+            const replies = repliesMap[m.id];
+            if (replies) {
+              replies.forEach((r, ri) => {
+                const rPrev = ri === 0 ? m : replies[ri - 1];
+                const rNext = replies[ri + 1] || null;
+                elements.push(renderBubble(r, rPrev, rNext, true, m));
+              });
+            }
+          });
+
+          return elements;
+        })()}
         <div ref={messagesEndRef} />
       </main>
+
+      {/* Scroll to bottom */}
+      <ScrollToBottom visible={showScrollBtn} onClick={scrollToBottom} />
+
+      {/* Toast banner */}
+      {banner && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[60] text-white font-normal px-4 py-[10px] rounded-[12px] text-center max-w-[90%]"
+          style={{
+            bottom: "80px",
+            background: banner.color.startsWith("var(") ? banner.color : `${banner.color}dd`,
+            backdropFilter: "saturate(180%) blur(12px)",
+            WebkitBackdropFilter: "saturate(180%) blur(12px)",
+            fontSize: "var(--bubble-font-size)",
+            boxShadow: "0 6px 20px rgba(0,0,0,.25)",
+          }}
+        >
+          {banner.text}
+        </div>
+      )}
+
+      {/* Reply bar */}
+      <ReplyBar replyingTo={replyingTo} onClose={() => setReplyingTo(null)} />
+
+      {/* Photo preview */}
+      {pendingPhotos.length > 0 && (
+        <div
+          className="flex-none flex items-center gap-2"
+          style={{
+            padding: "8px 16px",
+            background: "var(--composer-bg)",
+            borderTop: "0.5px solid var(--hairline)",
+          }}
+        >
+          <div className="flex gap-2 overflow-x-auto flex-1">
+            {pendingPhotos.map((p, i) => (
+              <div key={i} className="relative flex-shrink-0">
+                <img
+                  src={p.previewUrl}
+                  className="block rounded-[10px]"
+                  style={{ width: "56px", height: "56px", objectFit: "cover" }}
+                />
+                <button
+                  className="absolute flex items-center justify-center border-none cursor-pointer"
+                  style={{
+                    top: "-4px",
+                    right: "-4px",
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,.6)",
+                    color: "#fff",
+                    fontSize: "11px",
+                    lineHeight: 1,
+                  }}
+                  onClick={() => removePendingPhoto(i)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Frozen banner */}
       {channel?.is_frozen ? (
@@ -354,23 +743,34 @@ export function ChatView({ channelId }: { channelId: string }) {
             borderTop: "0.5px solid var(--hairline)",
           }}
         >
-          {/* Plus/photo button */}
+          {/* Hidden photo input */}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            onChange={handlePhotoSelect}
+          />
+
           <button
-            className="flex-none w-8 h-8 border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
-            style={{ color: "var(--meta)" }}
+            className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
+            style={{ color: "var(--meta)", width: "32px", height: "32px" }}
+            onClick={(e) => setPlusMenu(e.currentTarget.getBoundingClientRect())}
           >
-            <svg viewBox="0 0 24 24" width="28" height="28">
+            <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 11px)", height: "calc(var(--bubble-font-size) + 11px)" }}>
               <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="1.6" />
               <path d="M12 7v10M7 12h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </button>
 
-          {/* Input wrap */}
           <div
-            className="flex-1 flex items-center relative min-h-[36px] px-[14px] pr-[6px]"
+            className="flex-1 flex items-center relative"
             style={{
-              background: "var(--input-bg)",
-              border: "1px solid var(--input-border)",
+              minHeight: "calc(var(--bubble-font-size) + 19px)",
+              padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
+              background: dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
+              border: dmMode ? "1px solid #7b3fa0" : "1px solid var(--input-border)",
               borderRadius: "20px",
             }}
           >
@@ -380,7 +780,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               rows={1}
-              placeholder="메시지를 입력하세요"
+              placeholder={dmMode ? "관리자에게 보내기" : "메시지를 입력하세요"}
               className="flex-1 border-none bg-transparent outline-none resize-none"
               style={{
                 fontSize: "var(--bubble-font-size)",
@@ -393,31 +793,211 @@ export function ChatView({ channelId }: { channelId: string }) {
                 overflowY: "auto",
               }}
             />
-            {input.trim() && (
+            {(input.trim() || pendingPhotos.length > 0) && (
               <button
                 onClick={handleSend}
                 className="flex-none flex items-center justify-center border-none cursor-pointer"
                 style={{
-                  width: "26px",
-                  height: "26px",
+                  width: "calc(var(--bubble-font-size) + 9px)",
+                  height: "calc(var(--bubble-font-size) + 9px)",
                   borderRadius: "50%",
-                  background: channel?.bubble_color || "var(--bubble-sent)",
+                  background: dmMode ? "#7b3fa0" : bubbleColor,
                 }}
               >
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                  <path
-                    d="M12 20V5m0 0l-6 6m6-6l6 6"
-                    fill="none"
-                    stroke="#fff"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>
+                  <path d="M12 20V5m0 0l-6 6m6-6l6 6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
             )}
           </div>
         </footer>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          msg={contextMenu.msg}
+          isSent={contextMenu.isSent}
+          anchorRect={contextMenu.rect}
+          onReaction={handleReaction}
+          onReply={(msgId) => {
+            const msg = messages.find((m) => m.id === msgId);
+            if (msg) setReplyingTo(msg);
+            textareaRef.current?.focus();
+          }}
+          onReport={contextMenu.msg.uid !== uid ? () => {
+            const msgId = contextMenu.msg.id;
+            const msgText = contextMenu.msg.text;
+            // Mark as reported locally
+            setReportedMsgIds((prev) => {
+              const next = new Set(prev);
+              next.add(msgId);
+              localStorage.setItem("reportedMsgIds", JSON.stringify([...next]));
+              return next;
+            });
+            // Send report message to admin (as a special report message)
+            const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
+            sendMessageApi({
+              uid,
+              text: `🚨 신고된 채팅: "${preview}"`,
+              channel_id: channelId,
+            });
+            setBanner({ text: "신고가 접수되었습니다", color: "#d32f2f" });
+            setTimeout(() => setBanner(null), 3000);
+          } : undefined}
+          onUnreport={contextMenu.msg.uid !== uid ? () => {
+            const msgId = contextMenu.msg.id;
+            setReportedMsgIds((prev) => {
+              const next = new Set(prev);
+              next.delete(msgId);
+              localStorage.setItem("reportedMsgIds", JSON.stringify([...next]));
+              return next;
+            });
+            setBanner({ text: "신고가 취소되었습니다", color: "var(--meta)" });
+            setTimeout(() => setBanner(null), 3000);
+          } : undefined}
+          isReported={reportedMsgIds.has(contextMenu.msg.id)}
+          onDelete={contextMenu.msg.uid === uid ? handleDelete : undefined}
+          onEdit={contextMenu.msg.uid === uid ? () => { /* TODO */ } : undefined}
+          onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
+          onClose={() => setContextMenu(null)}
+          isMyMessage={contextMenu.msg.uid === uid}
+        />
+      )}
+
+      {/* Welcome Popup */}
+      <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} />
+
+      {/* Header Menu */}
+      {headerMenu && (
+        <HeaderMenu
+          anchorRect={headerMenu}
+          onSettings={() => setShowSettings(true)}
+          onGallery={() => setShowGallery(true)}
+          onLinks={() => setShowLinks(true)}
+          onAdmin={effectiveAdmin ? () => setShowAdminPanel(true) : undefined}
+          onClose={() => setHeaderMenu(null)}
+        />
+      )}
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <SettingsPanel
+          channelId={channelId}
+          currentColor={bubbleColor}
+          onColorChange={setLocalBubbleColor}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Gallery Panel */}
+      {showGallery && (
+        <GalleryPanel
+          items={[]}
+          onClose={() => setShowGallery(false)}
+        />
+      )}
+
+      {/* Links Panel */}
+      {showLinks && (
+        <LinksPanel
+          messages={messages}
+          onClose={() => setShowLinks(false)}
+        />
+      )}
+
+      {/* Admin Panel */}
+      {showAdminPanel && (
+        <AdminPanel
+          channelId={channelId}
+          channelName={channel?.name || ""}
+          profileImage={channel?.profile_image || null}
+          currentColor={bubbleColor}
+          isFrozen={!!channel?.is_frozen}
+          petitionEnabled={petitionEnabled}
+          dmEnabled={dmEnabled}
+          notice={channel?.notice || "[]"}
+          blockedUsers={[]}
+          onFreeze={() => {
+            setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
+            setBanner({ text: "채팅이 얼려졌습니다 🧊", color: "#4a4d8f" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onUnfreeze={() => {
+            setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
+            setBanner({ text: "채팅이 해제되었습니다", color: "#3b8df0" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onToggleView={() => setAdminViewAsUser(true)}
+          onPetitionToggle={() => {
+            setPetitionEnabled(!petitionEnabled);
+            setBanner({ text: !petitionEnabled ? "이의 제기가 허용됩니다" : "이의 제기가 차단됩니다", color: !petitionEnabled ? "#2a9d4e" : "#c0392b" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onDmToggle={() => {
+            setDmEnabled(!dmEnabled);
+            setBanner({ text: !dmEnabled ? "비밀 메시지가 허용됩니다" : "비밀 메시지가 차단됩니다", color: !dmEnabled ? "#2a9d4e" : "#c0392b" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onColorChange={(color) => {
+            setLocalBubbleColor(color);
+            localStorage.setItem(`bubbleColor_${channelId}`, color);
+            document.documentElement.style.setProperty("--bubble-sent", color);
+          }}
+          onNameChange={(name) => {
+            setChannel((prev) => prev ? { ...prev, name } : null);
+            setBanner({ text: "채널 이름이 변경되었습니다", color: "#3b8df0" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onProfileImageChange={(url) => {
+            setChannel((prev) => prev ? { ...prev, profile_image: url } : null);
+            setBanner({ text: "프로필 사진이 변경되었습니다", color: "#3b8df0" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onNoticeChange={(noticeStr) => {
+            setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
+            setBanner({ text: "채널 규칙이 저장되었습니다", color: "#3b8df0" });
+            setTimeout(() => setBanner(null), 3000);
+          }}
+          onUnblock={(uid) => {
+            setBanner({ text: "차단이 해제되었습니다", color: "#2a9d4e" });
+            setTimeout(() => setBanner(null), 3000);
+            // TODO: call backend to unblock
+          }}
+          onClose={() => setShowAdminPanel(false)}
+        />
+      )}
+
+      {/* Emoji Picker */}
+      {emojiPicker && (
+        <EmojiPicker
+          anchorRect={emojiPicker.rect}
+          onSelect={(emoji) => {
+            handleReaction(emojiPicker.msgId, emoji);
+            setEmojiPicker(null);
+          }}
+          onClose={() => setEmojiPicker(null)}
+        />
+      )}
+
+      {/* Plus Menu */}
+      {plusMenu && (
+        <PlusMenu
+          anchorRect={plusMenu}
+          dmMode={dmMode}
+          dmEnabled={dmEnabled}
+          onPhoto={() => photoInputRef.current?.click()}
+          onDmToggle={() => setDmMode(!dmMode)}
+          onClose={() => setPlusMenu(null)}
+        />
+      )}
+
+      {/* Notice Panel */}
+      {showNotice && (
+        <NoticePanel
+          notice={(() => { try { return JSON.parse(channel?.notice || "[]"); } catch { return []; } })()}
+          onClose={() => setShowNotice(false)}
+        />
       )}
     </div>
   );

@@ -16,6 +16,13 @@ export function useRealtime(channelId: string | null, uid: string) {
     if (!channelId) return;
 
     const url = getWebSocketUrl(channelId, uid);
+    if (!url) {
+      // Mock mode — no WebSocket
+      setConnected(true);
+      setPresence(3);
+      return;
+    }
+
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
