@@ -120,5 +120,43 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     return Response.json({ ok: true });
   }
 
+  // PATCH — toggle reaction
+  if (request.method === "PATCH") {
+    const body = await request.json() as Record<string, unknown>;
+    const { uid, message_id, channel_id, emoji } = body;
+
+    if (!message_id || !uid || !channel_id || !emoji) {
+      return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+
+    // Get current reactions
+    const msg = await env.DB.prepare("SELECT reactions FROM messages WHERE id = ? AND channel_id = ?")
+      .bind(message_id, channel_id).first() as { reactions: string } | null;
+    if (!msg) return Response.json({ error: "not found" }, { status: 404 });
+
+    const reactions: Record<string, string> = JSON.parse(msg.reactions || "{}");
+    const key = `${uid}_${(emoji as string).codePointAt(0)?.toString(16)}`;
+
+    // Toggle: if exists remove, otherwise add
+    if (reactions[key]) {
+      delete reactions[key];
+    } else {
+      reactions[key] = emoji as string;
+    }
+
+    await env.DB.prepare("UPDATE messages SET reactions = ? WHERE id = ?")
+      .bind(JSON.stringify(reactions), message_id).run();
+
+    // Broadcast
+    const doId = env.CHAT_ROOM.idFromName(channel_id as string);
+    const stub = env.CHAT_ROOM.get(doId);
+    await stub.fetch(new Request("http://internal/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ type: "message-changed", channel_id }),
+    }));
+
+    return Response.json({ ok: true, reactions });
+  }
+
   return Response.json({ error: "method not allowed" }, { status: 405 });
 }

@@ -141,6 +141,39 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true });
     }
 
+    case "add-banned-word": {
+      const { word, expires } = payload || {};
+      if (!word) return Response.json({ error: "missing word" }, { status: 400 });
+      await env.DB.prepare(
+        "INSERT INTO banned_words (id, word, channel_id, expires) VALUES (?, ?, ?, ?)"
+      ).bind(crypto.randomUUID(), word, channel_id, expires || null).run();
+      return Response.json({ ok: true });
+    }
+
+    case "remove-banned-word": {
+      const { word_id } = payload || {};
+      if (!word_id) return Response.json({ error: "missing word_id" }, { status: 400 });
+      await env.DB.prepare("DELETE FROM banned_words WHERE id = ? AND channel_id = ?")
+        .bind(word_id, channel_id).run();
+      return Response.json({ ok: true });
+    }
+
+    case "set-welcome": {
+      const { config } = payload || {};
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`welcome_${channel_id}`, config || "", channel_id, config || "").run();
+      return Response.json({ ok: true });
+    }
+
+    case "set-emoji-presets": {
+      const { emojis } = payload || {};
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`liveEmojis_${channel_id}`, emojis || "[]", channel_id, emojis || "[]").run();
+      return Response.json({ ok: true });
+    }
+
     default:
       return Response.json({ error: "unknown action" }, { status: 400 });
   }

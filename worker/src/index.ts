@@ -6,6 +6,7 @@ import { handleInit } from "./routes/init";
 import { handleAdmin } from "./routes/admin";
 import { handleUser } from "./routes/user";
 import { handleAuth } from "./routes/auth";
+import { handleDm } from "./routes/dm";
 
 export { ChatRoom };
 
@@ -14,7 +15,7 @@ function corsHeaders(origin: string, allowedOrigin: string): HeadersInit {
   const isAllowed = allowed.includes(origin) || allowed.includes("*");
   return {
     "Access-Control-Allow-Origin": isAllowed ? origin : "",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Internal-Token, X-User-Id",
     "Access-Control-Max-Age": "86400",
   };
@@ -59,6 +60,8 @@ export default {
         response = await handleUser(request, env);
       } else if (url.pathname.startsWith("/api/auth")) {
         response = await handleAuth(request, env);
+      } else if (url.pathname.startsWith("/api/dm")) {
+        response = await handleDm(request, env);
       } else {
         response = new Response("not found", { status: 404 });
       }

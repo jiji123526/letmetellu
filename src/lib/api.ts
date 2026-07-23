@@ -92,3 +92,30 @@ export async function editMessageApi(payload: {
   });
   return res.json();
 }
+
+export async function searchMessages(channelId: string, query: string) {
+  if (IS_MOCK) return { results: [] };
+  const params = new URLSearchParams({ type: "search", channel: channelId, q: query });
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  return res.json();
+}
+
+export async function sendDm(payload: { uid: string; nick?: string; text: string; channel_id: string; image?: string }) {
+  if (IS_MOCK) return { ok: true };
+  const res = await fetch(`${WORKER_URL}/api/dm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
+  if (IS_MOCK) return { ok: true };
+  const res = await fetch(`${WORKER_URL}/api/messages`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}

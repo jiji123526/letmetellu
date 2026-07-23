@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -288,7 +288,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       setPendingPhotos([]);
       setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
       setTimeout(() => setBanner(null), 3000);
-      // TODO: send to /api/dm endpoint
+      sendDm({ uid, text, channel_id: channelId });
       setReplyingTo(null);
       return;
     }
@@ -367,7 +367,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         return { ...m, reactions: JSON.stringify(reactions) };
       })
     );
-    // TODO: send to backend
+    toggleReaction({ uid, message_id: msgId, channel_id: channelId, emoji });
   };
 
   const handleAvatarClick = () => {
