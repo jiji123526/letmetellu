@@ -120,14 +120,14 @@ export async function toggleReaction(payload: { uid: string; message_id: string;
   return res.json();
 }
 
-export async function uploadImage(data: string, channelId: string): Promise<string | null> {
-  if (IS_MOCK) return data; // return as-is in mock mode
-  const res = await fetch(`${WORKER_URL}/api/upload`, {
+export async function uploadImage(blob: Blob, channelId: string): Promise<string | null> {
+  if (IS_MOCK) return URL.createObjectURL(blob);
+  const res = await fetch(`${WORKER_URL}/api/upload?channel=${channelId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ data, channel_id: channelId }),
+    headers: { "Content-Type": blob.type || "image/jpeg" },
+    body: blob,
   });
-  const result = await res.json() as { ok?: boolean; url?: string; key?: string };
+  const result = await res.json() as { ok?: boolean; key?: string };
   if (result.ok && result.key) {
     return `${WORKER_URL}/api/media/${result.key}`;
   }
