@@ -338,7 +338,7 @@ export function AdminPanel(props: AdminPanelProps) {
         {view === "welcome" && (
           <div style={{ padding: "12px 18px", maxHeight: "60vh", overflowY: "auto" }}>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>아이콘 (이모지 또는 이미지)</label>
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>아이콘 (이모지 또는 이미지)</label>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 {/* Preview */}
                 <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "#f8f8f8" }}>
@@ -365,11 +365,11 @@ export function AdminPanel(props: AdminPanelProps) {
               </div>
             </div>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>제목</label>
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>제목</label>
               <input value={welcomeTitle} onChange={(e) => setWelcomeTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder="환영합니다!" />
             </div>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 600, marginBottom: "6px" }}>안내 항목 (한 줄에 하나씩)</label>
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>안내 항목 (한 줄에 하나씩)</label>
               <textarea value={welcomeItems} onChange={(e) => setWelcomeItems(e.target.value)} rows={5} style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.5, fontSize: "var(--bubble-font-size)" }} placeholder="메시지를 꾹 누르면 답장, 리액션, 신고가 가능합니다" />
             </div>
             <button style={saveBtnStyle} onClick={() => {
