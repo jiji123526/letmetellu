@@ -1102,6 +1102,12 @@ export function ChatView({ channelId }: { channelId: string }) {
               localStorage.setItem("reportedMsgIds", JSON.stringify([...next]));
               return next;
             });
+            // Find and delete the report message from D1
+            const reportMsg = messages.find((m) => m.report && m.reported_msg_id === msgId && m.uid === uid);
+            if (reportMsg) {
+              deleteMessage({ uid, message_id: reportMsg.id, channel_id: channelId, soft: false });
+              setMessages((prev) => prev.filter((m) => m.id !== reportMsg.id));
+            }
             setBanner({ text: "신고가 취소되었습니다", color: "var(--meta)" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
