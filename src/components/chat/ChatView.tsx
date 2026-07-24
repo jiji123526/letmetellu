@@ -486,13 +486,19 @@ export function ChatView({ channelId }: { channelId: string }) {
       // Message deleted — remove or mark as deleted
       if (event.type === "message-deleted") {
         const id = event.message_id as string;
-        setMessages((prev) => {
-          const hasReplies = prev.some((m) => m.reply_to === id);
-          if (hasReplies) {
-            return prev.map((m) => m.id === id ? { ...m, deleted: true, text: t("deletedMessage"), image: null } : m);
-          }
-          return prev.filter((m) => m.id !== id);
-        });
+        if (event.soft) {
+          // User soft-delete (own message with replies) — keep as placeholder if has replies
+          setMessages((prev) => {
+            const hasReplies = prev.some((m) => m.reply_to === id);
+            if (hasReplies) {
+              return prev.map((m) => m.id === id ? { ...m, deleted: true, text: t("deletedMessage"), image: null } : m);
+            }
+            return prev.filter((m) => m.id !== id);
+          });
+        } else {
+          // Admin hard-delete — remove message and its replies entirely
+          setMessages((prev) => prev.filter((m) => m.id !== id && m.reply_to !== id));
+        }
       }
       // Reconnect or bulk sync — full refetch as safety net
       if (event.type === "reconnected" || event.type === "messages-sync") {

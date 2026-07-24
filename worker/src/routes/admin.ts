@@ -104,14 +104,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     case "delete-message": {
       const { message_id } = payload || {};
-      await env.DB.prepare("UPDATE messages SET deleted = 1 WHERE id = ? AND channel_id = ?")
+      // Hard delete — remove message and its replies entirely
+      await env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
+        .bind(message_id, channel_id).run();
+      await env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
         .bind(message_id, channel_id).run();
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "message-deleted", message_id, soft: true }),
+        body: JSON.stringify({ type: "message-deleted", message_id, soft: false }),
       }));
 
       return Response.json({ ok: true });
