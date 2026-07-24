@@ -9,7 +9,7 @@ export function LivePopup({ title, onJoin, onDismiss }: { title: string; onJoin:
       onClick={(e) => { if (e.target === e.currentTarget) onDismiss(); }}
     >
       <div style={{ width: "100%", maxWidth: "280px", background: "var(--bg)", borderRadius: "20px", padding: "28px 24px", textAlign: "center" }}>
-        <div style={{ marginBottom: "12px" }}>
+        <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
           <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#c0392b" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="4" /><path d="M4.93 4.93a10 10 0 0 1 14.14 0" /><path d="M7.76 7.76a6 6 0 0 1 8.48 0" />
           </svg>
