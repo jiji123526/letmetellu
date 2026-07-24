@@ -357,7 +357,8 @@ export function ChatView({ channelId }: { channelId: string }) {
         }).catch(() => {});
       }
       if (event.type === "dm-changed") {
-        fetchInit(channelId).then((data) => {
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        fetchInit(fetchChannel).then((data) => {
           if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
         });
       }
@@ -466,7 +467,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       const blockEntry = blockedUsers.find((b) => b.uid === uid);
       const reason = blockEntry?.reason ? `\n[차단 사유: "${blockEntry.reason}"]` : "";
-      sendDm({ uid, text: `[이의 제기] ${text}${reason}`, channel_id: channelId });
+      sendDm({ uid, text: `[이의 제기] ${text}${reason}`, channel_id: inLiveMode ? `${channelId}_live` : channelId });
       localStorage.setItem("petitionSent", uid);
       setBanner({ text: "이의 제기가 전송되었습니다", color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
@@ -486,7 +487,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       setDmMode(false);
       setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
       setTimeout(() => setBanner(null), 3000);
-      sendDm({ uid, text, channel_id: channelId });
+      sendDm({ uid, text, channel_id: inLiveMode ? `${channelId}_live` : channelId });
       return;
     }
 
@@ -793,7 +794,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); setMessages([]); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); setMessages([]); setDmMessages([]); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -1499,6 +1500,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setLiveActive(true);
             setInLiveMode(true);
             setMessages([]);
+            setDmMessages([]);
             localStorage.setItem(`liveActive_${channelId}`, "true");
             localStorage.setItem(`inLiveMode_${channelId}`, "true");
             localStorage.setItem(`liveTitle_${channelId}`, title);
@@ -1556,7 +1558,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.setItem(`inLiveMode_${channelId}`, "true");
             localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
             setMessages([]);
-            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {});
+            setDmMessages([]);
+            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); }).catch(() => {});
           }}
           onDismiss={() => {
             setShowLivePopup(false);

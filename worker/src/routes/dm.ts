@@ -14,8 +14,11 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       "INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).bind(id, uid, uid, nick || null, text || "", image || null, channel_id).run();
 
-    // Broadcast DM to admin via DO
-    const doId = env.CHAT_ROOM.idFromName(channel_id as string);
+    // Broadcast DM via DO — always use parent channel (where clients connect)
+    const parentChannelId = (channel_id as string).endsWith("_live")
+      ? (channel_id as string).replace(/_live$/, "")
+      : channel_id as string;
+    const doId = env.CHAT_ROOM.idFromName(parentChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
