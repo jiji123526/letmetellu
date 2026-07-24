@@ -387,25 +387,22 @@ export function ChatView({ channelId }: { channelId: string }) {
       return;
     }
 
-    setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-    if (dmMode) {
-      // Send as DM — not visible to sender, only admin sees it
-      setDmMode(false);
-      setPendingPhotos([]);
-      setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
-      setTimeout(() => setBanner(null), 3000);
-      sendDm({ uid, text, channel_id: channelId });
-      setReplyingTo(null);
-      return;
-    }
-
     // Send photos + text
     const photos = [...pendingPhotos];
     setPendingPhotos([]);
     const savedReplyTo = replyingTo?.id;
     setReplyingTo(null);
+
+    // DM mode
+    if (dmMode) {
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      setDmMode(false);
+      setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
+      setTimeout(() => setBanner(null), 3000);
+      sendDm({ uid, text, channel_id: channelId });
+      return;
+    }
 
     // Dismiss keyboard after send (except in live mode where keyboard stays)
     if (!inLiveMode && textareaRef.current) textareaRef.current.blur();
@@ -420,8 +417,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     }) as any;
 
     if (res.error) {
-      // Restore input on failure
-      setInput(text);
+      // Keep input on failure
       if (photos.length > 0) setPendingPhotos(photos);
       if (res.error === "message_too_long") setBanner({ text: "메시지가 너무 깁니다 (최대 5000자)", color: "#d32f2f" });
       else if (res.error === "banned_word") setBanner({ text: "금지어가 포함되어 전송할 수 없습니다", color: "#d32f2f" });
@@ -431,7 +427,11 @@ export function ChatView({ channelId }: { channelId: string }) {
       else setBanner({ text: "전송 실패", color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
     }
-    // On success: DO broadcasts message-changed → refetch shows the message
+    // On success: clear input, DO broadcasts message-changed → refetch shows the message
+    if (!res.error) {
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
