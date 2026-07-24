@@ -4,9 +4,21 @@ import { Env } from "../types";
 const RATE_LIMIT = 5;
 const RATE_WINDOW = 10000; // 10 seconds
 const rateLimitMap = new Map<string, number[]>();
+let lastCleanup = Date.now();
 
 export function checkRateLimit(uid: string): boolean {
   const now = Date.now();
+
+  // Cleanup stale entries every 60 seconds
+  if (now - lastCleanup > 60000) {
+    lastCleanup = now;
+    for (const [key, timestamps] of rateLimitMap) {
+      const recent = timestamps.filter((t) => now - t < RATE_WINDOW);
+      if (recent.length === 0) rateLimitMap.delete(key);
+      else rateLimitMap.set(key, recent);
+    }
+  }
+
   const timestamps = rateLimitMap.get(uid) || [];
   const recent = timestamps.filter((t) => now - t < RATE_WINDOW);
   if (recent.length >= RATE_LIMIT) return false;

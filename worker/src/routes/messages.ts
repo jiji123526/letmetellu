@@ -56,24 +56,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     // Broadcast via Durable Object
-    const doId = env.CHAT_ROOM.idFromName(channel_id as string);
+    // For live channels, only broadcast to the parent channel's DO (where clients connect)
+    const broadcastChannelId = (channel_id as string).endsWith("_live")
+      ? (channel_id as string).replace(/_live$/, "")
+      : channel_id as string;
+    const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
       body: JSON.stringify({ type: "message-changed", channel_id }),
     }));
-
-    // If this is a live channel, also broadcast to the parent channel's DO
-    // so clients connected to the main channel get the update
-    if ((channel_id as string).endsWith("_live")) {
-      const parentChannelId = (channel_id as string).replace(/_live$/, "");
-      const parentDoId = env.CHAT_ROOM.idFromName(parentChannelId);
-      const parentStub = env.CHAT_ROOM.get(parentDoId);
-      await parentStub.fetch(new Request("http://internal/broadcast", {
-        method: "POST",
-        body: JSON.stringify({ type: "message-changed", channel_id: channel_id }),
-      }));
-    }
 
     return Response.json({ id, created_at: new Date().toISOString() });
   }

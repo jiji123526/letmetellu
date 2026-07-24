@@ -350,14 +350,20 @@ export function ChatView({ channelId }: { channelId: string }) {
   const inLiveModeRef = useRef(inLiveMode);
   useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
 
+  // Debounce refetch to coalesce rapid broadcasts
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed" || event.type === "reconnected") {
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) setMessages([...data.messages].reverse());
-        }).catch(() => {});
+        if (refetchTimer.current) clearTimeout(refetchTimer.current);
+        refetchTimer.current = setTimeout(() => {
+          const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+          fetchMessages(fetchChannel).then((data) => {
+            if (data.messages) setMessages([...data.messages].reverse());
+          }).catch(() => {});
+        }, event.type === "reconnected" ? 0 : 100);
       }
       // Re-send join-live on reconnect so DO has accurate count
       if (event.type === "reconnected" && inLiveModeRef.current) {
