@@ -312,6 +312,10 @@ export function ChatView({ channelId }: { channelId: string }) {
             setLiveSessionId(data.live.sessionId);
             localStorage.setItem(`liveSession_${channelId}`, data.live.sessionId);
           }
+        }
+        // Load emoji presets from server
+        if (data.emojiPresets) {
+          localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);
         } else if (!data.live || !data.live.active) {
           // Server says live is not active — reset local state if stale
           if (liveActive || inLiveMode) {
@@ -402,6 +406,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "notice-changed") {
         setActiveNotice((event.notice as string) || "");
+      }
+      if (event.type === "emoji-presets-changed") {
+        localStorage.setItem(`liveEmojis_${channelId}_live`, event.emojis as string);
       }
     });
   }, [subscribe, channelId]);

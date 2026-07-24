@@ -42,6 +42,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const liveConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
     .bind(`live_${parentChannelId}`, parentChannelId).first();
 
+  // Fetch emoji presets for live mode (from parent channel)
+  const emojiPresetsConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
+    .bind(`liveEmojis_${parentChannelId}`, parentChannelId).first();
+
   // Fetch DM messages (visible to admin only — frontend filters)
   const { results: dmMessages } = await env.DB.prepare(
     "SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50"
@@ -74,5 +78,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     bannerNotice: noticeConfig?.text || "",
     welcomeConfig: welcomeConfig?.text || "",
     live: liveStatus,
+    emojiPresets: emojiPresetsConfig?.text || null,
   });
 }
