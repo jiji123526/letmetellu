@@ -373,10 +373,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         localStorage.removeItem(`liveTitle_${channelId}`);
         localStorage.removeItem(`liveSession_${channelId}`);
         setLiveActive(false);
-        if (inLiveMode && !effectiveAdmin) {
+        if (inLiveModeRef.current) {
           setInLiveMode(false);
           localStorage.setItem(`inLiveMode_${channelId}`, "false");
           setShowLiveEnded(true);
+          // Refetch normal messages
+          fetchInit(channelId).then((data) => { setMessages(data.messages); }).catch(() => {});
         }
       }
       if (event.type === "live-started") {
@@ -388,7 +390,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         localStorage.setItem(`liveTitle_${channelId}`, (event.title as string) || "라이브");
         localStorage.setItem(`liveSession_${channelId}`, sessionId);
         // Show popup only if not already in live mode and haven't dismissed this session
-        if (!inLiveMode) {
+        if (!inLiveModeRef.current) {
           const seen = localStorage.getItem(`liveSeen_${channelId}`);
           if (seen === sessionId) {
             // Already dismissed — just show banner (handled by liveActive + !inLiveMode in render)
