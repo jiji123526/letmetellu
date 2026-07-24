@@ -174,6 +174,7 @@ interface EmojiPresetPanelProps {
 
 export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) {
   const [emojis, setEmojis] = useState<string[]>(() => getPresetEmojis(channelId));
+  const [showPicker, setShowPicker] = useState(false);
 
   const save = (next: string[]) => {
     setEmojis(next);
@@ -199,15 +200,15 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
       style={{ background: "rgba(0,0,0,.4)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", padding: "24px" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ width: "100%", maxWidth: "320px", background: "var(--bg)", color: "var(--gray-text)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,.25)" }}>
+      <div style={{ width: "100%", maxWidth: "320px", maxHeight: "80vh", background: "var(--bg)", color: "var(--gray-text)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,.25)", display: "flex", flexDirection: "column" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)", flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500 }}>이모지 프리셋</h3>
           <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px" }} onClick={onClose}>✕</button>
         </div>
 
         {/* Body */}
-        <div style={{ padding: "12px 18px" }}>
+        <div style={{ padding: "12px 18px", overflowY: "auto", flex: 1 }}>
           {/* Emoji list */}
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
             {emojis.map((emoji, i) => (
@@ -219,17 +220,35 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
             ))}
           </div>
 
-          {/* Add button — opens inline emoji picker */}
+          {/* Add button — toggles emoji picker */}
           <button
             style={{ width: "100%", background: "var(--card)", border: "1.5px dashed var(--input-border)", borderRadius: "10px", padding: "10px", fontSize: "var(--bubble-font-size, 14px)", color: "var(--meta)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
-            onClick={() => {
-              // Simple prompt for now (full emoji picker TODO)
-              const emoji = prompt("이모지를 입력하세요");
-              if (emoji) addEmoji(emoji);
-            }}
+            onClick={() => setShowPicker(!showPicker)}
           >
-            + 추가
+            {showPicker ? "닫기" : "+ 추가"}
           </button>
+
+          {/* Inline emoji picker */}
+          {showPicker && (
+            <div
+              style={{ marginTop: "12px", borderRadius: "12px", overflow: "hidden" }}
+              ref={(el) => {
+                if (el && !el.querySelector("emoji-picker")) {
+                  import("emoji-picker-element").then(() => {
+                    const picker = document.createElement("emoji-picker");
+                    picker.setAttribute("locale", "ko");
+                    picker.style.width = "100%";
+                    picker.style.height = "280px";
+                    picker.addEventListener("emoji-click", (ev: Event) => {
+                      const detail = (ev as CustomEvent).detail;
+                      addEmoji(detail.unicode);
+                    });
+                    el.appendChild(picker);
+                  });
+                }
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
