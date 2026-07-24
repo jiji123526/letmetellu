@@ -519,7 +519,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         setDmMessages((prev) => prev.filter((d) => d.id !== dmId));
       }
       if (event.type === "freeze-change") {
-        setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
+        const isLiveFreeze = !!event.live;
+        if (isLiveFreeze && inLiveModeRef.current) {
+          setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
+        } else if (!isLiveFreeze && !inLiveModeRef.current) {
+          setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
+        }
       }
       if (event.type === "profile-change") {
         setChannel((prev) => {
@@ -1706,13 +1711,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           blockedUsers={blockedUsers}
           onFreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
-            adminAction("freeze", channelId, { frozen: true });
+            adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: true });
             setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onUnfreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
-            adminAction("freeze", channelId, { frozen: false });
+            adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: false });
             setBanner({ text: t("chatUnfrozen"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}

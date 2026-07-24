@@ -48,12 +48,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("UPDATE channels SET is_frozen = ? WHERE id = ?")
         .bind(frozen, channel_id).run();
 
-      // Broadcast freeze change
-      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      // Broadcast freeze change to parent channel DO (where clients connect)
+      const freezeBroadcastChannel = channel_id.endsWith("_live") ? channel_id.replace(/_live$/, "") : channel_id;
+      const doId = env.CHAT_ROOM.idFromName(freezeBroadcastChannel);
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "freeze-change", frozen: !!payload?.frozen }),
+        body: JSON.stringify({ type: "freeze-change", frozen: !!payload?.frozen, live: channel_id.endsWith("_live") }),
       }));
 
       return Response.json({ ok: true });
