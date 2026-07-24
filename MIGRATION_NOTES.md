@@ -273,3 +273,72 @@ Security:
 - Live mode full backend
 - Embeds (YouTube/link previews)
 - Channel deletion from dashboard
+
+
+### Session 3 (2026-07-24)
+
+**Live Mode — Full Backend Wiring:**
+
+Architecture:
+- Live messages stored in D1 with `channel_id = "${channelId}_live"`
+- Temporary channel row created on start-live (FK constraint workaround)
+- All live data (messages, DMs, gallery, blocked, config, R2 media) purged on end-live
+- Live state stored in D1 `config` table as `live_${channelId}`
+- Broadcasts go through parent channel's DO (where all clients connect)
+
+Admin flow:
+- Admin clicks "라이브" in admin panel → LiveTitlePrompt → `adminAction("start-live")`
+- Worker creates live session, temporary channel entry, broadcasts `live-started`
+- Admin auto-enters live mode, messages route to `_live` channel
+- Admin "종료" → confirm → `adminAction("end-live")` → purge + broadcast `live-ended`
+- Admin sees LiveEndedPopup after ending
+
+Non-admin flow:
+- Receives `live-started` broadcast → LivePopup (참여/안할래)
+- "참여" → enters live mode, fetches from `_live` channel
+- "안할래" → marks session as seen (liveSeen), shows join banner instead next time
+- "나가기" → leaves live mode locally (live continues for others)
+- Receives `live-ended` → exits live mode, shows LiveEndedPopup
+
+State management:
+- `inLiveMode`, `liveActive`, `liveTitle`, `liveSession` persisted to localStorage
+- Page refresh resumes live mode if still active (verified against server on init)
+- Server overrides stale localStorage (live ended while user was away)
+- `inLiveModeRef` used throughout subscribe handler to avoid stale closures
+
+Live viewer count:
+- DO tracks `liveViewers` set (separate from total connections)
+- Clients send `join-live`/`leave-live` WebSocket messages
+- `live-presence` broadcast with `liveCount` used in LiveExitBanner
+- Re-sends `join-live` on reconnect to maintain accurate count
+
+Emoji system:
+- EmojiBar shows preset emojis in live mode (trigger button + grid)
+- Admin can configure presets via EmojiPresetPanel (PlusMenu → 이모지 프리셋)
+- Presets saved to D1 `config` table + broadcast to all clients
+- `emojiPresets` React state ensures instant updates without refresh
+- Emoji effects broadcast via WebSocket (`emoji-fx` type), spawn floating animation
+
+DM separation:
+- DMs sent during live go to `channelId_live` (separate from normal DMs)
+- Worker DM route broadcasts to parent channel DO
+- DMs cleared when entering live mode
+- Live DMs purged on end-live with all other `_live` data
+- End-live refetches both messages and DMs from normal channel
+
+Other fixes:
+- Long message truncation (>1000 chars) with expandable overlay
+- Offline/reconnection banner (WebSocket `connected` state)
+- Image full view: date button only shows from gallery (not from chat)
+- LiveEndedPopup icon centered
+
+**Remaining:**
+- Embeds (YouTube/Twitter/Instagram/link previews)
+- Typing indicator
+- Channel deletion from dashboard
+- Channel discovery
+- Social login (Kakao, Apple)
+- SSR landing page
+- RSS feed
+- Email verification
+- Password hashing upgrade (SHA-256 → bcrypt)

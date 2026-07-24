@@ -86,7 +86,7 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] 채널 settings: profile image, name, color, passcode, rules editor
 - [x] 관리 settings: banned words (with duration), blocked users, petition toggle, DM toggle
 - [x] Chat freeze/unfreeze
-- [x] Live mode placeholder
+- [x] Live mode — full backend (start/end, separate channel, auto-purge)
 
 ### Panels & Settings
 - [x] Header menu (설정, 갤러리, 링크, 관리자 설정)
@@ -118,19 +118,41 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Server-side validation (rate limit, banned words, fingerprint, message cap)
 
 ### Phase 3: Media & Polish
-- [ ] Enable R2, wire image upload
+- [x] Enable R2, wire image upload
 - [ ] Embeds (YouTube, Twitter, Instagram, link previews)
-- [ ] Search (FTS5 via Worker)
-- [ ] Long message truncation (>1000 chars)
+- [x] Search (FTS5 via Worker)
+- [x] Long message truncation (>1000 chars)
 - [ ] Typing indicator
-- [ ] Offline/reconnection banner
-- [ ] Auto-reload stale tabs
+- [x] Offline/reconnection banner
+- [x] Auto-reload stale tabs
+
+### Phase 3.5: Live Mode ✅
+- [x] Start/end live (admin action → D1 config + DO broadcast)
+- [x] Temporary `_live` channel for FK constraint (created on start, deleted on end)
+- [x] Live messages stored separately (`channel_id = 'x_live'`)
+- [x] Live DMs stored separately, purged on end
+- [x] Auto-purge all live data + R2 media on end-live
+- [x] Non-admin popup/banner on live-started broadcast
+- [x] Session tracking (liveSeen prevents re-popup on dismiss)
+- [x] localStorage persistence (survives page refresh)
+- [x] Live-only viewer count (join-live/leave-live DO tracking)
+- [x] Emoji bar with preset emojis (admin-configurable)
+- [x] Emoji presets synced to all clients in real-time (broadcast)
+- [x] Emoji effects broadcast via WebSocket
+- [x] Admin "종료" ends for everyone, non-admin "나가기" only leaves
+- [x] Live-ended popup shown to all users including admin
+- [x] Stale closure fixes (inLiveModeRef for all subscribe handlers)
 
 ### Phase 4: Platform
+- [ ] Embeds (YouTube, Twitter, Instagram, link previews)
+- [ ] Typing indicator
+- [ ] Channel deletion from dashboard
 - [ ] Channel discovery
 - [ ] Social login (Kakao, Apple)
 - [ ] SSR landing page
 - [ ] RSS feed
+- [ ] Email verification
+- [ ] Password hashing upgrade (SHA-256 → bcrypt)
 
 ---
 
