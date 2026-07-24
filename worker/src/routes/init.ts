@@ -39,6 +39,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     "SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50"
   ).bind(channelId).all();
 
+  // Fetch gallery items
+  const { results: galleryItems } = await env.DB.prepare(
+    "SELECT * FROM gallery WHERE channel_id = ? ORDER BY created_at DESC LIMIT 100"
+  ).bind(channelId).all();
+
   // Get presence count from DO
   const doId = env.CHAT_ROOM.idFromName(channelId);
   const stub = env.CHAT_ROOM.get(doId);
@@ -50,6 +55,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     messages: messages.reverse(), // oldest first for display
     blocked,
     dm: dmMessages ? [...dmMessages].reverse() : [],
+    gallery: galleryItems || [],
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
     welcomeConfig: welcomeConfig?.text || "",

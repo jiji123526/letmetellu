@@ -208,6 +208,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
+  const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
@@ -263,6 +264,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         setMessages(data.messages);
         if (data.blocked) setBlockedUsers(data.blocked);
         if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+        if (data.gallery) setGalleryItems(data.gallery);
         setLoading(false);
         // Load banner notice from server
         if (data.bannerNotice) {
@@ -1239,7 +1241,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Gallery Panel */}
       {showGallery && (
         <GalleryPanel
-          items={[]}
+          items={galleryItems}
           onClose={() => setShowGallery(false)}
         />
       )}
