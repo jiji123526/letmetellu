@@ -51,7 +51,7 @@ export async function checkBannedWords(text: string, channelId: string, env: Env
     ).bind(channelId).all();
 
     const words = (results || []).map((r) => (r.word as string).toLowerCase());
-    cached = { words, expires: now + 60000 }; // 1 min TTL
+    cached = { words, expires: now + 10000 }; // 10s TTL
     bannedWordsCache.set(channelId, cached);
   }
 
