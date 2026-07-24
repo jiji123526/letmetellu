@@ -1868,7 +1868,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages((prev) =>
               prev.map((m) => (m.id === editingMsg.id ? { ...m, text: newText, edited: true } as Message : m))
             );
-            editMessageApi({ uid, message_id: editingMsg.id, channel_id: channelId, text: newText });
+            editMessageApi({ uid: effectiveAdmin && authUserId ? authUserId : uid, message_id: editingMsg.id, channel_id: inLiveMode ? `${channelId}_live` : channelId, text: newText });
           }}
           onClose={() => setEditingMsg(null)}
         />
