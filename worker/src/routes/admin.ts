@@ -70,6 +70,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const { uid: unblockUid } = payload || {};
       await env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
         .bind(unblockUid, channel_id).run();
+      // Clean up old petition DMs from this user
+      await env.DB.prepare("DELETE FROM dm WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'")
+        .bind(unblockUid, channel_id).run();
+      // Clean up old report messages about this user
+      await env.DB.prepare("DELETE FROM messages WHERE uid = ? AND channel_id = ? AND report = 1")
+        .bind(unblockUid, channel_id).run();
+
+      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "message-changed", channel_id }),
+      }));
+
       return Response.json({ ok: true });
     }
 
