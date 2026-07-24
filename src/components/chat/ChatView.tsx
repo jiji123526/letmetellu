@@ -1517,7 +1517,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               }}
             />
             {/* Emoji bar trigger (live mode only) */}
-            {inLiveMode && (
+            {inLiveMode && !isUserBlocked && (
               <EmojiBar channelId={channelId} presets={emojiPresets} onBroadcast={(emoji, x, h) => {
                 send({ type: "emoji-fx", emoji, x, h });
               }} />
