@@ -21,6 +21,13 @@ export async function fetchMessages(channelId: string, cursor?: string) {
   return res.json();
 }
 
+export async function fetchDm(channelId: string) {
+  if (IS_MOCK) return { dm: [] };
+  const params = new URLSearchParams({ type: "dm", channel: channelId });
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  return res.json();
+}
+
 export async function sendMessage(payload: {
   uid: string;
   nick?: string;

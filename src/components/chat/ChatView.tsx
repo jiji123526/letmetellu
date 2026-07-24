@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchDm } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -355,11 +355,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     return subscribe((event) => {
       if (event.type === "message-changed" || event.type === "reconnected") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchInit(fetchChannel).then((data) => {
-          setMessages(data.messages);
-          if (data.blocked) setBlockedUsers(data.blocked);
-          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
-          if (data.gallery) setGalleryItems(data.gallery);
+        fetchMessages(fetchChannel).then((data) => {
+          if (data.messages) setMessages([...data.messages].reverse());
         }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
@@ -368,8 +365,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "dm-changed") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchInit(fetchChannel).then((data) => {
-          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+        fetchDm(fetchChannel).then((data) => {
+          if (data.dm) setDmMessages([...data.dm].reverse().map((d: any) => ({ ...d, dm: true })));
         });
       }
       if (event.type === "freeze-change") {
