@@ -540,10 +540,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           setInLiveMode(false);
           localStorage.setItem(`inLiveMode_${channelId}`, "false");
           setShowLiveEnded(true);
-          // Refetch normal messages and DMs
+          // Refetch normal messages, DMs, and notice
           fetchInit(channelId).then((data) => {
             setMessages(data.messages);
             setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
+            setActiveNotice(data.bannerNotice || "");
           }).catch(() => {});
         }
       }
@@ -1055,7 +1056,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); setMessages([]); setDmMessages([]); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -1790,6 +1791,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setInLiveMode(true);
             setMessages([]);
             setDmMessages([]);
+            setActiveNotice("");
             localStorage.setItem(`liveActive_${channelId}`, "true");
             localStorage.setItem(`inLiveMode_${channelId}`, "true");
             localStorage.setItem(`liveTitle_${channelId}`, title);
@@ -1825,6 +1827,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             fetchInit(channelId).then((data) => {
               setMessages(data.messages);
               setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
+              setActiveNotice(data.bannerNotice || "");
             });
             setShowLiveEnded(true);
           }}
@@ -1851,7 +1854,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
             setMessages([]);
             setDmMessages([]);
-            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); }).catch(() => {});
+            setActiveNotice("");
+            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); }).catch(() => {});
           }}
           onDismiss={() => {
             setShowLivePopup(false);
@@ -1878,14 +1882,14 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (!title) {
               setActiveNotice("");
               localStorage.removeItem(`activeNotice_${channelId}`);
-              adminAction("set-notice", channelId, { text: "" });
+              adminAction("set-notice", inLiveMode ? `${channelId}_live` : channelId, { text: "" });
               setBanner({ text: t("noticePosted"), color: "var(--meta)" });
             } else {
               const notice = body ? JSON.stringify({ title, body }) : title;
               setActiveNotice(notice);
               localStorage.setItem(`activeNotice_${channelId}`, notice);
               localStorage.removeItem(`noticeDismissed_${channelId}`);
-              adminAction("set-notice", channelId, { text: notice });
+              adminAction("set-notice", inLiveMode ? `${channelId}_live` : channelId, { text: notice });
               setBanner({ text: t("noticePosted"), color: bubbleColor });
             }
             setTimeout(() => setBanner(null), 3000);
