@@ -7,6 +7,7 @@ const DEFAULT_EMOJIS = ["🍋", "🔥", "❤️", "😂", "👏", "🎉"];
 
 interface EmojiBarProps {
   channelId: string;
+  presets?: string[] | null;
   onBroadcast: (emoji: string, x: number, h: number) => void;
 }
 
@@ -19,9 +20,9 @@ function getPresetEmojis(channelId: string): string[] {
   return DEFAULT_EMOJIS;
 }
 
-export function EmojiBar({ channelId, onBroadcast }: EmojiBarProps) {
+export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
   const [showGrid, setShowGrid] = useState(false);
-  const [emojis] = useState(() => getPresetEmojis(channelId));
+  const emojis = presets && presets.length > 0 ? presets : getPresetEmojis(channelId);
 
   const triggerEmoji = (emoji: string) => {
     const x = 30 + Math.random() * 40;

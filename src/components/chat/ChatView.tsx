@@ -241,6 +241,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showLiveTitlePrompt, setShowLiveTitlePrompt] = useState(false);
   const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false);
   const [showEmojiPreset, setShowEmojiPreset] = useState(false);
+  const [emojiPresets, setEmojiPresets] = useState<string[] | null>(null);
   const [showNoticeEdit, setShowNoticeEdit] = useState(false);
   const [activeNotice, setActiveNotice] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -316,6 +317,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         // Load emoji presets from server
         if (data.emojiPresets) {
           localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);
+          try { setEmojiPresets(JSON.parse(data.emojiPresets)); } catch {}
         } else if (!data.live || !data.live.active) {
           // Server says live is not active — reset local state if stale
           if (liveActive || inLiveMode) {
@@ -413,6 +415,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "emoji-presets-changed") {
         localStorage.setItem(`liveEmojis_${channelId}_live`, event.emojis as string);
+        try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
   }, [subscribe, channelId, send]);
@@ -1199,7 +1202,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             />
             {/* Emoji bar trigger (live mode only) */}
             {inLiveMode && (
-              <EmojiBar channelId={channelId} onBroadcast={(emoji, x, h) => {
+              <EmojiBar channelId={channelId} presets={emojiPresets} onBroadcast={(emoji, x, h) => {
                 send({ type: "emoji-fx", emoji, x, h });
               }} />
             )}
