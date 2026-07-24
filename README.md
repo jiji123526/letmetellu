@@ -4,7 +4,7 @@ Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
 
 ## Status
 
-**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, and full server-side security. Live mode backend and embeds remaining.
+**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, live mode, and full server-side security. Embeds and platform features remaining.
 
 ---
 
@@ -71,7 +71,7 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 
 ### Backend-Wired Features
 - [x] Reactions — toggle via PATCH, persisted in D1 `messages.reactions`
-- [x] DM messages — persisted in D1 `dm` table, broadcast via DO
+- [x] DM messages — persisted in D1 `dm` table, broadcast via DO, image upload supported
 - [x] Search — FTS5 full-text search with highlight (yellow/orange, nav arrows)
 - [x] Photo upload — R2 binary upload, served via `/api/media/{key}`
 - [x] Banned words CRUD — admin panel → D1 `banned_words` table
@@ -79,14 +79,17 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Notice banner — D1 `config` table, broadcast via DO
 - [x] Channel profile/name/color/freeze — all persist via admin actions
 - [x] Admin messages detection — Worker checks `owner_uid`, stores `is_admin=1`
+- [x] Long message truncation — >1000 chars with expandable overlay
+- [x] Offline/reconnection banner — WebSocket state drives UI
+- [x] Auto-reload stale tabs — 5-min background refetch + version check
 
-### Admin Panel (complete, local state)
-- [x] Admin mode toggle (triple-click avatar)
+### Admin Panel (fully backend-wired)
+- [x] Admin mode toggle (triple-click avatar + auto-detect via channel ownership)
 - [x] Admin/user view toggle with return banner
 - [x] 채널 settings: profile image, name, color, passcode, rules editor
 - [x] 관리 settings: banned words (with duration), blocked users, petition toggle, DM toggle
-- [x] Chat freeze/unfreeze
-- [x] Live mode — full backend (start/end, separate channel, auto-purge)
+- [x] Chat freeze/unfreeze (global, persisted, broadcast)
+- [x] Live mode — full backend (start/end, separate channel, emoji presets, auto-purge)
 
 ### Panels & Settings
 - [x] Header menu (설정, 갤러리, 링크, 관리자 설정)
@@ -179,16 +182,29 @@ cd worker && npx wrangler deploy
 
 ### Environment Variables
 
-**`.env.local` (local):**
+**`.env.local` (local dev):**
 ```
-NEXT_PUBLIC_MOCK=true
+NEXT_PUBLIC_MOCK=false
 NEXT_PUBLIC_WORKER_URL=https://letsplay-api.letmetellu.workers.dev
+NEXTAUTH_SECRET=<random-string>
+NEXTAUTH_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=<from-google-console>
+GOOGLE_CLIENT_SECRET=<from-google-console>
+INTERNAL_SECRET=<shared-with-worker>
 ```
 
 **Vercel:**
 ```
 NEXT_PUBLIC_WORKER_URL=https://letsplay-api.letmetellu.workers.dev
-NEXT_PUBLIC_MOCK=false
+NEXTAUTH_SECRET=<same-as-local>
+GOOGLE_CLIENT_ID=<same>
+GOOGLE_CLIENT_SECRET=<same>
+INTERNAL_SECRET=<same-as-worker>
+```
+
+**Worker (via `wrangler secret put`):**
+```
+INTERNAL_SECRET=<same-as-vercel>
 ```
 
 ---
@@ -199,35 +215,49 @@ NEXT_PUBLIC_MOCK=false
 /
 ├── src/
 │   ├── app/                    ← Next.js pages
-│   │   ├── page.tsx            → / (redirect to login)
-│   │   ├── login/page.tsx
-│   │   └── ch/[slug]/page.tsx  → Chat page
+│   │   ├── page.tsx            → / (redirect based on auth)
+│   │   ├── login/page.tsx      → Login/signup (Korean UI)
+│   │   ├── onboarding/page.tsx → Channel creation + admin guide
+│   │   ├── dashboard/page.tsx  → List/create channels
+│   │   ├── ch/[slug]/page.tsx  → Chat page
+│   │   └── api/               → Auth, admin proxy, user sync, version
 │   ├── components/
 │   │   ├── chat/              → ChatView, ContextMenu, ReactionBadge, ReplyBar,
-│   │   │                        EmojiPicker, HeaderMenu, PlusMenu, SettingsPanel,
-│   │   │                        NoticePanel, GalleryPanel, LinksPanel, ScrollToBottom,
-│   │   │                        WelcomePopup
-│   │   └── admin/             → AdminPanel
+│   │   │                        EmojiPicker, EmojiBar, HeaderMenu, PlusMenu,
+│   │   │                        SettingsPanel, NoticePanel, GalleryPanel, LinksPanel,
+│   │   │                        ScrollToBottom, WelcomePopup, SearchBar, LiveMode,
+│   │   │                        NoticeBanner, NoticeEditDialog, ConfirmDialog, EditDialog
+│   │   └── admin/             → AdminPanel (채널/관리 categories)
 │   ├── hooks/
-│   │   └── useRealtime.ts     → WebSocket connection manager
+│   │   ├── useRealtime.ts     → WebSocket connection + presence + live count
+│   │   ├── useAuth.ts         → Channel ownership detection
+│   │   └── useAutoUpdate.ts   → Version check auto-reload
 │   └── lib/
 │       ├── api.ts             → Worker API client (mock/real switch)
-│       └── mock-api.ts        → In-memory mock for local dev
+│       ├── mock-api.ts        → In-memory mock for local dev
+│       ├── auth.ts            → NextAuth config (Google + Credentials)
+│       └── fingerprint.ts     → Canvas + UA hash
 ├── worker/
 │   ├── src/
 │   │   ├── index.ts           → Worker entry, router, CORS
-│   │   ├── types.ts
+│   │   ├── types.ts           → Env interface (DB, MEDIA, CHAT_ROOM, secrets)
 │   │   ├── realtime/
-│   │   │   └── chat-room.ts   → Durable Object (WebSocket + presence)
-│   │   └── routes/
-│   │       ├── init.ts        → Consolidated page load
-│   │       ├── messages.ts    → Send message
-│   │       ├── data.ts        → Read data (messages, blocked, gallery, dm)
-│   │       └── admin.ts       → Admin actions (verified via internal token)
-│   ├── migrations/
-│   │   └── 0001_initial_schema.sql
-│   └── wrangler.toml
-├── MIGRATION_NOTES.md          ← CSS→TSX porting gotchas
+│   │   │   └── chat-room.ts   → Durable Object (WebSocket, presence, live viewers)
+│   │   ├── routes/
+│   │   │   ├── init.ts        → Consolidated page load (channel, messages, dm, gallery, live)
+│   │   │   ├── messages.ts    → Send/edit/delete/react (supports _live channels)
+│   │   │   ├── data.ts        → Read data (messages, search, blocked, gallery, dm)
+│   │   │   ├── admin.ts       → Admin actions (freeze, block, live, profile, notice, presets)
+│   │   │   ├── dm.ts          → Direct messages
+│   │   │   ├── upload.ts      → R2 image upload + media serve
+│   │   │   ├── auth.ts        → Signup/login (SHA-256 password hash)
+│   │   │   └── user.ts        → User sync + channel listing
+│   │   └── lib/
+│   │       └── validation.ts  → Rate limit, message length, banned words
+│   ├── migrations/            → D1 SQL migrations (schema, banned_words, users)
+│   └── wrangler.toml          → D1, R2, DO bindings
+├── .env.local                  → Local dev secrets (git-ignored)
+├── MIGRATION_NOTES.md          ← CSS→TSX porting notes + session logs
 ├── vercel.json
 └── package.json
 ```
