@@ -781,9 +781,11 @@ export function ChatView({ channelId }: { channelId: string }) {
                       el.scrollIntoView({ behavior: "smooth", block: "center" });
                       const bubble = el.querySelector("[class*='relative']") as HTMLElement;
                       if (bubble) {
-                        bubble.style.outline = "2px solid #d32f2f";
-                        bubble.style.outlineOffset = "2px";
-                        setTimeout(() => { bubble.style.outline = ""; bubble.style.outlineOffset = ""; }, 2000);
+                        bubble.style.outline = "3px solid #ff1744";
+                        bubble.style.outlineOffset = "3px";
+                        bubble.style.transition = "outline-color 0.8s ease-out";
+                        setTimeout(() => { bubble.style.outlineColor = "transparent"; }, 100);
+                        setTimeout(() => { bubble.style.outline = ""; bubble.style.outlineOffset = ""; bubble.style.transition = ""; }, 1000);
                       }
                     }
                   }
