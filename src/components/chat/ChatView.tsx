@@ -510,6 +510,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Check if current user is blocked
   const isUserBlocked = !effectiveAdmin && blockedUsers.some((b) => b.uid === uid || (myFingerprint && (b as any).fingerprint === myFingerprint));
   const hasPetitioned = typeof window !== "undefined" && localStorage.getItem("petitionSent") === uid;
+  // Reset petition status when unblocked (gives another chance on re-block)
+  if (!isUserBlocked && hasPetitioned && typeof window !== "undefined") {
+    localStorage.removeItem("petitionSent");
+  }
 
   const handleDelete = (msgId: string) => {
     // Check if this message has replies (if so, soft delete; otherwise hard delete)
