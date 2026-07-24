@@ -805,7 +805,6 @@ export function ChatView({ channelId }: { channelId: string }) {
                   opacity: reportedMsgIds.has(msg.id) ? 0.6
                     : (effectiveAdmin && blockedUsers.some((b) => b.uid === msg.uid)) ? 0.4
                     : undefined,
-                  textDecoration: (effectiveAdmin && blockedUsers.some((b) => b.uid === msg.uid)) ? "line-through" : undefined,
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
