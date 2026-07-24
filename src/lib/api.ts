@@ -27,9 +27,12 @@ export async function fetchInit(channelId: string) {
   if (IS_MOCK) return mockApi.fetchInit(channelId);
 
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
-  const res = await fetch(`${WORKER_URL}/api/init?channel=${channelId}`, {
-    headers: roomTokenHeaders(parentChannelId),
-  });
+  const headers: Record<string, string> = {
+    ...roomTokenHeaders(parentChannelId),
+  };
+
+  // Use Vercel proxy (/api/init) — it adds session headers for owner bypass
+  const res = await fetch(`/api/init?channel=${channelId}`, { headers });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
   return res.json();
 }

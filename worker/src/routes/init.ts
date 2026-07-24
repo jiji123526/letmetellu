@@ -21,26 +21,31 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
 
-  // Passcode gate: if channel has passcode, verify token
+  // Passcode gate: if channel has passcode, verify token or owner identity
   if ((channel as any).passcode) {
-    const token = request.headers.get("X-Room-Token");
-    if (token) {
-      const decoded = await verifyRoomToken(token, env);
-      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
-        // Token invalid or passcode changed — gate access
+    // Check if requester is the channel owner (via Vercel proxy auth headers)
+    const internalToken = request.headers.get("X-Internal-Token");
+    const userId = request.headers.get("X-User-Id");
+    const isOwner = internalToken === env.INTERNAL_SECRET && userId === (channel as any).owner_uid;
+
+    if (!isOwner) {
+      const token = request.headers.get("X-Room-Token");
+      if (token) {
+        const decoded = await verifyRoomToken(token, env);
+        if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
+          return Response.json({
+            hasPasscode: true,
+            channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+          });
+        }
+      } else {
         return Response.json({
           hasPasscode: true,
           channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
         });
       }
-      // Token valid — continue to full data
-    } else {
-      // No token — gate access
-      return Response.json({
-        hasPasscode: true,
-        channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
-      });
     }
+    // Owner or valid token — continue to full data
   }
 
   // Fetch recent messages (from the requested channel — live or normal)
