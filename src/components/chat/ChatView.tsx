@@ -613,7 +613,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showSearch && (
         <SearchBar
           channelId={channelId}
-          messages={messages}
+          messages={effectiveAdmin ? [...messages, ...dmMessages] : messages}
           onNavigate={(msgId) => {
             const el = document.getElementById(`msg-${msgId}`);
             if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
