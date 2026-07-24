@@ -36,6 +36,20 @@ export async function fetchGallery(channelId: string, cursor?: string) {
   return res.json();
 }
 
+export async function fetchLinks(channelId: string, cursor?: string) {
+  if (IS_MOCK) return { links: [] };
+  const params = new URLSearchParams({ type: "links", channel: channelId });
+  if (cursor) params.set("cursor", cursor);
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  return res.json();
+}
+
+export async function fetchPreview(url: string) {
+  const res = await fetch(`${WORKER_URL}/api/preview?url=${encodeURIComponent(url)}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function sendMessage(payload: {
   uid: string;
   nick?: string;

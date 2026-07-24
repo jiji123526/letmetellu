@@ -57,6 +57,19 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       return Response.json({ dm: results });
     }
 
+    case "links": {
+      const cursor = url.searchParams.get("cursor");
+      let query = "SELECT id, text, created_at FROM messages WHERE channel_id = ? AND deleted = 0 AND (text LIKE '%http://%' OR text LIKE '%https://%' OR text LIKE '%www.%')";
+      const params: unknown[] = [channelId];
+      if (cursor) {
+        query += " AND created_at < ?";
+        params.push(cursor);
+      }
+      query += " ORDER BY created_at DESC LIMIT 30";
+      const { results } = await env.DB.prepare(query).bind(...params).all();
+      return Response.json({ links: results });
+    }
+
     case "search": {
       const query = url.searchParams.get("q");
       if (!query) return Response.json({ results: [] });

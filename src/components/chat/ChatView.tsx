@@ -1641,7 +1641,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Links Panel */}
       {showLinks && (
         <LinksPanel
-          messages={messages}
+          channelId={inLiveModeRef.current ? `${channelId}_live` : channelId}
           onNavigate={(msgId) => { setShowLinks(false); setTimeout(() => scrollToMessage(msgId), 100); }}
           onClose={() => setShowLinks(false)}
         />
