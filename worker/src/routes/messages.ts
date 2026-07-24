@@ -162,12 +162,15 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     await env.DB.prepare("UPDATE messages SET reactions = ? WHERE id = ?")
       .bind(JSON.stringify(reactions), message_id).run();
 
-    // Broadcast
-    const doId = env.CHAT_ROOM.idFromName(channel_id as string);
+    // Broadcast reaction change with payload (no full refetch needed)
+    const broadcastChannelId = (channel_id as string).endsWith("_live")
+      ? (channel_id as string).replace(/_live$/, "")
+      : channel_id as string;
+    const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
-      body: JSON.stringify({ type: "message-changed", channel_id }),
+      body: JSON.stringify({ type: "reaction-changed", message_id, reactions: JSON.stringify(reactions) }),
     }));
 
     return Response.json({ ok: true, reactions });

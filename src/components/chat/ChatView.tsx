@@ -378,8 +378,23 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "freeze-change") {
         setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
       }
+      if (event.type === "profile-change") {
+        setChannel((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev };
+          if (event.name) updated.name = event.name as string;
+          if (event.profile_image !== undefined) updated.profile_image = event.profile_image as string | null;
+          if (event.bubble_color) updated.bubble_color = event.bubble_color as string;
+          return updated;
+        });
+      }
       if (event.type === "emoji-fx") {
         spawnEmoji(event.emoji as string, event.x as number, event.h as number);
+      }
+      if (event.type === "reaction-changed") {
+        const msgId = event.message_id as string;
+        const newReactions = event.reactions as string;
+        setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: newReactions } : m));
       }
       if (event.type === "live-ended") {
         localStorage.setItem(`liveActive_${channelId}`, "false");

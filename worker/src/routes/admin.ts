@@ -135,7 +135,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         const stub = env.CHAT_ROOM.get(doId);
         await stub.fetch(new Request("http://internal/broadcast", {
           method: "POST",
-          body: JSON.stringify({ type: "profile-change", channel_id }),
+          body: JSON.stringify({ type: "profile-change", channel_id, name, profile_image, bubble_color }),
         }));
       }
 
