@@ -128,7 +128,7 @@ export const en: Record<LocaleKeys, string> = {
 
   // Plus menu
   photoBtn: "Send Photo",
-  dmBtn: "Secret Message",
+  dmBtn: "Direct Message",
   dmBtnOff: "Switch to Normal",
   noticeBtn: "Post Notice",
   emojiPresetBtn: "Emoji Presets",
