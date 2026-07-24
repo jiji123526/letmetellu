@@ -50,6 +50,11 @@ export class ChatRoom {
 
     try {
       const data = JSON.parse(message);
+      // Keep-alive ping → respond with pong (don't broadcast)
+      if (data.type === "ping") {
+        try { ws.send(JSON.stringify({ type: "pong" })); } catch {}
+        return;
+      }
       // Relay ephemeral events (typing, emoji-fx) to all clients
       if (data.type === "emoji-fx" || data.type === "typing") {
         this.broadcast(message);
