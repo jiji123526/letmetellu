@@ -290,13 +290,11 @@ export function ChatView({ channelId }: { channelId: string }) {
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed") {
-        // Small delay to allow D1 read replica to sync
-        setTimeout(() => {
-          fetchInit(channelId).then((data) => {
-            setMessages(data.messages);
-            if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
-          });
-        }, 200);
+        fetchInit(channelId).then((data) => {
+          setMessages(data.messages);
+          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+          if (data.gallery) setGalleryItems(data.gallery);
+        });
       }
       if (event.type === "dm-changed") {
         fetchInit(channelId).then((data) => {
