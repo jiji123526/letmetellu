@@ -1076,8 +1076,11 @@ export function ChatView({ channelId }: { channelId: string }) {
               // Non-admin just leaves live mode (live continues for others)
               setInLiveMode(false);
               localStorage.setItem(`inLiveMode_${channelId}`, "false");
-              // Refetch normal channel messages
-              fetchInit(channelId).then((data) => { setMessages(data.messages); });
+              // Refetch normal channel messages and notice
+              fetchInit(channelId).then((data) => {
+                setMessages(data.messages);
+                setActiveNotice(data.bannerNotice || "");
+              });
             }
           }}
         />
