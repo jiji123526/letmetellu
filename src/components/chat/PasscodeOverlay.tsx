@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { verifyPasscode, setRoomToken } from "@/lib/api";
+import { useLocale } from "@/hooks/useLocale";
 
 interface PasscodeOverlayProps {
   channelId: string;
@@ -12,6 +13,7 @@ interface PasscodeOverlayProps {
 }
 
 export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleColor, onSuccess }: PasscodeOverlayProps) {
+  const { t } = useLocale();
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -30,7 +32,7 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
       onSuccess();
     } else {
       setShake(true);
-      setError("비밀번호가 틀렸습니다");
+      setError(t("wrongPasscode"));
       setTimeout(() => setShake(false), 500);
       setPasscode("");
       inputRef.current?.focus();
@@ -65,7 +67,7 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
 
         {/* Description */}
         <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--meta)", marginBottom: "24px" }}>
-          이 채널은 비밀번호가 필요합니다
+          {t("passcodeRequired")}
         </div>
 
         {/* Input */}
@@ -75,7 +77,7 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
           value={passcode}
           onChange={(e) => setPasscode(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleSubmit(); }}
-          placeholder="비밀번호 입력"
+          placeholder={t("passcodeInput")}
           autoFocus
           style={{
             width: "100%",
@@ -122,7 +124,7 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
             lineHeight: 1,
           }}
         >
-          {loading ? "..." : "입장"}
+          {loading ? "..." : t("enterChannel")}
         </button>
       </div>
     </div>

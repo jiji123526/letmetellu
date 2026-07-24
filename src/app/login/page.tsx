@@ -2,8 +2,10 @@
 
 import { signIn } from "next-auth/react";
 import { useState } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 export default function LoginPage() {
+  const { t } = useLocale();
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,12 +17,12 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email || !password) { setError("모든 필드를 입력해주세요"); return; }
-    if (!isValidEmail(email)) { setError("올바른 이메일을 입력해주세요"); return; }
+    if (!email || !password) { setError(t("allFieldsRequired")); return; }
+    if (!isValidEmail(email)) { setError(t("invalidEmail")); return; }
 
     const result = await signIn("credentials", { email, password, redirect: false });
     if (result?.error) {
-      setError("이메일 또는 비밀번호가 틀렸습니다");
+      setError(t("loginError"));
     } else {
       window.location.href = "/dashboard";
     }
@@ -29,9 +31,9 @@ export default function LoginPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email || !password) { setError("모든 필드를 입력해주세요"); return; }
-    if (!isValidEmail(email)) { setError("올바른 이메일을 입력해주세요"); return; }
-    if (password.length < 8 || !/\d/.test(password)) { setError("비밀번호는 8자 이상, 숫자를 포함해야 합니다"); return; }
+    if (!email || !password) { setError(t("allFieldsRequired")); return; }
+    if (!isValidEmail(email)) { setError(t("invalidEmail")); return; }
+    if (password.length < 8 || !/\d/.test(password)) { setError(t("weakPassword")); return; }
 
     // Create account on Worker
     const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "";
@@ -42,16 +44,16 @@ export default function LoginPage() {
     });
     const signupData = await signupRes.json() as { ok?: boolean; error?: string };
     if (!signupData.ok) {
-      if (signupData.error === "user_exists") setError("이미 가입된 이메일입니다");
-      else if (signupData.error === "weak_password") setError("비밀번호는 8자 이상, 숫자를 포함해야 합니다");
-      else setError("가입에 실패했습니다");
+      if (signupData.error === "user_exists") setError(t("userExists"));
+      else if (signupData.error === "weak_password") setError(t("weakPassword"));
+      else setError(t("signupError"));
       return;
     }
 
     // Auto sign in after signup
     const result = await signIn("credentials", { email, password, redirect: false });
     if (result?.error) {
-      setError("가입 후 로그인에 실패했습니다");
+      setError(t("signupError"));
     } else {
       window.location.href = "/onboarding";
     }
@@ -72,7 +74,7 @@ export default function LoginPage() {
       <div style={{ background: "#fff", borderRadius: "20px", padding: "36px 28px", maxWidth: "360px", width: "100%", boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}>
         {/* Title */}
         <div style={{ fontSize: "24px", fontWeight: 500, textAlign: "center", marginBottom: "6px" }}>💬 letsplay</div>
-        <div style={{ fontSize: "13px", color: "#999", textAlign: "center", marginBottom: "28px" }}>나만의 익명 채팅방 만들기</div>
+        <div style={{ fontSize: "13px", color: "#999", textAlign: "center", marginBottom: "28px" }}>{t("appDesc")}</div>
 
         {/* Tabs */}
         <div style={{ display: "flex", marginBottom: "24px", borderRadius: "10px", overflow: "hidden", border: "1px solid #eee" }}>
@@ -107,14 +109,14 @@ export default function LoginPage() {
             </div>
             <form onSubmit={handleLogin}>
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>이메일</label>
+                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>{ t("email")}</label>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: "12px", fontSize: "14px", fontFamily: "inherit", outline: "none", background: "#f8f8f8", boxSizing: "border-box" }} onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#3b8df0"; }} onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }} />
               </div>
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>비밀번호</label>
+                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>{ t("password")}</label>
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: "12px", fontSize: "14px", fontFamily: "inherit", outline: "none", background: "#f8f8f8", boxSizing: "border-box" }} onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#3b8df0"; }} onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }} />
               </div>
-              <button type="submit" style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: "#3b8df0", cursor: "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}>로그인</button>
+              <button type="submit" style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: "#3b8df0", cursor: "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}>{ t("loginTab")}</button>
             </form>
           </>
         )}
@@ -136,15 +138,15 @@ export default function LoginPage() {
             </div>
             <form onSubmit={handleSignup}>
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>이메일</label>
+                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>{ t("email")}</label>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: "12px", fontSize: "14px", fontFamily: "inherit", outline: "none", background: "#f8f8f8", boxSizing: "border-box" }} onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#3b8df0"; }} onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }} />
               </div>
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>비밀번호</label>
+                <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>{ t("password")}</label>
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="8자 이상, 숫자 포함" style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: "12px", fontSize: "14px", fontFamily: "inherit", outline: "none", background: "#f8f8f8", boxSizing: "border-box" }} onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#3b8df0"; }} onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }} />
                 <div style={{ fontSize: "11px", color: "#bbb", marginTop: "4px" }}>8자 이상, 숫자 포함</div>
               </div>
-              <button type="submit" style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: "#3b8df0", cursor: "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}>가입하기</button>
+              <button type="submit" style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: "#3b8df0", cursor: "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}>{ t("signupTab")}</button>
             </form>
           </>
         )}

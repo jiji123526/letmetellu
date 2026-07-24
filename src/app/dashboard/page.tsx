@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
+import { useLocale } from "@/hooks/useLocale";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -15,6 +16,7 @@ interface Channel {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { t } = useLocale();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -76,7 +78,7 @@ export default function DashboardPage() {
   if (status === "loading" || loading) {
     return (
       <main className="min-h-dvh flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <div style={{ color: "var(--meta)" }}>로딩 중...</div>
+        <div style={{ color: "var(--meta)" }}>Loading...</div>
       </main>
     );
   }
@@ -86,7 +88,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-dvh" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       <header className="flex items-center justify-between p-4" style={{ borderBottom: "0.5px solid var(--hairline)" }}>
-        <h1 className="text-lg font-semibold">내 채널</h1>
+        <h1 className="text-lg font-semibold">{ t("dashboardTitle")}</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm" style={{ color: "var(--meta)" }}>{session.user?.email}</span>
           <button
@@ -94,7 +96,7 @@ export default function DashboardPage() {
             className="text-sm cursor-pointer"
             style={{ background: "none", border: "1px solid var(--input-border)", borderRadius: "8px", padding: "6px 12px", color: "var(--gray-text)", fontFamily: "inherit", lineHeight: 1 }}
           >
-            로그아웃
+            {t("logout")}
           </button>
         </div>
       </header>
@@ -133,19 +135,19 @@ export default function DashboardPage() {
               type="text"
               value={newSlug}
               onChange={(e) => setNewSlug(e.target.value)}
-              placeholder="채널 주소 (영문, 숫자, -)"
+              placeholder={t("channelSlug")}
               style={{ width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "10px", padding: "10px 12px", fontSize: "14px", fontFamily: "inherit", marginBottom: "8px", outline: "none", boxSizing: "border-box", lineHeight: 1 }}
             />
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="채널 이름"
+              placeholder={t("channelName")}
               style={{ width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "10px", padding: "10px 12px", fontSize: "14px", fontFamily: "inherit", marginBottom: "12px", outline: "none", boxSizing: "border-box", lineHeight: 1 }}
             />
             <div className="flex gap-2">
-              <button onClick={() => setCreating(false)} style={{ flex: 1, border: "none", borderRadius: "10px", padding: "10px", fontSize: "14px", cursor: "pointer", fontFamily: "inherit", background: "#f4f4f4", color: "#666", lineHeight: 1 }}>취소</button>
-              <button onClick={handleCreate} style={{ flex: 1, border: "none", borderRadius: "10px", padding: "10px", fontSize: "14px", cursor: "pointer", fontFamily: "inherit", background: "var(--bubble-sent, #3b8df0)", color: "#fff", lineHeight: 1 }}>만들기</button>
+              <button onClick={() => setCreating(false)} style={{ flex: 1, border: "none", borderRadius: "10px", padding: "10px", fontSize: "14px", cursor: "pointer", fontFamily: "inherit", background: "#f4f4f4", color: "#666", lineHeight: 1 }}>{ t("cancel")}</button>
+              <button onClick={handleCreate} style={{ flex: 1, border: "none", borderRadius: "10px", padding: "10px", fontSize: "14px", cursor: "pointer", fontFamily: "inherit", background: "var(--bubble-sent, #3b8df0)", color: "#fff", lineHeight: 1 }}>{ t("create")}</button>
             </div>
           </div>
         ) : (
@@ -154,7 +156,7 @@ export default function DashboardPage() {
             className="w-full mt-4 cursor-pointer"
             style={{ border: "1px dashed var(--input-border)", borderRadius: "12px", padding: "14px", fontSize: "14px", fontFamily: "inherit", background: "none", color: "var(--meta)", lineHeight: 1 }}
           >
-            + 새 채널 만들기
+            {t("createChannel")}
           </button>
         )}
       </div>

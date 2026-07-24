@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { adminAction } from "@/lib/api";
+import { useLocale } from "@/hooks/useLocale";
 
 const DEFAULT_EMOJIS = ["🍋", "🔥", "❤️", "😂", "👏", "🎉"];
 
@@ -173,6 +174,7 @@ interface EmojiPresetPanelProps {
 }
 
 export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) {
+  const { t } = useLocale();
   const [emojis, setEmojis] = useState<string[]>(() => getPresetEmojis(channelId));
   const [showPicker, setShowPicker] = useState(false);
 
@@ -203,7 +205,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
       <div style={{ width: "100%", maxWidth: "320px", maxHeight: "80vh", background: "var(--bg)", color: "var(--gray-text)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,.25)", display: "flex", flexDirection: "column" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)", flexShrink: 0 }}>
-          <h3 style={{ margin: 0, fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500 }}>이모지 프리셋</h3>
+          <h3 style={{ margin: 0, fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500 }}>{ t("emojiPresets")}</h3>
           <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px" }} onClick={onClose}>✕</button>
         </div>
 
@@ -225,7 +227,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
             style={{ width: "100%", background: "var(--card)", border: "1.5px dashed var(--input-border)", borderRadius: "10px", padding: "10px", fontSize: "var(--bubble-font-size, 14px)", color: "var(--meta)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
             onClick={() => setShowPicker(!showPicker)}
           >
-            {showPicker ? "닫기" : "+ 추가"}
+            {showPicker ? t("closePicker") : t("add")}
           </button>
 
           {/* Inline emoji picker */}

@@ -767,8 +767,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       const blockEntry = blockedUsers.find((b) => b.uid === uid);
-      const reason = blockEntry?.reason ? `\n[차단 사유: "${blockEntry.reason}"]` : "";
-      sendDm({ uid, text: `[이의 제기] ${text}${reason}`, channel_id: inLiveMode ? `${channelId}_live` : channelId });
+      const reason = blockEntry?.reason ? `\n[${t("blockReason")}: "${blockEntry.reason}"]` : "";
+      sendDm({ uid, text: `[${t("petitionPrefix")}] ${text}${reason}`, channel_id: inLiveMode ? `${channelId}_live` : channelId });
       localStorage.setItem("petitionSent", uid);
       setBanner({ text: t("petitionSent"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
@@ -1593,7 +1593,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               return next;
             });
             const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
-            sendMessageApi({ uid, text: `🚨 신고된 채팅: "${preview}"`, channel_id: channelId, report: true, reported_msg_id: msgId } as any);
+            sendMessageApi({ uid, text: `${t("reportPrefix")}: "${preview}"`, channel_id: channelId, report: true, reported_msg_id: msgId } as any);
             setBanner({ text: t("report"), color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
@@ -1649,12 +1649,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (isBlocked) {
               adminAction("unblock", channelId, { uid: blockUid });
               setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
-              setBanner({ text: `익명#${blockUid.slice(-4)} 차단 해제`, color: "#2a9d4e" });
+              setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonUnblocked")}`, color: "#2a9d4e" });
             } else {
               const msg = contextMenu.msg;
               adminAction("block", channelId, { uid: blockUid, reason: msg.text?.slice(0, 50) || "", fingerprint: "" });
               setBlockedUsers((prev) => [...prev, { uid: blockUid, reason: msg.text?.slice(0, 50) || "" }]);
-              setBanner({ text: `익명#${blockUid.slice(-4)} 차단됨`, color: "#d32f2f" });
+              setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonBlocked")}`, color: "#d32f2f" });
             }
             setTimeout(() => setBanner(null), 3000);
           } : undefined}

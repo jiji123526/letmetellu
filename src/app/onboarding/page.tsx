@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { useLocale } from "@/hooks/useLocale";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
@@ -21,6 +22,7 @@ const GUIDE_ITEMS = [
 export default function OnboardingPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { t } = useLocale();
   const [step, setStep] = useState(1);
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
@@ -38,10 +40,10 @@ export default function OnboardingPage() {
 
   const handleCreate = async () => {
     setError("");
-    if (!slug) { setError("채널 주소를 입력해주세요"); return; }
-    if (slug.length < 3) { setError("채널 주소는 3자 이상이어야 합니다"); return; }
-    if (!/^[a-z0-9-]{3,30}$/.test(slug)) { setError("영문 소문자, 숫자, 하이픈만 가능합니다"); return; }
-    if (!name.trim()) { setError("채널 이름을 입력해주세요"); return; }
+    if (!slug) { setError(t("allFieldsRequired")); return; }
+    if (slug.length < 3) { setError(t("allFieldsRequired")); return; }
+    if (!/^[a-z0-9-]{3,30}$/.test(slug)) { setError(t("allFieldsRequired")); return; }
+    if (!name.trim()) { setError(t("allFieldsRequired")); return; }
 
     const res = await fetch("/api/admin", {
       method: "POST",
@@ -50,7 +52,7 @@ export default function OnboardingPage() {
     });
     const data = await res.json();
     if (data.error) {
-      if (data.error === "channel already exists") setError("이미 사용 중인 채널 주소입니다");
+      if (data.error === "channel already exists") setError(t("userExists"));
       else setError(data.error);
       return;
     }
@@ -76,7 +78,7 @@ export default function OnboardingPage() {
 
         {/* Title */}
         <div style={{ fontSize: "22px", fontWeight: 500, textAlign: "center", marginBottom: "6px" }}>
-          {step === 1 ? "채널 만들기" : "시작하기"}
+          {step === 1 ? t("onboardingTitle") : t("onboardingComplete")}
         </div>
         {step === 1 && (
           <div style={{ fontSize: "13px", color: "#999", textAlign: "center", marginBottom: "28px", lineHeight: 1.6 }}>
@@ -94,7 +96,7 @@ export default function OnboardingPage() {
         {step === 1 && (
           <>
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>채널 주소</label>
+              <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>{ t("channelSlug")}</label>
               <input
                 type="text"
                 value={slug}
@@ -109,12 +111,12 @@ export default function OnboardingPage() {
               {slug && <div style={{ fontSize: "12px", color: "#3b8df0", marginTop: "6px", fontWeight: 500 }}>letmetellu.vercel.app/ch/{slug}</div>}
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>채널 이름</label>
+              <label style={{ display: "block", fontSize: "12px", color: "#888", fontWeight: 600, marginBottom: "6px" }}>{ t("channelName")}</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="표시될 이름"
+                placeholder={t("channelName")}
                 maxLength={30}
                 style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: "12px", fontSize: "14px", fontFamily: "inherit", outline: "none", background: "#f8f8f8", boxSizing: "border-box" }}
                 onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#3b8df0"; }}
