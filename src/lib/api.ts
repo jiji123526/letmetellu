@@ -54,6 +54,28 @@ export async function sendMessage(payload: {
   return res.json();
 }
 
+// Admin sends through Vercel proxy (session-verified, is_admin trusted)
+export async function sendMessageAsAdmin(payload: {
+  uid: string;
+  nick?: string;
+  text: string;
+  channel_id: string;
+  image?: string;
+  reply_to?: string;
+  fingerprint?: string;
+  report?: boolean;
+  reported_msg_id?: string;
+}) {
+  if (IS_MOCK) return mockApi.sendMessage(payload);
+
+  const res = await fetch("/api/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 export async function adminAction(
   action: string,
   channelId: string,

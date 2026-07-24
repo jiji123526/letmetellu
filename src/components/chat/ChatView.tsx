@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -576,7 +576,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
     const activeChannelId = inLiveMode ? `${channelId}_live` : channelId;
 
-    const res = await sendMessageApi({
+    const res = await (effectiveAdmin && authUserId ? sendMessageAsAdmin : sendMessageApi)({
       uid: effectiveAdmin && authUserId ? authUserId : uid,
       text,
       channel_id: activeChannelId,

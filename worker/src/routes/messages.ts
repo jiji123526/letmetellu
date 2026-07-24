@@ -10,6 +10,11 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
+    // Check if this is a verified admin request (from Vercel proxy)
+    const internalToken = request.headers.get("X-Internal-Token");
+    const verifiedUserId = request.headers.get("X-User-Id");
+    const isVerifiedAdmin = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+
     // Rate limit check
     if (!checkRateLimit(uid as string)) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
@@ -41,13 +46,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Insert message (+ gallery if image) in a single batch
     const id = crypto.randomUUID();
-    // Determine if sender is admin (channel owner — use parent channel)
-    const isAdmin = (channel as any).owner_uid && uid === (channel as any).owner_uid ? 1 : 0;
+    // Determine if sender is admin:
+    // - If verified via internal token: check X-User-Id matches channel owner
+    // - Otherwise: never mark as admin (anonymous users can't be admin)
+    const senderUid = isVerifiedAdmin ? verifiedUserId! : uid as string;
+    const isAdmin = isVerifiedAdmin && (channel as any).owner_uid === verifiedUserId ? 1 : 0;
     const stmts = [
       env.DB.prepare(`
         INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, uid, uid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null),
+      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null),
     ];
     if (image) {
       stmts.push(
