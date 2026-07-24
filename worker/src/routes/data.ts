@@ -14,17 +14,18 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const cursor = url.searchParams.get("cursor");
       const limit = 50;
 
-      let query = "SELECT * FROM messages WHERE channel_id = ? AND deleted = 0";
+      let innerQuery = "SELECT * FROM messages WHERE channel_id = ? AND deleted = 0";
       const params: unknown[] = [channelId];
 
       if (cursor) {
-        query += " AND created_at < ?";
+        innerQuery += " AND created_at < ?";
         params.push(cursor);
       }
 
-      query += " ORDER BY created_at DESC LIMIT ?";
+      innerQuery += " ORDER BY created_at DESC LIMIT ?";
       params.push(limit);
 
+      const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC`;
       const stmt = env.DB.prepare(query);
       const { results } = await stmt.bind(...params).all();
       return Response.json({ messages: results });

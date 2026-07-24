@@ -391,7 +391,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "reconnected" || event.type === "messages-sync") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) setMessages([...data.messages].reverse());
+          if (data.messages) setMessages(data.messages);
         }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
@@ -487,7 +487,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) setMessages([...data.messages].reverse());
+          if (data.messages) setMessages(data.messages);
         });
       }
     };

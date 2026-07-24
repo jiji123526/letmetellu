@@ -22,7 +22,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   // Fetch recent messages (from the requested channel — live or normal)
   const { results: messages } = await env.DB.prepare(
-    "SELECT * FROM messages WHERE channel_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 50"
+    "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
   ).bind(channelId).all();
 
   // Fetch blocked users (from parent channel)
@@ -48,7 +48,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   // Fetch DM messages (visible to admin only — frontend filters)
   const { results: dmMessages } = await env.DB.prepare(
-    "SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50"
+    "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
   ).bind(channelId).all();
 
   // Fetch gallery items
@@ -70,9 +70,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   return Response.json({
     channel,
-    messages: messages.reverse(), // oldest first for display
+    messages,
     blocked,
-    dm: dmMessages ? [...dmMessages].reverse() : [],
+    dm: dmMessages || [],
     gallery: galleryItems || [],
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
