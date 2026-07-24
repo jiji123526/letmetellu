@@ -348,6 +348,25 @@ export function ChatView({ channelId }: { channelId: string }) {
     const text = input.trim();
     if ((!text && pendingPhotos.length === 0) || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
 
+    // Blocked user handling
+    if (isUserBlocked) {
+      if (hasPetitioned || !petitionEnabled) {
+        setBanner({ text: "차단되어 채팅을 보낼 수 없습니다", color: "#d32f2f" });
+        setTimeout(() => setBanner(null), 3000);
+        return;
+      }
+      // Send one-time petition DM
+      setInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      const blockEntry = blockedUsers.find((b) => b.uid === uid);
+      const reason = blockEntry?.reason ? `\n[차단 사유: "${blockEntry.reason}"]` : "";
+      sendDm({ uid, text: `[이의 제기] ${text}${reason}`, channel_id: channelId });
+      localStorage.setItem("petitionSent", uid);
+      setBanner({ text: "이의 제기가 전송되었습니다", color: "#d32f2f" });
+      setTimeout(() => setBanner(null), 3000);
+      return;
+    }
+
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
@@ -469,6 +488,10 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
+
+  // Check if current user is blocked
+  const isUserBlocked = !effectiveAdmin && blockedUsers.some((b) => b.uid === uid || b.uid === myFingerprint);
+  const hasPetitioned = typeof window !== "undefined" && localStorage.getItem("petitionSent") === uid;
 
   const handleDelete = (msgId: string) => {
     // Check if this message has replies (if so, soft delete; otherwise hard delete)
@@ -1009,10 +1032,14 @@ export function ChatView({ channelId }: { channelId: string }) {
               padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
               background: (channel?.is_frozen && !effectiveAdmin && !dmMode)
                 ? "rgba(0,0,0,.03)"
-                : dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
+                : isUserBlocked
+                  ? "rgba(255,59,48,.05)"
+                  : dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
               border: (channel?.is_frozen && !effectiveAdmin && !dmMode)
                 ? "1px solid #ccc"
-                : dmMode ? "1px solid #7b3fa0" : "1px solid var(--input-border)",
+                : isUserBlocked
+                  ? "1px solid #d32f2f"
+                  : dmMode ? "1px solid #7b3fa0" : "1px solid var(--input-border)",
               borderRadius: "20px",
             }}
           >
@@ -1021,16 +1048,18 @@ export function ChatView({ channelId }: { channelId: string }) {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              disabled={!!(channel?.is_frozen && !effectiveAdmin && !dmMode)}
+              disabled={!!(channel?.is_frozen && !effectiveAdmin && !dmMode) || (isUserBlocked && (hasPetitioned || !petitionEnabled))}
               rows={1}
               placeholder={
                 (channel?.is_frozen && !effectiveAdmin && !dmMode)
                   ? "채팅이 얼려져 있습니다 🧊"
-                  : (channel?.is_frozen && effectiveAdmin)
-                    ? "얼려짐 🧊"
-                    : dmMode
-                      ? "관리자에게 보내기"
-                      : "메시지를 입력하세요"
+                  : isUserBlocked
+                    ? (hasPetitioned || !petitionEnabled ? "차단된 사용자입니다" : "이의 제기 (기회 1회)")
+                    : (channel?.is_frozen && effectiveAdmin)
+                      ? "얼려짐 🧊"
+                      : dmMode
+                        ? "관리자에게 보내기"
+                        : "메시지를 입력하세요"
               }
               className="flex-1 border-none bg-transparent outline-none resize-none"
               style={{
