@@ -147,10 +147,18 @@ function SkeletonLoading() {
 }
 
 // Message text with truncation (>1000 chars) and search highlight
-function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean }) {
+function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hideEmbedUrls }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hideEmbedUrls?: boolean }) {
   const [showOverlay, setShowOverlay] = useState(false);
-  const isLong = text.length > 1000;
-  const displayText = isLong ? text.slice(0, 1000) + "…" : text;
+
+  // Strip URLs that will be rendered as embeds
+  let processedText = text;
+  if (hideEmbedUrls) {
+    processedText = text.replace(/https?:\/\/[^\s<]+/g, "").trim();
+    if (!processedText) return null; // Only URL(s), no other text
+  }
+
+  const isLong = processedText.length > 1000;
+  const displayText = isLong ? processedText.slice(0, 1000) + "…" : processedText;
 
   const content = searchQuery && isSearchMatch
     ? highlightText(displayText, searchQuery, isActiveMatch)
@@ -1056,7 +1064,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                         >⤢</button>
                       </div>
                     )}
-                    {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} />}
+                    {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} hideEmbedUrls={!msg.deleted && !msg.report && /https?:\/\/[^\s<]+/.test(msg.text)} />}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
                     {msg.text && !msg.deleted && !msg.report && <MessageEmbeds text={msg.text} />}
                   </>
