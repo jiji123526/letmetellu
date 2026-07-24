@@ -30,9 +30,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     "SELECT * FROM blocked WHERE channel_id = ?"
   ).bind(parentChannelId).all();
 
-  // Fetch banner notice from config table (from parent channel)
+  // Fetch banner notice from config table (from requested channel — separate for live)
   const noticeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`notice_${parentChannelId}`, parentChannelId).first();
+    .bind(`notice_${channelId}`, channelId).first();
 
   // Fetch welcome popup config (from parent channel)
   const welcomeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")

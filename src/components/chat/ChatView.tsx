@@ -872,13 +872,13 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (effectiveAdmin) {
       const msg = messages.find((m) => m.id === msgId) || dmMessages.find((m) => m.id === msgId);
       if (msg?.dm) {
-        adminAction("delete-dm", channelId, { dm_id: msgId });
+        adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: msgId });
         setDmMessages((prev) => prev.filter((m) => m.id !== msgId));
       } else {
-        adminAction("delete-message", channelId, { message_id: msgId });
+        adminAction("delete-message", inLiveMode ? `${channelId}_live` : channelId, { message_id: msgId });
       }
     } else {
-      deleteMessage({ uid, message_id: msgId, channel_id: channelId, soft: hasReplies });
+      deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: hasReplies });
     }
   };
 
@@ -1519,7 +1519,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             // Find and delete the report message from D1
             const reportMsg = messages.find((m) => m.report && m.reported_msg_id === msgId && m.uid === uid);
             if (reportMsg) {
-              deleteMessage({ uid, message_id: reportMsg.id, channel_id: channelId, soft: false });
+              deleteMessage({ uid, message_id: reportMsg.id, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
               setMessages((prev) => prev.filter((m) => m.id !== reportMsg.id));
             }
             setBanner({ text: t("unreport"), color: "var(--meta)" });
@@ -1544,8 +1544,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             // Delete via admin endpoint
             idsToDelete.forEach((id) => {
               const msg = messages.find((m) => m.id === id) || dmMessages.find((m) => m.id === id);
-              if (msg?.dm) adminAction("delete-dm", channelId, { dm_id: id });
-              else adminAction("delete-message", channelId, { message_id: id });
+              if (msg?.dm) adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: id });
+              else adminAction("delete-message", inLiveMode ? `${channelId}_live` : channelId, { message_id: id });
             });
             setDmMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
             setBanner({ text: t("delete"), color: "#d32f2f" });
