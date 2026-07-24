@@ -5,6 +5,7 @@ import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
+import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { ContextMenu } from "./ContextMenu";
 import { ReactionBadge } from "./ReactionBadge";
 import { ReplyBar } from "./ReplyBar";
@@ -256,6 +257,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { connected, presence, subscribe } = useRealtime(channelId, uid);
+
+  // Auto-reload when new version is deployed (only when user has no draft)
+  useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
 
   // Load initial data
   useEffect(() => {

@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  env: {
+    APP_VERSION: process.env.VERCEL_GIT_COMMIT_SHA || "local",
+  },
 };
 
 export default nextConfig;
