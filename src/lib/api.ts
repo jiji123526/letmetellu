@@ -70,8 +70,11 @@ export async function fetchMessages(channelId: string, cursor?: string) {
 
 export async function fetchDm(channelId: string) {
   if (IS_MOCK) return { dm: [] };
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "dm", channel: channelId });
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
   return res.json();
 }
 
@@ -202,8 +205,11 @@ export async function editMessageApi(payload: {
 
 export async function searchMessages(channelId: string, query: string) {
   if (IS_MOCK) return { results: [] };
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "search", channel: channelId, q: query });
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
   return res.json();
 }
 

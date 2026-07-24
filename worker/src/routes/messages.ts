@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { checkRateLimit, checkMessageLength, checkBannedWords } from "../lib/validation";
+import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { verifyRoomToken } from "./passcode";
 
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
@@ -107,6 +107,18 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
+    // Passcode gate
+    const delParent = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const { passcode: delPasscode } = await getChannelPasscodeInfo(delParent, env);
+    if (delPasscode) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== delParent || decoded.passcode_hash !== delPasscode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
+    }
+
     // Verify ownership
     const msg = await env.DB.prepare("SELECT uid FROM messages WHERE id = ? AND channel_id = ?")
       .bind(message_id, channel_id).first();
@@ -146,6 +158,18 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
+    // Passcode gate
+    const editParent = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const { passcode: editPasscode } = await getChannelPasscodeInfo(editParent, env);
+    if (editPasscode) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== editParent || decoded.passcode_hash !== editPasscode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
+    }
+
     // Verify ownership
     const msg = await env.DB.prepare("SELECT uid FROM messages WHERE id = ? AND channel_id = ?")
       .bind(message_id, channel_id).first();
@@ -176,6 +200,18 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     if (!message_id || !uid || !channel_id || !emoji) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+
+    // Passcode gate
+    const patchParent = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const { passcode: patchPasscode } = await getChannelPasscodeInfo(patchParent, env);
+    if (patchPasscode) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== patchParent || decoded.passcode_hash !== patchPasscode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
     }
 
     // Get current reactions
