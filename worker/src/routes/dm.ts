@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { verifyRoomToken } from "./passcode";
 
 export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
@@ -9,6 +10,19 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
+    // Passcode gate
+    const parentChannelId = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
+      .bind(parentChannelId).first() as { passcode: string | null } | null;
+    if (channel?.passcode) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== channel.passcode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
+    }
+
     const id = crypto.randomUUID();
     const created_at = new Date().toISOString();
     await env.DB.prepare(
@@ -16,9 +30,6 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     ).bind(id, uid, uid, nick || null, text || "", image || null, channel_id).run();
 
     // Broadcast DM with payload — always use parent channel DO
-    const parentChannelId = (channel_id as string).endsWith("_live")
-      ? (channel_id as string).replace(/_live$/, "")
-      : channel_id as string;
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     const newDm = { id, uid, auth_uid: uid, nick: nick || null, text: text || "", image: image || null, channel_id, created_at };

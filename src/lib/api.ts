@@ -105,9 +105,10 @@ export async function sendMessage(payload: {
 }) {
   if (IS_MOCK) return mockApi.sendMessage(payload);
 
+  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -164,9 +165,10 @@ export async function deleteMessage(payload: {
 }) {
   if (IS_MOCK) return { ok: true };
 
+  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -180,9 +182,10 @@ export async function editMessageApi(payload: {
 }) {
   if (IS_MOCK) return { ok: true };
 
+  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -197,9 +200,10 @@ export async function searchMessages(channelId: string, query: string) {
 
 export async function sendDm(payload: { uid: string; nick?: string; text: string; channel_id: string; image?: string }) {
   if (IS_MOCK) return { ok: true };
+  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
   const res = await fetch(`${WORKER_URL}/api/dm`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -207,9 +211,10 @@ export async function sendDm(payload: { uid: string; nick?: string; text: string
 
 export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
   if (IS_MOCK) return { ok: true };
+  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -217,9 +222,10 @@ export async function toggleReaction(payload: { uid: string; message_id: string;
 
 export async function uploadImage(blob: Blob, channelId: string): Promise<string | null> {
   if (IS_MOCK) return URL.createObjectURL(blob);
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const res = await fetch(`${WORKER_URL}/api/upload?channel=${channelId}`, {
     method: "POST",
-    headers: { "Content-Type": blob.type || "image/jpeg" },
+    headers: { "Content-Type": blob.type || "image/jpeg", ...roomTokenHeaders(parentChannelId) },
     body: blob,
   });
   const result = await res.json() as { ok?: boolean; key?: string };

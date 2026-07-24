@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { checkRateLimit, checkMessageLength, checkBannedWords } from "../lib/validation";
+import { verifyRoomToken } from "./passcode";
 
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
@@ -15,6 +16,24 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const verifiedUserId = request.headers.get("X-User-Id");
     const isVerifiedAdmin = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
 
+    // Passcode gate — check if channel requires passcode for writing
+    const isLiveChannel = (channel_id as string).endsWith("_live");
+    const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const channel = await env.DB.prepare("SELECT id, is_frozen, owner_uid, passcode FROM channels WHERE id = ?")
+      .bind(parentChannelId).first();
+    if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
+
+    if ((channel as any).passcode && !isVerifiedAdmin) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
+    }
+
+    if (!isLiveChannel && (channel as any).is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
+
     // Rate limit check
     if (!checkRateLimit(uid as string)) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
@@ -24,14 +43,6 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (text && !checkMessageLength(text as string)) {
       return Response.json({ error: "message_too_long" }, { status: 400 });
     }
-
-    // Check channel exists (live channels use parent channel's config)
-    const isLiveChannel = (channel_id as string).endsWith("_live");
-    const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
-    const channel = await env.DB.prepare("SELECT id, is_frozen, owner_uid FROM channels WHERE id = ?")
-      .bind(parentChannelId).first();
-    if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
-    if (!isLiveChannel && channel.is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
 
     // Check if user is blocked (check parent channel)
     const blocked = await env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")

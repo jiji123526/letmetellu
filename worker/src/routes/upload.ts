@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { verifyRoomToken } from "./passcode";
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -10,6 +11,19 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   const channelId = new URL(request.url).searchParams.get("channel");
   if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
+
+  // Passcode gate
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
+    .bind(parentChannelId).first() as { passcode: string | null } | null;
+  if (channel?.passcode) {
+    const roomToken = request.headers.get("X-Room-Token");
+    if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+    const decoded = await verifyRoomToken(roomToken, env);
+    if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== channel.passcode) {
+      return Response.json({ error: "invalid token" }, { status: 403 });
+    }
+  }
 
   const contentType = request.headers.get("Content-Type") || "image/jpeg";
 
