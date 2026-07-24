@@ -388,8 +388,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           setInLiveMode(false);
           localStorage.setItem(`inLiveMode_${channelId}`, "false");
           setShowLiveEnded(true);
-          // Refetch normal messages
-          fetchInit(channelId).then((data) => { setMessages(data.messages); }).catch(() => {});
+          // Refetch normal messages and DMs
+          fetchInit(channelId).then((data) => {
+            setMessages(data.messages);
+            setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
+          }).catch(() => {});
         }
       }
       if (event.type === "live-started") {
@@ -1547,7 +1550,10 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.removeItem(`liveTitle_${channelId}`);
             localStorage.removeItem(`liveSession_${channelId}`);
             await adminAction("end-live", channelId);
-            fetchInit(channelId).then((data) => { setMessages(data.messages); });
+            fetchInit(channelId).then((data) => {
+              setMessages(data.messages);
+              setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
+            });
             setShowLiveEnded(true);
           }}
           onCancel={() => setShowEndLiveConfirm(false)}
