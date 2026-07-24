@@ -212,6 +212,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`live_${channel_id}`, liveState, channel_id, liveState).run();
 
+      // Create a temporary channel entry for the _live channel (FK constraint)
+      const liveChannelId = `${channel_id}_live`;
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO channels (id, owner_uid, name) VALUES (?, ?, ?)"
+      ).bind(liveChannelId, userId, "Live").run();
+
       // Broadcast live-started to all connected clients
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
@@ -268,6 +274,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("DELETE FROM dm WHERE channel_id = ?").bind(liveChannelId).run();
       await env.DB.prepare("DELETE FROM blocked WHERE channel_id = ?").bind(liveChannelId).run();
       await env.DB.prepare("DELETE FROM config WHERE channel_id = ?").bind(liveChannelId).run();
+      // Remove the temporary live channel entry
+      await env.DB.prepare("DELETE FROM channels WHERE id = ?").bind(liveChannelId).run();
 
       return Response.json({ ok: true });
     }

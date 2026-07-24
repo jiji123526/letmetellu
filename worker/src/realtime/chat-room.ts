@@ -7,6 +7,7 @@ interface Connection {
 
 export class ChatRoom {
   private connections: Map<WebSocket, Connection> = new Map();
+  private liveViewers: Set<WebSocket> = new Set();
   private state: DurableObjectState;
 
   constructor(state: DurableObjectState, _env: Env) {
@@ -32,18 +33,29 @@ export class ChatRoom {
           if (data.type === "emoji-fx" || data.type === "typing") {
             this.broadcast(event.data);
           }
-          // Ignore ping — connection stays alive just by having the listener
+          if (data.type === "join-live") {
+            this.liveViewers.add(server);
+            this.broadcastLivePresence();
+          }
+          if (data.type === "leave-live") {
+            this.liveViewers.delete(server);
+            this.broadcastLivePresence();
+          }
         } catch {}
       });
 
       server.addEventListener("close", () => {
         this.connections.delete(server);
+        this.liveViewers.delete(server);
         this.broadcastPresence();
+        this.broadcastLivePresence();
       });
 
       server.addEventListener("error", () => {
         this.connections.delete(server);
+        this.liveViewers.delete(server);
         this.broadcastPresence();
+        this.broadcastLivePresence();
       });
 
       this.broadcastPresence();
@@ -60,7 +72,7 @@ export class ChatRoom {
 
     // Presence query
     if (url.pathname.endsWith("/presence")) {
-      return Response.json({ count: this.connections.size });
+      return Response.json({ count: this.connections.size, liveCount: this.liveViewers.size });
     }
 
     return new Response("not found", { status: 404 });
@@ -72,11 +84,16 @@ export class ChatRoom {
         ws.send(message);
       } catch {
         this.connections.delete(ws);
+        this.liveViewers.delete(ws);
       }
     }
   }
 
   private broadcastPresence() {
-    this.broadcast(JSON.stringify({ type: "presence", count: this.connections.size }));
+    this.broadcast(JSON.stringify({ type: "presence", count: this.connections.size, liveCount: this.liveViewers.size }));
+  }
+
+  private broadcastLivePresence() {
+    this.broadcast(JSON.stringify({ type: "live-presence", liveCount: this.liveViewers.size }));
   }
 }

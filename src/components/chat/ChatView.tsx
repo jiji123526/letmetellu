@@ -269,10 +269,19 @@ export function ChatView({ channelId }: { channelId: string }) {
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { connected, presence, subscribe, send } = useRealtime(channelId, uid);
+  const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
+
+  // Notify DO of live mode join/leave for viewer count
+  useEffect(() => {
+    if (inLiveMode) {
+      send({ type: "join-live" });
+    } else {
+      send({ type: "leave-live" });
+    }
+  }, [inLiveMode, send]);
 
   // Load initial data
   useEffect(() => {
@@ -776,7 +785,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <LiveExitBanner
           isAdmin={effectiveAdmin}
           title={liveTitle}
-          viewerCount={presence}
+          viewerCount={liveCount}
           onExit={() => {
             if (effectiveAdmin) {
               setShowEndLiveConfirm(true);

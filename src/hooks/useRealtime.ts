@@ -10,6 +10,7 @@ export function useRealtime(channelId: string | null, uid: string) {
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
   const [connected, setConnected] = useState(false);
   const [presence, setPresence] = useState(0);
+  const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const connect = useCallback(() => {
@@ -36,6 +37,10 @@ export function useRealtime(channelId: string | null, uid: string) {
         const data = JSON.parse(e.data);
         if (data.type === "presence") {
           setPresence(data.count);
+          if (data.liveCount !== undefined) setLiveCount(data.liveCount);
+        }
+        if (data.type === "live-presence") {
+          setLiveCount(data.liveCount);
         }
         handlersRef.current.forEach((handler) => handler(data));
       } catch {
@@ -77,5 +82,5 @@ export function useRealtime(channelId: string | null, uid: string) {
     }
   }, []);
 
-  return { connected, presence, subscribe, send };
+  return { connected, presence, liveCount, subscribe, send };
 }
