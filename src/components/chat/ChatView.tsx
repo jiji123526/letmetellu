@@ -1266,7 +1266,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  if (!msg.deleted) handleBubbleLongPress(msg, isSent, e.currentTarget);
+                  if (!msg.deleted || effectiveAdmin) handleBubbleLongPress(msg, isSent, e.currentTarget);
                 }}
                 onClick={() => {
                   if (msg.report && msg.reported_msg_id && effectiveAdmin) {
