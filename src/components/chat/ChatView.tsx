@@ -544,6 +544,15 @@ export function ChatView({ channelId }: { channelId: string }) {
         const newReactions = event.reactions as string;
         setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: newReactions } : m));
       }
+      if (event.type === "user-blocked") {
+        // Update local blocked list so blocked user's input reflects immediately
+        const blockedUid = event.uid as string;
+        const blockedFp = event.fingerprint as string | null;
+        setBlockedUsers((prev) => {
+          if (prev.some((b) => b.uid === blockedUid)) return prev;
+          return [...prev, { uid: blockedUid, reason: "" }];
+        });
+      }
       if (event.type === "live-ended") {
         localStorage.setItem(`liveActive_${channelId}`, "false");
         localStorage.removeItem(`liveSeen_${channelId}`);
@@ -878,18 +887,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const handleDelete = (msgId: string) => {
     // Check if this message has replies (if so, soft delete; otherwise hard delete)
     const hasReplies = messages.some((m) => m.reply_to === msgId);
-    if (hasReplies) {
-      // Soft delete — keep message but mark as deleted
-      setMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, text: t("deletedMessage"), image: null, deleted: true } as Message : m))
-      );
-    } else {
-      // Hard delete — remove completely
-      setMessages((prev) => prev.filter((m) => m.id !== msgId));
-    }
-    // Send to backend
-    // Send to backend — admin uses adminAction, non-admin uses ownership-checked endpoint
     if (effectiveAdmin) {
+      // Admin: always remove from view immediately
+      setMessages((prev) => prev.filter((m) => m.id !== msgId && m.reply_to !== msgId));
       const msg = messages.find((m) => m.id === msgId) || dmMessages.find((m) => m.id === msgId);
       if (msg?.dm) {
         adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: msgId });
@@ -897,8 +897,16 @@ export function ChatView({ channelId }: { channelId: string }) {
       } else {
         adminAction("delete-message", inLiveMode ? `${channelId}_live` : channelId, { message_id: msgId });
       }
+    } else if (hasReplies) {
+      // Non-admin with replies: soft delete
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, text: t("deletedMessage"), image: null, deleted: true } as Message : m))
+      );
+      deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: true });
     } else {
-      deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: hasReplies });
+      // Non-admin no replies: hard delete
+      setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
     }
   };
 

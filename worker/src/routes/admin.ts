@@ -65,6 +65,15 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare(
         "INSERT INTO blocked (id, uid, reason, fingerprint, channel_id) VALUES (?, ?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), uid, reason || "", fingerprint || null, channel_id).run();
+
+      // Broadcast block so the blocked user's UI updates immediately
+      const blockDoId = env.CHAT_ROOM.idFromName(channel_id);
+      const blockStub = env.CHAT_ROOM.get(blockDoId);
+      await blockStub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "user-blocked", uid, fingerprint: fingerprint || null }),
+      }));
+
       return Response.json({ ok: true });
     }
 
