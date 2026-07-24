@@ -486,13 +486,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       // Message deleted — remove or mark as deleted
       if (event.type === "message-deleted") {
         const id = event.message_id as string;
-        if (event.soft) {
-          setMessages((prev) => prev.map((m) =>
-            m.id === id ? { ...m, deleted: true, text: t("deletedMessage"), image: null } : m
-          ));
-        } else {
-          setMessages((prev) => prev.filter((m) => m.id !== id));
-        }
+        setMessages((prev) => prev.filter((m) => m.id !== id));
       }
       // Reconnect or bulk sync — full refetch as safety net
       if (event.type === "reconnected" || event.type === "messages-sync") {
