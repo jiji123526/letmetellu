@@ -404,46 +404,34 @@ export function ChatView({ channelId }: { channelId: string }) {
     // Send photos + text
     const photos = [...pendingPhotos];
     setPendingPhotos([]);
-
-    const optimistic: Message = {
-      id: crypto.randomUUID(),
-      uid,
-      nick: null,
-      text,
-      is_admin: effectiveAdmin ? 1 : 0,
-      image: photos.length > 0 ? photos[0].previewUrl : null,
-      reactions: "{}",
-      reply_to: replyingTo?.id || null,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, optimistic]);
+    const savedReplyTo = replyingTo?.id;
     setReplyingTo(null);
 
     // Dismiss keyboard after send (except in live mode where keyboard stays)
     if (!inLiveMode && textareaRef.current) textareaRef.current.blur();
 
-    await sendMessageApi({
+    const res = await sendMessageApi({
       uid: effectiveAdmin && authUserId ? authUserId : uid,
       text,
       channel_id: channelId,
       image: photos.length > 0 ? await uploadImage(photos[0].blob, channelId) || undefined : undefined,
-      reply_to: replyingTo?.id,
+      reply_to: savedReplyTo,
       fingerprint: myFingerprint,
-    }).then((res: any) => {
-      if (res.error) {
-        // Restore input and remove optimistic message on failure
-        setInput(text);
-        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
-        if (photos.length > 0) setPendingPhotos(photos);
-        if (res.error === "message_too_long") setBanner({ text: "메시지가 너무 깁니다 (최대 5000자)", color: "#d32f2f" });
-        else if (res.error === "banned_word") setBanner({ text: "금지어가 포함되어 전송할 수 없습니다", color: "#d32f2f" });
-        else if (res.error === "rate_limited") setBanner({ text: "너무 빠르게 보내고 있습니다", color: "#d32f2f" });
-        else if (res.error === "blocked") setBanner({ text: "차단되어 전송할 수 없습니다", color: "#d32f2f" });
-        else if (res.error === "channel frozen") setBanner({ text: "채팅이 얼려져 있습니다", color: "#4a4d8f" });
-        else setBanner({ text: "전송 실패", color: "#d32f2f" });
-        setTimeout(() => setBanner(null), 3000);
-      }
-    });
+    }) as any;
+
+    if (res.error) {
+      // Restore input on failure
+      setInput(text);
+      if (photos.length > 0) setPendingPhotos(photos);
+      if (res.error === "message_too_long") setBanner({ text: "메시지가 너무 깁니다 (최대 5000자)", color: "#d32f2f" });
+      else if (res.error === "banned_word") setBanner({ text: "금지어가 포함되어 전송할 수 없습니다", color: "#d32f2f" });
+      else if (res.error === "rate_limited") setBanner({ text: "너무 빠르게 보내고 있습니다", color: "#d32f2f" });
+      else if (res.error === "blocked") setBanner({ text: "차단되어 전송할 수 없습니다", color: "#d32f2f" });
+      else if (res.error === "channel frozen") setBanner({ text: "채팅이 얼려져 있습니다", color: "#4a4d8f" });
+      else setBanner({ text: "전송 실패", color: "#d32f2f" });
+      setTimeout(() => setBanner(null), 3000);
+    }
+    // On success: DO broadcasts message-changed → refetch shows the message
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
