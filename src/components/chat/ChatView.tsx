@@ -293,7 +293,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
-      if (event.type === "message-changed") {
+      console.log("[realtime]", event.type);
+      if (event.type === "message-changed" || event.type === "reconnected") {
         fetchInit(channelId).then((data) => {
           setMessages(data.messages);
           if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));

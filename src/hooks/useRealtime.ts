@@ -27,6 +27,8 @@ export function useRealtime(channelId: string | null, uid: string) {
 
     ws.onopen = () => {
       setConnected(true);
+      // Notify handlers that connection restored (trigger refetch)
+      handlersRef.current.forEach((handler) => handler({ type: "reconnected" }));
     };
 
     ws.onmessage = (e) => {
