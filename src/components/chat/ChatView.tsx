@@ -1532,8 +1532,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.removeItem(`liveSession_${channelId}`);
             await adminAction("end-live", channelId);
             fetchInit(channelId).then((data) => { setMessages(data.messages); });
-            setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
-            setTimeout(() => setBanner(null), 3000);
+            setShowLiveEnded(true);
           }}
           onCancel={() => setShowEndLiveConfirm(false)}
         />
