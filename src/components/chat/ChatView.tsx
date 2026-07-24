@@ -345,6 +345,11 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
 
+  // Sync bubble color to CSS variable so var(--bubble-sent) works everywhere
+  useEffect(() => {
+    document.documentElement.style.setProperty("--bubble-sent", bubbleColor);
+  }, [bubbleColor]);
+
   // Track inLiveMode in a ref so the subscribe callback always has the latest value
   const inLiveModeRef = useRef(inLiveMode);
   useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
@@ -841,17 +846,17 @@ export function ChatView({ channelId }: { channelId: string }) {
           className="flex-none flex items-center justify-between"
           style={{
             padding: "6px 14px",
-            background: "rgba(59, 141, 240, 0.1)",
-            borderBottom: "1px solid rgba(59, 141, 240, 0.2)",
+            background: `color-mix(in srgb, ${bubbleColor} 10%, transparent)`,
+            borderBottom: `1px solid color-mix(in srgb, ${bubbleColor} 20%, transparent)`,
             fontSize: "calc(var(--bubble-font-size) - 5px)",
-            color: "#3b8df0",
+            color: bubbleColor,
           }}
         >
           <span>사용자 시점으로 보는 중</span>
           <button
             className="border-none rounded-lg cursor-pointer"
             style={{
-              background: "#3b8df0",
+              background: bubbleColor,
               color: "#fff",
               padding: "4px 10px",
               fontSize: "calc(var(--bubble-font-size) - 5px)",
@@ -1459,7 +1464,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           onUnfreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
             adminAction("freeze", channelId, { frozen: false });
-            setBanner({ text: "채팅이 해제되었습니다", color: "#3b8df0" });
+            setBanner({ text: "채팅이 해제되었습니다", color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onToggleView={() => setAdminViewAsUser(true)}
@@ -1495,26 +1500,26 @@ export function ChatView({ channelId }: { channelId: string }) {
           onNameChange={(name) => {
             setChannel((prev) => prev ? { ...prev, name } : null);
             adminAction("update-profile", channelId, { name });
-            setBanner({ text: "채널 이름이 변경되었습니다", color: "#3b8df0" });
+            setBanner({ text: "채널 이름이 변경되었습니다", color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onProfileImageChange={(url) => {
             setChannel((prev) => prev ? { ...prev, profile_image: url } : null);
             adminAction("update-profile", channelId, { profile_image: url });
-            setBanner({ text: "프로필 사진이 변경되었습니다", color: "#3b8df0" });
+            setBanner({ text: "프로필 사진이 변경되었습니다", color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onNoticeChange={(noticeStr) => {
             setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
             adminAction("set-rules", channelId, { rules: noticeStr });
-            setBanner({ text: "채널 규칙이 저장되었습니다", color: "#3b8df0" });
+            setBanner({ text: "채널 규칙이 저장되었습니다", color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onWelcomeChange={(config) => {
             setWelcomeConfig(config);
             localStorage.setItem(`welcomeConfig_${channelId}`, config);
             adminAction("set-welcome", channelId, { config });
-            setBanner({ text: "환영 팝업이 저장되었습니다", color: "#3b8df0" });
+            setBanner({ text: "환영 팝업이 저장되었습니다", color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onUnblock={(blockUid) => {
@@ -1675,7 +1680,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               localStorage.setItem(`activeNotice_${channelId}`, notice);
               localStorage.removeItem(`noticeDismissed_${channelId}`);
               adminAction("set-notice", channelId, { text: notice });
-              setBanner({ text: "공지가 등록되었습니다", color: "#3b8df0" });
+              setBanner({ text: "공지가 등록되었습니다", color: bubbleColor });
             }
             setTimeout(() => setBanner(null), 3000);
           }}

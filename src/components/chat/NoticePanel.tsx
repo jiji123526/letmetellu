@@ -44,7 +44,7 @@ export function NoticePanel({ notice, onClose }: NoticePanelProps) {
         <div className="overflow-y-auto" style={{ padding: "16px 18px", fontSize: "var(--bubble-font-size, 15px)" }}>
           {notice.map((section, i) => (
             <div key={i} style={{ marginBottom: i < notice.length - 1 ? "16px" : 0 }}>
-              <h4 className="m-0" style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400, color: "var(--tint)", marginBottom: "8px" }}>
+              <h4 className="m-0" style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400, color: "var(--bubble-sent)", marginBottom: "8px" }}>
                 {section.title}
               </h4>
               <ul style={{ margin: 0, padding: "0 0 0 18px", listStyle: "disc" }}>

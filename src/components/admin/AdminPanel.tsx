@@ -428,7 +428,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>라이브</strong> — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제</li>
               </ul>
             </div>
-            <div style={{ padding: "10px 12px", background: "var(--guide-bg)", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "#3b8df0", lineHeight: 1.5 }}>
+            <div style={{ padding: "10px 12px", background: "var(--guide-bg)", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--bubble-sent)", lineHeight: 1.5 }}>
               💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다.
             </div>
           </div>
