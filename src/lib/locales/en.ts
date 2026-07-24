@@ -16,7 +16,8 @@ export const en: Record<LocaleKeys, string> = {
   report: "Report",
   unreport: "Unreport",
   edit: "Edit",
-  block: "Block",
+  block: "Block User",
+  unblock: "Unblock",
   messageInput: "Type a message",
   frozenInput: "Chat is frozen",
   blockedInput: "You are blocked",
@@ -126,8 +127,10 @@ export const en: Record<LocaleKeys, string> = {
   searchNoResults: "No results",
 
   // Plus menu
-  photoBtn: "Photo",
-  dmBtn: "DM",
+  photoBtn: "Send Photo",
+  dmBtn: "Secret Message",
+  dmBtnOff: "Switch to Normal",
+  noticeBtn: "Post Notice",
   emojiPresetBtn: "Emoji Presets",
 
   // Login

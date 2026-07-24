@@ -14,7 +14,8 @@ export const ko = {
   report: "신고",
   unreport: "신고 취소",
   edit: "수정",
-  block: "차단",
+  block: "사용자 차단",
+  unblock: "차단 해제",
   messageInput: "메시지를 입력하세요",
   frozenInput: "채팅이 얼려져 있습니다",
   blockedInput: "차단되어 입력할 수 없습니다",
@@ -124,8 +125,10 @@ export const ko = {
   searchNoResults: "검색 결과 없음",
 
   // Plus menu
-  photoBtn: "사진",
-  dmBtn: "DM",
+  photoBtn: "사진 보내기",
+  dmBtn: "비밀 메시지",
+  dmBtnOff: "일반 채팅으로 전환",
+  noticeBtn: "공지 등록",
   emojiPresetBtn: "이모지 프리셋",
 
   // Login

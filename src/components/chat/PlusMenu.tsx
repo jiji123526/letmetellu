@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 interface PlusMenuProps {
   anchorRect: DOMRect;
@@ -22,12 +23,12 @@ const ITEMS = [
   },
   {
     key: "photo",
-    label: "사진 보내기",
     icon: `<svg viewBox="0 0 24 24" width="16" height="16"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="4" fill="none" stroke="currentColor" stroke-width="2"/></svg>`,
   },
 ];
 
 export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, inLiveMode, onPhoto, onDmToggle, onNotice, onEmojiPreset, onClose }: PlusMenuProps) {
+  const { t } = useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,23 +75,23 @@ export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, inLiveMode, o
       {dmEnabled && !isAdmin && (
         <button style={itemStyle} onClick={() => { onDmToggle(); onClose(); }}>
           <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: ITEMS[0].icon }} />
-          {dmMode ? "일반 채팅으로 전환" : "비밀 메시지"}
+          {dmMode ? t("dmBtnOff") : t("dmBtn")}
         </button>
       )}
       <button style={{ ...itemStyle, borderBottom: (isAdmin && (inLiveMode || onNotice)) ? "0.5px solid var(--hairline)" : "none" }} onClick={() => { onPhoto(); onClose(); }}>
         <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: ITEMS[1].icon }} />
-        사진 보내기
+        {t("photoBtn")}
       </button>
       {isAdmin && onNotice && (
         <button style={{ ...itemStyle, borderBottom: inLiveMode ? "0.5px solid var(--hairline)" : "none" }} onClick={() => { onNotice(); onClose(); }}>
           <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke-linecap="round"/></svg>` }} />
-          공지 등록
+          {t("noticeBtn")}
         </button>
       )}
       {isAdmin && inLiveMode && onEmojiPreset && (
         <button style={{ ...itemStyle, borderBottom: "none" }} onClick={() => { onEmojiPreset(); onClose(); }}>
           <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>` }} />
-          이모지 프리셋
+          {t("emojiPresetBtn")}
         </button>
       )}
     </div>

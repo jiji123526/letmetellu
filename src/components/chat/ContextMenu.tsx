@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 const REACTIONS = ["👍", "👎", "🫪", "❓"];
 
@@ -46,6 +47,7 @@ export function ContextMenu({
   isMyMessage,
 }: ContextMenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const { t } = useLocale();
 
   // Calculate positioning first
   const bubbleHeight = anchorRect.bottom - anchorRect.top;
@@ -208,7 +210,7 @@ export function ContextMenu({
             <path d="M9 4l-7 7 7 7" />
             <path d="M2 11h14a4 4 0 0 1 4 4v4" />
           </svg>
-          <span>답장</span>
+          <span>{t("reply")}</span>
         </button>
 
         {/* Admin viewing own: Edit + Delete */}
@@ -218,7 +220,7 @@ export function ContextMenu({
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
-            <span>수정</span>
+            <span>{t("edit")}</span>
           </button>
         )}
 
@@ -227,7 +229,7 @@ export function ContextMenu({
             <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
               <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
             </svg>
-            <span>삭제</span>
+            <span>{t("delete")}</span>
           </button>
         )}
 
@@ -237,7 +239,7 @@ export function ContextMenu({
             <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
               <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
             </svg>
-            <span>삭제</span>
+            <span>{t("delete")}</span>
           </button>
         )}
 
@@ -247,7 +249,7 @@ export function ContextMenu({
               <circle cx="12" cy="12" r="10" />
               <path d="M4.93 4.93l14.14 14.14" />
             </svg>
-            <span>{isBlockedUser ? "차단 해제" : "사용자 차단"}</span>
+            <span>{isBlockedUser ? t("unblock") : t("block")}</span>
           </button>
         )}
 
@@ -258,7 +260,7 @@ export function ContextMenu({
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
-            <span>수정</span>
+            <span>{t("edit")}</span>
           </button>
         )}
 
@@ -267,7 +269,7 @@ export function ContextMenu({
             <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
               <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
             </svg>
-            <span>삭제</span>
+            <span>{t("delete")}</span>
           </button>
         )}
 
@@ -278,7 +280,7 @@ export function ContextMenu({
               <path d="M9 4l-7 7 7 7" />
               <path d="M2 11h20" />
             </svg>
-            <span>신고 취소</span>
+            <span>{t("unreport")}</span>
           </button>
         )}
         {!isAdmin && !isMyMessage && !msg.is_admin && !isReported && onReport && (
@@ -287,7 +289,7 @@ export function ContextMenu({
               <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
               <path d="M4 22V15" strokeLinecap="round" />
             </svg>
-            <span>신고</span>
+            <span>{t("report")}</span>
           </button>
         )}
       </div>
