@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -146,23 +146,86 @@ function SkeletonLoading() {
   );
 }
 
-// Message text with truncation (>1000 chars) and search highlight
+// URL regex — matches http(s) URLs and bare domains (www. or common TLDs)
+const URL_LINK_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))(?:\/[^\s<]*)?)/g;
+// URLs that get embedded (YouTube, Twitter, Instagram, or any http URL for OG preview)
+const EMBED_URL_REGEX = /https?:\/\/[^\s<]+/g;
+
+// Render text with clickable links
+function linkifyText(text: string, isMine: boolean, hideEmbedUrls: boolean): (string | React.ReactElement)[] {
+  const parts: (string | React.ReactElement)[] = [];
+  let lastIndex = 0;
+  const linkColor = isMine ? "rgba(255,255,255,0.9)" : "var(--bubble-sent)";
+
+  for (const match of text.matchAll(URL_LINK_REGEX)) {
+    const url = match[0];
+    const index = match.index!;
+
+    // Check if this URL will be embedded
+    const fullUrl = url.startsWith("http") ? url : `https://${url}`;
+    const isEmbedded = hideEmbedUrls && EMBED_URL_REGEX.test(fullUrl);
+    // Reset regex lastIndex
+    EMBED_URL_REGEX.lastIndex = 0;
+
+    // Add text before this URL
+    if (index > lastIndex) {
+      const before = text.slice(lastIndex, index);
+      // Trim trailing whitespace/newline if URL is hidden
+      parts.push(isEmbedded ? before.replace(/\s+$/, "") : before);
+    }
+
+    if (!isEmbedded) {
+      // Render as clickable link
+      parts.push(
+        <a
+          key={`link-${index}`}
+          href={fullUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: linkColor, textDecoration: "underline", textUnderlineOffset: "2px" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {url}
+        </a>
+      );
+    }
+    // else: skip the URL (embed will show it)
+
+    lastIndex = index + url.length;
+
+    // Trim leading whitespace/newline after hidden URL
+    if (isEmbedded && lastIndex < text.length) {
+      const after = text.slice(lastIndex);
+      const trimmed = after.replace(/^\s+/, "");
+      lastIndex += after.length - trimmed.length;
+    }
+  }
+
+  // Remaining text after last URL
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  // If everything was embedded URLs and whitespace, return empty
+  if (parts.every((p) => typeof p === "string" && !p.trim())) return [];
+
+  return parts;
+}
+
+// Message text with truncation (>1000 chars), linkification, and search highlight
 function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hideEmbedUrls }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hideEmbedUrls?: boolean }) {
   const [showOverlay, setShowOverlay] = useState(false);
 
-  // Strip URLs that will be rendered as embeds
-  let processedText = text;
-  if (hideEmbedUrls) {
-    processedText = text.replace(/https?:\/\/[^\s<]+/g, "").trim();
-    if (!processedText) return null; // Only URL(s), no other text
-  }
+  const isLong = text.length > 1000;
+  const displayText = isLong ? text.slice(0, 1000) + "…" : text;
 
-  const isLong = processedText.length > 1000;
-  const displayText = isLong ? processedText.slice(0, 1000) + "…" : processedText;
+  // Linkify and optionally hide embedded URLs
+  const parts = linkifyText(displayText, isMine, !!hideEmbedUrls);
+  if (parts.length === 0 && hideEmbedUrls) return null; // Only URLs, no text
 
   const content = searchQuery && isSearchMatch
     ? highlightText(displayText, searchQuery, isActiveMatch)
-    : displayText;
+    : parts;
 
   return (
     <>
@@ -1128,7 +1191,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             );
           };
 
-          const elements: React.ReactNode[] = [];
+          const elements: (string | React.ReactElement)[] = [];
 
           topLevel.forEach((m, i) => {
             const prev = topLevel[i - 1] || null;
