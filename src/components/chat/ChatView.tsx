@@ -251,7 +251,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [welcomeConfig, setWelcomeConfig] = useState("");
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
-  const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
+  const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(`bubbleColor_${channelId}`);
+  });
   const [emojiPicker, setEmojiPicker] = useState<{ msgId: string; rect: DOMRect } | null>(null);
   const [editingMsg, setEditingMsg] = useState<{ id: string; text: string } | null>(null);
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
@@ -333,11 +336,6 @@ export function ChatView({ channelId }: { channelId: string }) {
               });
             }
           }
-        }
-        // Restore saved bubble color
-        if (typeof window !== "undefined") {
-          const saved = localStorage.getItem(`bubbleColor_${channelId}`);
-          if (saved) setLocalBubbleColor(saved);
         }
       })
       .catch(console.error);
