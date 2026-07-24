@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyRoomToken } from "./passcode";
+import { getChannelPasscodeInfo } from "../lib/validation";
 
 export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
@@ -12,13 +13,12 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
 
     // Passcode gate
     const parentChannelId = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
-    const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
-      .bind(parentChannelId).first() as { passcode: string | null } | null;
-    if (channel?.passcode) {
+    const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    if (passcode) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
       const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== channel.passcode) {
+      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }

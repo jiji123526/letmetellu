@@ -31,11 +31,20 @@ export async function fetchInit(channelId: string) {
   const headers: Record<string, string> = {};
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
-  // Route through Vercel proxy for session-based owner bypass
-  // The proxy adds X-Internal-Token + X-User-Id if user is logged in
-  const res = await fetch(`/api/init?channel=${channelId}`, { headers });
-  if (!res.ok) throw new Error(`Init failed: ${res.status}`);
-  return res.json();
+  // If user has a session cookie, route through Vercel proxy for owner bypass
+  // Otherwise, call Worker directly (faster, no proxy overhead)
+  const hasSession = typeof document !== "undefined" &&
+    (document.cookie.includes("next-auth.session-token") || document.cookie.includes("__Secure-next-auth.session-token"));
+
+  if (hasSession) {
+    const res = await fetch(`/api/init?channel=${channelId}`, { headers });
+    if (!res.ok) throw new Error(`Init failed: ${res.status}`);
+    return res.json();
+  } else {
+    const res = await fetch(`${WORKER_URL}/api/init?channel=${channelId}`, { headers });
+    if (!res.ok) throw new Error(`Init failed: ${res.status}`);
+    return res.json();
+  }
 }
 
 export async function verifyPasscode(channelId: string, passcode: string): Promise<{ token?: string; error?: string }> {

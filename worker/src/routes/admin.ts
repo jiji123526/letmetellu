@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { invalidateBannedWordsCache } from "../lib/validation";
+import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
@@ -221,6 +221,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       // Store hashed passcode (or null to remove)
       await env.DB.prepare("UPDATE channels SET passcode = ? WHERE id = ?")
         .bind(hashedPasscode, channel_id).run();
+      invalidatePasscodeCache(channel_id);
       return Response.json({ ok: true });
     }
 
