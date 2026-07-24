@@ -287,7 +287,15 @@ export function ChatView({ channelId }: { channelId: string }) {
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed") {
-        fetchInit(channelId).then((data) => setMessages(data.messages));
+        fetchInit(channelId).then((data) => {
+          setMessages(data.messages);
+          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+        });
+      }
+      if (event.type === "dm-changed") {
+        fetchInit(channelId).then((data) => {
+          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+        });
       }
       if (event.type === "freeze-change") {
         setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
