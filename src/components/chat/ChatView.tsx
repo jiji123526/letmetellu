@@ -553,6 +553,10 @@ export function ChatView({ channelId }: { channelId: string }) {
           return [...prev, { uid: blockedUid, reason: "" }];
         });
       }
+      if (event.type === "user-unblocked") {
+        const unblockedUid = event.uid as string;
+        setBlockedUsers((prev) => prev.filter((b) => b.uid !== unblockedUid));
+      }
       if (event.type === "live-ended") {
         localStorage.setItem(`liveActive_${channelId}`, "false");
         localStorage.removeItem(`liveSeen_${channelId}`);

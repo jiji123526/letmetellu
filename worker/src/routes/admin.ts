@@ -92,6 +92,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
+        body: JSON.stringify({ type: "user-unblocked", uid: unblockUid }),
+      }));
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
         body: JSON.stringify({ type: "messages-sync", channel_id }),
       }));
 
