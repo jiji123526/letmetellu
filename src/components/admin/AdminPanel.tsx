@@ -288,7 +288,7 @@ export function AdminPanel(props: AdminPanelProps) {
                       const next = bannedWords.filter((_, j) => j !== i);
                       setBannedWords(next);
                       localStorage.setItem(`bannedWords_${channelId}`, JSON.stringify(next));
-                      if (removed && (removed as any).id) adminAction("remove-banned-word", channelId, { word_id: (removed as any).id });
+                      if (removed) adminAction("remove-banned-word", channelId, { word: removed.word });
                     }}>✕</button>
                   </div>
                 </div>

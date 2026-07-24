@@ -166,10 +166,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "remove-banned-word": {
-      const { word_id } = payload || {};
-      if (!word_id) return Response.json({ error: "missing word_id" }, { status: 400 });
-      await env.DB.prepare("DELETE FROM banned_words WHERE id = ? AND channel_id = ?")
-        .bind(word_id, channel_id).run();
+      const { word } = payload || {};
+      if (!word) return Response.json({ error: "missing word" }, { status: 400 });
+      await env.DB.prepare("DELETE FROM banned_words WHERE word = ? AND channel_id = ?")
+        .bind(word, channel_id).run();
       return Response.json({ ok: true });
     }
 
