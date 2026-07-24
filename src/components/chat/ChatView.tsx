@@ -142,26 +142,49 @@ function SkeletonLoading() {
 
 // Message text with truncation (>1000 chars) and search highlight
 function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
   const isLong = text.length > 1000;
-  const displayText = isLong && !expanded ? text.slice(0, 1000) + "…" : text;
+  const displayText = isLong ? text.slice(0, 1000) + "…" : text;
 
   const content = searchQuery && isSearchMatch
     ? highlightText(displayText, searchQuery, isActiveMatch)
     : displayText;
 
   return (
-    <span style={image ? { display: "block", padding: "6px 10px 0" } : undefined}>
-      {content}
-      {isLong && !expanded && (
-        <button
-          onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
-          style={{ display: "block", background: "none", border: "none", color: isMine ? "rgba(255,255,255,0.85)" : "var(--bubble-sent, #3b8df0)", cursor: "pointer", padding: "4px 0 0", fontSize: "var(--bubble-font-size)", fontFamily: "inherit", marginLeft: "auto", transform: "rotate(-90deg)", lineHeight: 1 }}
+    <>
+      <span style={image ? { display: "block", padding: "6px 10px 0" } : undefined}>
+        {content}
+        {isLong && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowOverlay(true); }}
+            style={{ display: "block", background: "none", border: "none", color: isMine ? "rgba(255,255,255,0.85)" : "var(--bubble-sent, #3b8df0)", cursor: "pointer", padding: "4px 0 0", fontSize: "var(--bubble-font-size)", fontFamily: "inherit", marginLeft: "auto", transform: "rotate(-90deg)", lineHeight: 1 }}
+          >
+            <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5" /><path d="M7 6l5 5 5-5" /></svg>
+          </button>
+        )}
+      </span>
+      {/* Post overlay — full text dialog */}
+      {showOverlay && (
+        <div
+          className="fixed inset-0 z-[500] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", padding: "20px" }}
+          onClick={() => setShowOverlay(false)}
         >
-          <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5" /><path d="M7 6l5 5 5-5" /></svg>
-        </button>
+          <div
+            style={{ background: "var(--bg)", borderRadius: "20px", maxWidth: "400px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--hairline)" }}>
+              <span />
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={() => setShowOverlay(false)}>✕</button>
+            </div>
+            <div style={{ padding: "18px", fontSize: "var(--bubble-font-size)", lineHeight: 1.6, color: "var(--gray-text)", overflowY: "auto", whiteSpace: "pre-wrap", wordWrap: "break-word" }}>
+              {text}
+            </div>
+          </div>
+        </div>
       )}
-    </span>
+    </>
   );
 }
 
