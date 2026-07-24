@@ -1100,7 +1100,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); localStorage.removeItem(`noticeDismissed_${channelId}_live`); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -1843,6 +1843,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setActiveNotice("");
             localStorage.setItem(`liveActive_${channelId}`, "true");
             localStorage.setItem(`inLiveMode_${channelId}`, "true");
+            localStorage.removeItem(`noticeDismissed_${channelId}_live`);
             localStorage.setItem(`liveTitle_${channelId}`, title);
             setBanner({ text: t("liveStarted"), color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
@@ -1902,6 +1903,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setInLiveMode(true);
             localStorage.setItem(`inLiveMode_${channelId}`, "true");
             localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
+            localStorage.removeItem(`noticeDismissed_${channelId}_live`);
             setMessages([]);
             setDmMessages([]);
             setActiveNotice("");
