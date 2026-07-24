@@ -256,7 +256,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { connected, presence, subscribe } = useRealtime(channelId, uid);
+  const { connected, presence, subscribe, send } = useRealtime(channelId, uid);
 
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
@@ -279,6 +279,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         if (data.welcomeConfig) {
           setWelcomeConfig(data.welcomeConfig);
         }
+        // Load live status from server
+        if (data.live && data.live.active) {
+          setLiveActive(true);
+          setLiveTitle(data.live.title || "라이브");
+        }
         // Restore saved bubble color
         if (typeof window !== "undefined") {
           const saved = localStorage.getItem(`bubbleColor_${channelId}`);
@@ -294,12 +299,13 @@ export function ChatView({ channelId }: { channelId: string }) {
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed" || event.type === "reconnected") {
-        fetchInit(channelId).then((data) => {
+        const fetchChannel = inLiveMode ? `${channelId}_live` : channelId;
+        fetchInit(fetchChannel).then((data) => {
           setMessages(data.messages);
           if (data.blocked) setBlockedUsers(data.blocked);
           if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
           if (data.gallery) setGalleryItems(data.gallery);
-        });
+        }).catch(() => {});
       }
       if (event.type === "dm-changed") {
         fetchInit(channelId).then((data) => {
@@ -317,6 +323,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           setLiveActive(false);
           setInLiveMode(false);
           setShowLiveEnded(true);
+        }
+      }
+      if (event.type === "live-started") {
+        setLiveActive(true);
+        setLiveTitle((event.title as string) || "라이브");
+        if (!effectiveAdmin) {
+          setShowLivePopup(true);
         }
       }
       if (event.type === "notice-changed") {
@@ -413,11 +426,13 @@ export function ChatView({ channelId }: { channelId: string }) {
     // Dismiss keyboard after send (except in live mode where keyboard stays)
     if (!inLiveMode && textareaRef.current) textareaRef.current.blur();
 
+    const activeChannelId = inLiveMode ? `${channelId}_live` : channelId;
+
     const res = await sendMessageApi({
       uid: effectiveAdmin && authUserId ? authUserId : uid,
       text,
-      channel_id: channelId,
-      image: photos.length > 0 ? await uploadImage(photos[0].blob, channelId) || undefined : undefined,
+      channel_id: activeChannelId,
+      image: photos.length > 0 ? await uploadImage(photos[0].blob, activeChannelId) || undefined : undefined,
       reply_to: savedReplyTo,
       fingerprint: myFingerprint,
     }) as any;
@@ -711,7 +726,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); setMessages([]); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); setMessages([]); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -1104,7 +1119,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             {/* Emoji bar trigger (live mode only) */}
             {inLiveMode && (
               <EmojiBar channelId={channelId} onBroadcast={(emoji, x, h) => {
-                // TODO: broadcast via WebSocket
+                send({ type: "emoji-fx", emoji, x, h });
               }} />
             )}
             {(input.trim() || pendingPhotos.length > 0) && !(channel?.is_frozen && !effectiveAdmin && !dmMode) && (
@@ -1409,7 +1424,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Live Title Prompt */}
       {showLiveTitlePrompt && (
         <LiveTitlePrompt
-          onStart={(title) => {
+          onStart={async (title) => {
             setShowLiveTitlePrompt(false);
             setLiveTitle(title);
             setLiveActive(true);
@@ -1417,6 +1432,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages([]);
             setBanner({ text: "라이브가 시작되었습니다", color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
+            await adminAction("start-live", channelId, { title });
           }}
           onCancel={() => setShowLiveTitlePrompt(false)}
         />
@@ -1429,10 +1445,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           message="라이브를 종료하시겠습니까?<br>모든 메시지가 삭제됩니다."
           confirmLabel="종료"
           confirmColor="#c0392b"
-          onConfirm={() => {
+          onConfirm={async () => {
             setShowEndLiveConfirm(false);
             setLiveActive(false);
             setInLiveMode(false);
+            await adminAction("end-live", channelId);
             fetchInit(channelId).then((data) => { setMessages(data.messages); });
             setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
@@ -1447,6 +1464,20 @@ export function ChatView({ channelId }: { channelId: string }) {
           setShowLiveEnded(false);
           fetchInit(channelId).then((data) => { setMessages(data.messages); });
         }} />
+      )}
+
+      {/* Live Started Popup (shown to non-admin when live starts) */}
+      {showLivePopup && (
+        <LivePopup
+          title={liveTitle}
+          onJoin={() => {
+            setShowLivePopup(false);
+            setInLiveMode(true);
+            setMessages([]);
+            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {});
+          }}
+          onDismiss={() => setShowLivePopup(false)}
+        />
       )}
 
       {/* Emoji Preset Panel */}

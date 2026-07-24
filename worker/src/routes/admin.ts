@@ -203,6 +203,75 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true });
     }
 
+    case "start-live": {
+      const { title } = payload || {};
+      const sessionId = crypto.randomUUID();
+      const liveState = JSON.stringify({ active: true, title: title || "라이브 채팅", sessionId });
+
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`live_${channel_id}`, liveState, channel_id, liveState).run();
+
+      // Broadcast live-started to all connected clients
+      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "live-started", channel_id, title: title || "라이브 채팅", sessionId }),
+      }));
+
+      return Response.json({ ok: true, sessionId });
+    }
+
+    case "end-live": {
+      const liveChannelId = `${channel_id}_live`;
+
+      // Mark live as inactive
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`live_${channel_id}`, "false", channel_id, "false").run();
+
+      // Broadcast live-ended BEFORE cleanup so clients exit live mode
+      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "live-ended", channel_id }),
+      }));
+
+      // Collect R2 media keys from live messages before deleting
+      const { results: liveMedia } = await env.DB.prepare(
+        "SELECT image FROM messages WHERE channel_id = ? AND image IS NOT NULL"
+      ).bind(liveChannelId).all();
+      const { results: liveGalleryMedia } = await env.DB.prepare(
+        "SELECT image FROM gallery WHERE channel_id = ? AND image IS NOT NULL"
+      ).bind(liveChannelId).all();
+      const { results: liveDmMedia } = await env.DB.prepare(
+        "SELECT image FROM dm WHERE channel_id = ? AND image IS NOT NULL"
+      ).bind(liveChannelId).all();
+
+      // Delete R2 objects for live media
+      const allMedia = [...(liveMedia || []), ...(liveGalleryMedia || []), ...(liveDmMedia || [])];
+      for (const row of allMedia) {
+        if (row.image) {
+          // Extract key from URL (format: .../api/media/KEY)
+          const key = (row.image as string).split("/api/media/").pop();
+          if (key) {
+            try { await env.MEDIA.delete(key); } catch {}
+          }
+        }
+      }
+
+      // Delete all live channel data
+      await env.DB.prepare("DELETE FROM messages WHERE channel_id = ?").bind(liveChannelId).run();
+      await env.DB.prepare("DELETE FROM gallery WHERE channel_id = ?").bind(liveChannelId).run();
+      await env.DB.prepare("DELETE FROM dm WHERE channel_id = ?").bind(liveChannelId).run();
+      await env.DB.prepare("DELETE FROM blocked WHERE channel_id = ?").bind(liveChannelId).run();
+      await env.DB.prepare("DELETE FROM config WHERE channel_id = ?").bind(liveChannelId).run();
+
+      return Response.json({ ok: true });
+    }
+
     default:
       return Response.json({ error: "unknown action" }, { status: 400 });
   }

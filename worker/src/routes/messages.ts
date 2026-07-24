@@ -20,26 +20,28 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "message_too_long" }, { status: 400 });
     }
 
-    // Check channel exists
+    // Check channel exists (live channels use parent channel's config)
+    const isLiveChannel = (channel_id as string).endsWith("_live");
+    const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
     const channel = await env.DB.prepare("SELECT id, is_frozen, owner_uid FROM channels WHERE id = ?")
-      .bind(channel_id).first();
+      .bind(parentChannelId).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
-    if (channel.is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
+    if (!isLiveChannel && channel.is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
 
-    // Check if user is blocked
+    // Check if user is blocked (check parent channel)
     const blocked = await env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-      .bind(uid, fingerprint || "", channel_id).first();
+      .bind(uid, fingerprint || "", parentChannelId).first();
     if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
 
-    // Banned words check
+    // Banned words check (check parent channel)
     if (text) {
-      const allowed = await checkBannedWords(text as string, channel_id as string, env);
+      const allowed = await checkBannedWords(text as string, parentChannelId, env);
       if (!allowed) return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
     // Insert message
     const id = crypto.randomUUID();
-    // Determine if sender is admin (channel owner)
+    // Determine if sender is admin (channel owner — use parent channel)
     const isAdmin = (channel as any).owner_uid && uid === (channel as any).owner_uid ? 1 : 0;
     await env.DB.prepare(`
       INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id)
@@ -60,6 +62,18 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       method: "POST",
       body: JSON.stringify({ type: "message-changed", channel_id }),
     }));
+
+    // If this is a live channel, also broadcast to the parent channel's DO
+    // so clients connected to the main channel get the update
+    if ((channel_id as string).endsWith("_live")) {
+      const parentChannelId = (channel_id as string).replace(/_live$/, "");
+      const parentDoId = env.CHAT_ROOM.idFromName(parentChannelId);
+      const parentStub = env.CHAT_ROOM.get(parentDoId);
+      await parentStub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "message-changed", channel_id: channel_id }),
+      }));
+    }
 
     return Response.json({ id, created_at: new Date().toISOString() });
   }

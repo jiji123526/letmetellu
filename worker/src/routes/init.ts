@@ -8,31 +8,39 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     return Response.json({ error: "missing channel" }, { status: 400 });
   }
 
-  // Fetch channel config
+  // Live channels use parent channel's config
+  const isLiveChannel = channelId.endsWith("_live");
+  const parentChannelId = isLiveChannel ? channelId.replace(/_live$/, "") : channelId;
+
+  // Fetch channel config (always from parent)
   const channel = await env.DB.prepare("SELECT * FROM channels WHERE id = ?")
-    .bind(channelId).first();
+    .bind(parentChannelId).first();
 
   if (!channel) {
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
 
-  // Fetch recent messages
+  // Fetch recent messages (from the requested channel — live or normal)
   const { results: messages } = await env.DB.prepare(
     "SELECT * FROM messages WHERE channel_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 50"
   ).bind(channelId).all();
 
-  // Fetch blocked users
+  // Fetch blocked users (from parent channel)
   const { results: blocked } = await env.DB.prepare(
     "SELECT * FROM blocked WHERE channel_id = ?"
-  ).bind(channelId).all();
+  ).bind(parentChannelId).all();
 
-  // Fetch banner notice from config table
+  // Fetch banner notice from config table (from parent channel)
   const noticeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`notice_${channelId}`, channelId).first();
+    .bind(`notice_${parentChannelId}`, parentChannelId).first();
 
-  // Fetch welcome popup config
+  // Fetch welcome popup config (from parent channel)
   const welcomeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`welcome_${channelId}`, channelId).first();
+    .bind(`welcome_${parentChannelId}`, parentChannelId).first();
+
+  // Fetch live mode status (from parent channel)
+  const liveConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
+    .bind(`live_${parentChannelId}`, parentChannelId).first();
 
   // Fetch DM messages (visible to admin only — frontend filters)
   const { results: dmMessages } = await env.DB.prepare(
@@ -44,11 +52,17 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     "SELECT * FROM gallery WHERE channel_id = ? ORDER BY created_at DESC LIMIT 100"
   ).bind(channelId).all();
 
-  // Get presence count from DO
-  const doId = env.CHAT_ROOM.idFromName(channelId);
+  // Get presence count from DO (always from parent channel where clients connect)
+  const doId = env.CHAT_ROOM.idFromName(parentChannelId);
   const stub = env.CHAT_ROOM.get(doId);
   const presenceRes = await stub.fetch(new Request("http://internal/presence"));
   const presence = await presenceRes.json() as { count: number };
+
+  // Parse live status
+  let liveStatus: { active: boolean; title: string; sessionId: string } | null = null;
+  if (liveConfig?.text && liveConfig.text !== "false") {
+    try { liveStatus = JSON.parse(liveConfig.text as string); } catch {}
+  }
 
   return Response.json({
     channel,
@@ -59,5 +73,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
     welcomeConfig: welcomeConfig?.text || "",
+    live: liveStatus,
   });
 }
