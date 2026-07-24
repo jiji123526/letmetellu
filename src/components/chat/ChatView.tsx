@@ -1247,7 +1247,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showGallery && (
         <GalleryPanel
           items={galleryItems}
-          onViewImage={(src) => setFullViewImage({ src })}
+          onViewImage={(src, meta) => {
+            const msg = messages.find((m) => m.id === meta.id);
+            setFullViewImage({ src, caption: msg?.text || undefined, date: meta.created_at, msgId: meta.id });
+          }}
           onClose={() => setShowGallery(false)}
         />
       )}

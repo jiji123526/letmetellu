@@ -8,7 +8,7 @@ interface GalleryItem {
 
 interface GalleryPanelProps {
   items: GalleryItem[];
-  onViewImage?: (src: string) => void;
+  onViewImage?: (src: string, meta: { id: string; created_at: string }) => void;
   onClose: () => void;
 }
 
@@ -84,7 +84,7 @@ export function GalleryPanel({ items, onViewImage, onClose }: GalleryPanelProps)
                       src={item.image}
                       className="w-full cursor-pointer"
                       style={{ aspectRatio: "1", objectFit: "cover", borderRadius: "6px", transition: "opacity .15s" }}
-                      onClick={() => onViewImage?.(item.image)}
+                      onClick={() => onViewImage?.(item.image, { id: item.id, created_at: item.created_at })}
                     />
                   </div>
                 );
