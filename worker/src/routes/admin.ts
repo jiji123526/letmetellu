@@ -111,7 +111,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub2 = env.CHAT_ROOM.get(doId2);
       await stub2.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "dm-changed", channel_id }),
+        body: JSON.stringify({ type: "dm-deleted", dm_id }),
       }));
 
       return Response.json({ ok: true });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchDm } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -398,11 +398,19 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "reconnected" && inLiveModeRef.current) {
         send({ type: "join-live" });
       }
-      if (event.type === "dm-changed") {
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchDm(fetchChannel).then((data) => {
-          if (data.dm) setDmMessages([...data.dm].reverse().map((d: any) => ({ ...d, dm: true })));
-        });
+      if (event.type === "dm-new") {
+        const dm = event.dm as Message;
+        const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        if (dm.channel_id === viewingChannel) {
+          setDmMessages((prev) => {
+            if (prev.some((d) => d.id === dm.id)) return prev;
+            return [...prev, { ...dm, dm: true }];
+          });
+        }
+      }
+      if (event.type === "dm-deleted") {
+        const dmId = event.dm_id as string;
+        setDmMessages((prev) => prev.filter((d) => d.id !== dmId));
       }
       if (event.type === "freeze-change") {
         setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);

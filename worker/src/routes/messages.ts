@@ -39,21 +39,23 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       if (!allowed) return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
-    // Insert message
+    // Insert message (+ gallery if image) in a single batch
     const id = crypto.randomUUID();
     // Determine if sender is admin (channel owner — use parent channel)
     const isAdmin = (channel as any).owner_uid && uid === (channel as any).owner_uid ? 1 : 0;
-    await env.DB.prepare(`
-      INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, uid, uid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null).run();
-
-    // If image, also insert into gallery table
+    const stmts = [
+      env.DB.prepare(`
+        INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, uid, uid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null),
+    ];
     if (image) {
-      await env.DB.prepare(
-        "INSERT INTO gallery (id, image, auth_uid, channel_id) VALUES (?, ?, ?, ?)"
-      ).bind(id, image, uid, channel_id).run();
+      stmts.push(
+        env.DB.prepare("INSERT INTO gallery (id, image, auth_uid, channel_id) VALUES (?, ?, ?, ?)")
+          .bind(id, image, uid, channel_id)
+      );
     }
+    await env.DB.batch(stmts);
 
     // Broadcast via Durable Object
     // For live channels, only broadcast to the parent channel's DO (where clients connect)
