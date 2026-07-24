@@ -28,9 +28,10 @@ export async function fetchDm(channelId: string) {
   return res.json();
 }
 
-export async function fetchGallery(channelId: string) {
+export async function fetchGallery(channelId: string, cursor?: string) {
   if (IS_MOCK) return { gallery: [] };
   const params = new URLSearchParams({ type: "gallery", channel: channelId });
+  if (cursor) params.set("cursor", cursor);
   const res = await fetch(`${WORKER_URL}/api/data?${params}`);
   return res.json();
 }

@@ -38,9 +38,15 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     }
 
     case "gallery": {
-      const { results } = await env.DB.prepare(
-        "SELECT * FROM gallery WHERE channel_id = ? ORDER BY created_at DESC LIMIT 100"
-      ).bind(channelId).all();
+      const cursor = url.searchParams.get("cursor");
+      let query = "SELECT * FROM gallery WHERE channel_id = ?";
+      const params: unknown[] = [channelId];
+      if (cursor) {
+        query += " AND created_at < ?";
+        params.push(cursor);
+      }
+      query += " ORDER BY created_at DESC LIMIT 50";
+      const { results } = await env.DB.prepare(query).bind(...params).all();
       return Response.json({ gallery: results });
     }
 

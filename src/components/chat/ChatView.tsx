@@ -285,6 +285,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
+  const [galleryHasMore, setGalleryHasMore] = useState(true);
+  const galleryLoading = useRef(false);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
@@ -601,12 +603,41 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [messages, showScrollBtn]);
 
   // Scroll detection for scroll-to-bottom button
+  const loadingMore = useRef(false);
+  const hasMoreMessages = useRef(true);
+
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     setShowScrollBtn(distanceFromBottom > 200);
-  }, []);
+
+    // Load older messages when scrolled to top
+    if (el.scrollTop < 50 && !loadingMore.current && hasMoreMessages.current && messages.length > 0) {
+      const oldest = messages[0];
+      if (!oldest?.created_at) return;
+      loadingMore.current = true;
+      const prevHeight = el.scrollHeight;
+      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+      fetchMessages(fetchChannel, oldest.created_at).then((data) => {
+        if (data.messages && data.messages.length > 0) {
+          if (data.messages.length < 50) hasMoreMessages.current = false;
+          setMessages((prev) => {
+            // Merge avoiding duplicates
+            const ids = new Set(prev.map((m) => m.id));
+            const older = data.messages.filter((m: Message) => !ids.has(m.id));
+            return [...older, ...prev];
+          });
+          // Preserve scroll position
+          requestAnimationFrame(() => {
+            if (el) el.scrollTop = el.scrollHeight - prevHeight;
+          });
+        } else {
+          hasMoreMessages.current = false;
+        }
+      }).finally(() => { loadingMore.current = false; });
+    }
+  }, [messages, channelId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1496,9 +1527,14 @@ export function ChatView({ channelId }: { channelId: string }) {
           onSettings={() => setShowSettings(true)}
           onGallery={() => {
             setShowGallery(true);
+            setGalleryItems([]);
+            setGalleryHasMore(true);
             const fetchChannel = inLiveMode ? `${channelId}_live` : channelId;
             fetchGallery(fetchChannel).then((data) => {
-              if (data.gallery) setGalleryItems(data.gallery);
+              if (data.gallery) {
+                setGalleryItems(data.gallery);
+                if (data.gallery.length < 50) setGalleryHasMore(false);
+              }
             });
           }}
           onLinks={() => setShowLinks(true)}
@@ -1521,6 +1557,21 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showGallery && (
         <GalleryPanel
           items={galleryItems}
+          hasMore={galleryHasMore}
+          onLoadMore={() => {
+            if (galleryLoading.current || !galleryHasMore || galleryItems.length === 0) return;
+            galleryLoading.current = true;
+            const oldest = galleryItems[galleryItems.length - 1];
+            const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+            fetchGallery(fetchChannel, oldest.created_at).then((data) => {
+              if (data.gallery && data.gallery.length > 0) {
+                setGalleryItems((prev) => [...prev, ...data.gallery]);
+                if (data.gallery.length < 50) setGalleryHasMore(false);
+              } else {
+                setGalleryHasMore(false);
+              }
+            }).finally(() => { galleryLoading.current = false; });
+          }}
           onViewImage={(src, meta) => {
             const msg = messages.find((m) => m.id === meta.id);
             setFullViewImage({ src, caption: msg?.text || undefined, date: meta.created_at, msgId: meta.id, fromGallery: true });

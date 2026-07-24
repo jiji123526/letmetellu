@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useCallback } from "react";
+
 interface GalleryItem {
   id: string;
   image: string;
@@ -9,17 +11,28 @@ interface GalleryItem {
 interface GalleryPanelProps {
   items: GalleryItem[];
   onViewImage?: (src: string, meta: { id: string; created_at: string }) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
   onClose: () => void;
 }
 
 function galleryDateLabel(dateStr: string): string {
-  if (!dateStr) return "날짜 없음";
+  if (!dateStr) return "";
   const d = new Date(dateStr);
-  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  return `${kst.getUTCFullYear()}/${String(kst.getUTCMonth() + 1).padStart(2, "0")}/${String(kst.getUTCDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function GalleryPanel({ items, onViewImage, onClose }: GalleryPanelProps) {
+export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose }: GalleryPanelProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasMore || !onLoadMore) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+      onLoadMore();
+    }
+  }, [hasMore, onLoadMore]);
+
   return (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center animate-[ctxFade_0.2s_ease]"
@@ -43,7 +56,7 @@ export function GalleryPanel({ items, onViewImage, onClose }: GalleryPanelProps)
               <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
               <path d="M21 15l-5-5L5 21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            {" "}갤러리
+            {" "}Gallery
           </h3>
           <button
             className="bg-transparent border-none cursor-pointer"
@@ -55,10 +68,10 @@ export function GalleryPanel({ items, onViewImage, onClose }: GalleryPanelProps)
         </div>
 
         {/* Grid */}
-        <div className="overflow-y-auto" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "4px" }}>
+        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "4px" }}>
           {items.length === 0 ? (
             <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>
-              사진이 없습니다
+              No photos yet
             </div>
           ) : (
             (() => {
@@ -90,6 +103,11 @@ export function GalleryPanel({ items, onViewImage, onClose }: GalleryPanelProps)
                 );
               });
             })()
+          )}
+          {hasMore && (
+            <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center" }}>
+              <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>Loading...</span>
+            </div>
           )}
         </div>
       </div>
