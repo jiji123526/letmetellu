@@ -567,7 +567,13 @@ export function ChatView({ channelId }: { channelId: string }) {
         }
       }
       if (event.type === "notice-changed") {
-        setActiveNotice((event.notice as string) || "");
+        const isLiveNotice = !!event.live;
+        // Only apply if the notice matches user's current mode
+        if (isLiveNotice && inLiveModeRef.current) {
+          setActiveNotice((event.notice as string) || "");
+        } else if (!isLiveNotice && !inLiveModeRef.current) {
+          setActiveNotice((event.notice as string) || "");
+        }
       }
       if (event.type === "rules-changed") {
         setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);

@@ -151,12 +151,14 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`notice_${channel_id}`, noticeText, channel_id, noticeText).run();
 
-      // Broadcast notice change
-      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      // Broadcast notice change to parent channel DO (where clients connect)
+      const isLive = channel_id.endsWith("_live");
+      const broadcastChannel = isLive ? channel_id.replace(/_live$/, "") : channel_id;
+      const doId = env.CHAT_ROOM.idFromName(broadcastChannel);
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "notice-changed", channel_id, notice: noticeText }),
+        body: JSON.stringify({ type: "notice-changed", channel_id, notice: noticeText, live: isLive }),
       }));
 
       return Response.json({ ok: true });
