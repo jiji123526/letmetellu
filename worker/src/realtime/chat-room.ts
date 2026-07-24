@@ -21,16 +21,37 @@ export class ChatRoom {
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 
-      this.state.acceptWebSocket(server);
+      server.accept();
       const uid = url.searchParams.get("uid") || "anon";
       this.connections.set(server, { uid, joinedAt: Date.now() });
+
+      server.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") return;
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "emoji-fx" || data.type === "typing") {
+            this.broadcast(event.data);
+          }
+          // Ignore ping — connection stays alive just by having the listener
+        } catch {}
+      });
+
+      server.addEventListener("close", () => {
+        this.connections.delete(server);
+        this.broadcastPresence();
+      });
+
+      server.addEventListener("error", () => {
+        this.connections.delete(server);
+        this.broadcastPresence();
+      });
 
       this.broadcastPresence();
 
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    // Internal broadcast trigger (called by Worker routes after D1 write)
+    // Internal broadcast trigger (from Worker routes after D1 write)
     if (url.pathname.endsWith("/broadcast")) {
       const event = await request.json();
       this.broadcast(JSON.stringify(event));
@@ -43,35 +64,6 @@ export class ChatRoom {
     }
 
     return new Response("not found", { status: 404 });
-  }
-
-  webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-    if (typeof message !== "string") return;
-
-    try {
-      const data = JSON.parse(message);
-      // Keep-alive ping → respond with pong (don't broadcast)
-      if (data.type === "ping") {
-        try { ws.send(JSON.stringify({ type: "pong" })); } catch {}
-        return;
-      }
-      // Relay ephemeral events (typing, emoji-fx) to all clients
-      if (data.type === "emoji-fx" || data.type === "typing") {
-        this.broadcast(message);
-      }
-    } catch {
-      // Ignore malformed messages
-    }
-  }
-
-  webSocketClose(ws: WebSocket) {
-    this.connections.delete(ws);
-    this.broadcastPresence();
-  }
-
-  webSocketError(ws: WebSocket) {
-    this.connections.delete(ws);
-    this.broadcastPresence();
   }
 
   private broadcast(message: string) {
