@@ -28,14 +28,20 @@ function YouTubeEmbed({ url }: { url: string }) {
   const isShorts = url.includes("/shorts/");
 
   return (
-    <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "100%", background: "#000" }}>
+    <div style={{
+      borderRadius: "12px",
+      overflow: "hidden",
+      maxWidth: "100%",
+      background: "#000",
+      aspectRatio: isShorts ? "9/16" : "16/9",
+    }}>
       <iframe
         width="100%"
-        height={isShorts ? "534" : "169"}
+        height="100%"
         src={`https://www.youtube.com/embed/${videoId}`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
-        style={{ display: "block", border: 0, maxWidth: "100%" }}
+        style={{ display: "block", border: 0 }}
       />
     </div>
   );
@@ -130,7 +136,7 @@ function TwitterEmbed({ url }: { url: string }) {
 
   return (
     <div
-      style={{ maxWidth: "100%", minHeight: "80px", overflow: "visible" }}
+      style={{ maxWidth: "100%", minHeight: "80px", overflow: "hidden", borderRadius: "12px" }}
       ref={(el) => {
         if (!el || el.dataset.rendered) return;
         el.dataset.rendered = "1";
@@ -140,7 +146,6 @@ function TwitterEmbed({ url }: { url: string }) {
             (window as any).twttr.widgets.createTweet(tweetId, el, {
               theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
               conversation: "none",
-              width: 320,
             });
           }
         };
@@ -166,12 +171,12 @@ function TwitterEmbed({ url }: { url: string }) {
 function InstagramEmbed({ url }: { url: string }) {
   return (
     <div
-      style={{ maxWidth: "100%", overflow: "visible" }}
+      style={{ maxWidth: "100%", overflow: "hidden", borderRadius: "12px" }}
       ref={(el) => {
         if (!el || el.dataset.rendered) return;
         el.dataset.rendered = "1";
 
-        el.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:320px;width:100%;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
+        el.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:100%;width:100%;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
 
         const process = () => {
           if ((window as any).instgrm?.Embeds?.process) {
