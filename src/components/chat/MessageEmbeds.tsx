@@ -28,7 +28,7 @@ function YouTubeEmbed({ url }: { url: string }) {
   const isShorts = url.includes("/shorts/");
 
   return (
-    <div style={{ borderRadius: "0 0 12px 12px", overflow: "hidden", maxWidth: "100%", background: "#000" }}>
+    <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "100%", background: "#000" }}>
       <iframe
         width="100%"
         height={isShorts ? "534" : "169"}
@@ -76,10 +76,9 @@ function LinkPreviewCard({ url }: { url: string }) {
       style={{
         display: "block",
         maxWidth: "100%",
-        borderRadius: "0 0 12px 12px",
+        borderRadius: "12px",
         overflow: "hidden",
         border: "1px solid var(--hairline)",
-        borderTop: "none",
         background: "var(--card)",
         textDecoration: "none",
         color: "inherit",
@@ -207,10 +206,7 @@ export function MessageEmbeds({ text }: { text: string }) {
 
   return (
     <div style={{
-      marginLeft: "calc(var(--bubble-font-size) * -0.824)",
-      marginRight: "calc(var(--bubble-font-size) * -0.824)",
-      marginBottom: "calc(var(--bubble-font-size) * -0.588)",
-      marginTop: "4px",
+      marginTop: "6px",
       overflow: "visible",
     }}>
       {unique.map((url) => {
