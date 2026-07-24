@@ -22,7 +22,6 @@ binding = "MEDIA"
 bucket_name = "letmetellu-media"
 
 [vars]
-ALLOWED_ORIGIN = "*"
-# Tighten this after you deploy to Vercel:
-# ALLOWED_ORIGIN = "https://your-app.vercel.app,http://localhost:3000"
-# INTERNAL_SECRET = "" # Set via: wrangler secret put INTERNAL_SECRET
+ALLOWED_ORIGIN = "https://letmetellu.vercel.app,http://localhost:3000"
+# For development, temporarily use "*" if needed:
+# ALLOWED_ORIGIN = "*"

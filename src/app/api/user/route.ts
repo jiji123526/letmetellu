@@ -13,7 +13,10 @@ export async function GET() {
   // Sync user to D1 and get their channels
   const res = await fetch(`${workerUrl}/api/user`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
+    },
     body: JSON.stringify({
       id: session.user.id,
       email: session.user.email,

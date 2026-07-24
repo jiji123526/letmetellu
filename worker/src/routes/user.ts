@@ -2,6 +2,12 @@ import { Env } from "../types";
 
 export async function handleUser(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
+    // Verify internal token (only Vercel proxy should call this)
+    const token = request.headers.get("X-Internal-Token");
+    if (token !== env.INTERNAL_SECRET) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json() as { id: string; email: string; name?: string; image?: string };
     const { id, email, name, image } = body;
 

@@ -1,5 +1,8 @@
 import { Env } from "../types";
 
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
 export async function handleUpload(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
@@ -9,11 +12,39 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
 
   const contentType = request.headers.get("Content-Type") || "image/jpeg";
+
+  // Validate content type
+  if (!ALLOWED_TYPES.includes(contentType)) {
+    return Response.json({ error: "invalid file type" }, { status: 400 });
+  }
+
+  // Validate size from Content-Length header
+  const contentLength = parseInt(request.headers.get("Content-Length") || "0");
+  if (contentLength > MAX_UPLOAD_SIZE) {
+    return Response.json({ error: "file too large" }, { status: 413 });
+  }
+
   const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : contentType.includes("webp") ? "webp" : "jpg";
   const key = `${channelId}/${crypto.randomUUID()}.${ext}`;
 
-  // Store raw binary directly to R2
-  await env.MEDIA.put(key, request.body!, {
+  // Read body with size enforcement (in case Content-Length is spoofed)
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+  const reader = request.body!.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalSize += value.byteLength;
+    if (totalSize > MAX_UPLOAD_SIZE) {
+      reader.cancel();
+      return Response.json({ error: "file too large" }, { status: 413 });
+    }
+    chunks.push(value);
+  }
+
+  const blob = new Blob(chunks, { type: contentType });
+
+  await env.MEDIA.put(key, blob, {
     httpMetadata: { contentType },
   });
 
