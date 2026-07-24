@@ -779,7 +779,10 @@ export function ChatView({ channelId }: { channelId: string }) {
                         ? (isMine ? "#fff" : "#5a1580")
                         : isMine ? "#fff" : "var(--gray-text)",
                   cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
-                  opacity: reportedMsgIds.has(msg.id) ? 0.6 : undefined,
+                  opacity: reportedMsgIds.has(msg.id) ? 0.6
+                    : (effectiveAdmin && blockedUsers.some((b) => b.uid === msg.uid)) ? 0.4
+                    : undefined,
+                  textDecoration: (effectiveAdmin && blockedUsers.some((b) => b.uid === msg.uid)) ? "line-through" : undefined,
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -1148,9 +1151,17 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (msg) setEditingMsg({ id: msg.id, text: msg.text });
           } : undefined}
           onBlock={effectiveAdmin && !contextMenu.isOwn ? (blockUid) => {
-            const msg = contextMenu.msg;
-            adminAction("block", channelId, { uid: blockUid, reason: msg.text?.slice(0, 50) || "", fingerprint: "" });
-            setBanner({ text: `익명#${blockUid.slice(-4)} 차단됨`, color: "#d32f2f" });
+            const isBlocked = blockedUsers.some((b) => b.uid === blockUid);
+            if (isBlocked) {
+              adminAction("unblock", channelId, { uid: blockUid });
+              setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
+              setBanner({ text: `익명#${blockUid.slice(-4)} 차단 해제`, color: "#2a9d4e" });
+            } else {
+              const msg = contextMenu.msg;
+              adminAction("block", channelId, { uid: blockUid, reason: msg.text?.slice(0, 50) || "", fingerprint: "" });
+              setBlockedUsers((prev) => [...prev, { uid: blockUid, reason: msg.text?.slice(0, 50) || "" }]);
+              setBanner({ text: `익명#${blockUid.slice(-4)} 차단됨`, color: "#d32f2f" });
+            }
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
