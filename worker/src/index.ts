@@ -8,6 +8,7 @@ import { handleUser } from "./routes/user";
 import { handleAuth } from "./routes/auth";
 import { handleDm } from "./routes/dm";
 import { handleUpload, handleMediaServe } from "./routes/upload";
+import { handlePreview } from "./routes/preview";
 
 export { ChatRoom };
 
@@ -65,6 +66,8 @@ export default {
         response = await handleDm(request, env);
       } else if (url.pathname.startsWith("/api/upload")) {
         response = await handleUpload(request, env);
+      } else if (url.pathname.startsWith("/api/preview")) {
+        response = await handlePreview(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key);

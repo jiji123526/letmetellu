@@ -26,6 +26,7 @@ import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
 import { SearchBar, highlightText } from "./SearchBar";
 import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
+import { MessageEmbeds } from "./MessageEmbeds";
 import { AdminPanel } from "../admin/AdminPanel";
 
 interface Message {
@@ -1057,6 +1058,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                     )}
                     {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} />}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
+                    {msg.text && !msg.deleted && !msg.report && <MessageEmbeds text={msg.text} />}
                   </>
                 )}
               </div>
