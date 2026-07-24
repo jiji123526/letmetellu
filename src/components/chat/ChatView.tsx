@@ -140,6 +140,31 @@ function SkeletonLoading() {
   );
 }
 
+// Message text with truncation (>1000 chars) and search highlight
+function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 1000;
+  const displayText = isLong && !expanded ? text.slice(0, 1000) + "…" : text;
+
+  const content = searchQuery && isSearchMatch
+    ? highlightText(displayText, searchQuery, isActiveMatch)
+    : displayText;
+
+  return (
+    <span style={image ? { display: "block", padding: "6px 10px 0" } : undefined}>
+      {content}
+      {isLong && !expanded && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+          style={{ display: "block", background: "none", border: "none", color: isMine ? "rgba(255,255,255,0.85)" : "var(--bubble-sent, #3b8df0)", cursor: "pointer", padding: "4px 0 0", fontSize: "var(--bubble-font-size)", fontFamily: "inherit", marginLeft: "auto", transform: "rotate(-90deg)", lineHeight: 1 }}
+        >
+          <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5" /><path d="M7 6l5 5 5-5" /></svg>
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -611,6 +636,13 @@ export function ChatView({ channelId }: { channelId: string }) {
         />
       )}
 
+      {/* Offline banner */}
+      {!connected && !loading && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 12px", background: "#fff3e0", borderBottom: "0.5px solid #ffe0b2", flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "#e65100", lineHeight: 1 }}>
+          <span>연결이 끊어졌습니다. 재연결 중...</span>
+        </div>
+      )}
+
       {/* Messages */}
       <main
         ref={messagesContainerRef}
@@ -700,11 +732,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                         style={{ objectFit: "contain" }}
                       />
                     )}
-                    {msg.text && <span style={msg.image ? { display: "block", padding: "6px 10px 0" } : undefined}>
-                      {searchState.query && searchState.resultIds.includes(msg.id)
-                        ? highlightText(msg.text, searchState.query, msg.id === searchState.activeId)
-                        : msg.text}
-                    </span>}
+                    {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} />}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
                   </>
                 )}
