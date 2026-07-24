@@ -360,6 +360,10 @@ export function ChatView({ channelId }: { channelId: string }) {
           if (data.gallery) setGalleryItems(data.gallery);
         }).catch(() => {});
       }
+      // Re-send join-live on reconnect so DO has accurate count
+      if (event.type === "reconnected" && inLiveModeRef.current) {
+        send({ type: "join-live" });
+      }
       if (event.type === "dm-changed") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchInit(fetchChannel).then((data) => {
@@ -411,7 +415,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         localStorage.setItem(`liveEmojis_${channelId}_live`, event.emojis as string);
       }
     });
-  }, [subscribe, channelId]);
+  }, [subscribe, channelId, send]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes
   useEffect(() => {
