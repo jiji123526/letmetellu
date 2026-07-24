@@ -146,6 +146,17 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Live-ended popup shown to all users including admin
 - [x] Stale closure fixes (inLiveModeRef for all subscribe handlers)
 
+### Phase 3.6: Performance ✅
+- [x] Broadcast payload — zero DB queries per event (message-new, edited, deleted, reaction, dm, profile, rules)
+- [x] Gallery lazy-load — removed from init, fetched on-demand when panel opens
+- [x] Banned words cache — in-memory with 1-min TTL, invalidated on admin change
+- [x] Batch D1 writes — message + gallery insert in one round-trip
+- [x] ASC subquery — DB returns oldest-first directly, no .reverse()
+- [x] Rate limiter cleanup — stale UIDs purged every 60s
+- [x] Dark mode — all panels use CSS variables (--card, --card-text, etc.)
+- [x] Channel color — all colored elements follow channel color setting
+- [x] Rules broadcast — non-admin sees ℹ️ icon in real-time
+
 ### Phase 4: Platform
 - [ ] Embeds (YouTube, Twitter, Instagram, link previews)
 - [ ] Typing indicator

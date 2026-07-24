@@ -332,6 +332,44 @@ Other fixes:
 - Image full view: date button only shows from gallery (not from chat)
 - LiveEndedPopup icon centered
 
+**Performance — Broadcast Payload (zero refetch):**
+- Adopted original's approach: broadcast event data, patch locally
+- `message-new`: Worker sends full message object → client appends
+- `message-edited`: Worker sends { id, text } → client patches in place
+- `message-deleted`: Worker sends { id, soft } → client removes/marks
+- `reaction-changed`: Worker sends { message_id, reactions } → client patches
+- `dm-new`: Worker sends full DM object → client appends
+- `dm-deleted`: Worker sends { dm_id } → client filters out
+- `profile-change`: Worker sends { name, image, color } → client patches channel state
+- `rules-changed`: Worker sends { rules } → client patches channel.notice
+- Only `reconnected` and `messages-sync` (rare bulk ops) trigger refetch
+- Result: 0 DB queries per event for all normal operations
+
+**Performance — Other:**
+- Debounced refetch (100ms) for rapid broadcasts (removed after switching to payload)
+- Single DO broadcast: removed wasted broadcast to `_live` DO
+- Rate limiter cleanup: stale UIDs purged every 60s
+- ASC subquery: DB returns oldest-first directly, no .reverse() in JS
+- Batch D1 writes: message + gallery insert in one `env.DB.batch()`
+- Gallery lazy-load: removed from init, fetched on-demand when panel opens
+- Banned words cache: in-memory Map with 1-min TTL, invalidated on admin change
+
+**Dark Mode:**
+- Added CSS variables: --card, --card-text, --secondary-text, --tertiary-text, --guide-bg
+- AdminPanel, EditDialog, ConfirmDialog, NoticeEditDialog, LiveMode, EmojiBar:
+  all backgrounds and text colors use CSS vars (adapt to dark mode)
+
+**Channel Color:**
+- `--bubble-sent` CSS variable synced from `bubbleColor` on mount via useEffect
+- All colored elements (skeleton, banners, buttons, reactions, admin view toggle,
+  notice panel, scroll-to-bottom) now follow channel color setting
+- `localBubbleColor` initialized from localStorage immediately (not after init)
+  so skeleton renders with correct color from first frame
+
+**Real-time Broadcasts:**
+- `rules-changed`: non-admin sees ℹ️ icon appear/disappear when admin saves rules
+- DM images: uploadImage now called before sendDm (images render correctly)
+
 **Remaining:**
 - Embeds (YouTube/Twitter/Instagram/link previews)
 - Typing indicator
