@@ -207,7 +207,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [fullViewImage, setFullViewImage] = useState<{ src: string; caption?: string; date?: string; msgId?: string } | null>(null);
+  const [fullViewImage, setFullViewImage] = useState<{ src: string; caption?: string; date?: string; msgId?: string; fromGallery?: boolean } | null>(null);
   const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
@@ -1358,7 +1358,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           items={galleryItems}
           onViewImage={(src, meta) => {
             const msg = messages.find((m) => m.id === meta.id);
-            setFullViewImage({ src, caption: msg?.text || undefined, date: meta.created_at, msgId: meta.id });
+            setFullViewImage({ src, caption: msg?.text || undefined, date: meta.created_at, msgId: meta.id, fromGallery: true });
           }}
           onClose={() => setShowGallery(false)}
         />
@@ -1643,7 +1643,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                   {fullViewImage.caption}
                 </div>
               )}
-              {fullViewImage.date && fullViewImage.msgId && (
+              {fullViewImage.date && fullViewImage.msgId && fullViewImage.fromGallery && (
                 <button
                   onClick={() => {
                     setFullViewImage(null);
