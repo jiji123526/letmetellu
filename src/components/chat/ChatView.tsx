@@ -791,7 +791,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // Desktop: Enter sends, Shift+Enter adds new line
+    // Mobile: Enter adds new line naturally, user taps send button
+    const isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    if (e.key === "Enter" && !e.shiftKey && !isMobile && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
