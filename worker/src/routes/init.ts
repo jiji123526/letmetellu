@@ -93,8 +93,18 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     try { liveStatus = JSON.parse(liveConfig.text as string); } catch {}
   }
 
+  // For live channels, override is_frozen with the _live row's value
+  let responseChannel = channel;
+  if (isLiveChannel) {
+    const liveRow = await env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?")
+      .bind(channelId).first();
+    if (liveRow) {
+      responseChannel = { ...channel, is_frozen: (liveRow as any).is_frozen ?? 0 };
+    }
+  }
+
   return Response.json({
-    channel,
+    channel: responseChannel,
     messages,
     blocked,
     dm: dmMessages || [],
