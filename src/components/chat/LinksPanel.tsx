@@ -138,14 +138,14 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
           </button>
         </div>
 
-        {/* Links list */}
-        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "8px" }}>
+        {/* Links grid */}
+        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", alignContent: "start" }}>
           {loading ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>Loading...</div>
+            <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>Loading...</div>
           ) : links.length === 0 ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>No links shared</div>
+            <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>No links shared</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <>
               {links.map((link, i) => (
                 <div
                   key={`${link.url}-${i}`}
@@ -165,39 +165,38 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
                     }
                   }}
                 >
-                  {/* Preview card or fallback URL */}
                   {link.preview && link.preview.image ? (
                     <img
                       src={link.preview.image}
                       alt=""
-                      style={{ width: "100%", height: "120px", objectFit: "cover", display: "block" }}
+                      style={{ width: "100%", maxHeight: "80px", objectFit: "cover", display: "block" }}
                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
                   ) : null}
-                  <div style={{ padding: "10px 12px" }}>
+                  <div style={{ padding: "8px 10px" }}>
                     {link.preview?.siteName && (
-                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
                         {link.preview.siteName}
                       </div>
                     )}
                     {link.preview?.title ? (
-                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", fontWeight: 500, color: "var(--gray-text)", lineHeight: 1.3 }}>
-                        {link.preview.title.length > 50 ? link.preview.title.slice(0, 50) + "…" : link.preview.title}
+                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 400, color: "var(--gray-text)", lineHeight: 1.3 }}>
+                        {link.preview.title.length > 30 ? link.preview.title.slice(0, 30) + "…" : link.preview.title}
                       </div>
                     ) : (
-                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
-                        {link.url.length > 60 ? link.url.slice(0, 60) + "…" : link.url}
+                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
+                        {link.url.replace(/^https?:\/\//, "").slice(0, 25)}…
                       </div>
                     )}
                   </div>
                 </div>
               ))}
               {hasMore && (
-                <div style={{ padding: "12px", textAlign: "center" }}>
+                <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center" }}>
                   <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>Loading...</span>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
