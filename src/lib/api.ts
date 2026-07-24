@@ -27,11 +27,12 @@ export async function fetchInit(channelId: string) {
   if (IS_MOCK) return mockApi.fetchInit(channelId);
 
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
-  const headers: Record<string, string> = {
-    ...roomTokenHeaders(parentChannelId),
-  };
+  const roomToken = getRoomToken(parentChannelId);
+  const headers: Record<string, string> = {};
+  if (roomToken) headers["X-Room-Token"] = roomToken;
 
-  // Use Vercel proxy (/api/init) — it adds session headers for owner bypass
+  // Route through Vercel proxy for session-based owner bypass
+  // The proxy adds X-Internal-Token + X-User-Id if user is logged in
   const res = await fetch(`/api/init?channel=${channelId}`, { headers });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
   return res.json();
@@ -49,9 +50,12 @@ export async function verifyPasscode(channelId: string, passcode: string): Promi
 export async function fetchMessages(channelId: string, cursor?: string) {
   if (IS_MOCK) return mockApi.fetchMessages(channelId, cursor);
 
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "messages", channel: channelId });
   if (cursor) params.set("cursor", cursor);
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
   return res.json();
 }
 
@@ -64,17 +68,23 @@ export async function fetchDm(channelId: string) {
 
 export async function fetchGallery(channelId: string, cursor?: string) {
   if (IS_MOCK) return { gallery: [] };
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "gallery", channel: channelId });
   if (cursor) params.set("cursor", cursor);
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
   return res.json();
 }
 
 export async function fetchLinks(channelId: string, cursor?: string) {
   if (IS_MOCK) return { links: [] };
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "links", channel: channelId });
   if (cursor) params.set("cursor", cursor);
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
   return res.json();
 }
 

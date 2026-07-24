@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { verifyRoomToken } from "./passcode";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -7,6 +8,27 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
   if (!channelId) {
     return Response.json({ error: "missing channel" }, { status: 400 });
+  }
+
+  // Passcode gate for data endpoints
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const channel = await env.DB.prepare("SELECT passcode, owner_uid FROM channels WHERE id = ?")
+    .bind(parentChannelId).first() as { passcode: string | null; owner_uid: string } | null;
+
+  if (channel?.passcode) {
+    // Check owner bypass
+    const internalToken = request.headers.get("X-Internal-Token");
+    const userId = request.headers.get("X-User-Id");
+    const isOwner = internalToken === env.INTERNAL_SECRET && userId === channel.owner_uid;
+
+    if (!isOwner) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== channel.passcode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
+    }
   }
 
   switch (type) {

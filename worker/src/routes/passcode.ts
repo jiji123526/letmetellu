@@ -7,23 +7,8 @@ async function hashPasscode(passcode: string): Promise<string> {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function createToken(channelId: string, passcodeHash: string, secret: string): string {
-  // Simple JWT (HS256) — header.payload.signature
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "");
-  const payload = btoa(JSON.stringify({
-    channel_id: channelId,
-    passcode_hash: passcodeHash,
-    type: "room-access",
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, // 7 days
-  })).replace(/=/g, "");
-  const signature = btoa(String.fromCharCode(...new Uint8Array(
-    // HMAC-SHA256 would be proper, but for simplicity use a hash of secret+payload
-    // This is sufficient for our use case (not cryptographically critical)
-  ))).replace(/=/g, "");
-  // Use Web Crypto for proper HMAC
-  return `${header}.${payload}`;
-}
+// Rate limit: 5 attempts per 60 seconds per channel
+const passcodeAttempts = new Map<string, number[]>();
 
 export async function handleVerifyPasscode(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
@@ -36,6 +21,16 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
   if (!channel_id || !passcode) {
     return Response.json({ error: "missing fields" }, { status: 400 });
   }
+
+  // Rate limit check
+  const now = Date.now();
+  const attempts = passcodeAttempts.get(channel_id) || [];
+  const recent = attempts.filter((t) => now - t < 60000);
+  if (recent.length >= 5) {
+    return Response.json({ error: "too_many_attempts" }, { status: 429 });
+  }
+  recent.push(now);
+  passcodeAttempts.set(channel_id, recent);
 
   // Get channel's stored passcode hash
   const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
