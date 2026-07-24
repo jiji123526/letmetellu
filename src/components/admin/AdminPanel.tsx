@@ -249,9 +249,14 @@ export function AdminPanel(props: AdminPanelProps) {
         {view === "passcode" && (
           <div style={{ padding: "12px 18px" }}>
             <div style={{ fontSize: "13px", color: "var(--meta)", marginBottom: "6px" }}>{t("currentChannel")}: {channelName}</div>
-            <input style={inputStyle} type="text" placeholder={t("newPasscode")} autoComplete="off" />
+            <input id="passcode-input" style={inputStyle} type="text" placeholder={t("newPasscode")} autoComplete="off" />
             <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>{t("passcodeHint")}</div>
-            <button style={saveBtnStyle} onClick={goBack}>{ t("save")}</button>
+            <button style={saveBtnStyle} onClick={() => {
+              const input = document.getElementById("passcode-input") as HTMLInputElement;
+              const value = input?.value?.trim() || "";
+              adminAction("set-passcode", channelId, { passcode: value || null });
+              goBack();
+            }}>{ t("save")}</button>
           </div>
         )}
 

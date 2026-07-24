@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { verifyRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -18,6 +19,28 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   if (!channel) {
     return Response.json({ error: "channel not found" }, { status: 404 });
+  }
+
+  // Passcode gate: if channel has passcode, verify token
+  if ((channel as any).passcode) {
+    const token = request.headers.get("X-Room-Token");
+    if (token) {
+      const decoded = await verifyRoomToken(token, env);
+      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
+        // Token invalid or passcode changed — gate access
+        return Response.json({
+          hasPasscode: true,
+          channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+        });
+      }
+      // Token valid — continue to full data
+    } else {
+      // No token — gate access
+      return Response.json({
+        hasPasscode: true,
+        channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+      });
+    }
   }
 
   // Fetch recent messages (from the requested channel — live or normal)

@@ -9,6 +9,7 @@ import { handleAuth } from "./routes/auth";
 import { handleDm } from "./routes/dm";
 import { handleUpload, handleMediaServe } from "./routes/upload";
 import { handlePreview } from "./routes/preview";
+import { handleVerifyPasscode } from "./routes/passcode";
 
 export { ChatRoom };
 
@@ -68,6 +69,8 @@ export default {
         response = await handleUpload(request, env);
       } else if (url.pathname.startsWith("/api/preview")) {
         response = await handlePreview(request, env);
+      } else if (url.pathname.startsWith("/api/verify-passcode")) {
+        response = await handleVerifyPasscode(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key);

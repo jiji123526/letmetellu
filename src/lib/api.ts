@@ -1,14 +1,45 @@
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 
+// Room token management
+function getRoomToken(channelId: string): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(`roomToken_${channelId}`);
+}
+
+export function setRoomToken(channelId: string, token: string) {
+  localStorage.setItem(`roomToken_${channelId}`, token);
+}
+
+export function clearRoomToken(channelId: string) {
+  localStorage.removeItem(`roomToken_${channelId}`);
+}
+
+function roomTokenHeaders(channelId: string): Record<string, string> {
+  const token = getRoomToken(channelId);
+  return token ? { "X-Room-Token": token } : {};
+}
+
 // Dynamic import for mock - re-export functions based on mode
 import * as mockApi from "./mock-api";
 
 export async function fetchInit(channelId: string) {
   if (IS_MOCK) return mockApi.fetchInit(channelId);
 
-  const res = await fetch(`${WORKER_URL}/api/init?channel=${channelId}`);
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const res = await fetch(`${WORKER_URL}/api/init?channel=${channelId}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
+  return res.json();
+}
+
+export async function verifyPasscode(channelId: string, passcode: string): Promise<{ token?: string; error?: string }> {
+  const res = await fetch(`${WORKER_URL}/api/verify-passcode`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel_id: channelId, passcode }),
+  });
   return res.json();
 }
 

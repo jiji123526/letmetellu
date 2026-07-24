@@ -208,6 +208,22 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true });
     }
 
+    case "set-passcode": {
+      const { passcode } = payload || {};
+      let hashedPasscode: string | null = null;
+      if (passcode && (passcode as string).trim()) {
+        // Hash the passcode
+        const encoder = new TextEncoder();
+        const data = encoder.encode(passcode as string);
+        const hash = await crypto.subtle.digest("SHA-256", data);
+        hashedPasscode = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+      }
+      // Store hashed passcode (or null to remove)
+      await env.DB.prepare("UPDATE channels SET passcode = ? WHERE id = ?")
+        .bind(hashedPasscode, channel_id).run();
+      return Response.json({ ok: true });
+    }
+
     case "set-emoji-presets": {
       const { emojis } = payload || {};
       await env.DB.prepare(

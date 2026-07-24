@@ -28,6 +28,7 @@ import { SearchBar, highlightText } from "./SearchBar";
 import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { MessageEmbeds } from "./MessageEmbeds";
 import { AdminPanel } from "../admin/AdminPanel";
+import { PasscodeOverlay } from "./PasscodeOverlay";
 
 interface Message {
   id: string;
@@ -272,6 +273,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
+  const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string } | null>(null);
   const [uid] = useState(getOrCreateUid);
   const [myFingerprint] = useState(() => typeof window !== "undefined" ? generateFingerprint() : "");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -385,6 +387,13 @@ export function ChatView({ channelId }: { channelId: string }) {
     const initChannel = inLiveMode && liveActive ? `${channelId}_live` : channelId;
     fetchInit(initChannel)
       .then((data) => {
+        // Check if passcode-gated
+        if (data.hasPasscode && !data.messages) {
+          setPasscodeGate({ name: data.channel.name, profile_image: data.channel.profile_image, bubble_color: data.channel.bubble_color });
+          setLoading(false);
+          return;
+        }
+        setPasscodeGate(null);
         setChannel(data.channel);
         setMessages(data.messages);
         if (data.blocked) setBlockedUsers(data.blocked);
@@ -914,6 +923,30 @@ export function ChatView({ channelId }: { channelId: string }) {
       return updated;
     });
   };
+
+  // Passcode gate — show overlay if channel requires passcode
+  if (passcodeGate && !isOwner) {
+    return (
+      <PasscodeOverlay
+        channelId={channelId}
+        channelName={passcodeGate.name}
+        profileImage={passcodeGate.profile_image}
+        bubbleColor={passcodeGate.bubble_color || "#3b8df0"}
+        onSuccess={() => {
+          // Re-fetch init with token
+          setLoading(true);
+          setPasscodeGate(null);
+          fetchInit(channelId).then((data) => {
+            setChannel(data.channel);
+            setMessages(data.messages || []);
+            if (data.blocked) setBlockedUsers(data.blocked);
+            if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+            setLoading(false);
+          });
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
