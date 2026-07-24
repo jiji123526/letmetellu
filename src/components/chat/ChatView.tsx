@@ -278,6 +278,22 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
+  // Authenticate admin on WebSocket for DM privacy
+  const wsTokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isOwner && channelId) {
+      fetch(`/api/ws-token?channel=${channelId}`)
+        .then((r) => r.json())
+        .then((data: { token?: string }) => {
+          if (data.token) {
+            wsTokenRef.current = data.token;
+            send({ type: "auth-admin", token: data.token });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOwner, channelId, send]);
+
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
 
@@ -400,6 +416,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       // Re-send join-live on reconnect so DO has accurate count
       if (event.type === "reconnected" && inLiveModeRef.current) {
         send({ type: "join-live" });
+      }
+      // Re-authenticate admin on reconnect
+      if (event.type === "reconnected" && wsTokenRef.current) {
+        send({ type: "auth-admin", token: wsTokenRef.current });
       }
       if (event.type === "dm-new") {
         const dm = event.dm as Message;

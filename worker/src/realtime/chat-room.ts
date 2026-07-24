@@ -3,15 +3,18 @@ import { Env } from "../types";
 interface Connection {
   uid: string;
   joinedAt: number;
+  isAdmin: boolean;
 }
 
 export class ChatRoom {
   private connections: Map<WebSocket, Connection> = new Map();
   private liveViewers: Set<WebSocket> = new Set();
   private state: DurableObjectState;
+  private env: Env;
 
-  constructor(state: DurableObjectState, _env: Env) {
+  constructor(state: DurableObjectState, env: Env) {
     this.state = state;
+    this.env = env;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -24,7 +27,7 @@ export class ChatRoom {
 
       server.accept();
       const uid = url.searchParams.get("uid") || "anon";
-      this.connections.set(server, { uid, joinedAt: Date.now() });
+      this.connections.set(server, { uid, joinedAt: Date.now(), isAdmin: false });
 
       server.addEventListener("message", (event) => {
         if (typeof event.data !== "string") return;
@@ -40,6 +43,11 @@ export class ChatRoom {
           if (data.type === "leave-live") {
             this.liveViewers.delete(server);
             this.broadcastLivePresence();
+          }
+          // Admin authentication via WebSocket message
+          if (data.type === "auth-admin" && data.token === this.env.INTERNAL_SECRET) {
+            const conn = this.connections.get(server);
+            if (conn) conn.isAdmin = true;
           }
         } catch {}
       });
@@ -65,8 +73,16 @@ export class ChatRoom {
 
     // Internal broadcast trigger (from Worker routes after D1 write)
     if (url.pathname.endsWith("/broadcast")) {
-      const event = await request.json();
-      this.broadcast(JSON.stringify(event));
+      const event = await request.json() as Record<string, unknown>;
+      const eventStr = JSON.stringify(event);
+      const isDmEvent = event.type === "dm-new" || event.type === "dm-deleted";
+
+      if (isDmEvent) {
+        // Only send DM events to authenticated admin connections
+        this.broadcastToAdmin(eventStr);
+      } else {
+        this.broadcast(eventStr);
+      }
       return new Response("ok");
     }
 
@@ -80,6 +96,18 @@ export class ChatRoom {
 
   private broadcast(message: string) {
     for (const [ws] of this.connections) {
+      try {
+        ws.send(message);
+      } catch {
+        this.connections.delete(ws);
+        this.liveViewers.delete(ws);
+      }
+    }
+  }
+
+  private broadcastToAdmin(message: string) {
+    for (const [ws, conn] of this.connections) {
+      if (!conn.isAdmin) continue;
       try {
         ws.send(message);
       } catch {
