@@ -790,7 +790,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               <div
                 className="relative max-w-full break-words whitespace-pre-wrap select-none"
                 style={{
-                  padding: msg.image && !msg.text ? "4px" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                  padding: msg.image ? "4px" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
                   fontSize: "var(--bubble-font-size)",
                   lineHeight: 1.38,
                   overflowWrap: "anywhere",
