@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { adminAction } from "@/lib/api";
+import { useLocale } from "@/hooks/useLocale";
 
 interface AdminPanelProps {
   channelId: string;
@@ -46,6 +47,7 @@ interface MenuItem { key: string; label: string; icon: string; arrow: string; ar
 
 export function AdminPanel(props: AdminPanelProps) {
   const { channelId, channelName, profileImage, currentColor, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
+  const { t } = useLocale();
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
   const [selectedColor, setSelectedColor] = useState(currentColor);
@@ -62,7 +64,7 @@ export function AdminPanel(props: AdminPanelProps) {
     try { const p = JSON.parse(welcomeConfig || "{}"); return p.icon || "💬"; } catch { return "💬"; }
   });
   const [welcomeTitle, setWelcomeTitle] = useState(() => {
-    try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || "환영합니다!"; } catch { return "환영합니다!"; }
+    try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || "Welcome"; } catch { return "환영합니다!"; }
   });
   const [welcomeItems, setWelcomeItems] = useState(() => {
     try { const p = JSON.parse(welcomeConfig || "{}"); return (p.items || []).join("\n"); } catch { return ""; }
@@ -70,27 +72,27 @@ export function AdminPanel(props: AdminPanelProps) {
   const colorInputRef = useRef<HTMLInputElement>(null);
 
   const mainItems: MenuItem[] = [
-    { key: "channel", label: "채널", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>`, arrow: "›" },
-    { key: "manage", label: "관리", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`, arrow: "›" },
-    { key: "freeze", label: isFrozen ? "채팅 해제" : "채팅 얼리기", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 7l-10 10M2 12h20M7 7l10 10"/></svg>`, arrow: "●", arrowColor: isFrozen ? "#4a4d8f" : undefined },
-    { key: "live", label: liveActive ? "라이브 종료" : "라이브 시작", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>`, arrow: "●", arrowColor: liveActive ? "#c0392b" : undefined },
-    { key: "guide", label: "사용 가이드", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`, arrow: "›" },
-    { key: "toggle-view", label: "사용자 시점으로 보기", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`, arrow: "›" },
+    { key: "channel", label: t("channel"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>`, arrow: "›" },
+    { key: "manage", label: t("manage"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`, arrow: "›" },
+    { key: "freeze", label: isFrozen ? t("unfreezeChat") : t("freezeChat"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 7l-10 10M2 12h20M7 7l10 10"/></svg>`, arrow: "●", arrowColor: isFrozen ? "#4a4d8f" : undefined },
+    { key: "live", label: liveActive ? t("liveStop") : t("liveStart"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>`, arrow: "●", arrowColor: liveActive ? "#c0392b" : undefined },
+    { key: "guide", label: t("guide"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`, arrow: "›" },
+    { key: "toggle-view", label: t("viewAsUser"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`, arrow: "›" },
   ];
 
   const channelItems: MenuItem[] = [
-    { key: "profile", label: "채널 프로필", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`, arrow: "›" },
-    { key: "color", label: "채널 기본 색상", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: "›" },
-    { key: "passcode", label: "채널 비밀번호", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "›" },
-    { key: "rules", label: "채널 규칙", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>`, arrow: "›" },
-    { key: "welcome", label: "환영 팝업", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "›" },
+    { key: "profile", label: t("profile"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`, arrow: "›" },
+    { key: "color", label: t("color"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: "›" },
+    { key: "passcode", label: t("passcode"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "›" },
+    { key: "rules", label: t("rules"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>`, arrow: "›" },
+    { key: "welcome", label: t("welcomePopup"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "›" },
   ];
 
   const manageItems: MenuItem[] = [
-    { key: "banned-words", label: "금지어", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 5.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>`, arrow: "›" },
-    { key: "blocked", label: "차단 사용자", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>`, arrow: "›" },
-    { key: "petition-toggle", label: petitionEnabled ? "이의 제기 허용 중" : "이의 제기 차단 중", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "●", arrowColor: petitionEnabled ? "#2a9d4e" : "#c0392b" },
-    { key: "dm-toggle", label: dmEnabled ? "비밀 메시지 허용 중" : "비밀 메시지 차단 중", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "●", arrowColor: dmEnabled ? "#2a9d4e" : "#c0392b" },
+    { key: "banned-words", label: t("bannedWords"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 5.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>`, arrow: "›" },
+    { key: "blocked", label: t("blockedUsers"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>`, arrow: "›" },
+    { key: "petition-toggle", label: petitionEnabled ? t("petitionOn") : t("petitionOff"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "●", arrowColor: petitionEnabled ? "#2a9d4e" : "#c0392b" },
+    { key: "dm-toggle", label: dmEnabled ? t("dmOn") : t("dmOff"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "●", arrowColor: dmEnabled ? "#2a9d4e" : "#c0392b" },
   ];
 
   const handleClick = (key: string) => {
@@ -151,7 +153,7 @@ export function AdminPanel(props: AdminPanelProps) {
   const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px", lineHeight: 1 };
   const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
 
-  const title = { main: "관리자 설정", channel: "채널", manage: "관리", profile: "채널 프로필", color: "채널 기본 색상", passcode: "채널 비밀번호", rules: "채널 규칙", welcome: "환영 팝업", "banned-words": "금지어", blocked: "차단된 사용자", guide: "사용 가이드" }[view];
+  const title = { main: t("adminSettingsTitle"), channel: t("channel"), manage: t("manage"), profile: t("profile"), color: t("color"), passcode: t("passcode"), rules: t("rules"), welcome: t("welcomePopup"), "banned-words": t("bannedWords"), blocked: t("blockedUsers"), guide: t("guide") }[view];
 
   return (
     <div
@@ -190,7 +192,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 style={{ background: "var(--card)", border: "1px solid var(--input-border)", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer", fontFamily: "inherit", color: "var(--card-text)" }}
                 onClick={() => document.getElementById("profileImgInput")?.click()}
               >
-                사진 변경
+                {t("changePhoto")}
               </button>
               <input id="profileImgInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -208,7 +210,7 @@ export function AdminPanel(props: AdminPanelProps) {
 
             {/* Channel name */}
             <div style={{ marginBottom: "16px" }}>
-              <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 700, marginBottom: "8px" }}>채널 이름</div>
+              <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 700, marginBottom: "8px" }}>{ t("channelName")}</div>
               <input
                 style={{ width: "100%", background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "12px", padding: "11px 14px", fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--gray-text)", fontFamily: "inherit", boxSizing: "border-box" as const, outline: "none" }}
                 type="text"
@@ -218,14 +220,14 @@ export function AdminPanel(props: AdminPanelProps) {
               />
             </div>
 
-            <button style={saveBtnStyle} onClick={() => { onNameChange(nameInput); goBack(); }}>저장</button>
+            <button style={saveBtnStyle} onClick={() => { onNameChange(nameInput); goBack(); }}>{ t("save")}</button>
           </div>
         )}
 
         {/* Color panel */}
         {view === "color" && (
           <div style={{ padding: "12px 18px" }}>
-            <div style={{ fontSize: "13px", color: "var(--meta)", textAlign: "center", marginBottom: "16px" }}>이 채널의 기본 말풍선 색상을 설정합니다</div>
+            <div style={{ fontSize: "13px", color: "var(--meta)", textAlign: "center", marginBottom: "16px" }}>{t("colorDesc")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", width: "200px", margin: "0 auto", justifyItems: "center", padding: "2px" }}>
               {BUBBLE_COLORS.map((color) => (
                 <button
@@ -246,10 +248,10 @@ export function AdminPanel(props: AdminPanelProps) {
         {/* Passcode panel */}
         {view === "passcode" && (
           <div style={{ padding: "12px 18px" }}>
-            <div style={{ fontSize: "13px", color: "var(--meta)", marginBottom: "6px" }}>현재 채널: {channelName}</div>
-            <input style={inputStyle} type="text" placeholder="새 비밀번호 입력" autoComplete="off" />
-            <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>비우면 비밀번호 해제</div>
-            <button style={saveBtnStyle} onClick={goBack}>저장</button>
+            <div style={{ fontSize: "13px", color: "var(--meta)", marginBottom: "6px" }}>{t("currentChannel")}: {channelName}</div>
+            <input style={inputStyle} type="text" placeholder={t("newPasscode")} autoComplete="off" />
+            <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>{t("passcodeHint")}</div>
+            <button style={saveBtnStyle} onClick={goBack}>{ t("save")}</button>
           </div>
         )}
 
@@ -259,14 +261,14 @@ export function AdminPanel(props: AdminPanelProps) {
             {rules.map((section, i) => (
               <div key={i} style={{ marginBottom: "16px", padding: "12px", borderRadius: "12px", border: "1px solid var(--hairline)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <input style={{ ...inputStyle, flex: 1, marginRight: "8px", marginBottom: 0 }} value={section.title} placeholder="섹션 제목" onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], title: e.target.value }; setRules(r); }} />
+                  <input style={{ ...inputStyle, flex: 1, marginRight: "8px", marginBottom: 0 }} value={section.title} placeholder={t("sectionTitle")} onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], title: e.target.value }; setRules(r); }} />
                   <button style={{ background: "none", border: "none", color: "#c0392b", cursor: "pointer", fontSize: "18px" }} onClick={() => setRules(rules.filter((_, j) => j !== i))}>✕</button>
                 </div>
-                <textarea style={{ ...inputStyle, marginBottom: 0, resize: "vertical" }} rows={3} placeholder="항목 (한 줄에 하나씩)" value={section.items.join("\n")} onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], items: e.target.value.split("\n") }; setRules(r); }} />
+                <textarea style={{ ...inputStyle, marginBottom: 0, resize: "vertical" }} rows={3} placeholder={t("sectionItems")} value={section.items.join("\n")} onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], items: e.target.value.split("\n") }; setRules(r); }} />
               </div>
             ))}
-            <button style={{ ...saveBtnStyle, background: "var(--card)", color: "var(--secondary-text)", marginBottom: "12px" }} onClick={() => setRules([...rules, { title: "", items: [] }])}>+ 섹션 추가</button>
-            <button style={saveBtnStyle} onClick={() => { const cleaned = rules.filter(s => s.title.trim() || s.items.some(i => i.trim())).map(s => ({ title: s.title.trim(), items: s.items.map(i => i.trim()).filter(Boolean) })); onNoticeChange(JSON.stringify(cleaned)); goBack(); }}>저장</button>
+            <button style={{ ...saveBtnStyle, background: "var(--card)", color: "var(--secondary-text)", marginBottom: "12px" }} onClick={() => setRules([...rules, { title: "", items: [] }])}>{t("addSection")}</button>
+            <button style={saveBtnStyle} onClick={() => { const cleaned = rules.filter(s => s.title.trim() || s.items.some(i => i.trim())).map(s => ({ title: s.title.trim(), items: s.items.map(i => i.trim()).filter(Boolean) })); onNoticeChange(JSON.stringify(cleaned)); goBack(); }}>{ t("save")}</button>
           </div>
         )}
 
@@ -275,13 +277,13 @@ export function AdminPanel(props: AdminPanelProps) {
           <div style={{ padding: "12px 18px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginBottom: "12px", maxHeight: "200px", overflowY: "auto" }}>
               {bannedWords.length === 0 ? (
-                <div style={{ color: "var(--meta)", fontSize: "var(--bubble-font-size, 13px)", textAlign: "center", padding: "12px 0" }}>등록된 금지어가 없습니다</div>
+                <div style={{ color: "var(--meta)", fontSize: "var(--bubble-font-size, 13px)", textAlign: "center", padding: "12px 0" }}>{ t("noBannedWords")}</div>
               ) : bannedWords.map((w, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--card)", borderRadius: "10px" }}>
                   <span style={{ fontSize: "var(--bubble-font-size, 14px)", color: "var(--gray-text)" }}>{w.word}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)" }}>
-                      {w.expires ? (() => { const diff = new Date(w.expires).getTime() - Date.now(); return diff > 0 ? `${Math.ceil(diff / 86400000)}일 남음` : "만료됨"; })() : "영구"}
+                      {w.expires ? (() => { const diff = new Date(w.expires).getTime() - Date.now(); return diff > 0 ? `${Math.ceil(diff / 86400000)}${t("daysRemaining")}` : t("expired"); })() : t("permanent")}
                     </span>
                     <button style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontSize: "var(--bubble-font-size, 14px)", padding: "0 4px", lineHeight: 1 }} onClick={() => {
                       const removed = bannedWords[i];
@@ -298,7 +300,7 @@ export function AdminPanel(props: AdminPanelProps) {
               <input
                 style={{ flex: 1, minWidth: 0, background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "10px", padding: "8px 12px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", outline: "none" }}
                 type="text"
-                placeholder="금지어 추가..."
+                placeholder={t("addBannedWord")}
                 value={bannedInput}
                 onChange={(e) => setBannedInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); addBannedWord(); } }}
@@ -308,10 +310,10 @@ export function AdminPanel(props: AdminPanelProps) {
                 value={bannedDuration}
                 onChange={(e) => setBannedDuration(e.target.value)}
               >
-                <option value="">영구</option>
-                <option value="1">1일</option>
-                <option value="7">7일</option>
-                <option value="30">30일</option>
+                <option value="">{ t("permanent")}</option>
+                <option value="1">{ t("days1")}</option>
+                <option value="7">{ t("days7")}</option>
+                <option value="30">{ t("days30")}</option>
               </select>
               <button
                 style={{ width: "calc(var(--bubble-font-size) + 19px)", height: "calc(var(--bubble-font-size) + 19px)", borderRadius: "50%", border: "none", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontSize: "var(--bubble-font-size)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
@@ -325,18 +327,18 @@ export function AdminPanel(props: AdminPanelProps) {
         {view === "blocked" && (
           <div style={{ padding: "8px 0", maxHeight: "300px", overflowY: "auto" }}>
             {blockedUsers.length === 0 ? (
-              <div style={{ padding: "24px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>차단된 사용자가 없습니다</div>
+              <div style={{ padding: "24px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>{ t("noBlockedUsers")}</div>
             ) : blockedUsers.map((blocked, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px", borderBottom: "0.5px solid var(--hairline)", gap: "10px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: "var(--bubble-font-size, 14px)", fontWeight: 400 }}>익명#{blocked.uid.slice(-4)}</span>
+                  <span style={{ fontSize: "var(--bubble-font-size, 14px)", fontWeight: 400 }}>{t("anon")}#{blocked.uid.slice(-4)}</span>
                   {blocked.reason && <span style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", color: "var(--meta)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>&quot;{blocked.reason}&quot;</span>}
                 </div>
                 <button
                   style={{ background: "none", border: "1px solid #d32f2f", color: "#d32f2f", fontSize: "calc(var(--bubble-font-size) - 3px)", fontWeight: 400, padding: "5px 10px", borderRadius: "8px", cursor: "pointer", fontFamily: "inherit" }}
                   onClick={() => onUnblock(blocked.uid)}
                 >
-                  차단 해제
+                  {t("unblock")}
                 </button>
               </div>
             ))}
@@ -347,7 +349,7 @@ export function AdminPanel(props: AdminPanelProps) {
         {view === "welcome" && (
           <div style={{ padding: "12px 18px", maxHeight: "60vh", overflowY: "auto" }}>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>아이콘 (이모지 또는 이미지)</label>
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>{ t("welcomeIcon")}</label>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 {/* Preview */}
                 <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "var(--card)" }}>
@@ -357,12 +359,12 @@ export function AdminPanel(props: AdminPanelProps) {
                   }
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <input value={welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:") ? "" : welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder="이모지 입력" maxLength={4} />
+                  <input value={welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:") ? "" : welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeIconPlaceholder")} maxLength={4} />
                   <button
                     type="button"
                     style={{ background: "var(--card)", border: "1px solid var(--input-border)", borderRadius: "8px", padding: "6px 10px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", fontFamily: "inherit", color: "var(--card-text)", lineHeight: 1 }}
                     onClick={() => document.getElementById("welcomeIconInput")?.click()}
-                  >사진 업로드</button>
+                  >{ t("welcomeUpload")}</button>
                   <input id="welcomeIconInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
@@ -374,22 +376,22 @@ export function AdminPanel(props: AdminPanelProps) {
               </div>
             </div>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>제목</label>
-              <input value={welcomeTitle} onChange={(e) => setWelcomeTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder="환영합니다!" />
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>{ t("welcomeTitleLabel")}</label>
+              <input value={welcomeTitle} onChange={(e) => setWelcomeTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeTitlePlaceholder")} />
             </div>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>안내 항목 (한 줄에 하나씩)</label>
-              <textarea value={welcomeItems} onChange={(e) => setWelcomeItems(e.target.value)} rows={5} style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.5, fontSize: "var(--bubble-font-size)" }} placeholder="메시지를 꾹 누르면 답장, 리액션, 신고가 가능합니다" />
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>안내 {t("sectionItems")}</label>
+              <textarea value={welcomeItems} onChange={(e) => setWelcomeItems(e.target.value)} rows={5} style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.5, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeItemsPlaceholder")} />
             </div>
             <button style={saveBtnStyle} onClick={() => {
               const config = JSON.stringify({
                 icon: welcomeIcon.trim() || "💬",
-                title: welcomeTitle.trim() || "환영합니다!",
+                title: welcomeTitle.trim() || t("welcomeTitlePlaceholder"),
                 items: welcomeItems.split("\n").map((s: string) => s.trim()).filter(Boolean),
               });
               onWelcomeChange(config);
               goBack();
-            }}>저장</button>
+            }}>{ t("save")}</button>
           </div>
         )}
 
@@ -397,39 +399,39 @@ export function AdminPanel(props: AdminPanelProps) {
         {view === "guide" && (
           <div style={{ padding: "12px 18px", fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.6, color: "var(--gray-text)", maxHeight: "60vh", overflowY: "auto" }}>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>관리자 설정 열기</h4>
-              <p style={{ color: "var(--tertiary-text)", margin: 0 }}>우측 상단 ⋮ 메뉴 → 관리자 설정에서 모든 채널 설정을 관리할 수 있습니다.</p>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideOpenAdmin")}</h4>
+              <p style={{ color: "var(--tertiary-text)", margin: 0 }}>{ t("guideOpenAdminDesc")}</p>
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>채널 설정</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideChannelTitle")}</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>프로필</strong> — 채널 이름과 프로필 사진 변경. 정사각형 크롭 후 업로드</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>색상</strong> — 말풍선 기본 색상. 7가지 프리셋 또는 커스텀</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>비밀번호</strong> — 설정하면 입장 시 비밀번호 필요. 비우면 해제</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>규칙</strong> — ℹ️ 버튼에 표시되는 채널 규칙. 여러 섹션 추가 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>환영 팝업</strong> — 첫 방문자에게 표시되는 안내 팝업. 아이콘, 제목, 항목 커스텀 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>프로필</strong> — 채널 이름과 프로필 {t("changePhoto")}. 정사각형 크롭 후 업로드</li>
+                <li>• {t("guideColor")}</li>
+                <li>• {t("guidePasscode")}</li>
+                <li>• {t("guideRules")}</li>
+                <li>• {t("guideWelcome")}</li>
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>사용자 관리</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideManageTitle")}</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>신고 접수</strong> — 사용자가 메시지를 꾹 눌러 신고하면 🚨 표시로 나타남</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>차단</strong> — 메시지를 꾹 눌러 즉시 차단. UID + 기기 지문으로 식별</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>차단 해제</strong> — 관리 → 차단 사용자에서 해제 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>이의 제기</strong> — 차단된 사용자의 1회 DM 허용. 관리에서 끄기 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>금지어</strong> — 특정 단어 포함 메시지 자동 차단. 기간 설정 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>메시지 삭제</strong> — 꾹 눌러 삭제. 답장도 함께 삭제됨</li>
+                <li>• {t("guideReport")}</li>
+                <li>• {t("guideBlock")}</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>{t("unblock")}</strong> — 관리 → 차단 사용자에서 해제 가능</li>
+                <li>• {t("guidePetition")}</li>
+                <li>• {t("guideBannedWords")}</li>
+                <li>• {t("guideDelete")}</li>
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>특수 기능</h4>
+              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideSpecialTitle")}</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>얼리기</strong> — 일반 채팅 중단. 관리자만 보낼 수 있고 사용자는 DM만 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>라이브</strong> — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제</li>
+                <li>• {t("guideFreeze")}</li>
+                <li>• {t("guideLive")}</li>
               </ul>
             </div>
             <div style={{ padding: "10px 12px", background: "var(--guide-bg)", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--bubble-sent)", lineHeight: 1.5 }}>
-              💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다.
+              {t("guideTip")}
             </div>
           </div>
         )}
