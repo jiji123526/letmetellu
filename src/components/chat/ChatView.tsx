@@ -206,6 +206,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [fullViewImage, setFullViewImage] = useState<string | null>(null);
   const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
@@ -849,12 +850,18 @@ export function ChatView({ channelId }: { channelId: string }) {
                 ) : (
                   <>
                     {msg.image && (
-                      <img
-                        src={msg.image}
-                        alt=""
-                        className="block w-full max-w-[260px] h-auto rounded-[15px]"
-                        style={{ objectFit: "contain" }}
-                      />
+                      <div className="relative inline-block">
+                        <img
+                          src={msg.image}
+                          alt=""
+                          className="block w-full max-w-[260px] h-auto rounded-[15px]"
+                          style={{ objectFit: "contain" }}
+                        />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setFullViewImage(msg.image); }}
+                          style={{ position: "absolute", top: "6px", right: "6px", width: "24px", height: "24px", border: "none", background: "rgba(0,0,0,.5)", color: "#fff", borderRadius: "6px", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
+                        >⤢</button>
+                      </div>
                     )}
                     {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} />}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
@@ -1469,6 +1476,38 @@ export function ChatView({ channelId }: { channelId: string }) {
           notice={(() => { try { return JSON.parse(channel?.notice || "[]"); } catch { return []; } })()}
           onClose={() => setShowNotice(false)}
         />
+      )}
+
+      {/* Full view image overlay */}
+      {fullViewImage && (
+        <div
+          className="fixed inset-0 z-[120] flex flex-col items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
+          style={{ background: "rgba(0,0,0,.85)" }}
+          onClick={() => setFullViewImage(null)}
+        >
+          <img
+            src={fullViewImage}
+            alt=""
+            style={{ maxWidth: "90%", maxHeight: "70%", objectFit: "contain", borderRadius: "8px" }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div style={{ padding: "16px", display: "flex", gap: "12px" }}>
+            <a
+              href={fullViewImage}
+              download
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "none", color: "#fff", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", textDecoration: "none", lineHeight: 1 }}
+            >
+              저장
+            </a>
+            <button
+              onClick={(e) => { e.stopPropagation(); navigator.clipboard.write?.([new ClipboardItem({ "text/plain": new Blob([fullViewImage], { type: "text/plain" }) })]); setBanner({ text: "이미지 URL이 복사되었습니다", color: "#3b8df0" }); setTimeout(() => setBanner(null), 2000); setFullViewImage(null); }}
+              style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "none", color: "#fff", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", lineHeight: 1 }}
+            >
+              복사
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
