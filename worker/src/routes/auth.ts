@@ -22,8 +22,8 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
 
   if (action === "signup") {
     // Check if user already exists
-    const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
-    if (existing) {
+    const existing = await env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?").bind(email).first() as { id: string; password_hash: string | null } | null;
+    if (existing && existing.password_hash) {
       return Response.json({ error: "user_exists" }, { status: 409 });
     }
 
@@ -32,17 +32,20 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "weak_password" }, { status: 400 });
     }
 
-    // Create user
-    const id = crypto.randomUUID();
     const hashedPw = await hashPassword(password);
-    await env.DB.prepare(
-      "INSERT INTO users (id, email, name) VALUES (?, ?, ?)"
-    ).bind(id, email, name || email.split("@")[0]).run();
 
-    // Store password in a separate column (add to schema)
+    if (existing && !existing.password_hash) {
+      // User exists (from OAuth sync) but no password — set it
+      await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(hashedPw, existing.id).run();
+      return Response.json({ ok: true, id: existing.id, email });
+    }
+
+    // Create new user
+    const id = crypto.randomUUID();
     await env.DB.prepare(
-      "UPDATE users SET password_hash = ? WHERE id = ?"
-    ).bind(hashedPw, id).run();
+      "INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)"
+    ).bind(id, email, name || email.split("@")[0], hashedPw).run();
 
     return Response.json({ ok: true, id, email });
   }
