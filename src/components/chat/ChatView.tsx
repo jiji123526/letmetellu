@@ -39,6 +39,8 @@ interface Message {
   dm?: boolean;
   deleted?: boolean;
   edited?: boolean;
+  report?: number;
+  reported_msg_id?: string;
 }
 
 interface Channel {
@@ -739,23 +741,44 @@ export function ChatView({ channelId }: { channelId: string }) {
                   borderRadius: !isReply && isLast
                     ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
                     : "20px",
-                  background: reportedMsgIds.has(msg.id)
-                    ? "#ffe0e0"
-                    : msg.dm
-                      ? (isMine ? "#7b3fa0" : "#ddc8ed")
-                      : isMine
-                        ? bubbleColor
-                        : "var(--gray-bubble)",
-                  color: reportedMsgIds.has(msg.id)
-                    ? "#a00"
-                    : msg.dm
-                      ? (isMine ? "#fff" : "#5a1580")
-                      : isMine ? "#fff" : "var(--gray-text)",
+                  background: msg.report
+                    ? "#ffeaea"
+                    : reportedMsgIds.has(msg.id)
+                      ? "#ffe0e0"
+                      : (effectiveAdmin && !msg.report && allMsgs.some((r) => r.report && r.reported_msg_id === msg.id))
+                        ? "#ffe0e0"
+                        : msg.dm
+                          ? (isMine ? "#7b3fa0" : "#ddc8ed")
+                          : isMine
+                            ? bubbleColor
+                            : "var(--gray-bubble)",
+                  color: msg.report
+                    ? "#c00"
+                    : reportedMsgIds.has(msg.id) || (effectiveAdmin && allMsgs.some((r) => r.report && r.reported_msg_id === msg.id))
+                      ? "#a00"
+                      : msg.dm
+                        ? (isMine ? "#fff" : "#5a1580")
+                        : isMine ? "#fff" : "var(--gray-text)",
+                  cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
                   opacity: reportedMsgIds.has(msg.id) ? 0.6 : undefined,
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   if (!msg.deleted) handleBubbleLongPress(msg, isSent, e.currentTarget);
+                }}
+                onClick={() => {
+                  if (msg.report && msg.reported_msg_id && effectiveAdmin) {
+                    const el = document.getElementById(`msg-${msg.reported_msg_id}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      const bubble = el.querySelector("[class*='relative']") as HTMLElement;
+                      if (bubble) {
+                        bubble.style.outline = "2px solid #d32f2f";
+                        bubble.style.outlineOffset = "2px";
+                        setTimeout(() => { bubble.style.outline = ""; bubble.style.outlineOffset = ""; }, 2000);
+                      }
+                    }
+                  }
                 }}
                 onTouchStart={(e) => { if (!msg.deleted) handleTouchStart(msg, isSent, e.currentTarget); }}
                 onTouchEnd={handleTouchEnd}
