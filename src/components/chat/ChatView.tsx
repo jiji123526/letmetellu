@@ -319,6 +319,14 @@ export function ChatView({ channelId }: { channelId: string }) {
             setInLiveMode(false);
             localStorage.setItem(`liveActive_${channelId}`, "false");
             localStorage.setItem(`inLiveMode_${channelId}`, "false");
+            // Refetch from normal channel since we loaded from _live
+            if (initChannel !== channelId) {
+              fetchInit(channelId).then((d) => {
+                setMessages(d.messages);
+                if (d.dm) setDmMessages(d.dm.map((dm: any) => ({ ...dm, dm: true })));
+                if (d.gallery) setGalleryItems(d.gallery);
+              });
+            }
           }
         }
         // Restore saved bubble color
@@ -332,11 +340,15 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
 
+  // Track inLiveMode in a ref so the subscribe callback always has the latest value
+  const inLiveModeRef = useRef(inLiveMode);
+  useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
+
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-changed" || event.type === "reconnected") {
-        const fetchChannel = inLiveMode ? `${channelId}_live` : channelId;
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchInit(fetchChannel).then((data) => {
           setMessages(data.messages);
           if (data.blocked) setBlockedUsers(data.blocked);
