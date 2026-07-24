@@ -316,6 +316,20 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   }, [subscribe, channelId]);
 
+  // Refetch on tab focus (handles stale WebSocket connections)
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        fetchInit(channelId).then((data) => {
+          setMessages(data.messages);
+          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [channelId]);
+
   // Auto-scroll on new messages
   useEffect(() => {
     if (!showScrollBtn) {
