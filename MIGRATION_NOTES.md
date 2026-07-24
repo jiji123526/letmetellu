@@ -232,3 +232,44 @@ Security:
 - Channel deletion (15 min)
 - Live mode full backend (1-2 hrs)
 - Embeds (1-2 hrs)
+
+
+### Session 2 (2026-07-24)
+
+**Realtime fixed:**
+- Removed ping/pong, switched DO from hibernation API to standard WebSocketPair
+- Connection stays alive without keep-alive messages
+- Refetch on reconnect handles missed broadcasts
+- 5-min stale tab refetch on visibility change
+
+**Send flow simplified:**
+- Removed optimistic updates — wait for server confirmation
+- Input stays on failure (banned word, rate limit, etc.)
+- Error banners for all rejection types
+- No flash of invalid messages
+
+**Features wired to backend:**
+- Image upload: R2 binary upload, auto-insert gallery, gallery panel populated
+- Image full view: expand button, caption, date navigator from gallery
+- Reactions: instant realtime via PATCH + DO broadcast
+- DM: visible in admin view in realtime (dm-changed handler)
+- Block/unblock: toggle from context menu, admin panel shows real blocked list
+- Report: cascade delete (report + reported msg + replies)
+- Report visibility: hidden from non-admin, pink tint on admin-side reported msgs
+- Banned words: add/remove persists to D1, removal by word text
+- Blocked user UX: red input, petition (1 DM), locked after
+- Search: includes DMs for admin
+- Auto-update: version check every 60s, reload when no draft
+
+**Fixes:**
+- Admin messages stored with is_admin=1 (Worker checks owner_uid)
+- Non-admin can't edit/delete others' messages (isOwn = msg.uid === uid)
+- Gallery cross-references messages for caption/date
+- Image+caption bubble padding matches original (4px 4px 0 + 2px 10px 8px)
+- Signup handles existing OAuth users (set password instead of rejecting)
+- Email validation on login/signup forms
+
+**Remaining:**
+- Live mode full backend
+- Embeds (YouTube/link previews)
+- Channel deletion from dashboard

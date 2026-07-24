@@ -4,7 +4,7 @@ Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
 
 ## Status
 
-**Phase 1-4 complete.** Fully functional multi-tenant anonymous chat platform with real-time messaging, auth, admin panel, and server-side security. Ready for MVP testing. Image upload (R2) and polish features remaining.
+**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, and full server-side security. Live mode backend and embeds remaining.
 
 ---
 
