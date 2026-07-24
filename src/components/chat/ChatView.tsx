@@ -1249,6 +1249,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showGallery && (
         <GalleryPanel
           items={galleryItems}
+          onViewImage={(src) => setFullViewImage(src)}
           onClose={() => setShowGallery(false)}
         />
       )}
@@ -1481,32 +1482,15 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Full view image overlay */}
       {fullViewImage && (
         <div
-          className="fixed inset-0 z-[120] flex flex-col items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
+          className="fixed inset-0 z-[120] flex items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
           style={{ background: "rgba(0,0,0,.85)" }}
           onClick={() => setFullViewImage(null)}
         >
           <img
             src={fullViewImage}
             alt=""
-            style={{ maxWidth: "90%", maxHeight: "70%", objectFit: "contain", borderRadius: "8px" }}
-            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "90%", maxHeight: "80%", objectFit: "contain", borderRadius: "8px" }}
           />
-          <div style={{ padding: "16px", display: "flex", gap: "12px" }}>
-            <a
-              href={fullViewImage}
-              download
-              onClick={(e) => e.stopPropagation()}
-              style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "none", color: "#fff", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", textDecoration: "none", lineHeight: 1 }}
-            >
-              저장
-            </a>
-            <button
-              onClick={(e) => { e.stopPropagation(); navigator.clipboard.write?.([new ClipboardItem({ "text/plain": new Blob([fullViewImage], { type: "text/plain" }) })]); setBanner({ text: "이미지 URL이 복사되었습니다", color: "#3b8df0" }); setTimeout(() => setBanner(null), 2000); setFullViewImage(null); }}
-              style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "none", color: "#fff", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", lineHeight: 1 }}
-            >
-              복사
-            </button>
-          </div>
         </div>
       )}
     </div>
