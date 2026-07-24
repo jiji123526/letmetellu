@@ -644,6 +644,58 @@ export function ChatView({ channelId }: { channelId: string }) {
     setShowScrollBtn(false);
   };
 
+  // Scroll to a specific message by ID — loads older messages if needed
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  const scrollToMessage = useCallback(async (msgId: string) => {
+    // Try to find it in current DOM
+    let el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.transition = "background .3s";
+      el.style.background = "color-mix(in srgb, var(--bubble-sent) 15%, transparent)";
+      setTimeout(() => { el!.style.background = ""; }, 2000);
+      return;
+    }
+
+    // Not loaded — load older messages until found
+    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+    let attempts = 0;
+
+    while (attempts < 20) {
+      const current = messagesRef.current;
+      if (current.length === 0) break;
+      const oldest = current[0];
+      if (!oldest?.created_at) break;
+
+      const data = await fetchMessages(fetchChannel, oldest.created_at);
+      if (!data.messages || data.messages.length === 0) break;
+
+      setMessages((prev) => {
+        const ids = new Set(prev.map((m) => m.id));
+        const older = data.messages.filter((m: Message) => !ids.has(m.id));
+        return [...older, ...prev];
+      });
+
+      // Wait for React render
+      await new Promise((r) => setTimeout(r, 100));
+
+      el = document.getElementById(`msg-${msgId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.transition = "background .3s";
+        el.style.background = "color-mix(in srgb, var(--bubble-sent) 15%, transparent)";
+        setTimeout(() => { el!.style.background = ""; }, 2000);
+        return;
+      }
+      attempts++;
+    }
+
+    setBanner({ text: "Message not found", color: "var(--meta)" });
+    setTimeout(() => setBanner(null), 2000);
+  }, [channelId]);
+
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -895,6 +947,12 @@ export function ChatView({ channelId }: { channelId: string }) {
           borderBottom: "0.5px solid var(--hairline)",
           padding: "10px 16px",
           zIndex: 5,
+          cursor: "pointer",
+        }}
+        onClick={(e) => {
+          // Scroll to top unless clicking a button/link
+          if ((e.target as HTMLElement).closest("button, a")) return;
+          messagesContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
         }}
       >
         {/* Notice button — only show if rules exist */}
@@ -1584,6 +1642,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showLinks && (
         <LinksPanel
           messages={messages}
+          onNavigate={(msgId) => { setShowLinks(false); setTimeout(() => scrollToMessage(msgId), 100); }}
           onClose={() => setShowLinks(false)}
         />
       )}
@@ -1865,12 +1924,10 @@ export function ChatView({ channelId }: { channelId: string }) {
               {fullViewImage.date && fullViewImage.msgId && fullViewImage.fromGallery && (
                 <button
                   onClick={() => {
+                    const msgId = fullViewImage.msgId!;
                     setFullViewImage(null);
                     setShowGallery(false);
-                    setTimeout(() => {
-                      const el = document.getElementById(`msg-${fullViewImage.msgId}`);
-                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-                    }, 100);
+                    setTimeout(() => scrollToMessage(msgId), 100);
                   }}
                   style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.3)", color: "#fff", fontSize: "calc(var(--bubble-font-size) - 2px)", padding: "6px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
                 >
