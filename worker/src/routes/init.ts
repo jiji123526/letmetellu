@@ -50,8 +50,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   // Fetch recent messages (from the requested channel — live or normal)
   const { results: messages } = await env.DB.prepare(
-    "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND deleted = 0 ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
-  ).bind(channelId).all();
+    "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+  ).bind(channelId, channelId).all();
 
   // Fetch blocked users (from parent channel)
   const { results: blocked } = await env.DB.prepare(

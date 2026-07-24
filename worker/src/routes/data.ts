@@ -36,8 +36,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const cursor = url.searchParams.get("cursor");
       const limit = 50;
 
-      let innerQuery = "SELECT * FROM messages WHERE channel_id = ? AND deleted = 0";
-      const params: unknown[] = [channelId];
+      let innerQuery = "SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL)))";
+      const params: unknown[] = [channelId, channelId];
 
       if (cursor) {
         innerQuery += " AND created_at < ?";
