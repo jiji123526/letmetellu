@@ -6,6 +6,7 @@ import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
+import { useLocale } from "@/hooks/useLocale";
 import { ContextMenu } from "./ContextMenu";
 import { ReactionBadge } from "./ReactionBadge";
 import { ReplyBar } from "./ReplyBar";
@@ -215,6 +216,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
+  const { t } = useLocale();
   const [manualAdmin, setManualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("isAdmin") === "true";
@@ -230,8 +232,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     return localStorage.getItem(`inLiveMode_${channelId}`) === "true";
   });
   const [liveTitle, setLiveTitle] = useState(() => {
-    if (typeof window === "undefined") return "라이브";
-    return localStorage.getItem(`liveTitle_${channelId}`) || "라이브";
+    if (typeof window === "undefined") return t("liveTitle");
+    return localStorage.getItem(`liveTitle_${channelId}`) || t("liveTitle");
   });
   const [liveSessionId, setLiveSessionId] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -309,9 +311,9 @@ export function ChatView({ channelId }: { channelId: string }) {
         // Load live status from server
         if (data.live && data.live.active) {
           setLiveActive(true);
-          setLiveTitle(data.live.title || "라이브");
+          setLiveTitle(data.live.title || t("liveTitle"));
           localStorage.setItem(`liveActive_${channelId}`, "true");
-          localStorage.setItem(`liveTitle_${channelId}`, data.live.title || "라이브");
+          localStorage.setItem(`liveTitle_${channelId}`, data.live.title || t("liveTitle"));
           if (data.live.sessionId) {
             setLiveSessionId(data.live.sessionId);
             localStorage.setItem(`liveSession_${channelId}`, data.live.sessionId);
@@ -382,7 +384,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         const id = event.message_id as string;
         if (event.soft) {
           setMessages((prev) => prev.map((m) =>
-            m.id === id ? { ...m, deleted: true, text: "삭제된 채팅입니다", image: null } : m
+            m.id === id ? { ...m, deleted: true, text: t("deletedMessage"), image: null } : m
           ));
         } else {
           setMessages((prev) => prev.filter((m) => m.id !== id));
@@ -454,10 +456,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "live-started") {
         const sessionId = (event.sessionId as string) || "";
         setLiveActive(true);
-        setLiveTitle((event.title as string) || "라이브");
+        setLiveTitle((event.title as string) || t("liveTitle"));
         setLiveSessionId(sessionId);
         localStorage.setItem(`liveActive_${channelId}`, "true");
-        localStorage.setItem(`liveTitle_${channelId}`, (event.title as string) || "라이브");
+        localStorage.setItem(`liveTitle_${channelId}`, (event.title as string) || t("liveTitle"));
         localStorage.setItem(`liveSession_${channelId}`, sessionId);
         // Show popup only if not already in live mode and haven't dismissed this session
         if (!inLiveModeRef.current) {
@@ -534,7 +536,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     // Blocked user handling
     if (isUserBlocked) {
       if (hasPetitioned || !petitionEnabled) {
-        setBanner({ text: "차단되어 채팅을 보낼 수 없습니다", color: "#d32f2f" });
+        setBanner({ text: t("blocked"), color: "#d32f2f" });
         setTimeout(() => setBanner(null), 3000);
         return;
       }
@@ -545,7 +547,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       const reason = blockEntry?.reason ? `\n[차단 사유: "${blockEntry.reason}"]` : "";
       sendDm({ uid, text: `[이의 제기] ${text}${reason}`, channel_id: inLiveMode ? `${channelId}_live` : channelId });
       localStorage.setItem("petitionSent", uid);
-      setBanner({ text: "이의 제기가 전송되었습니다", color: "#d32f2f" });
+      setBanner({ text: t("petitionSent"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
       return;
     }
@@ -561,7 +563,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       setDmMode(false);
-      setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
+      setBanner({ text: t("sentToAdmin"), color: "#7b3fa0" });
       setTimeout(() => setBanner(null), 3000);
       const dmChannelId = inLiveMode ? `${channelId}_live` : channelId;
       const dmImage = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId) || undefined : undefined;
@@ -586,12 +588,12 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (res.error) {
       // Keep input on failure
       if (photos.length > 0) setPendingPhotos(photos);
-      if (res.error === "message_too_long") setBanner({ text: "메시지가 너무 깁니다 (최대 5000자)", color: "#d32f2f" });
-      else if (res.error === "banned_word") setBanner({ text: "금지어가 포함되어 전송할 수 없습니다", color: "#d32f2f" });
-      else if (res.error === "rate_limited") setBanner({ text: "너무 빠르게 보내고 있습니다", color: "#d32f2f" });
-      else if (res.error === "blocked") setBanner({ text: "차단되어 전송할 수 없습니다", color: "#d32f2f" });
-      else if (res.error === "channel frozen") setBanner({ text: "채팅이 얼려져 있습니다", color: "#4a4d8f" });
-      else setBanner({ text: "전송 실패", color: "#d32f2f" });
+      if (res.error === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
+      else if (res.error === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
+      else if (res.error === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
+      else if (res.error === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
+      else if (res.error === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+      else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
     }
     // On success: clear input, DO broadcasts message-changed → refetch shows the message
@@ -661,7 +663,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       const newAdmin = !manualAdmin;
       setManualAdmin(newAdmin);
       localStorage.setItem("isAdmin", String(newAdmin));
-      setBanner({ text: newAdmin ? "관리자 모드 활성화" : "관리자 모드 해제", color: newAdmin ? "#3b8df0" : "var(--meta)" });
+      setBanner({ text: newAdmin ? t("adminModeOn") : t("adminModeOff"), color: newAdmin ? "#3b8df0" : "var(--meta)" });
       setTimeout(() => setBanner(null), 2000);
     }
   };
@@ -683,7 +685,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (hasReplies) {
       // Soft delete — keep message but mark as deleted
       setMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, text: "삭제된 채팅입니다", image: null, deleted: true } as Message : m))
+        prev.map((m) => (m.id === msgId ? { ...m, text: t("deletedMessage"), image: null, deleted: true } as Message : m))
       );
     } else {
       // Hard delete — remove completely
@@ -853,7 +855,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             color: bubbleColor,
           }}
         >
-          <span>사용자 시점으로 보는 중</span>
+          <span>{t("viewingAsUser")}</span>
           <button
             className="border-none rounded-lg cursor-pointer"
             style={{
@@ -865,7 +867,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             }}
             onClick={() => setAdminViewAsUser(false)}
           >
-            관리자로 돌아가기
+            {t("returnToAdmin")}
           </button>
         </div>
       )}
@@ -905,7 +907,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Offline banner */}
       {!connected && !loading && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 12px", background: "#fff3e0", borderBottom: "0.5px solid #ffe0b2", flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "#e65100", lineHeight: 1 }}>
-          <span>연결이 끊어졌습니다. 재연결 중...</span>
+          <span>{t("connectionLost")}</span>
         </div>
       )}
 
@@ -1016,7 +1018,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 onTouchMove={handleTouchEnd}
               >
                 {msg.deleted ? (
-                  <span style={{ fontStyle: "italic", opacity: 0.5 }}>삭제된 채팅입니다</span>
+                  <span style={{ fontStyle: "italic", opacity: 0.5 }}>{t("deletedMessage")}</span>
                 ) : (
                   <>
                     {msg.image && (
@@ -1034,7 +1036,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                       </div>
                     )}
                     {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} />}
-                    {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(수정됨)</span>}
+                    {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
                   </>
                 )}
               </div>
@@ -1243,14 +1245,14 @@ export function ChatView({ channelId }: { channelId: string }) {
               rows={1}
               placeholder={
                 (channel?.is_frozen && !effectiveAdmin && !dmMode)
-                  ? "채팅이 얼려져 있습니다 🧊"
+                  ? t("frozenInput")
                   : isUserBlocked
-                    ? (hasPetitioned || !petitionEnabled ? "차단된 사용자입니다" : "이의 제기 (기회 1회)")
+                    ? (hasPetitioned || !petitionEnabled ? t("blockedInput") : t("petitionInput"))
                     : (channel?.is_frozen && effectiveAdmin)
-                      ? "얼려짐 🧊"
+                      ? t("frozenInput")
                       : dmMode
-                        ? "관리자에게 보내기"
-                        : "메시지를 입력하세요"
+                        ? t("sentToAdmin")
+                        : t("messageInput")
               }
               className="flex-1 border-none bg-transparent outline-none resize-none"
               style={{
@@ -1320,7 +1322,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             });
             const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
             sendMessageApi({ uid, text: `🚨 신고된 채팅: "${preview}"`, channel_id: channelId, report: true, reported_msg_id: msgId } as any);
-            setBanner({ text: "신고가 접수되었습니다", color: "#d32f2f" });
+            setBanner({ text: t("report"), color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           onUnreport={!effectiveAdmin && !contextMenu.isOwn ? () => {
@@ -1337,7 +1339,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               deleteMessage({ uid, message_id: reportMsg.id, channel_id: channelId, soft: false });
               setMessages((prev) => prev.filter((m) => m.id !== reportMsg.id));
             }
-            setBanner({ text: "신고가 취소되었습니다", color: "var(--meta)" });
+            setBanner({ text: t("unreport"), color: "var(--meta)" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           isReported={reportedMsgIds.has(contextMenu.msg.id)}
@@ -1363,7 +1365,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               else adminAction("delete-message", channelId, { message_id: id });
             });
             setDmMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
-            setBanner({ text: "메시지가 삭제되었습니다", color: "#d32f2f" });
+            setBanner({ text: t("delete"), color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           onEdit={contextMenu.isOwn ? (msgId) => {
@@ -1459,13 +1461,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           onFreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
             adminAction("freeze", channelId, { frozen: true });
-            setBanner({ text: "채팅이 얼려졌습니다 🧊", color: "#4a4d8f" });
+            setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onUnfreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
             adminAction("freeze", channelId, { frozen: false });
-            setBanner({ text: "채팅이 해제되었습니다", color: bubbleColor });
+            setBanner({ text: t("chatUnfrozen"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onToggleView={() => setAdminViewAsUser(true)}
@@ -1475,7 +1477,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               setLiveActive(false);
               setInLiveMode(false);
               fetchInit(channelId).then((data) => { setMessages(data.messages); });
-              setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
+              setBanner({ text: t("liveEnded"), color: "#c0392b" });
               setTimeout(() => setBanner(null), 3000);
             } else {
               // Show title prompt
@@ -1484,12 +1486,12 @@ export function ChatView({ channelId }: { channelId: string }) {
           }}
           onPetitionToggle={() => {
             setPetitionEnabled(!petitionEnabled);
-            setBanner({ text: !petitionEnabled ? "이의 제기가 허용됩니다" : "이의 제기가 차단됩니다", color: !petitionEnabled ? "#2a9d4e" : "#c0392b" });
+            setBanner({ text: !petitionEnabled ? t("petitionAllowed") : t("petitionBlocked"), color: !petitionEnabled ? "#2a9d4e" : "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onDmToggle={() => {
             setDmEnabled(!dmEnabled);
-            setBanner({ text: !dmEnabled ? "비밀 메시지가 허용됩니다" : "비밀 메시지가 차단됩니다", color: !dmEnabled ? "#2a9d4e" : "#c0392b" });
+            setBanner({ text: !dmEnabled ? t("dmAllowed") : t("dmBlocked"), color: !dmEnabled ? "#2a9d4e" : "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onColorChange={(color) => {
@@ -1501,32 +1503,32 @@ export function ChatView({ channelId }: { channelId: string }) {
           onNameChange={(name) => {
             setChannel((prev) => prev ? { ...prev, name } : null);
             adminAction("update-profile", channelId, { name });
-            setBanner({ text: "채널 이름이 변경되었습니다", color: bubbleColor });
+            setBanner({ text: t("nameChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onProfileImageChange={(url) => {
             setChannel((prev) => prev ? { ...prev, profile_image: url } : null);
             adminAction("update-profile", channelId, { profile_image: url });
-            setBanner({ text: "프로필 사진이 변경되었습니다", color: bubbleColor });
+            setBanner({ text: t("profileChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onNoticeChange={(noticeStr) => {
             setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
             adminAction("set-rules", channelId, { rules: noticeStr });
-            setBanner({ text: "채널 규칙이 저장되었습니다", color: bubbleColor });
+            setBanner({ text: t("rulesChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onWelcomeChange={(config) => {
             setWelcomeConfig(config);
             localStorage.setItem(`welcomeConfig_${channelId}`, config);
             adminAction("set-welcome", channelId, { config });
-            setBanner({ text: "환영 팝업이 저장되었습니다", color: bubbleColor });
+            setBanner({ text: t("welcomeChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onUnblock={(blockUid) => {
             adminAction("unblock", channelId, { uid: blockUid });
             setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
-            setBanner({ text: "차단이 해제되었습니다", color: "#2a9d4e" });
+            setBanner({ text: t("chatUnfrozen"), color: "#2a9d4e" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onClose={() => setShowAdminPanel(false)}
@@ -1588,7 +1590,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.setItem(`liveActive_${channelId}`, "true");
             localStorage.setItem(`inLiveMode_${channelId}`, "true");
             localStorage.setItem(`liveTitle_${channelId}`, title);
-            setBanner({ text: "라이브가 시작되었습니다", color: "#c0392b" });
+            setBanner({ text: t("liveStarted"), color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
             const res = await adminAction("start-live", channelId, { title }) as any;
             if (res?.sessionId) {
@@ -1603,9 +1605,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* End Live Confirm */}
       {showEndLiveConfirm && (
         <ConfirmDialog
-          title="라이브 종료"
-          message="라이브를 종료하시겠습니까?<br>모든 메시지가 삭제됩니다."
-          confirmLabel="종료"
+          title={t("liveEndTitle")}
+          message={t("liveEndMessage")}
+          confirmLabel={t("liveEndBtn")}
           confirmColor="#c0392b"
           onConfirm={async () => {
             setShowEndLiveConfirm(false);
@@ -1674,14 +1676,14 @@ export function ChatView({ channelId }: { channelId: string }) {
               setActiveNotice("");
               localStorage.removeItem(`activeNotice_${channelId}`);
               adminAction("set-notice", channelId, { text: "" });
-              setBanner({ text: "공지가 삭제되었습니다", color: "var(--meta)" });
+              setBanner({ text: t("noticePosted"), color: "var(--meta)" });
             } else {
               const notice = body ? JSON.stringify({ title, body }) : title;
               setActiveNotice(notice);
               localStorage.setItem(`activeNotice_${channelId}`, notice);
               localStorage.removeItem(`noticeDismissed_${channelId}`);
               adminAction("set-notice", channelId, { text: notice });
-              setBanner({ text: "공지가 등록되었습니다", color: bubbleColor });
+              setBanner({ text: t("noticePosted"), color: bubbleColor });
             }
             setTimeout(() => setBanner(null), 3000);
           }}
