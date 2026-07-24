@@ -10,10 +10,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) { setError("모든 필드를 입력해주세요"); return; }
+    if (!isValidEmail(email)) { setError("올바른 이메일을 입력해주세요"); return; }
 
     const result = await signIn("credentials", { email, password, redirect: false });
     if (result?.error) {
@@ -27,6 +30,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     if (!email || !password) { setError("모든 필드를 입력해주세요"); return; }
+    if (!isValidEmail(email)) { setError("올바른 이메일을 입력해주세요"); return; }
     if (password.length < 8 || !/\d/.test(password)) { setError("비밀번호는 8자 이상, 숫자를 포함해야 합니다"); return; }
 
     // Create account on Worker
