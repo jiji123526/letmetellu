@@ -125,6 +125,78 @@ function LinkPreviewCard({ url }: { url: string }) {
   );
 }
 
+function TwitterEmbed({ url }: { url: string }) {
+  const tweetId = url.match(/status\/(\d+)/)?.[1];
+  if (!tweetId) return null;
+
+  return (
+    <div
+      style={{ maxWidth: "320px", marginTop: "6px", minHeight: "80px" }}
+      ref={(el) => {
+        if (!el || el.dataset.rendered) return;
+        el.dataset.rendered = "1";
+
+        const render = () => {
+          if ((window as any).twttr?.widgets?.createTweet) {
+            (window as any).twttr.widgets.createTweet(tweetId, el, {
+              theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
+              conversation: "none",
+              width: 320,
+            });
+          }
+        };
+
+        if ((window as any).twttr?.widgets) {
+          render();
+        } else {
+          if (!document.getElementById("twitter-wjs")) {
+            const script = document.createElement("script");
+            script.id = "twitter-wjs";
+            script.src = "https://platform.twitter.com/widgets.js";
+            script.async = true;
+            document.body.appendChild(script);
+          }
+          const w = (window as any);
+          (w.twttr = w.twttr || { _e: [] })._e.push(render);
+        }
+      }}
+    />
+  );
+}
+
+function InstagramEmbed({ url }: { url: string }) {
+  return (
+    <div
+      style={{ maxWidth: "320px", marginTop: "6px" }}
+      ref={(el) => {
+        if (!el || el.dataset.rendered) return;
+        el.dataset.rendered = "1";
+
+        el.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:320px;width:100%;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
+
+        const process = () => {
+          if ((window as any).instgrm?.Embeds?.process) {
+            (window as any).instgrm.Embeds.process();
+          }
+        };
+
+        if ((window as any).instgrm) {
+          process();
+        } else if (!document.getElementById("insta-embed-js")) {
+          const script = document.createElement("script");
+          script.id = "insta-embed-js";
+          script.src = "https://www.instagram.com/embed.js";
+          script.async = true;
+          script.onload = process;
+          document.body.appendChild(script);
+        } else {
+          setTimeout(process, 1000);
+        }
+      }}
+    />
+  );
+}
+
 // Main export: renders embeds for URLs found in message text
 export function MessageEmbeds({ text }: { text: string }) {
   const urls = text.match(URL_REGEX);
@@ -140,9 +212,13 @@ export function MessageEmbeds({ text }: { text: string }) {
         if (YOUTUBE_REGEX.test(url)) {
           return <YouTubeEmbed key={url} url={url} />;
         }
-        // Twitter/X and Instagram — link preview card (native embeds are heavy/slow)
-        if (TWITTER_REGEX.test(url) || INSTAGRAM_REGEX.test(url)) {
-          return <LinkPreviewCard key={url} url={url} />;
+        // Twitter/X — native widget
+        if (TWITTER_REGEX.test(url)) {
+          return <TwitterEmbed key={url} url={url} />;
+        }
+        // Instagram — native widget
+        if (INSTAGRAM_REGEX.test(url)) {
+          return <InstagramEmbed key={url} url={url} />;
         }
         // Other URLs — OG link preview
         return <LinkPreviewCard key={url} url={url} />;
