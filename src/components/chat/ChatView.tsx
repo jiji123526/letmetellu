@@ -504,7 +504,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       setDmMode(false);
       setBanner({ text: "관리자에게 전송됨", color: "#7b3fa0" });
       setTimeout(() => setBanner(null), 3000);
-      sendDm({ uid, text, channel_id: inLiveMode ? `${channelId}_live` : channelId });
+      const dmChannelId = inLiveMode ? `${channelId}_live` : channelId;
+      const dmImage = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId) || undefined : undefined;
+      sendDm({ uid, text, channel_id: dmChannelId, image: dmImage });
       return;
     }
 
