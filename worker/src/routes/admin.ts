@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { invalidateBannedWordsCache } from "../lib/validation";
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
@@ -176,6 +177,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare(
         "INSERT INTO banned_words (id, word, channel_id, expires) VALUES (?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), word, channel_id, expires || null).run();
+      invalidateBannedWordsCache(channel_id);
       return Response.json({ ok: true });
     }
 
@@ -184,6 +186,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       if (!word) return Response.json({ error: "missing word" }, { status: 400 });
       await env.DB.prepare("DELETE FROM banned_words WHERE word = ? AND channel_id = ?")
         .bind(word, channel_id).run();
+      invalidateBannedWordsCache(channel_id);
       return Response.json({ ok: true });
     }
 

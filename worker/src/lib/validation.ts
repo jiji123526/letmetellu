@@ -34,19 +34,32 @@ export function checkMessageLength(text: string): boolean {
   return text.length <= MAX_MESSAGE_LENGTH;
 }
 
-// Banned words check
-export async function checkBannedWords(text: string, channelId: string, env: Env): Promise<boolean> {
-  const { results } = await env.DB.prepare(
-    "SELECT word FROM banned_words WHERE channel_id = ? AND (expires IS NULL OR expires > datetime('now'))"
-  ).bind(channelId).all();
+// Banned words check — cached per channel (1 min TTL)
+const bannedWordsCache = new Map<string, { words: string[]; expires: number }>();
 
-  if (!results || results.length === 0) return true;
+export function invalidateBannedWordsCache(channelId: string) {
+  bannedWordsCache.delete(channelId);
+}
+
+export async function checkBannedWords(text: string, channelId: string, env: Env): Promise<boolean> {
+  const now = Date.now();
+  let cached = bannedWordsCache.get(channelId);
+
+  if (!cached || now > cached.expires) {
+    const { results } = await env.DB.prepare(
+      "SELECT word FROM banned_words WHERE channel_id = ? AND (expires IS NULL OR expires > datetime('now'))"
+    ).bind(channelId).all();
+
+    const words = (results || []).map((r) => (r.word as string).toLowerCase());
+    cached = { words, expires: now + 60000 }; // 1 min TTL
+    bannedWordsCache.set(channelId, cached);
+  }
+
+  if (cached.words.length === 0) return true;
 
   const lowerText = text.toLowerCase();
-  for (const row of results) {
-    if (lowerText.includes((row.word as string).toLowerCase())) {
-      return false;
-    }
+  for (const word of cached.words) {
+    if (lowerText.includes(word)) return false;
   }
   return true;
 }

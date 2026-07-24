@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -294,7 +294,6 @@ export function ChatView({ channelId }: { channelId: string }) {
         setMessages(data.messages);
         if (data.blocked) setBlockedUsers(data.blocked);
         if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
-        if (data.gallery) setGalleryItems(data.gallery);
         setLoading(false);
         // Load banner notice from server
         if (data.bannerNotice) {
@@ -331,7 +330,6 @@ export function ChatView({ channelId }: { channelId: string }) {
               fetchInit(channelId).then((d) => {
                 setMessages(d.messages);
                 if (d.dm) setDmMessages(d.dm.map((dm: any) => ({ ...dm, dm: true })));
-                if (d.gallery) setGalleryItems(d.gallery);
               });
             }
           }
@@ -1395,7 +1393,13 @@ export function ChatView({ channelId }: { channelId: string }) {
         <HeaderMenu
           anchorRect={headerMenu}
           onSettings={() => setShowSettings(true)}
-          onGallery={() => setShowGallery(true)}
+          onGallery={() => {
+            setShowGallery(true);
+            const fetchChannel = inLiveMode ? `${channelId}_live` : channelId;
+            fetchGallery(fetchChannel).then((data) => {
+              if (data.gallery) setGalleryItems(data.gallery);
+            });
+          }}
           onLinks={() => setShowLinks(true)}
           onAdmin={effectiveAdmin ? () => setShowAdminPanel(true) : undefined}
           onClose={() => setHeaderMenu(null)}

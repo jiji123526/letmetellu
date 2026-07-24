@@ -28,6 +28,13 @@ export async function fetchDm(channelId: string) {
   return res.json();
 }
 
+export async function fetchGallery(channelId: string) {
+  if (IS_MOCK) return { gallery: [] };
+  const params = new URLSearchParams({ type: "gallery", channel: channelId });
+  const res = await fetch(`${WORKER_URL}/api/data?${params}`);
+  return res.json();
+}
+
 export async function sendMessage(payload: {
   uid: string;
   nick?: string;

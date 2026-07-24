@@ -51,10 +51,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
   ).bind(channelId).all();
 
-  // Fetch gallery items
-  const { results: galleryItems } = await env.DB.prepare(
-    "SELECT * FROM gallery WHERE channel_id = ? ORDER BY created_at DESC LIMIT 100"
-  ).bind(channelId).all();
+  // Gallery fetched on-demand when panel opens (not included in init to save payload)
 
   // Get presence count from DO (always from parent channel where clients connect)
   const doId = env.CHAT_ROOM.idFromName(parentChannelId);
@@ -73,7 +70,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     messages,
     blocked,
     dm: dmMessages || [],
-    gallery: galleryItems || [],
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
     welcomeConfig: welcomeConfig?.text || "",
