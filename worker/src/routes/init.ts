@@ -34,6 +34,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const welcomeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
     .bind(`welcome_${channelId}`, channelId).first();
 
+  // Fetch DM messages (visible to admin only — frontend filters)
+  const { results: dmMessages } = await env.DB.prepare(
+    "SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50"
+  ).bind(channelId).all();
+
   // Get presence count from DO
   const doId = env.CHAT_ROOM.idFromName(channelId);
   const stub = env.CHAT_ROOM.get(doId);
@@ -44,6 +49,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     channel,
     messages: messages.reverse(), // oldest first for display
     blocked,
+    dm: dmMessages ? [...dmMessages].reverse() : [],
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
     welcomeConfig: welcomeConfig?.text || "",

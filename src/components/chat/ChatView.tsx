@@ -192,6 +192,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
+  const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [uid] = useState(getOrCreateUid);
@@ -259,6 +260,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         setChannel(data.channel);
         setMessages(data.messages);
         if (data.blocked) setBlockedUsers(data.blocked);
+        if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
         setLoading(false);
         // Load banner notice from server
         if (data.bannerNotice) {
@@ -685,12 +687,17 @@ export function ChatView({ channelId }: { channelId: string }) {
         style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
       >
         {(() => {
+          // Merge DMs into messages when admin is active
+          const allMsgs = effectiveAdmin
+            ? [...messages, ...dmMessages].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
+            : messages;
+
           // Separate top-level messages and replies (threaded under parent)
           const topLevel: Message[] = [];
           const repliesMap: Record<string, Message[]> = {};
-          const messageIds = new Set(messages.map((m) => m.id));
+          const messageIds = new Set(allMsgs.map((m) => m.id));
 
-          messages.forEach((m) => {
+          allMsgs.forEach((m) => {
             if (m.reply_to && messageIds.has(m.reply_to)) {
               if (!repliesMap[m.reply_to]) repliesMap[m.reply_to] = [];
               repliesMap[m.reply_to].push(m);
