@@ -206,7 +206,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [fullViewImage, setFullViewImage] = useState<string | null>(null);
+  const [fullViewImage, setFullViewImage] = useState<{ src: string; caption?: string; date?: string; msgId?: string } | null>(null);
   const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
@@ -856,7 +856,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                           style={{ objectFit: "contain" }}
                         />
                         <button
-                          onClick={(e) => { e.stopPropagation(); setFullViewImage(msg.image); }}
+                          onClick={(e) => { e.stopPropagation(); setFullViewImage({ src: msg.image!, caption: msg.text || undefined, date: msg.created_at, msgId: msg.id }); }}
                           style={{ position: "absolute", top: "6px", right: "6px", width: "24px", height: "24px", border: "none", background: "rgba(0,0,0,.5)", color: "#fff", borderRadius: "6px", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
                         >⤢</button>
                       </div>
@@ -1247,7 +1247,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showGallery && (
         <GalleryPanel
           items={galleryItems}
-          onViewImage={(src) => setFullViewImage(src)}
+          onViewImage={(src) => setFullViewImage({ src })}
           onClose={() => setShowGallery(false)}
         />
       )}
@@ -1480,15 +1480,39 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Full view image overlay */}
       {fullViewImage && (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
+          className="fixed inset-0 z-[120] flex flex-col items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
           style={{ background: "rgba(0,0,0,.85)" }}
           onClick={() => setFullViewImage(null)}
         >
           <img
-            src={fullViewImage}
+            src={fullViewImage.src}
             alt=""
-            style={{ maxWidth: "90%", maxHeight: "80%", objectFit: "contain", borderRadius: "8px" }}
+            style={{ maxWidth: "90%", maxHeight: "70%", objectFit: "contain", borderRadius: "8px" }}
           />
+          {(fullViewImage.caption || fullViewImage.date) && (
+            <div style={{ textAlign: "center", padding: "12px" }} onClick={(e) => e.stopPropagation()}>
+              {fullViewImage.caption && (
+                <div style={{ color: "#fff", fontSize: "var(--bubble-font-size, 15px)", marginBottom: "8px", textShadow: "0 1px 4px rgba(0,0,0,.5)" }}>
+                  {fullViewImage.caption}
+                </div>
+              )}
+              {fullViewImage.date && fullViewImage.msgId && (
+                <button
+                  onClick={() => {
+                    setFullViewImage(null);
+                    setShowGallery(false);
+                    setTimeout(() => {
+                      const el = document.getElementById(`msg-${fullViewImage.msgId}`);
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }, 100);
+                  }}
+                  style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.3)", color: "#fff", fontSize: "calc(var(--bubble-font-size) - 2px)", padding: "6px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
+                >
+                  {(() => { const d = new Date(fullViewImage.date!); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}`; })()} →
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
