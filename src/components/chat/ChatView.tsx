@@ -319,10 +319,13 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   }, [subscribe, channelId]);
 
-  // Refetch on tab focus (handles stale WebSocket connections)
+  // Refetch on tab focus only if backgrounded for >5 minutes
   useEffect(() => {
+    let lastHidden = 0;
     const handler = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "hidden") {
+        lastHidden = Date.now();
+      } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
         fetchInit(channelId).then((data) => {
           setMessages(data.messages);
           if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
