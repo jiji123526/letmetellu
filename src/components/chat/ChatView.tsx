@@ -37,6 +37,7 @@ interface Message {
   reactions: string;
   reply_to: string | null;
   created_at: string;
+  channel_id?: string;
   dm?: boolean;
   deleted?: boolean;
   edited?: boolean;
@@ -350,20 +351,48 @@ export function ChatView({ channelId }: { channelId: string }) {
   const inLiveModeRef = useRef(inLiveMode);
   useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
 
-  // Debounce refetch to coalesce rapid broadcasts
-  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounce not needed — local patching handles most events, reconnect does full refetch
 
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
-      if (event.type === "message-changed" || event.type === "reconnected") {
-        if (refetchTimer.current) clearTimeout(refetchTimer.current);
-        refetchTimer.current = setTimeout(() => {
-          const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-          fetchMessages(fetchChannel).then((data) => {
-            if (data.messages) setMessages([...data.messages].reverse());
-          }).catch(() => {});
-        }, event.type === "reconnected" ? 0 : 100);
+      // New message — append to local array
+      if (event.type === "message-new") {
+        const msg = event.message as Message;
+        // Only add if it belongs to the channel we're viewing
+        const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        if (msg.channel_id === viewingChannel) {
+          setMessages((prev) => {
+            // Avoid duplicates (e.g. our own message already shown optimistically)
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
+        }
+      }
+      // Message edited — patch text in place
+      if (event.type === "message-edited") {
+        const id = event.message_id as string;
+        setMessages((prev) => prev.map((m) =>
+          m.id === id ? { ...m, text: event.text as string, edited: true } : m
+        ));
+      }
+      // Message deleted — remove or mark as deleted
+      if (event.type === "message-deleted") {
+        const id = event.message_id as string;
+        if (event.soft) {
+          setMessages((prev) => prev.map((m) =>
+            m.id === id ? { ...m, deleted: true, text: "삭제된 채팅입니다", image: null } : m
+          ));
+        } else {
+          setMessages((prev) => prev.filter((m) => m.id !== id));
+        }
+      }
+      // Reconnect or bulk sync — full refetch as safety net
+      if (event.type === "reconnected" || event.type === "messages-sync") {
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        fetchMessages(fetchChannel).then((data) => {
+          if (data.messages) setMessages([...data.messages].reverse());
+        }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
       if (event.type === "reconnected" && inLiveModeRef.current) {
@@ -441,16 +470,16 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   }, [subscribe, channelId, send]);
 
-  // Refetch on tab focus only if backgrounded for >5 minutes
+  // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
     let lastHidden = 0;
     const handler = () => {
       if (document.visibilityState === "hidden") {
         lastHidden = Date.now();
       } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
-        fetchInit(channelId).then((data) => {
-          setMessages(data.messages);
-          if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        fetchMessages(fetchChannel).then((data) => {
+          if (data.messages) setMessages([...data.messages].reverse());
         });
       }
     };

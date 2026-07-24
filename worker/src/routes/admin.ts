@@ -81,7 +81,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "message-changed", channel_id }),
+        body: JSON.stringify({ type: "messages-sync", channel_id }),
       }));
 
       return Response.json({ ok: true });
@@ -96,7 +96,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "message-changed", channel_id }),
+        body: JSON.stringify({ type: "message-deleted", message_id, soft: true }),
       }));
 
       return Response.json({ ok: true });

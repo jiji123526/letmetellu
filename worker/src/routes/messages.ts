@@ -60,14 +60,21 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const broadcastChannelId = (channel_id as string).endsWith("_live")
       ? (channel_id as string).replace(/_live$/, "")
       : channel_id as string;
+    const created_at = new Date().toISOString();
+    const newMessage = {
+      id, uid, auth_uid: uid, nick: nick || null, text: text || "", is_admin: isAdmin,
+      channel_id, image: image || null, reply_to: reply_to || null, fingerprint: fingerprint || null,
+      report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
+      deleted: 0, edited: 0, reactions: "{}", created_at,
+    };
     const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
-      body: JSON.stringify({ type: "message-changed", channel_id }),
+      body: JSON.stringify({ type: "message-new", message: newMessage }),
     }));
 
-    return Response.json({ id, created_at: new Date().toISOString() });
+    return Response.json({ id, created_at });
   }
 
   // DELETE — hard delete (remove message) or soft delete (mark as deleted)
@@ -95,12 +102,15 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         .bind(message_id).run();
     }
 
-    // Broadcast
-    const doId = env.CHAT_ROOM.idFromName(channel_id as string);
+    // Broadcast deletion with payload
+    const broadcastChannelId = (channel_id as string).endsWith("_live")
+      ? (channel_id as string).replace(/_live$/, "")
+      : channel_id as string;
+    const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
-      body: JSON.stringify({ type: "message-changed", channel_id }),
+      body: JSON.stringify({ type: "message-deleted", message_id, soft: !!soft }),
     }));
 
     return Response.json({ ok: true });
@@ -124,12 +134,15 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ?")
       .bind(text, message_id).run();
 
-    // Broadcast
-    const doId = env.CHAT_ROOM.idFromName(channel_id as string);
+    // Broadcast edit with payload
+    const broadcastChannelId = (channel_id as string).endsWith("_live")
+      ? (channel_id as string).replace(/_live$/, "")
+      : channel_id as string;
+    const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
     const stub = env.CHAT_ROOM.get(doId);
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
-      body: JSON.stringify({ type: "message-changed", channel_id }),
+      body: JSON.stringify({ type: "message-edited", message_id, text, edited: true }),
     }));
 
     return Response.json({ ok: true });
