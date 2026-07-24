@@ -32,7 +32,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       }
     }
 
-    if (!isLiveChannel && (channel as any).is_frozen) return Response.json({ error: "channel frozen" }, { status: 403 });
+    // Freeze check — normal: check parent; live: check _live row
+    if (isLiveChannel) {
+      const liveRow = await env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?")
+        .bind(channel_id).first();
+      if (liveRow && (liveRow as any).is_frozen && !isVerifiedAdmin) {
+        return Response.json({ error: "channel frozen" }, { status: 403 });
+      }
+    } else if ((channel as any).is_frozen && !isVerifiedAdmin) {
+      return Response.json({ error: "channel frozen" }, { status: 403 });
+    }
 
     // Rate limit check
     if (!checkRateLimit(uid as string)) {
