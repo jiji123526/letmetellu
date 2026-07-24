@@ -88,6 +88,21 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true });
     }
 
+    case "delete-dm": {
+      const { dm_id } = payload || {};
+      await env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
+        .bind(dm_id, channel_id).run();
+
+      const doId2 = env.CHAT_ROOM.idFromName(channel_id);
+      const stub2 = env.CHAT_ROOM.get(doId2);
+      await stub2.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "dm-changed", channel_id }),
+      }));
+
+      return Response.json({ ok: true });
+    }
+
     case "update-profile": {
       const { name, profile_image, bubble_color } = payload || {};
       const updates: string[] = [];

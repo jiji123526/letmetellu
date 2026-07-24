@@ -485,7 +485,13 @@ export function ChatView({ channelId }: { channelId: string }) {
     // Send to backend
     // Send to backend — admin uses adminAction, non-admin uses ownership-checked endpoint
     if (effectiveAdmin) {
-      adminAction("delete-message", channelId, { message_id: msgId });
+      const msg = messages.find((m) => m.id === msgId) || dmMessages.find((m) => m.id === msgId);
+      if (msg?.dm) {
+        adminAction("delete-dm", channelId, { dm_id: msgId });
+        setDmMessages((prev) => prev.filter((m) => m.id !== msgId));
+      } else {
+        adminAction("delete-message", channelId, { message_id: msgId });
+      }
     } else {
       deleteMessage({ uid, message_id: msgId, channel_id: channelId, soft: hasReplies });
     }
@@ -1119,7 +1125,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             messages.forEach((m) => { if (m.reply_to === msgId) idsToDelete.add(m.id); });
             setMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
             // Delete via admin endpoint
-            idsToDelete.forEach((id) => adminAction("delete-message", channelId, { message_id: id }));
+            idsToDelete.forEach((id) => {
+              const msg = messages.find((m) => m.id === id) || dmMessages.find((m) => m.id === id);
+              if (msg?.dm) adminAction("delete-dm", channelId, { dm_id: id });
+              else adminAction("delete-message", channelId, { message_id: id });
+            });
+            setDmMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
             setBanner({ text: "메시지가 삭제되었습니다", color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
