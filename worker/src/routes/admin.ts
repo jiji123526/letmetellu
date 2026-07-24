@@ -168,6 +168,14 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("UPDATE channels SET notice = ? WHERE id = ?")
         .bind(rulesText, channel_id).run();
 
+      // Broadcast rules change so non-admin sees the ℹ️ icon appear/disappear
+      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "rules-changed", rules: rulesText }),
+      }));
+
       return Response.json({ ok: true });
     }
 

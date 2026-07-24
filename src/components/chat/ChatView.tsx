@@ -472,6 +472,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "notice-changed") {
         setActiveNotice((event.notice as string) || "");
       }
+      if (event.type === "rules-changed") {
+        setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);
+      }
       if (event.type === "emoji-presets-changed") {
         localStorage.setItem(`liveEmojis_${channelId}_live`, event.emojis as string);
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
