@@ -984,7 +984,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               return next;
             });
             const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
-            sendMessageApi({ uid, text: `🚨 신고된 채팅: "${preview}"`, channel_id: channelId });
+            sendMessageApi({ uid, text: `🚨 신고된 채팅: "${preview}"`, channel_id: channelId, report: true, reported_msg_id: msgId } as any);
             setBanner({ text: "신고가 접수되었습니다", color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
@@ -1014,9 +1014,10 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (msg) setEditingMsg({ id: msg.id, text: msg.text });
           } : undefined}
           onBlock={effectiveAdmin && !contextMenu.isOwn ? (blockUid) => {
+            const msg = contextMenu.msg;
+            adminAction("block", channelId, { uid: blockUid, reason: msg.text?.slice(0, 50) || "", fingerprint: "" });
             setBanner({ text: `익명#${blockUid.slice(-4)} 차단됨`, color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
-            // TODO: send to backend
           } : undefined}
           onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
           onClose={() => setContextMenu(null)}

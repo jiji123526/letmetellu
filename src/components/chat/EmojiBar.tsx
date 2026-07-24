@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { adminAction } from "@/lib/api";
 
 const DEFAULT_EMOJIS = ["🍋", "🔥", "❤️", "😂", "👏", "🎉"];
 
@@ -176,6 +177,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
   const save = (next: string[]) => {
     setEmojis(next);
     localStorage.setItem(`liveEmojis_${channelId}_live`, JSON.stringify(next));
+    adminAction("set-emoji-presets", channelId, { emojis: JSON.stringify(next) });
   };
 
   const addEmoji = (emoji: string) => {

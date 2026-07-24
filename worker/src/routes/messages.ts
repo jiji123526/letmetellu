@@ -4,7 +4,7 @@ import { checkRateLimit, checkMessageLength, checkBannedWords } from "../lib/val
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, nick, text, channel_id, image, reply_to, fingerprint } = body;
+    const { uid, nick, text, channel_id, image, reply_to, fingerprint, report, reported_msg_id } = body;
 
     if (!channel_id || !uid) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -42,9 +42,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // Determine if sender is admin (channel owner)
     const isAdmin = (channel as any).owner_uid && uid === (channel as any).owner_uid ? 1 : 0;
     await env.DB.prepare(`
-      INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, uid, uid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null).run();
+      INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, uid, uid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null).run();
 
     // Broadcast via Durable Object
     const doId = env.CHAT_ROOM.idFromName(channel_id as string);
