@@ -660,9 +660,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     let el = document.getElementById(`msg-${msgId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.style.transition = "background .3s";
-      el.style.background = "color-mix(in srgb, var(--bubble-sent) 15%, transparent)";
-      setTimeout(() => { el!.style.background = ""; }, 2000);
+      const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .3s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 2000); }
       return;
     }
 
@@ -691,9 +689,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       el = document.getElementById(`msg-${msgId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.style.transition = "background .3s";
-        el.style.background = "color-mix(in srgb, var(--bubble-sent) 15%, transparent)";
-        setTimeout(() => { el!.style.background = ""; }, 2000);
+        const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .3s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 2000); }
         return;
       }
       attempts++;
@@ -1153,6 +1149,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
             const bubble = (
               <div
+                data-bubble
                 className="relative max-w-full break-words whitespace-pre-wrap select-none"
                 style={{
                   padding: msg.image ? "4px 4px 0" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
