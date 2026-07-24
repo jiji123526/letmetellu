@@ -422,7 +422,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         if (data.emojiPresets) {
           localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);
           try { setEmojiPresets(JSON.parse(data.emojiPresets)); } catch {}
-        } else if (!data.live || !data.live.active) {
+        }
+        // Load petition/dm toggle settings
+        if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
+        if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
+
+        if (!data.live || !data.live.active) {
           // Server says live is not active — reset local state if stale
           if (liveActive || inLiveMode) {
             setLiveActive(false);
@@ -1761,13 +1766,17 @@ export function ChatView({ channelId }: { channelId: string }) {
             }
           }}
           onPetitionToggle={() => {
-            setPetitionEnabled(!petitionEnabled);
-            setBanner({ text: !petitionEnabled ? t("petitionAllowed") : t("petitionBlocked"), color: !petitionEnabled ? "#2a9d4e" : "#c0392b" });
+            const newVal = !petitionEnabled;
+            setPetitionEnabled(newVal);
+            adminAction("set-petition", channelId, { enabled: newVal });
+            setBanner({ text: newVal ? t("petitionAllowed") : t("petitionBlocked"), color: newVal ? "#2a9d4e" : "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onDmToggle={() => {
-            setDmEnabled(!dmEnabled);
-            setBanner({ text: !dmEnabled ? t("dmAllowed") : t("dmBlocked"), color: !dmEnabled ? "#2a9d4e" : "#c0392b" });
+            const newVal = !dmEnabled;
+            setDmEnabled(newVal);
+            adminAction("set-dm", channelId, { enabled: newVal });
+            setBanner({ text: newVal ? t("dmAllowed") : t("dmBlocked"), color: newVal ? "#2a9d4e" : "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
           }}
           onColorChange={(color) => {

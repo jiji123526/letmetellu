@@ -239,6 +239,22 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true });
     }
 
+    case "set-petition": {
+      const { enabled } = payload || {};
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`petition_${channel_id}`, enabled ? "true" : "false", channel_id, enabled ? "true" : "false").run();
+      return Response.json({ ok: true });
+    }
+
+    case "set-dm": {
+      const { enabled } = payload || {};
+      await env.DB.prepare(
+        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
+      ).bind(`dm_${channel_id}`, enabled ? "true" : "false", channel_id, enabled ? "true" : "false").run();
+      return Response.json({ ok: true });
+    }
+
     case "set-emoji-presets": {
       const { emojis } = payload || {};
       await env.DB.prepare(
