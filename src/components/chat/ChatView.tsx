@@ -155,7 +155,7 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
 
   return (
     <>
-      <span style={image ? { display: "block", padding: "6px 10px 0" } : undefined}>
+      <span style={image ? { display: "block", padding: "2px 10px 8px" } : undefined}>
         {content}
         {isLong && (
           <button
@@ -794,7 +794,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               <div
                 className="relative max-w-full break-words whitespace-pre-wrap select-none"
                 style={{
-                  padding: msg.image ? "4px" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                  padding: msg.image ? "4px 4px 0" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
                   fontSize: "var(--bubble-font-size)",
                   lineHeight: 1.38,
                   overflowWrap: "anywhere",
