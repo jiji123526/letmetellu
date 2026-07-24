@@ -22,7 +22,7 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 | Database | Cloudflare D1 (SQLite) | ✅ Schema applied, messages persisting |
 | Realtime | Cloudflare Durable Objects + WebSocket | ✅ Working (multi-tab confirmed) |
 | Auth | Auth.js (NextAuth v5) | ✅ Google OAuth + email/password |
-| Storage | Cloudflare R2 | ⬜ Not enabled yet |
+| Storage | Cloudflare R2 | ✅ Working (upload + serve) |
 | Backend API | Cloudflare Workers | ✅ Full validation (rate limit, banned words, fingerprint) |
 
 ---
