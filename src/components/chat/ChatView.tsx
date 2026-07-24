@@ -483,7 +483,12 @@ export function ChatView({ channelId }: { channelId: string }) {
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
     }
     // Send to backend
-    deleteMessage({ uid, message_id: msgId, channel_id: channelId, soft: hasReplies });
+    // Send to backend — admin uses adminAction, non-admin uses ownership-checked endpoint
+    if (effectiveAdmin) {
+      adminAction("delete-message", channelId, { message_id: msgId });
+    } else {
+      deleteMessage({ uid, message_id: msgId, channel_id: channelId, soft: hasReplies });
+    }
   };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -700,7 +705,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           // Merge DMs into messages when admin is active
           const allMsgs = effectiveAdmin
             ? [...messages, ...dmMessages].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
-            : messages;
+            : messages.filter((m) => !m.report);
 
           // Separate top-level messages and replies (threaded under parent)
           const topLevel: Message[] = [];
@@ -1107,6 +1112,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             const idsToDelete = new Set([msgId]);
             messages.forEach((m) => { if (m.reply_to === msgId) idsToDelete.add(m.id); });
             setMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
+            // Delete via admin endpoint
+            idsToDelete.forEach((id) => adminAction("delete-message", channelId, { message_id: id }));
             setBanner({ text: "메시지가 삭제되었습니다", color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
