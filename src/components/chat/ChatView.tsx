@@ -554,8 +554,9 @@ export function ChatView({ channelId }: { channelId: string }) {
           setInLiveMode(false);
           localStorage.setItem(`inLiveMode_${channelId}`, "false");
           setShowLiveEnded(true);
-          // Refetch normal messages, DMs, and notice
+          // Refetch normal channel state (messages, DMs, notice, freeze state)
           fetchInit(channelId).then((data) => {
+            setChannel(data.channel);
             setMessages(data.messages);
             setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
             setActiveNotice(data.bannerNotice || "");
@@ -1113,8 +1114,9 @@ export function ChatView({ channelId }: { channelId: string }) {
               // Non-admin just leaves live mode (live continues for others)
               setInLiveMode(false);
               localStorage.setItem(`inLiveMode_${channelId}`, "false");
-              // Refetch normal channel messages and notice
+              // Refetch normal channel state (messages, notice, freeze)
               fetchInit(channelId).then((data) => {
+                setChannel(data.channel);
                 setMessages(data.messages);
                 setActiveNotice(data.bannerNotice || "");
               });
@@ -1872,6 +1874,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.removeItem(`liveSession_${channelId}`);
             await adminAction("end-live", channelId);
             fetchInit(channelId).then((data) => {
+              setChannel(data.channel);
               setMessages(data.messages);
               setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
               setActiveNotice(data.bannerNotice || "");
