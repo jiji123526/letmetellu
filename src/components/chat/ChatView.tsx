@@ -191,6 +191,7 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
+  const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [uid] = useState(getOrCreateUid);
@@ -257,6 +258,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       .then((data) => {
         setChannel(data.channel);
         setMessages(data.messages);
+        if (data.blocked) setBlockedUsers(data.blocked);
         setLoading(false);
         // Load banner notice from server
         if (data.bannerNotice) {
@@ -1139,7 +1141,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           dmEnabled={dmEnabled}
           notice={channel?.notice || "[]"}
           welcomeConfig={welcomeConfig}
-          blockedUsers={[]}
+          blockedUsers={blockedUsers}
           onFreeze={() => {
             setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
             adminAction("freeze", channelId, { frozen: true });
@@ -1207,10 +1209,11 @@ export function ChatView({ channelId }: { channelId: string }) {
             setBanner({ text: "환영 팝업이 저장되었습니다", color: "#3b8df0" });
             setTimeout(() => setBanner(null), 3000);
           }}
-          onUnblock={(uid) => {
+          onUnblock={(blockUid) => {
+            adminAction("unblock", channelId, { uid: blockUid });
+            setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
             setBanner({ text: "차단이 해제되었습니다", color: "#2a9d4e" });
             setTimeout(() => setBanner(null), 3000);
-            // TODO: call backend to unblock
           }}
           onClose={() => setShowAdminPanel(false)}
         />
