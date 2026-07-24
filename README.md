@@ -4,7 +4,7 @@ Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
 
 ## Status
 
-**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, live mode, i18n (Korean + English), and full server-side security. Embeds and platform features remaining.
+**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, live mode, embeds (YouTube/Twitter/Instagram/link previews), passcode-protected channels, i18n (Korean + English), and full server-side security. Platform features remaining.
 
 ---
 
@@ -122,12 +122,19 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 
 ### Phase 3: Media & Polish
 - [x] Enable R2, wire image upload
-- [ ] Embeds (YouTube, Twitter, Instagram, link previews)
+- [x] Embeds (YouTube iframe, Twitter/Instagram native widgets, OG link preview cards)
 - [x] Search (FTS5 via Worker)
 - [x] Long message truncation (>1000 chars)
-- [ ] Typing indicator
 - [x] Offline/reconnection banner
 - [x] Auto-reload stale tabs
+- [x] URL linkification (clickable links in messages, bare domain detection)
+- [x] Scroll-up to load older messages (cursor-based pagination)
+- [x] Gallery load-more (scroll-down pagination)
+- [x] Links panel with OG previews + load-more from server
+- [x] Header tap-to-scroll-top
+- [x] Gallery/links → navigate to source message (with history loading)
+- [x] Multiline input (Enter = new line on mobile, send on desktop)
+- [x] Responsive embeds (aspect-ratio for mobile)
 
 ### Phase 3.5: Live Mode ✅
 - [x] Start/end live (admin action → D1 config + DO broadcast)
@@ -139,12 +146,15 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Session tracking (liveSeen prevents re-popup on dismiss)
 - [x] localStorage persistence (survives page refresh)
 - [x] Live-only viewer count (join-live/leave-live DO tracking)
-- [x] Emoji bar with preset emojis (admin-configurable)
+- [x] Emoji bar with preset emojis (admin-configurable via emoji picker)
 - [x] Emoji presets synced to all clients in real-time (broadcast)
 - [x] Emoji effects broadcast via WebSocket
 - [x] Admin "종료" ends for everyone, non-admin "나가기" only leaves
 - [x] Live-ended popup shown to all users including admin
 - [x] Stale closure fixes (inLiveModeRef for all subscribe handlers)
+- [x] Live-only freeze (separate from normal chat, session-only)
+- [x] Live-only notice banner (separate from normal chat, auto-deleted)
+- [x] Blocked users: emoji bar + plus menu disabled in live
 
 ### Phase 3.6: Performance ✅
 - [x] Broadcast payload — zero DB queries per event (message-new, edited, deleted, reaction, dm, profile, rules)
@@ -164,6 +174,13 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Admin message spoofing prevented (session-verified proxy for admin sends)
 - [x] DM broadcasts private (only admin-authenticated WebSocket connections receive DMs)
 - [x] WebSocket admin auth via `/api/ws-token` endpoint (session + ownership verified)
+- [x] Channel passcode: server-side JWT gate (7-day token, hash-validated)
+- [x] Passcode gate on ALL endpoints (init, data, messages, DM, upload)
+- [x] Passcode brute-force rate limiting (5/min per channel)
+- [x] Passcode change instantly invalidates all tokens (hash mismatch)
+- [x] Admin auto-bypasses passcode (session-verified via Vercel proxy)
+- [x] Passcode cache (30s TTL) — minimal DB overhead
+- [x] Anonymous users skip Vercel proxy (direct Worker, faster)
 
 ### Phase 3.8: Internationalization ✅
 - [x] Locale system (ko.ts + en.ts, 200+ keys)
@@ -174,8 +191,17 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] HeaderMenu, PlusMenu, ContextMenu migrated
 - [x] AdminPanel fully migrated (menus, forms, guide)
 
+### Phase 3.9: Real-time & Polish ✅
+- [x] Block/unblock immediately reflected for affected user (broadcast)
+- [x] Petition/DM toggle immediately reflected for non-admin (broadcast)
+- [x] Admin delete = hard delete (removes message + replies from DB)
+- [x] Non-admin soft-delete preserves placeholder for threaded replies
+- [x] Soft-deleted messages with replies persist across refresh
+- [x] Petition/DM toggle settings persist to backend (D1 config)
+- [x] Plus menu disabled for blocked users (except petition)
+- [x] Live viewer badge positioned correctly (no overlap with banners)
+
 ### Phase 4: Platform
-- [ ] Embeds (YouTube, Twitter, Instagram, link previews)
 - [ ] Typing indicator
 - [ ] Channel deletion from dashboard
 - [ ] Channel discovery

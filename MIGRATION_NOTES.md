@@ -392,8 +392,61 @@ Other fixes:
 - Migrated components: ChatView, SettingsPanel, HeaderMenu, PlusMenu, ContextMenu, AdminPanel
 - All banners, menus, dialogs, admin guide now support English
 
+**Embeds:**
+- YouTube: responsive iframe with aspect-ratio (16/9, 9/16 for shorts)
+- Twitter: native widget (twttr.widgets.createTweet, dark mode support)
+- Instagram: native embed (instgrm.Embeds.process)
+- Other URLs: OG link preview cards (image + title + description)
+- Worker /api/preview endpoint for OG meta scraping (YouTube via noembed, Twitter via fxtwitter)
+- URL linkification: clickable links in messages, bare domain detection (www., common TLDs)
+- Smart URL hiding: embed URLs hidden from text, non-embedded URLs stay clickable
+- Responsive: all embeds use 100% width, aspect-ratio for mobile
+
+**Pagination:**
+- Scroll-up loads older messages (cursor-based, 50 per page, preserves scroll position)
+- Gallery: scroll-down loads more (cursor-based, 50 per page)
+- Links panel: fetches from ALL messages via /api/data?type=links (not just loaded ones)
+- Links panel: OG preview cards with load-more
+
+**Channel Passcode (server-side JWT gate):**
+- PasscodeOverlay component (profile, name, input, shake on error)
+- POST /api/verify-passcode: hash + compare → returns signed JWT (7-day, HMAC-SHA256)
+- Token includes passcode_hash — admin changing passcode invalidates immediately
+- All endpoints gated: init, data, messages (all methods), DM, upload
+- Admin auto-bypasses via Vercel init proxy (session → X-Internal-Token + X-User-Id)
+- Passcode cache (30s TTL) for minimal DB overhead
+- Anonymous users skip Vercel proxy (detect session cookie → faster direct Worker)
+- Rate limiting: 5 attempts per 60 seconds per channel
+- Admin set-passcode action (stores SHA-256 hash in channels table)
+
+**Real-time Broadcasts (all immediate, no refresh needed):**
+- user-blocked: blocked user's input disables instantly
+- user-unblocked: unblocked user's input re-enables instantly
+- petition-changed: petition availability updates for non-admin
+- dm-toggle-changed: DM option appears/disappears for non-admin
+- freeze-change (live): separate from normal chat freeze
+- notice-changed (live): separate from normal chat notice
+- All broadcasts use flag-based filtering (live: true/false)
+
+**Deletion:**
+- Admin: always hard delete (DELETE FROM) + cascade replies
+- Non-admin own message with replies: soft delete (placeholder preserved)
+- Non-admin own message no replies: hard delete
+- Soft-deleted messages with replies persist in DB and load on refresh
+- message-deleted broadcast: soft=true → placeholder if replies; soft=false → remove entirely
+
+**Other:**
+- Header tap-to-scroll-top
+- Gallery/links navigate to source message (loads history until found, highlight bubble)
+- Multiline input (mobile: Enter = new line; desktop: Enter = send, Shift+Enter = new line)
+- Plus menu disabled for blocked users (except petition)
+- Emoji bar disabled for blocked users in live mode
+- Live viewer badge: top-right, avoids banner overlap
+- Petition/DM toggle persists to D1 config table
+- Emoji preset panel uses full emoji picker (not text prompt)
+- Live freeze/notice/DMs fully separated from normal channel
+
 **Remaining:**
-- Embeds (YouTube/Twitter/Instagram/link previews)
 - Typing indicator
 - Channel deletion from dashboard
 - Channel discovery
