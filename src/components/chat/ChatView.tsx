@@ -220,9 +220,22 @@ export function ChatView({ channelId }: { channelId: string }) {
   });
   const isAdmin = isOwner || manualAdmin;
   const [adminViewAsUser, setAdminViewAsUser] = useState(false);
-  const [liveActive, setLiveActive] = useState(false);
-  const [inLiveMode, setInLiveMode] = useState(false);
-  const [liveTitle, setLiveTitle] = useState("라이브");
+  const [liveActive, setLiveActive] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(`liveActive_${channelId}`) === "true";
+  });
+  const [inLiveMode, setInLiveMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(`inLiveMode_${channelId}`) === "true";
+  });
+  const [liveTitle, setLiveTitle] = useState(() => {
+    if (typeof window === "undefined") return "라이브";
+    return localStorage.getItem(`liveTitle_${channelId}`) || "라이브";
+  });
+  const [liveSessionId, setLiveSessionId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem(`liveSession_${channelId}`) || "";
+  });
   const [showLivePopup, setShowLivePopup] = useState(false);
   const [showLiveEnded, setShowLiveEnded] = useState(false);
   const [showLiveTitlePrompt, setShowLiveTitlePrompt] = useState(false);
@@ -263,7 +276,8 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   // Load initial data
   useEffect(() => {
-    fetchInit(channelId)
+    const initChannel = inLiveMode && liveActive ? `${channelId}_live` : channelId;
+    fetchInit(initChannel)
       .then((data) => {
         setChannel(data.channel);
         setMessages(data.messages);
@@ -283,6 +297,20 @@ export function ChatView({ channelId }: { channelId: string }) {
         if (data.live && data.live.active) {
           setLiveActive(true);
           setLiveTitle(data.live.title || "라이브");
+          localStorage.setItem(`liveActive_${channelId}`, "true");
+          localStorage.setItem(`liveTitle_${channelId}`, data.live.title || "라이브");
+          if (data.live.sessionId) {
+            setLiveSessionId(data.live.sessionId);
+            localStorage.setItem(`liveSession_${channelId}`, data.live.sessionId);
+          }
+        } else if (!data.live || !data.live.active) {
+          // Server says live is not active — reset local state if stale
+          if (liveActive || inLiveMode) {
+            setLiveActive(false);
+            setInLiveMode(false);
+            localStorage.setItem(`liveActive_${channelId}`, "false");
+            localStorage.setItem(`inLiveMode_${channelId}`, "false");
+          }
         }
         // Restore saved bubble color
         if (typeof window !== "undefined") {
@@ -319,17 +347,33 @@ export function ChatView({ channelId }: { channelId: string }) {
         spawnEmoji(event.emoji as string, event.x as number, event.h as number);
       }
       if (event.type === "live-ended") {
+        localStorage.setItem(`liveActive_${channelId}`, "false");
+        localStorage.removeItem(`liveSeen_${channelId}`);
+        localStorage.removeItem(`liveTitle_${channelId}`);
+        localStorage.removeItem(`liveSession_${channelId}`);
+        setLiveActive(false);
         if (inLiveMode && !effectiveAdmin) {
-          setLiveActive(false);
           setInLiveMode(false);
+          localStorage.setItem(`inLiveMode_${channelId}`, "false");
           setShowLiveEnded(true);
         }
       }
       if (event.type === "live-started") {
+        const sessionId = (event.sessionId as string) || "";
         setLiveActive(true);
         setLiveTitle((event.title as string) || "라이브");
-        if (!effectiveAdmin) {
-          setShowLivePopup(true);
+        setLiveSessionId(sessionId);
+        localStorage.setItem(`liveActive_${channelId}`, "true");
+        localStorage.setItem(`liveTitle_${channelId}`, (event.title as string) || "라이브");
+        localStorage.setItem(`liveSession_${channelId}`, sessionId);
+        // Show popup only if not already in live mode and haven't dismissed this session
+        if (!inLiveMode) {
+          const seen = localStorage.getItem(`liveSeen_${channelId}`);
+          if (seen === sessionId) {
+            // Already dismissed — just show banner (handled by liveActive + !inLiveMode in render)
+          } else {
+            setShowLivePopup(true);
+          }
         }
       }
       if (event.type === "notice-changed") {
@@ -726,7 +770,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); setMessages([]); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); setMessages([]); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -737,9 +781,11 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (effectiveAdmin) {
               setShowEndLiveConfirm(true);
             } else {
+              // Non-admin just leaves live mode (live continues for others)
               setInLiveMode(false);
-              setLiveActive(false);
-              setShowLiveEnded(true);
+              localStorage.setItem(`inLiveMode_${channelId}`, "false");
+              // Refetch normal channel messages
+              fetchInit(channelId).then((data) => { setMessages(data.messages); });
             }
           }}
         />
@@ -1430,9 +1476,16 @@ export function ChatView({ channelId }: { channelId: string }) {
             setLiveActive(true);
             setInLiveMode(true);
             setMessages([]);
+            localStorage.setItem(`liveActive_${channelId}`, "true");
+            localStorage.setItem(`inLiveMode_${channelId}`, "true");
+            localStorage.setItem(`liveTitle_${channelId}`, title);
             setBanner({ text: "라이브가 시작되었습니다", color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
-            await adminAction("start-live", channelId, { title });
+            const res = await adminAction("start-live", channelId, { title }) as any;
+            if (res?.sessionId) {
+              setLiveSessionId(res.sessionId);
+              localStorage.setItem(`liveSession_${channelId}`, res.sessionId);
+            }
           }}
           onCancel={() => setShowLiveTitlePrompt(false)}
         />
@@ -1449,6 +1502,11 @@ export function ChatView({ channelId }: { channelId: string }) {
             setShowEndLiveConfirm(false);
             setLiveActive(false);
             setInLiveMode(false);
+            localStorage.setItem(`liveActive_${channelId}`, "false");
+            localStorage.setItem(`inLiveMode_${channelId}`, "false");
+            localStorage.removeItem(`liveSeen_${channelId}`);
+            localStorage.removeItem(`liveTitle_${channelId}`);
+            localStorage.removeItem(`liveSession_${channelId}`);
             await adminAction("end-live", channelId);
             fetchInit(channelId).then((data) => { setMessages(data.messages); });
             setBanner({ text: "라이브가 종료되었습니다", color: "#c0392b" });
@@ -1473,10 +1531,16 @@ export function ChatView({ channelId }: { channelId: string }) {
           onJoin={() => {
             setShowLivePopup(false);
             setInLiveMode(true);
+            localStorage.setItem(`inLiveMode_${channelId}`, "true");
+            localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
             setMessages([]);
             fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); }).catch(() => {});
           }}
-          onDismiss={() => setShowLivePopup(false)}
+          onDismiss={() => {
+            setShowLivePopup(false);
+            // Mark as seen so banner shows instead of popup next time
+            localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
+          }}
         />
       )}
 
