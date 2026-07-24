@@ -1463,7 +1463,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
           <button
             className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
-            style={{ color: "var(--meta)", width: "32px", height: "32px", opacity: isUserBlocked ? 0.3 : 1, pointerEvents: isUserBlocked ? "none" : "auto" }}
+            style={{ color: "var(--meta)", width: "32px", height: "32px", opacity: (isUserBlocked && (hasPetitioned || !petitionEnabled)) ? 0.3 : 1, pointerEvents: (isUserBlocked && (hasPetitioned || !petitionEnabled)) ? "none" : "auto" }}
             onClick={(e) => setPlusMenu(e.currentTarget.getBoundingClientRect())}
           >
             <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 11px)", height: "calc(var(--bubble-font-size) + 11px)" }}>
