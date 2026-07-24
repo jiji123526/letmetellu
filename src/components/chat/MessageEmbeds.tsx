@@ -28,9 +28,9 @@ function YouTubeEmbed({ url }: { url: string }) {
   const isShorts = url.includes("/shorts/");
 
   return (
-    <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "300px", marginTop: "6px", background: "#000" }}>
+    <div style={{ borderRadius: "0 0 12px 12px", overflow: "hidden", maxWidth: "100%", background: "#000" }}>
       <iframe
-        width="300"
+        width="100%"
         height={isShorts ? "534" : "169"}
         src={`https://www.youtube.com/embed/${videoId}`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -75,11 +75,11 @@ function LinkPreviewCard({ url }: { url: string }) {
       rel="noopener noreferrer"
       style={{
         display: "block",
-        maxWidth: "300px",
-        marginTop: "6px",
-        borderRadius: "12px",
+        maxWidth: "100%",
+        borderRadius: "0 0 12px 12px",
         overflow: "hidden",
         border: "1px solid var(--hairline)",
+        borderTop: "none",
         background: "var(--card)",
         textDecoration: "none",
         color: "inherit",
@@ -131,7 +131,7 @@ function TwitterEmbed({ url }: { url: string }) {
 
   return (
     <div
-      style={{ maxWidth: "320px", marginTop: "6px", minHeight: "80px" }}
+      style={{ maxWidth: "100%", minHeight: "80px", overflow: "visible" }}
       ref={(el) => {
         if (!el || el.dataset.rendered) return;
         el.dataset.rendered = "1";
@@ -167,7 +167,7 @@ function TwitterEmbed({ url }: { url: string }) {
 function InstagramEmbed({ url }: { url: string }) {
   return (
     <div
-      style={{ maxWidth: "320px", marginTop: "6px" }}
+      style={{ maxWidth: "100%", overflow: "visible" }}
       ref={(el) => {
         if (!el || el.dataset.rendered) return;
         el.dataset.rendered = "1";
@@ -206,7 +206,13 @@ export function MessageEmbeds({ text }: { text: string }) {
   const unique = [...new Set(urls)];
 
   return (
-    <>
+    <div style={{
+      marginLeft: "calc(var(--bubble-font-size) * -0.824)",
+      marginRight: "calc(var(--bubble-font-size) * -0.824)",
+      marginBottom: "calc(var(--bubble-font-size) * -0.588)",
+      marginTop: "4px",
+      overflow: "visible",
+    }}>
       {unique.map((url) => {
         // YouTube — inline iframe
         if (YOUTUBE_REGEX.test(url)) {
@@ -223,6 +229,6 @@ export function MessageEmbeds({ text }: { text: string }) {
         // Other URLs — OG link preview
         return <LinkPreviewCard key={url} url={url} />;
       })}
-    </>
+    </div>
   );
 }
