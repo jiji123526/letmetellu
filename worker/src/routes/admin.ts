@@ -244,6 +244,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`petition_${channel_id}`, enabled ? "true" : "false", channel_id, enabled ? "true" : "false").run();
+      const petDoId = env.CHAT_ROOM.idFromName(channel_id);
+      const petStub = env.CHAT_ROOM.get(petDoId);
+      await petStub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "petition-changed", enabled: !!enabled }),
+      }));
       return Response.json({ ok: true });
     }
 
@@ -252,6 +258,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`dm_${channel_id}`, enabled ? "true" : "false", channel_id, enabled ? "true" : "false").run();
+      const dmDoId = env.CHAT_ROOM.idFromName(channel_id);
+      const dmStub = env.CHAT_ROOM.get(dmDoId);
+      await dmStub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "dm-toggle-changed", enabled: !!enabled }),
+      }));
       return Response.json({ ok: true });
     }
 
