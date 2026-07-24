@@ -19,6 +19,7 @@ interface ContextMenuProps {
   onDeleteWithReplies?: (msgId: string) => void;
   onEdit?: (msgId: string) => void;
   onBlock?: (uid: string) => void;
+  isBlockedUser?: boolean;
   onEmojiPicker: (msgId: string, rect: DOMRect) => void;
   onClose: () => void;
   isMyMessage: boolean;
@@ -39,6 +40,7 @@ export function ContextMenu({
   onDeleteWithReplies,
   onEdit,
   onBlock,
+  isBlockedUser,
   onEmojiPicker,
   onClose,
   isMyMessage,
@@ -240,12 +242,12 @@ export function ContextMenu({
         )}
 
         {isAdmin && !isMyMessage && onBlock && (
-          <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg.uid); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2">
+          <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg.uid); onClose(); }}>
+            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <path d="M4.93 4.93l14.14 14.14" />
             </svg>
-            <span>사용자 차단</span>
+            <span>{isBlockedUser ? "차단 해제" : "사용자 차단"}</span>
           </button>
         )}
 

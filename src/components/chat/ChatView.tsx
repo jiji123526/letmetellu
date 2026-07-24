@@ -296,6 +296,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "message-changed" || event.type === "reconnected") {
         fetchInit(channelId).then((data) => {
           setMessages(data.messages);
+          if (data.blocked) setBlockedUsers(data.blocked);
           if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
           if (data.gallery) setGalleryItems(data.gallery);
         });
@@ -1220,6 +1221,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             }
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
+          isBlockedUser={blockedUsers.some((b) => b.uid === contextMenu.msg.uid)}
           onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
           onClose={() => setContextMenu(null)}
           isMyMessage={contextMenu.isOwn}
