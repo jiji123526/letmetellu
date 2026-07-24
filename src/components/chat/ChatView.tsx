@@ -495,7 +495,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const effectiveAdmin = isAdmin && !adminViewAsUser;
 
   // Check if current user is blocked
-  const isUserBlocked = !effectiveAdmin && blockedUsers.some((b) => b.uid === uid || b.uid === myFingerprint);
+  const isUserBlocked = !effectiveAdmin && blockedUsers.some((b) => b.uid === uid || (myFingerprint && (b as any).fingerprint === myFingerprint));
   const hasPetitioned = typeof window !== "undefined" && localStorage.getItem("petitionSent") === uid;
 
   const handleDelete = (msgId: string) => {
