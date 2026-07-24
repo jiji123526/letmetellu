@@ -40,7 +40,7 @@ export function EditDialog({ currentText, onSave, onClose }: EditDialogProps) {
           rows={4}
           style={{
             width: "100%",
-            background: "#f4f4f4",
+            background: "var(--card)",
             border: "1.5px solid #e0e0e0",
             borderRadius: "12px",
             padding: "11px 14px",
@@ -59,7 +59,7 @@ export function EditDialog({ currentText, onSave, onClose }: EditDialogProps) {
         {/* Buttons */}
         <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
           <button
-            style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#f4f4f4", color: "#666" }}
+            style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card)", color: "var(--secondary-text)" }}
             onClick={onClose}
           >
             취소

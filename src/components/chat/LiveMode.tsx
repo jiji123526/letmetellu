@@ -19,7 +19,7 @@ export function LivePopup({ title, onJoin, onDismiss }: { title: string; onJoin:
           라이브 채팅이 시작되었습니다.<br />참여하시겠습니까?<br />라이브 종료 시 모든 메시지가 삭제됩니다.
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
-          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#f4f4f4", color: "#666" }} onClick={onDismiss}>안할래</button>
+          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card)", color: "var(--secondary-text)" }} onClick={onDismiss}>안할래</button>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#c0392b", color: "#fff" }} onClick={onJoin}>참여</button>
         </div>
       </div>
@@ -64,13 +64,13 @@ export function LiveTitlePrompt({ onStart, onCancel }: { onStart: (title: string
           ref={(el) => { inputRef = el; el?.focus(); }}
           type="text"
           placeholder="라이브 제목을 입력하세요"
-          style={{ width: "100%", background: "#f4f4f4", border: "1.5px solid #e0e0e0", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", boxSizing: "border-box" as const, outline: "none", lineHeight: 1 }}
+          style={{ width: "100%", background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", boxSizing: "border-box" as const, outline: "none", lineHeight: 1 }}
           onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
-          onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }}
+          onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--input-border)"; }}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && inputRef?.value.trim()) { onStart(inputRef.value.trim()); } }}
         />
         <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#f4f4f4", color: "#666" }} onClick={onCancel}>취소</button>
+          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card)", color: "var(--secondary-text)" }} onClick={onCancel}>취소</button>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#c0392b", color: "#fff" }} onClick={() => { if (inputRef?.value.trim()) onStart(inputRef.value.trim()); }}>시작</button>
         </div>
       </div>

@@ -16,6 +16,11 @@
   --placeholder: #a4a4a9;
   --tint: #007aff;
   --bubble-font-size: 17px;
+  --card: #f4f4f4;
+  --card-text: #555;
+  --secondary-text: #666;
+  --tertiary-text: #888;
+  --guide-bg: #f0f7ff;
 }
 
 .dark {
@@ -31,6 +36,11 @@
   --icon: #8e8e93;
   --placeholder: #8a8a8e;
   --tint: #0a84ff;
+  --card: #1c1c1e;
+  --card-text: #ccc;
+  --secondary-text: #aaa;
+  --tertiary-text: #888;
+  --guide-bg: #1a2a3a;
 }
 
 * {

@@ -177,7 +177,7 @@ export function AdminPanel(props: AdminPanelProps) {
             {/* Profile image upload */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
               <div
-                style={{ width: "80px", height: "80px", borderRadius: "20px", overflow: "hidden", border: "2px dashed var(--hairline)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8f8f8" }}
+                style={{ width: "80px", height: "80px", borderRadius: "20px", overflow: "hidden", border: "2px dashed var(--hairline)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--card)" }}
                 onClick={() => document.getElementById("profileImgInput")?.click()}
               >
                 {profileImage ? (
@@ -187,7 +187,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 )}
               </div>
               <button
-                style={{ background: "#f4f4f4", border: "1px solid #e0e0e0", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer", fontFamily: "inherit", color: "#555" }}
+                style={{ background: "var(--card)", border: "1px solid var(--input-border)", borderRadius: "10px", padding: "8px 16px", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer", fontFamily: "inherit", color: "var(--card-text)" }}
                 onClick={() => document.getElementById("profileImgInput")?.click()}
               >
                 사진 변경
@@ -210,7 +210,7 @@ export function AdminPanel(props: AdminPanelProps) {
             <div style={{ marginBottom: "16px" }}>
               <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", fontWeight: 700, marginBottom: "8px" }}>채널 이름</div>
               <input
-                style={{ width: "100%", background: "#f8f8f8", border: "1.5px solid #e0e0e0", borderRadius: "12px", padding: "11px 14px", fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--gray-text)", fontFamily: "inherit", boxSizing: "border-box" as const, outline: "none" }}
+                style={{ width: "100%", background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "12px", padding: "11px 14px", fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--gray-text)", fontFamily: "inherit", boxSizing: "border-box" as const, outline: "none" }}
                 type="text"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
@@ -265,7 +265,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 <textarea style={{ ...inputStyle, marginBottom: 0, resize: "vertical" }} rows={3} placeholder="항목 (한 줄에 하나씩)" value={section.items.join("\n")} onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], items: e.target.value.split("\n") }; setRules(r); }} />
               </div>
             ))}
-            <button style={{ ...saveBtnStyle, background: "#f4f4f4", color: "#666", marginBottom: "12px" }} onClick={() => setRules([...rules, { title: "", items: [] }])}>+ 섹션 추가</button>
+            <button style={{ ...saveBtnStyle, background: "var(--card)", color: "var(--secondary-text)", marginBottom: "12px" }} onClick={() => setRules([...rules, { title: "", items: [] }])}>+ 섹션 추가</button>
             <button style={saveBtnStyle} onClick={() => { const cleaned = rules.filter(s => s.title.trim() || s.items.some(i => i.trim())).map(s => ({ title: s.title.trim(), items: s.items.map(i => i.trim()).filter(Boolean) })); onNoticeChange(JSON.stringify(cleaned)); goBack(); }}>저장</button>
           </div>
         )}
@@ -277,7 +277,7 @@ export function AdminPanel(props: AdminPanelProps) {
               {bannedWords.length === 0 ? (
                 <div style={{ color: "var(--meta)", fontSize: "var(--bubble-font-size, 13px)", textAlign: "center", padding: "12px 0" }}>등록된 금지어가 없습니다</div>
               ) : bannedWords.map((w, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f4f4f4", borderRadius: "10px" }}>
+                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--card)", borderRadius: "10px" }}>
                   <span style={{ fontSize: "var(--bubble-font-size, 14px)", color: "var(--gray-text)" }}>{w.word}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)" }}>
@@ -296,7 +296,7 @@ export function AdminPanel(props: AdminPanelProps) {
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <input
-                style={{ flex: 1, minWidth: 0, background: "#f4f4f4", border: "1.5px solid #e0e0e0", borderRadius: "10px", padding: "8px 12px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", outline: "none" }}
+                style={{ flex: 1, minWidth: 0, background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "10px", padding: "8px 12px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", outline: "none" }}
                 type="text"
                 placeholder="금지어 추가..."
                 value={bannedInput}
@@ -304,7 +304,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); addBannedWord(); } }}
               />
               <select
-                style={{ background: "#f4f4f4", border: "1.5px solid #e0e0e0", borderRadius: "8px", padding: "6px 8px", fontSize: "calc(var(--bubble-font-size) - 2px)", fontFamily: "inherit", color: "var(--gray-text)", cursor: "pointer", flexShrink: 0 }}
+                style={{ background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "8px", padding: "6px 8px", fontSize: "calc(var(--bubble-font-size) - 2px)", fontFamily: "inherit", color: "var(--gray-text)", cursor: "pointer", flexShrink: 0 }}
                 value={bannedDuration}
                 onChange={(e) => setBannedDuration(e.target.value)}
               >
@@ -350,7 +350,7 @@ export function AdminPanel(props: AdminPanelProps) {
               <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>아이콘 (이모지 또는 이미지)</label>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 {/* Preview */}
-                <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "#f8f8f8" }}>
+                <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "var(--card)" }}>
                   {welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:")
                     ? <img src={welcomeIcon} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <span style={{ fontSize: "28px" }}>{welcomeIcon || "💬"}</span>
@@ -360,7 +360,7 @@ export function AdminPanel(props: AdminPanelProps) {
                   <input value={welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:") ? "" : welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder="이모지 입력" maxLength={4} />
                   <button
                     type="button"
-                    style={{ background: "#f4f4f4", border: "1px solid #e0e0e0", borderRadius: "8px", padding: "6px 10px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", fontFamily: "inherit", color: "#555", lineHeight: 1 }}
+                    style={{ background: "var(--card)", border: "1px solid var(--input-border)", borderRadius: "8px", padding: "6px 10px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", fontFamily: "inherit", color: "var(--card-text)", lineHeight: 1 }}
                     onClick={() => document.getElementById("welcomeIconInput")?.click()}
                   >사진 업로드</button>
                   <input id="welcomeIconInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
@@ -395,40 +395,40 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {/* Guide panel */}
         {view === "guide" && (
-          <div style={{ padding: "12px 18px", fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.6, color: "#444", maxHeight: "60vh", overflowY: "auto" }}>
+          <div style={{ padding: "12px 18px", fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.6, color: "var(--gray-text)", maxHeight: "60vh", overflowY: "auto" }}>
             <div style={{ marginBottom: "16px" }}>
               <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>관리자 설정 열기</h4>
-              <p style={{ color: "#888", margin: 0 }}>우측 상단 ⋮ 메뉴 → 관리자 설정에서 모든 채널 설정을 관리할 수 있습니다.</p>
+              <p style={{ color: "var(--tertiary-text)", margin: 0 }}>우측 상단 ⋮ 메뉴 → 관리자 설정에서 모든 채널 설정을 관리할 수 있습니다.</p>
             </div>
             <div style={{ marginBottom: "16px" }}>
               <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>채널 설정</h4>
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>프로필</strong> — 채널 이름과 프로필 사진 변경. 정사각형 크롭 후 업로드</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>색상</strong> — 말풍선 기본 색상. 7가지 프리셋 또는 커스텀</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>비밀번호</strong> — 설정하면 입장 시 비밀번호 필요. 비우면 해제</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>규칙</strong> — ℹ️ 버튼에 표시되는 채널 규칙. 여러 섹션 추가 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>환영 팝업</strong> — 첫 방문자에게 표시되는 안내 팝업. 아이콘, 제목, 항목 커스텀 가능</li>
+              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>프로필</strong> — 채널 이름과 프로필 사진 변경. 정사각형 크롭 후 업로드</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>색상</strong> — 말풍선 기본 색상. 7가지 프리셋 또는 커스텀</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>비밀번호</strong> — 설정하면 입장 시 비밀번호 필요. 비우면 해제</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>규칙</strong> — ℹ️ 버튼에 표시되는 채널 규칙. 여러 섹션 추가 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>환영 팝업</strong> — 첫 방문자에게 표시되는 안내 팝업. 아이콘, 제목, 항목 커스텀 가능</li>
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
               <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>사용자 관리</h4>
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>신고 접수</strong> — 사용자가 메시지를 꾹 눌러 신고하면 🚨 표시로 나타남</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>차단</strong> — 메시지를 꾹 눌러 즉시 차단. UID + 기기 지문으로 식별</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>차단 해제</strong> — 관리 → 차단 사용자에서 해제 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>이의 제기</strong> — 차단된 사용자의 1회 DM 허용. 관리에서 끄기 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>금지어</strong> — 특정 단어 포함 메시지 자동 차단. 기간 설정 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>메시지 삭제</strong> — 꾹 눌러 삭제. 답장도 함께 삭제됨</li>
+              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>신고 접수</strong> — 사용자가 메시지를 꾹 눌러 신고하면 🚨 표시로 나타남</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>차단</strong> — 메시지를 꾹 눌러 즉시 차단. UID + 기기 지문으로 식별</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>차단 해제</strong> — 관리 → 차단 사용자에서 해제 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>이의 제기</strong> — 차단된 사용자의 1회 DM 허용. 관리에서 끄기 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>금지어</strong> — 특정 단어 포함 메시지 자동 차단. 기간 설정 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>메시지 삭제</strong> — 꾹 눌러 삭제. 답장도 함께 삭제됨</li>
               </ul>
             </div>
             <div style={{ marginBottom: "16px" }}>
               <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>특수 기능</h4>
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "#888" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>얼리기</strong> — 일반 채팅 중단. 관리자만 보낼 수 있고 사용자는 DM만 가능</li>
-                <li>• <strong style={{ fontWeight: 500, color: "#555" }}>라이브</strong> — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제</li>
+              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>얼리기</strong> — 일반 채팅 중단. 관리자만 보낼 수 있고 사용자는 DM만 가능</li>
+                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>라이브</strong> — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제</li>
               </ul>
             </div>
-            <div style={{ padding: "10px 12px", background: "#f0f7ff", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "#3b8df0", lineHeight: 1.5 }}>
+            <div style={{ padding: "10px 12px", background: "var(--guide-bg)", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "#3b8df0", lineHeight: 1.5 }}>
               💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다.
             </div>
           </div>

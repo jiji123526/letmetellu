@@ -211,7 +211,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
           {/* Emoji list */}
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
             {emojis.map((emoji, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "#f4f4f4", borderRadius: "10px" }}>
+              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--card)", borderRadius: "10px" }}>
                 <span style={{ color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)", marginRight: "8px" }}>☰</span>
                 <span style={{ flex: 1, fontSize: "calc(var(--bubble-font-size) + 4px)" }}>{emoji}</span>
                 <button style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontSize: "var(--bubble-font-size, 14px)", padding: "0 4px", lineHeight: 1 }} onClick={() => removeEmoji(i)}>✕</button>
@@ -221,7 +221,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
 
           {/* Add button — opens inline emoji picker */}
           <button
-            style={{ width: "100%", background: "#f4f4f4", border: "1.5px dashed #e0e0e0", borderRadius: "10px", padding: "10px", fontSize: "var(--bubble-font-size, 14px)", color: "var(--meta)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
+            style={{ width: "100%", background: "var(--card)", border: "1.5px dashed var(--input-border)", borderRadius: "10px", padding: "10px", fontSize: "var(--bubble-font-size, 14px)", color: "var(--meta)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
             onClick={() => {
               // Simple prompt for now (full emoji picker TODO)
               const emoji = prompt("이모지를 입력하세요");
