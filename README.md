@@ -4,7 +4,7 @@ Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
 
 ## Status
 
-**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, live mode, and full server-side security. Embeds and platform features remaining.
+**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, live mode, i18n (Korean + English), and full server-side security. Embeds and platform features remaining.
 
 ---
 
@@ -157,6 +157,23 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [x] Channel color — all colored elements follow channel color setting
 - [x] Rules broadcast — non-admin sees ℹ️ icon in real-time
 
+### Phase 3.7: Security ✅
+- [x] CORS restricted to Vercel domain + localhost (no more wildcard)
+- [x] `/api/user` Worker endpoint requires internal token
+- [x] Upload: file type validation (images only) + 10MB size limit
+- [x] Admin message spoofing prevented (session-verified proxy for admin sends)
+- [x] DM broadcasts private (only admin-authenticated WebSocket connections receive DMs)
+- [x] WebSocket admin auth via `/api/ws-token` endpoint (session + ownership verified)
+
+### Phase 3.8: Internationalization ✅
+- [x] Locale system (ko.ts + en.ts, 200+ keys)
+- [x] useLocale hook + LocaleProvider (React context)
+- [x] Auto-detect browser language on first visit
+- [x] Language toggle in Settings panel
+- [x] ChatView fully migrated (banners, inputs, dialogs)
+- [x] HeaderMenu, PlusMenu, ContextMenu migrated
+- [x] AdminPanel fully migrated (menus, forms, guide)
+
 ### Phase 4: Platform
 - [ ] Embeds (YouTube, Twitter, Instagram, link previews)
 - [ ] Typing indicator
@@ -167,6 +184,7 @@ Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
 - [ ] RSS feed
 - [ ] Email verification
 - [ ] Password hashing upgrade (SHA-256 → bcrypt)
+- [ ] i18n: login, dashboard, onboarding pages
 
 ---
 

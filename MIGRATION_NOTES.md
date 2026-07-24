@@ -370,6 +370,28 @@ Other fixes:
 - `rules-changed`: non-admin sees ℹ️ icon appear/disappear when admin saves rules
 - DM images: uploadImage now called before sendDm (images render correctly)
 
+**Security Hardening:**
+- CORS: restricted to Vercel domain + localhost (was wildcard `*`)
+- `/api/user` endpoint: now requires X-Internal-Token (was public, anyone could upsert users)
+- Upload validation: file type restricted to jpeg/png/gif/webp, 10MB max enforced via header + stream
+- Admin message spoofing: admin messages routed through Vercel proxy (session-verified)
+  - Worker only marks `is_admin=1` when X-Internal-Token + X-User-Id verified
+  - Anonymous users call Worker directly → always `is_admin=0`
+  - Attacker can't fake admin messages even if they know the owner's UID
+- DM privacy: DO only sends dm-new/dm-deleted to authenticated admin connections
+  - Admin authenticates via WebSocket message with token from `/api/ws-token`
+  - Token endpoint verifies session + channel ownership
+  - Non-admin connections never receive DM data on the wire
+  - Re-authenticates on reconnect with cached token
+
+**Internationalization (i18n):**
+- Created locale system: `src/lib/locales/ko.ts`, `en.ts` (200+ keys each)
+- `useLocale` hook with React context (LocaleProvider wraps app)
+- Auto-detects browser language on first visit, persists to localStorage
+- Language toggle in Settings panel (한국어 / English)
+- Migrated components: ChatView, SettingsPanel, HeaderMenu, PlusMenu, ContextMenu, AdminPanel
+- All banners, menus, dialogs, admin guide now support English
+
 **Remaining:**
 - Embeds (YouTube/Twitter/Instagram/link previews)
 - Typing indicator
@@ -380,3 +402,5 @@ Other fixes:
 - RSS feed
 - Email verification
 - Password hashing upgrade (SHA-256 → bcrypt)
+- i18n: login, dashboard, onboarding pages
+- i18n: LiveMode, GalleryPanel, LinksPanel, NoticePanel components
