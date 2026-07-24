@@ -1120,9 +1120,18 @@ export function ChatView({ channelId }: { channelId: string }) {
           isReported={reportedMsgIds.has(contextMenu.msg.id)}
           onDelete={contextMenu.isOwn ? handleDelete : undefined}
           onDeleteWithReplies={effectiveAdmin && !contextMenu.isOwn ? (msgId) => {
-            // Delete message + all its replies
+            const targetMsg = messages.find((m) => m.id === msgId);
             const idsToDelete = new Set([msgId]);
+
+            // If deleting a report message, also delete the reported message + its replies
+            if (targetMsg?.report && targetMsg.reported_msg_id) {
+              idsToDelete.add(targetMsg.reported_msg_id);
+              messages.forEach((m) => { if (m.reply_to === targetMsg.reported_msg_id) idsToDelete.add(m.id); });
+            }
+
+            // Also delete replies of the target message
             messages.forEach((m) => { if (m.reply_to === msgId) idsToDelete.add(m.id); });
+
             setMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
             // Delete via admin endpoint
             idsToDelete.forEach((id) => {
