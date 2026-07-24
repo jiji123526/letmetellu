@@ -353,6 +353,15 @@ export function ChatView({ channelId }: { channelId: string }) {
       image: photos.length > 0 ? await uploadImage(photos[0].blob, channelId) || undefined : undefined,
       reply_to: replyingTo?.id,
       fingerprint: myFingerprint,
+    }).then((res: any) => {
+      if (res.error) {
+        if (res.error === "message_too_long") setBanner({ text: "메시지가 너무 깁니다 (최대 5000자)", color: "#d32f2f" });
+        else if (res.error === "banned_word") setBanner({ text: "금지어가 포함되어 있습니다", color: "#d32f2f" });
+        else if (res.error === "rate_limited") setBanner({ text: "메시지를 너무 빠르게 보내고 있습니다", color: "#d32f2f" });
+        else if (res.error === "blocked") setBanner({ text: "차단된 사용자입니다", color: "#d32f2f" });
+        else if (res.error === "channel frozen") setBanner({ text: "채팅이 얼려져 있습니다", color: "#4a4d8f" });
+        if (res.error) setTimeout(() => setBanner(null), 3000);
+      }
     });
   };
 
