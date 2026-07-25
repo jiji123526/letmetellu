@@ -704,7 +704,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
   const { t } = useLocale();
-  const [manualAdmin, setManualAdmin] = useState(() => {
+  const [manualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("isAdmin") === "true";
   });
@@ -760,8 +760,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRequestIdRef = useRef(0);
   const initialScrollDoneRef = useRef(false);
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
@@ -1495,20 +1493,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   };
 
-  const handleAvatarClick = () => {
-    clickCountRef.current++;
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = setTimeout(() => { clickCountRef.current = 0; }, 500);
-    if (clickCountRef.current >= 3) {
-      clickCountRef.current = 0;
-      const newAdmin = !manualAdmin;
-      setManualAdmin(newAdmin);
-      localStorage.setItem("isAdmin", String(newAdmin));
-      setBanner({ text: newAdmin ? t("adminModeOn") : t("adminModeOff"), color: newAdmin ? "#3b8df0" : "var(--meta)" });
-      setTimeout(() => setBanner(null), 2000);
-    }
-  };
-
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
 
@@ -1736,17 +1720,19 @@ export function ChatView({ channelId }: { channelId: string }) {
         )}
 
         <div className="flex-1 flex flex-col items-center gap-[6px]">
-          <div
-            className="rounded-full overflow-hidden relative top-[3px] cursor-pointer"
+          <button
+            type="button"
+            className="rounded-full overflow-hidden relative top-[3px] cursor-pointer border-none p-0"
+            aria-label={t("dashboardChats")}
             style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)" }}
-            onClick={handleAvatarClick}
+            onClick={() => { window.location.href = "/dashboard"; }}
           >
             {channel?.profile_image ? (
               <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-lg" style={{ background: "var(--gray-bubble)" }}>💬</div>
             )}
-          </div>
+          </button>
           <div className="font-normal flex items-center gap-[2px]" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--gray-text)" }}>
             {channel?.name}
           </div>
@@ -2213,7 +2199,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       {headerMenu && (
         <HeaderMenu
           anchorRect={headerMenu}
-          onDashboard={() => { window.location.href = "/dashboard"; }}
           onSettings={() => setShowSettings(true)}
           onGallery={() => {
             setShowGallery(true);

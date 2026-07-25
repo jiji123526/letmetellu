@@ -5,7 +5,6 @@ import { useLocale } from "@/hooks/useLocale";
 
 interface HeaderMenuProps {
   anchorRect: DOMRect;
-  onDashboard: () => void;
   onSettings: () => void;
   onGallery: () => void;
   onLinks: () => void;
@@ -13,7 +12,7 @@ interface HeaderMenuProps {
   onClose: () => void;
 }
 
-export function HeaderMenu({ anchorRect, onDashboard, onSettings, onGallery, onLinks, onAdmin, onClose }: HeaderMenuProps) {
+export function HeaderMenu({ anchorRect, onSettings, onGallery, onLinks, onAdmin, onClose }: HeaderMenuProps) {
   const { t } = useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -28,7 +27,6 @@ export function HeaderMenu({ anchorRect, onDashboard, onSettings, onGallery, onL
   }, [onClose]);
 
   const handlers: Record<string, () => void> = {
-    dashboard: onDashboard,
     settings: onSettings,
     gallery: onGallery,
     links: onLinks,
@@ -36,7 +34,6 @@ export function HeaderMenu({ anchorRect, onDashboard, onSettings, onGallery, onL
   };
 
   const items = [
-    { key: "dashboard", label: t("dashboardChats"), icon: `<svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 10h8M8 14h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-1-1.73V6a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>` },
     { key: "settings", label: t("settings"), icon: `<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="2"/></svg>` },
     { key: "gallery", label: t("gallery"), icon: `<svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/><path d="M21 15l-5-5L5 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` },
     { key: "links", label: t("links"), icon: `<svg viewBox="0 0 24 24" width="16" height="16"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>` },
