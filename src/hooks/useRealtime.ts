@@ -13,6 +13,7 @@ export function useRealtime(channelId: string | null, uid: string) {
   const [presence, setPresence] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestRoomAuthRequest = useRef<string | null>(null);
 
   const connect = useCallback(() => {
     if (!channelId) return;
@@ -39,12 +40,25 @@ export function useRealtime(channelId: string | null, uid: string) {
       setSocketConnected(true);
       setRoomAuthenticated(false);
       const roomToken = getRoomToken(channelId);
-      ws.send(JSON.stringify({ type: "auth-room", token: roomToken }));
+      const requestId = crypto.randomUUID();
+      latestRoomAuthRequest.current = requestId;
+      ws.send(JSON.stringify({ type: "auth-room", token: roomToken, requestId }));
     };
 
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
+        if (
+          (
+            data.type === "room-authenticated"
+            || data.type === "room-auth-failed"
+            || data.type === "room-auth-required"
+          )
+          && data.requestId
+          && data.requestId !== latestRoomAuthRequest.current
+        ) {
+          return;
+        }
         if (data.type === "presence") {
           setPresence(data.count);
           if (data.liveCount !== undefined) setLiveCount(data.liveCount);
@@ -104,7 +118,9 @@ export function useRealtime(channelId: string | null, uid: string) {
         return;
       }
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "auth-room", token: detail.token }));
+        const requestId = crypto.randomUUID();
+        latestRoomAuthRequest.current = requestId;
+        wsRef.current.send(JSON.stringify({ type: "auth-room", token: detail.token, requestId }));
       }
     };
     window.addEventListener("room-token-changed", handleRoomTokenChanged);

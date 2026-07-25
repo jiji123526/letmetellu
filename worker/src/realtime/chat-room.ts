@@ -8,6 +8,7 @@ interface Connection {
   joinedAt: number;
   isAdmin: boolean;
   authorized: boolean;
+  authAttempt: number;
 }
 
 export class ChatRoom {
@@ -51,6 +52,7 @@ export class ChatRoom {
         joinedAt: Date.now(),
         isAdmin: false,
         authorized: !this.currentPasscode,
+        authAttempt: 0,
       });
 
       server.addEventListener("message", async (event) => {
@@ -61,25 +63,37 @@ export class ChatRoom {
           if (!conn) return;
 
           if (data.type === "auth-room") {
+            const authAttempt = ++conn.authAttempt;
+            const expectedPasscode = this.currentPasscode;
+            const authResponse = (type: string) => JSON.stringify({
+              type,
+              requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+            });
             if (!this.currentPasscode) {
               conn.authorized = true;
-              server.send(JSON.stringify({ type: "room-authenticated" }));
+              server.send(authResponse("room-authenticated"));
             } else if (typeof data.token === "string" && data.token) {
               const payload = await verifyRoomToken(data.token, this.env);
+              // A newer token attempt or passcode change supersedes this
+              // asynchronous verification result.
+              if (
+                conn.authAttempt !== authAttempt
+                || this.currentPasscode !== expectedPasscode
+              ) return;
               if (
                 payload?.channel_id === conn.channelId
                 && payload.passcode_hash === this.currentPasscode
               ) {
                 conn.authorized = true;
-                server.send(JSON.stringify({ type: "room-authenticated" }));
+                server.send(authResponse("room-authenticated"));
                 this.broadcastPresence();
               } else {
                 conn.authorized = false;
-                server.send(JSON.stringify({ type: "room-auth-failed" }));
+                server.send(authResponse("room-auth-failed"));
               }
             } else {
               conn.authorized = false;
-              server.send(JSON.stringify({ type: "room-auth-required" }));
+              server.send(authResponse("room-auth-required"));
             }
           }
 
@@ -135,9 +149,14 @@ export class ChatRoom {
     // the passcode. Admin sessions remain authorized by their separate token.
     if (url.pathname.endsWith("/access-policy-changed")) {
       const body = await request.json() as { passcode: string | null };
-      this.currentPasscode = body.passcode || null;
+      const nextPasscode = body.passcode || null;
+      if (this.passcodeLoaded && this.currentPasscode === nextPasscode) {
+        return new Response("ok");
+      }
+      this.currentPasscode = nextPasscode;
       this.passcodeLoaded = true;
       for (const [ws, connection] of this.connections) {
+        connection.authAttempt++;
         if (connection.isAdmin) continue;
         if (this.currentPasscode) {
           if (connection.authorized) {
