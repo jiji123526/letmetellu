@@ -164,11 +164,8 @@ function SkeletonLoading() {
 
 // URL regex — matches http(s) URLs and bare domains (www. or common TLDs)
 const URL_LINK_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))(?:\/[^\s<]*)?)/g;
-// URLs that get embedded (YouTube, Twitter, Instagram, or any http URL for OG preview)
-const EMBED_URL_REGEX = /https?:\/\/[^\s<]+/g;
-
 // Render text with clickable links
-function linkifyText(text: string, isMine: boolean, hideEmbedUrls: boolean): (string | React.ReactElement)[] {
+function linkifyText(text: string, isMine: boolean, hiddenEmbedUrls: Set<string>): (string | React.ReactElement)[] {
   const parts: (string | React.ReactElement)[] = [];
   let lastIndex = 0;
   const linkColor = isMine ? "rgba(255,255,255,0.9)" : "var(--bubble-sent)";
@@ -179,9 +176,7 @@ function linkifyText(text: string, isMine: boolean, hideEmbedUrls: boolean): (st
 
     // Check if this URL will be embedded
     const fullUrl = url.startsWith("http") ? url : `https://${url}`;
-    const isEmbedded = hideEmbedUrls && EMBED_URL_REGEX.test(fullUrl);
-    // Reset regex lastIndex
-    EMBED_URL_REGEX.lastIndex = 0;
+    const isEmbedded = hiddenEmbedUrls.has(url) || hiddenEmbedUrls.has(fullUrl);
 
     // Add text before this URL
     if (index > lastIndex) {
@@ -276,14 +271,14 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
 }
 
 // Message text with truncation (>1000 chars), linkification, and search highlight
-function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hideEmbedUrls, onExpand }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hideEmbedUrls?: boolean; onExpand: (text: string) => void }) {
+function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hiddenEmbedUrls, onExpand }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hiddenEmbedUrls: Set<string>; onExpand: (text: string) => void }) {
 
   const isLong = text.length > 1000;
   const displayText = isLong ? text.slice(0, 1000) + "…" : text;
 
   // Linkify and optionally hide embedded URLs
-  const parts = linkifyText(displayText, isMine, !!hideEmbedUrls);
-  if (parts.length === 0 && hideEmbedUrls) return null; // Only URLs, no text
+  const parts = linkifyText(displayText, isMine, hiddenEmbedUrls);
+  if (parts.length === 0 && hiddenEmbedUrls.size > 0) return null; // Only embedded URLs
 
   const content = searchQuery && isSearchMatch
     ? highlightText(displayText, searchQuery, isActiveMatch)
@@ -302,6 +297,52 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
           </button>
         )}
       </span>
+    </>
+  );
+}
+
+function MessageTextWithEmbeds({
+  text,
+  image,
+  isMine,
+  searchQuery,
+  isSearchMatch,
+  isActiveMatch,
+  showEmbeds,
+  onExpand,
+}: {
+  text: string;
+  image: boolean;
+  isMine: boolean;
+  searchQuery: string;
+  isSearchMatch: boolean;
+  isActiveMatch: boolean;
+  showEmbeds: boolean;
+  onExpand: (text: string) => void;
+}) {
+  const [hiddenEmbedUrls, setHiddenEmbedUrls] = useState<Set<string>>(() => new Set());
+  const handleEmbedReady = useCallback((url: string) => {
+    setHiddenEmbedUrls((current) => {
+      if (current.has(url)) return current;
+      const next = new Set(current);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
+  return (
+    <>
+      <MessageText
+        text={text}
+        image={image}
+        isMine={isMine}
+        searchQuery={searchQuery}
+        isSearchMatch={isSearchMatch}
+        isActiveMatch={isActiveMatch}
+        hiddenEmbedUrls={hiddenEmbedUrls}
+        onExpand={onExpand}
+      />
+      {showEmbeds && <MessageEmbeds text={text} isMine={isMine} onEmbedReady={handleEmbedReady} />}
     </>
   );
 }
@@ -1387,6 +1428,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             // non-admin view: user reply = mine (blue), admin reply = other (gray)
             const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
             const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
+            const hasTextAlongsideLink = !!msg.text?.replace(URL_LINK_REGEX, "").trim();
 
             const isGroupStart = !isReply && (!prev || !isSameGroup(prev, msg, uid));
             const isLast = !isReply && (!next || !isSameGroup(msg, next, uid));
@@ -1399,7 +1441,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 style={{
                   padding: msg.image
                     ? "4px 4px 0"
-                    : hasNativeEmbed
+                    : hasNativeEmbed && !hasTextAlongsideLink
                       ? "4px"
                       : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
                   fontSize: "var(--bubble-font-size)",
@@ -1465,9 +1507,20 @@ export function ChatView({ channelId }: { channelId: string }) {
                         onOpen={() => setFullViewImage({ src: msg.image!, caption: msg.text || undefined, date: msg.created_at, msgId: msg.id })}
                       />
                     )}
-                    {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} hideEmbedUrls={!msg.deleted && !msg.report && /https?:\/\/[^\s<]+/.test(msg.text)} onExpand={openExpandedPost} />}
+                    {msg.text && (
+                      <MessageTextWithEmbeds
+                        key={`${msg.id}:${msg.text}`}
+                        text={msg.text}
+                        image={!!msg.image}
+                        isMine={isMine}
+                        searchQuery={searchState.query}
+                        isSearchMatch={searchState.resultIds.includes(msg.id)}
+                        isActiveMatch={msg.id === searchState.activeId}
+                        showEmbeds={!msg.report && !msg.image}
+                        onExpand={openExpandedPost}
+                      />
+                    )}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
-                    {msg.text && !msg.deleted && !msg.report && <MessageEmbeds text={msg.text} />}
                   </>
                 )}
               </div>

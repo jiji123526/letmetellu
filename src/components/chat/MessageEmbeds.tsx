@@ -70,8 +70,12 @@ function useResponsiveEmbedScale() {
   return { frameRef, contentRef, scale, scaledHeight };
 }
 
-function YouTubeEmbed({ url }: { url: string }) {
+function YouTubeEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    onReady(url);
+  }, [onReady, url]);
+
   const match = url.match(YOUTUBE_REGEX);
   if (!match) return null;
   const videoId = match[1];
@@ -101,7 +105,7 @@ function YouTubeEmbed({ url }: { url: string }) {
   );
 }
 
-function LinkPreviewCard({ url }: { url: string }) {
+function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolean; onReady: (url: string) => void }) {
   const [data, setData] = useState<PreviewData | null>(previewCache.get(url) || null);
   const [loading, setLoading] = useState(!previewCache.has(url));
 
@@ -114,13 +118,18 @@ function LinkPreviewCard({ url }: { url: string }) {
         if (result && (result.title || result.image)) {
           previewCache.set(url, result);
           setData(result);
+          onReady(url);
         } else {
           previewCache.set(url, null);
         }
       })
       .catch(() => { previewCache.set(url, null); })
       .finally(() => setLoading(false));
-  }, [url]);
+  }, [onReady, url]);
+
+  useEffect(() => {
+    if (data) onReady(url);
+  }, [data, onReady, url]);
 
   if (loading) return <MediaLoadingDots />;
   if (!data) return null;
@@ -135,8 +144,8 @@ function LinkPreviewCard({ url }: { url: string }) {
         maxWidth: "100%",
         borderRadius: "12px",
         overflow: "hidden",
-        border: "1px solid var(--hairline)",
-        background: "var(--card)",
+        width: "min(320px, 100%)",
+        background: isMine ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.05)",
         textDecoration: "none",
         color: "inherit",
       }}
@@ -167,13 +176,13 @@ function LinkPreviewCard({ url }: { url: string }) {
           </div>
         )}
         {data.title && (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", fontWeight: 500, color: "var(--gray-text)", lineHeight: 1.3, marginBottom: "2px" }}>
-            {data.title.length > 60 ? data.title.slice(0, 60) + "…" : data.title}
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", fontWeight: 400, color: isMine ? "#fff" : "var(--gray-text)", lineHeight: 1.3, marginBottom: "2px" }}>
+            {data.title}
           </div>
         )}
         {data.description && (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)", lineHeight: 1.3 }}>
-            {data.description.length > 80 ? data.description.slice(0, 80) + "…" : data.description}
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: isMine ? "rgba(255,255,255,.7)" : "var(--meta)", lineHeight: 1.3 }}>
+            {data.description.length > 100 ? data.description.slice(0, 100) + "…" : data.description}
           </div>
         )}
       </div>
@@ -181,10 +190,14 @@ function LinkPreviewCard({ url }: { url: string }) {
   );
 }
 
-function TwitterEmbed({ url }: { url: string }) {
+function TwitterEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
   const tweetId = url.match(/status\/(\d+)/)?.[1];
   const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    onReady(url);
+  }, [onReady, url]);
 
   useEffect(() => {
     const container = contentRef.current;
@@ -233,9 +246,13 @@ function TwitterEmbed({ url }: { url: string }) {
   );
 }
 
-function InstagramEmbed({ url }: { url: string }) {
+function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
   const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    onReady(url);
+  }, [onReady, url]);
 
   useEffect(() => {
     const container = contentRef.current;
@@ -290,7 +307,7 @@ function InstagramEmbed({ url }: { url: string }) {
 }
 
 // Main export: renders embeds for URLs found in message text
-export function MessageEmbeds({ text }: { text: string }) {
+export function MessageEmbeds({ text, isMine, onEmbedReady }: { text: string; isMine: boolean; onEmbedReady: (url: string) => void }) {
   const urls = text.match(URL_REGEX);
   if (!urls || urls.length === 0) return null;
 
@@ -307,18 +324,18 @@ export function MessageEmbeds({ text }: { text: string }) {
       {unique.map((url) => {
         // YouTube — inline iframe
         if (YOUTUBE_REGEX.test(url)) {
-          return <YouTubeEmbed key={url} url={url} />;
+          return <YouTubeEmbed key={url} url={url} onReady={onEmbedReady} />;
         }
         // Twitter/X — native widget
         if (TWITTER_REGEX.test(url)) {
-          return <TwitterEmbed key={url} url={url} />;
+          return <TwitterEmbed key={url} url={url} onReady={onEmbedReady} />;
         }
         // Instagram — native widget
         if (INSTAGRAM_REGEX.test(url)) {
-          return <InstagramEmbed key={url} url={url} />;
+          return <InstagramEmbed key={url} url={url} onReady={onEmbedReady} />;
         }
         // Other URLs — OG link preview
-        return <LinkPreviewCard key={url} url={url} />;
+        return <LinkPreviewCard key={url} url={url} isMine={isMine} onReady={onEmbedReady} />;
       })}
     </div>
   );
