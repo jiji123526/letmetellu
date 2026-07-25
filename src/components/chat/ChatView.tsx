@@ -29,6 +29,7 @@ import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { MessageEmbeds } from "./MessageEmbeds";
 import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
+import { MediaLoadingDots } from "./MediaLoadingDots";
 
 interface Message {
   id: string;
@@ -227,9 +228,55 @@ function linkifyText(text: string, isMine: boolean, hideEmbedUrls: boolean): (st
   return parts;
 }
 
+function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  return (
+    <div className="relative inline-block" style={{ minWidth: loaded ? undefined : "74px" }}>
+      {!loaded && !failed && <MediaLoadingDots />}
+      {failed ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setFailed(false);
+            setLoaded(false);
+            setAttempt((value) => value + 1);
+          }}
+          style={{ minHeight: "80px", padding: "8px 14px", border: 0, background: "transparent", color: "inherit", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer" }}
+        >
+          탭하여 다시 시도
+        </button>
+      ) : (
+        <img
+          key={attempt}
+          src={src}
+          alt=""
+          className="block w-full max-w-[260px] h-auto rounded-[15px]"
+          style={{ display: loaded ? "block" : "none", objectFit: "contain" }}
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+        />
+      )}
+      {loaded && (
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen();
+          }}
+          style={{ position: "absolute", top: "6px", right: "6px", width: "24px", height: "24px", border: "none", background: "rgba(0,0,0,.5)", color: "#fff", borderRadius: "6px", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
+        >
+          ⤢
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Message text with truncation (>1000 chars), linkification, and search highlight
-function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hideEmbedUrls }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hideEmbedUrls?: boolean }) {
-  const [showOverlay, setShowOverlay] = useState(false);
+function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hideEmbedUrls, onExpand }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hideEmbedUrls?: boolean; onExpand: (text: string) => void }) {
 
   const isLong = text.length > 1000;
   const displayText = isLong ? text.slice(0, 1000) + "…" : text;
@@ -248,34 +295,13 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
         {content}
         {isLong && (
           <button
-            onClick={(e) => { e.stopPropagation(); setShowOverlay(true); }}
+            onClick={(e) => { e.stopPropagation(); onExpand(text); }}
             style={{ display: "block", background: "none", border: "none", color: isMine ? "rgba(255,255,255,0.85)" : "var(--bubble-sent, #3b8df0)", cursor: "pointer", padding: "4px 0 0", fontSize: "var(--bubble-font-size)", fontFamily: "inherit", marginLeft: "auto", transform: "rotate(-90deg)", lineHeight: 1 }}
           >
             <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5" /><path d="M7 6l5 5 5-5" /></svg>
           </button>
         )}
       </span>
-      {/* Post overlay — full text dialog */}
-      {showOverlay && (
-        <div
-          className="fixed inset-0 z-[500] flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", padding: "20px" }}
-          onClick={() => setShowOverlay(false)}
-        >
-          <div
-            style={{ background: "var(--bg)", borderRadius: "20px", maxWidth: "400px", width: "100%", maxHeight: "80vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--hairline)" }}>
-              <span />
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={() => setShowOverlay(false)}>✕</button>
-            </div>
-            <div style={{ padding: "18px", fontSize: "var(--bubble-font-size)", lineHeight: 1.6, color: "var(--gray-text)", overflowY: "auto", whiteSpace: "pre-wrap", wordWrap: "break-word" }}>
-              {text}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -298,6 +324,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showNotice, setShowNotice] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [fullViewImage, setFullViewImage] = useState<{ src: string; caption?: string; date?: string; msgId?: string; fromGallery?: boolean } | null>(null);
+  const [expandedPost, setExpandedPost] = useState<{ text: string; top: number; left: number; width: number; height: number } | null>(null);
   const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
@@ -366,6 +393,18 @@ export function ChatView({ channelId }: { channelId: string }) {
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRequestIdRef = useRef(0);
+
+  const openExpandedPost = useCallback((text: string) => {
+    const rect = messagesContainerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setExpandedPost({
+      text,
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+    });
+  }, []);
 
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
@@ -832,28 +871,71 @@ export function ChatView({ channelId }: { channelId: string }) {
 
     const activeChannelId = inLiveMode ? `${channelId}_live` : channelId;
 
-    const res = await (effectiveAdmin && authUserId ? sendMessageAsAdmin : sendMessageApi)({
-      uid: effectiveAdmin && authUserId ? authUserId : uid,
-      text,
-      channel_id: activeChannelId,
-      image: photos.length > 0 ? await uploadImage(photos[0].blob, activeChannelId) || undefined : undefined,
-      reply_to: savedReplyTo,
-      fingerprint: myFingerprint,
-    }) as any;
+    const sender = effectiveAdmin && authUserId ? sendMessageAsAdmin : sendMessageApi;
+    const senderUid = effectiveAdmin && authUserId ? authUserId : uid;
+    let sendError: string | undefined;
+    let unsentPhotos: typeof photos = [];
 
-    if (res.error) {
-      // Keep input on failure
-      if (photos.length > 0) setPendingPhotos(photos);
-      if (res.error === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
-      else if (res.error === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
-      else if (res.error === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
-      else if (res.error === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
-      else if (res.error === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+    try {
+      if (photos.length === 0) {
+        const result = await sender({
+          uid: senderUid,
+          text,
+          channel_id: activeChannelId,
+          reply_to: savedReplyTo,
+          fingerprint: myFingerprint,
+        });
+        sendError = result.error;
+      } else {
+        // Match the original behavior: caption/reply on the first image, then
+        // send every remaining image as its own consecutive message.
+        for (let index = 0; index < photos.length; index += 1) {
+          const image = await uploadImage(photos[index].blob, activeChannelId);
+          if (!image) {
+            sendError = "upload_failed";
+            unsentPhotos = photos.slice(index);
+            break;
+          }
+
+          const result = await sender({
+            uid: senderUid,
+            text: index === 0 ? text : "",
+            channel_id: activeChannelId,
+            image,
+            reply_to: index === 0 ? savedReplyTo : undefined,
+            fingerprint: myFingerprint,
+          });
+
+          if (result.error) {
+            sendError = result.error;
+            unsentPhotos = photos.slice(index);
+            break;
+          }
+
+          URL.revokeObjectURL(photos[index].previewUrl);
+          // The first successful photo already delivered the caption.
+          if (index === 0) {
+            setInput("");
+            if (textareaRef.current) textareaRef.current.style.height = "auto";
+          }
+        }
+      }
+    } catch {
+      sendError = "network_error";
+      unsentPhotos = photos;
+    }
+
+    if (sendError) {
+      if (unsentPhotos.length > 0) setPendingPhotos(unsentPhotos);
+      if (sendError === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
+      else if (sendError === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
+      else if (sendError === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
+      else if (sendError === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
+      else if (sendError === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
       else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
-    }
-    // On success: clear input, DO broadcasts message-changed → refetch shows the message
-    if (!res.error) {
+    } else {
+      // DO broadcasts message-changed → refetch shows each sent message.
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
@@ -1266,6 +1348,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             // admin view: admin reply = mine (blue), user reply = other (gray)
             // non-admin view: user reply = mine (blue), admin reply = other (gray)
             const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
+            const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
 
             const isGroupStart = !isReply && (!prev || !isSameGroup(prev, msg, uid));
             const isLast = !isReply && (!next || !isSameGroup(msg, next, uid));
@@ -1280,6 +1363,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                   fontSize: "var(--bubble-font-size)",
                   lineHeight: 1.38,
                   overflowWrap: "anywhere",
+                  width: hasNativeEmbed ? "100%" : undefined,
                   borderRadius: !isReply && isLast
                     ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
                     : "20px",
@@ -1334,20 +1418,12 @@ export function ChatView({ channelId }: { channelId: string }) {
                 ) : (
                   <>
                     {msg.image && (
-                      <div className="relative inline-block">
-                        <img
-                          src={msg.image}
-                          alt=""
-                          className="block w-full max-w-[260px] h-auto rounded-[15px]"
-                          style={{ objectFit: "contain" }}
-                        />
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setFullViewImage({ src: msg.image!, caption: msg.text || undefined, date: msg.created_at, msgId: msg.id }); }}
-                          style={{ position: "absolute", top: "6px", right: "6px", width: "24px", height: "24px", border: "none", background: "rgba(0,0,0,.5)", color: "#fff", borderRadius: "6px", fontSize: "14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
-                        >⤢</button>
-                      </div>
+                      <MessageImage
+                        src={msg.image}
+                        onOpen={() => setFullViewImage({ src: msg.image!, caption: msg.text || undefined, date: msg.created_at, msgId: msg.id })}
+                      />
                     )}
-                    {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} hideEmbedUrls={!msg.deleted && !msg.report && /https?:\/\/[^\s<]+/.test(msg.text)} />}
+                    {msg.text && <MessageText text={msg.text} image={!!msg.image} isMine={isMine} searchQuery={searchState.query} isSearchMatch={searchState.resultIds.includes(msg.id)} isActiveMatch={msg.id === searchState.activeId} hideEmbedUrls={!msg.deleted && !msg.report && /https?:\/\/[^\s<]+/.test(msg.text)} onExpand={openExpandedPost} />}
                     {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
                     {msg.text && !msg.deleted && !msg.report && <MessageEmbeds text={msg.text} />}
                   </>
@@ -1383,7 +1459,13 @@ export function ChatView({ channelId }: { channelId: string }) {
                   paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
                 }}
               >
-                <div className={`flex flex-col ${isReply ? "max-w-[85%]" : "max-w-[74%]"} ${isSent ? "items-end" : "items-start"}`}>
+                <div
+                  className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
+                  style={{
+                    width: hasNativeEmbed ? "min(340px, 100%)" : undefined,
+                    maxWidth: hasNativeEmbed ? "min(340px, 100%)" : (isReply ? "85%" : "74%"),
+                  }}
+                >
                   {/* Bubble with reply arrow */}
                   {isReply ? (
                     <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
@@ -1433,6 +1515,36 @@ export function ChatView({ channelId }: { channelId: string }) {
         })()}
         <div ref={messagesEndRef} />
       </main>
+
+      {/* Long-message reader, constrained to the visible chat field. */}
+      {expandedPost && (
+        <div
+          className="fixed z-[500] flex items-center justify-center"
+          style={{
+            top: expandedPost.top,
+            left: expandedPost.left,
+            width: expandedPost.width,
+            height: expandedPost.height,
+            padding: "12px",
+            background: "rgba(0,0,0,0.42)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+          onClick={() => setExpandedPost(null)}
+        >
+          <div
+            style={{ background: "var(--bg)", borderRadius: "18px", maxWidth: "400px", width: "100%", maxHeight: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 16px", borderBottom: "1px solid var(--hairline)" }}>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={() => setExpandedPost(null)}>✕</button>
+            </div>
+            <div style={{ padding: "16px", fontSize: "var(--bubble-font-size)", lineHeight: 1.6, color: "var(--gray-text)", overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {expandedPost.text}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Scroll to bottom */}
       <ScrollToBottom visible={showScrollBtn} onClick={scrollToBottom} />

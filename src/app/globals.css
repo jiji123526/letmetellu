@@ -95,3 +95,51 @@ body {
   60% { transform: translateX(-5px); }
   80% { transform: translateX(5px); }
 }
+
+/* Media/widget loading indicator — matches the original typing bubble. */
+.media-loading-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 0 14px;
+  line-height: 0;
+}
+
+.media-loading-dots span {
+  width: calc(var(--bubble-font-size) * 0.47);
+  height: calc(var(--bubble-font-size) * 0.47);
+  border-radius: 50%;
+  background: #999;
+  animation: media-dot-bounce 1.4s infinite ease-in-out;
+}
+
+.media-loading-dots span:nth-child(1) { animation-delay: 0s; }
+.media-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.media-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes media-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+.dark .media-loading-dots span {
+  background: #777;
+}
+
+/* Native widgets inject fixed-width descendants; constrain them to the bubble. */
+.native-chat-embed,
+.native-chat-embed > div,
+.native-chat-embed blockquote {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.native-chat-embed iframe {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}

@@ -1,6 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MediaLoadingDots } from "./MediaLoadingDots";
+
+interface TwitterWidgets {
+  createTweet: (
+    id: string,
+    element: HTMLElement,
+    options: { theme: string; conversation: string; width: number },
+  ) => Promise<unknown>;
+}
+
+interface InstagramEmbeds {
+  process: () => void;
+}
+
+declare global {
+  interface Window {
+    twttr?: { widgets?: TwitterWidgets; _e?: Array<() => void> };
+    instgrm?: { Embeds?: InstagramEmbeds };
+  }
+}
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 
@@ -22,6 +42,7 @@ interface PreviewData {
 const previewCache = new Map<string, PreviewData | null>();
 
 function YouTubeEmbed({ url }: { url: string }) {
+  const [loading, setLoading] = useState(true);
   const match = url.match(YOUTUBE_REGEX);
   if (!match) return null;
   const videoId = match[1];
@@ -29,19 +50,27 @@ function YouTubeEmbed({ url }: { url: string }) {
 
   return (
     <div style={{
+      position: "relative",
       borderRadius: "12px",
       overflow: "hidden",
+      width: "min(320px, 100%)",
       maxWidth: "100%",
       background: "#000",
       aspectRatio: isShorts ? "9/16" : "16/9",
     }}>
+      {loading && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", background: "var(--gray-bubble)" }}>
+          <MediaLoadingDots />
+        </div>
+      )}
       <iframe
         width="100%"
         height="100%"
         src={`https://www.youtube.com/embed/${videoId}`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
-        style={{ display: "block", border: 0 }}
+        onLoad={() => setLoading(false)}
+        style={{ display: loading ? "none" : "block", border: 0 }}
       />
     </div>
   );
@@ -52,11 +81,7 @@ function LinkPreviewCard({ url }: { url: string }) {
   const [loading, setLoading] = useState(!previewCache.has(url));
 
   useEffect(() => {
-    if (previewCache.has(url)) {
-      setData(previewCache.get(url)!);
-      setLoading(false);
-      return;
-    }
+    if (previewCache.has(url)) return;
 
     fetch(`${WORKER_URL}/api/preview?url=${encodeURIComponent(url)}`)
       .then((r) => r.ok ? r.json() : null)
@@ -72,7 +97,8 @@ function LinkPreviewCard({ url }: { url: string }) {
       .finally(() => setLoading(false));
   }, [url]);
 
-  if (loading || !data) return null;
+  if (loading) return <MediaLoadingDots minHeight="72px" />;
+  if (!data) return null;
 
   return (
     <a
@@ -132,72 +158,99 @@ function LinkPreviewCard({ url }: { url: string }) {
 
 function TwitterEmbed({ url }: { url: string }) {
   const tweetId = url.match(/status\/(\d+)/)?.[1];
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!tweetId || !container) return;
+
+    const render = () => {
+      if (window.twttr?.widgets?.createTweet) {
+        window.twttr.widgets.createTweet(tweetId, container, {
+          theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
+          conversation: "none",
+          width: Math.min(320, container.clientWidth || 320),
+        }).then(() => setLoading(false)).catch(() => setLoading(false));
+      }
+    };
+
+    if (window.twttr?.widgets) {
+      render();
+    } else {
+      if (!document.getElementById("twitter-wjs")) {
+        const script = document.createElement("script");
+        script.id = "twitter-wjs";
+        script.src = "https://platform.twitter.com/widgets.js";
+        script.async = true;
+        document.body.appendChild(script);
+      }
+      window.twttr = window.twttr || { _e: [] };
+      (window.twttr._e ||= []).push(render);
+    }
+  }, [tweetId]);
+
   if (!tweetId) return null;
 
   return (
     <div
-      style={{ maxWidth: "100%", minHeight: "80px", overflow: "hidden", borderRadius: "12px" }}
-      ref={(el) => {
-        if (!el || el.dataset.rendered) return;
-        el.dataset.rendered = "1";
-
-        const render = () => {
-          if ((window as any).twttr?.widgets?.createTweet) {
-            (window as any).twttr.widgets.createTweet(tweetId, el, {
-              theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
-              conversation: "none",
-            });
-          }
-        };
-
-        if ((window as any).twttr?.widgets) {
-          render();
-        } else {
-          if (!document.getElementById("twitter-wjs")) {
-            const script = document.createElement("script");
-            script.id = "twitter-wjs";
-            script.src = "https://platform.twitter.com/widgets.js";
-            script.async = true;
-            document.body.appendChild(script);
-          }
-          const w = (window as any);
-          (w.twttr = w.twttr || { _e: [] })._e.push(render);
-        }
-      }}
-    />
+      className="native-chat-embed"
+      style={{ position: "relative", width: "min(320px, 100%)", maxWidth: "100%", minHeight: "80px", overflow: "hidden", borderRadius: "12px" }}
+    >
+      {loading && <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "var(--gray-bubble)" }}><MediaLoadingDots minHeight="80px" /></div>}
+      <div ref={containerRef} style={{ width: "100%" }} />
+    </div>
   );
 }
 
 function InstagramEmbed({ url }: { url: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:100%;width:100%;min-width:0;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
+
+    const observer = new MutationObserver(() => {
+      if (container.querySelector("iframe")) {
+        setLoading(false);
+        observer.disconnect();
+      }
+    });
+    observer.observe(container, { childList: true, subtree: true });
+
+    const process = () => {
+      if (window.instgrm?.Embeds?.process) {
+        window.instgrm.Embeds.process();
+      }
+    };
+
+    if (window.instgrm) {
+      process();
+    } else if (!document.getElementById("insta-embed-js")) {
+      const script = document.createElement("script");
+      script.id = "insta-embed-js";
+      script.src = "https://www.instagram.com/embed.js";
+      script.async = true;
+      script.onload = process;
+      document.body.appendChild(script);
+    } else {
+      setTimeout(process, 1000);
+    }
+
+    return () => observer.disconnect();
+  }, [url]);
+
   return (
     <div
-      style={{ maxWidth: "100%", overflow: "hidden", borderRadius: "12px" }}
-      ref={(el) => {
-        if (!el || el.dataset.rendered) return;
-        el.dataset.rendered = "1";
-
-        el.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:100%;width:100%;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
-
-        const process = () => {
-          if ((window as any).instgrm?.Embeds?.process) {
-            (window as any).instgrm.Embeds.process();
-          }
-        };
-
-        if ((window as any).instgrm) {
-          process();
-        } else if (!document.getElementById("insta-embed-js")) {
-          const script = document.createElement("script");
-          script.id = "insta-embed-js";
-          script.src = "https://www.instagram.com/embed.js";
-          script.async = true;
-          script.onload = process;
-          document.body.appendChild(script);
-        } else {
-          setTimeout(process, 1000);
-        }
-      }}
-    />
+      className="native-chat-embed"
+      style={{ position: "relative", width: "min(320px, 100%)", maxWidth: "100%", minHeight: "80px", overflow: "hidden", borderRadius: "12px" }}
+    >
+      {loading && <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "var(--gray-bubble)" }}><MediaLoadingDots minHeight="80px" /></div>}
+      <div ref={containerRef} style={{ width: "100%" }} />
+    </div>
   );
 }
 
@@ -213,6 +266,8 @@ export function MessageEmbeds({ text }: { text: string }) {
     <div style={{
       marginTop: "6px",
       overflow: "visible",
+      width: "min(320px, 100%)",
+      maxWidth: "100%",
     }}>
       {unique.map((url) => {
         // YouTube — inline iframe
