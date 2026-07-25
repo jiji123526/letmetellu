@@ -128,18 +128,8 @@ body {
   background: #777;
 }
 
-/* Native widgets inject fixed-width descendants; constrain them to the bubble. */
-.native-chat-embed,
-.native-chat-embed > div,
-.native-chat-embed blockquote {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
-}
-
-.native-chat-embed iframe {
+/* Native widgets render at 320px, then their wrapper scales them proportionally. */
+.native-chat-embed-scale iframe {
   display: block !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 0 !important;
+  max-width: none !important;
 }
