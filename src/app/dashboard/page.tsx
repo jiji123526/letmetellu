@@ -253,8 +253,18 @@ export default function DashboardPage() {
 
           <div className="px-4 pb-3">
             <div className="relative">
-              <svg viewBox="0 0 24 24" className="absolute left-10 top-1/2 -translate-y-1/2 w-4 h-4" fill="none" stroke="#8e8e93" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("dashboardSearch")} className="w-full border-none rounded-[11px] outline-none text-[15px] text-center" style={{ background: "#f2f2f7", padding: "9px 38px", boxSizing: "border-box" }} />
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" fill="none" stroke="#8e8e93" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("dashboardSearch")}
+                className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
+                style={{ background: "#efeff4", padding: "0 42px", boxSizing: "border-box", color: "#111" }}
+              />
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="12" rx="3" />
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
+              </svg>
             </div>
           </div>
           <div className="h-px ml-[80px]" style={{ background: "#e5e5ea" }} />
