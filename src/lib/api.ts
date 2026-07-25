@@ -31,20 +31,13 @@ export async function fetchInit(channelId: string) {
   const headers: Record<string, string> = {};
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
-  // If user has a session cookie, route through Vercel proxy for owner bypass
-  // Otherwise, call Worker directly (faster, no proxy overhead)
-  const hasSession = typeof document !== "undefined" &&
-    (document.cookie.includes("next-auth.session-token") || document.cookie.includes("__Secure-next-auth.session-token"));
-
-  if (hasSession) {
-    const res = await fetch(`/api/init?channel=${channelId}`, { headers });
-    if (!res.ok) throw new Error(`Init failed: ${res.status}`);
-    return res.json();
-  } else {
-    const res = await fetch(`${WORKER_URL}/api/init?channel=${channelId}`, { headers });
-    if (!res.ok) throw new Error(`Init failed: ${res.status}`);
-    return res.json();
-  }
+  // Always use the same-origin proxy. Auth.js session cookies are HttpOnly, so
+  // client-side cookie inspection cannot reliably decide whether the user is
+  // signed in. The proxy verifies the session server-side and forwards owner
+  // identity only when appropriate.
+  const res = await fetch(`/api/init?channel=${channelId}`, { headers });
+  if (!res.ok) throw new Error(`Init failed: ${res.status}`);
+  return res.json();
 }
 
 export async function verifyPasscode(channelId: string, passcode: string): Promise<{ token?: string; error?: string }> {

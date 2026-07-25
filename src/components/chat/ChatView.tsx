@@ -980,6 +980,11 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (data.blocked) setBlockedUsers(data.blocked);
             if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
             setLoading(false);
+          }).catch(() => {
+            // Restore the gate instead of leaving the page stuck on loading
+            // when the authenticated init request fails.
+            setPasscodeGate(passcodeGate);
+            setLoading(false);
           });
         }}
       />
