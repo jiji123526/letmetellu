@@ -44,23 +44,30 @@ const previewCache = new Map<string, PreviewData | null>();
 
 function useResponsiveEmbedScale() {
   const frameRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const [scaledHeight, setScaledHeight] = useState(80);
 
   useEffect(() => {
     const frame = frameRef.current;
-    if (!frame) return;
+    const content = contentRef.current;
+    if (!frame || !content) return;
 
-    const updateScale = () => {
-      setScale(Math.min(1, frame.clientWidth / NATIVE_EMBED_WIDTH));
+    const updateSize = () => {
+      const nextScale = Math.min(1, frame.clientWidth / NATIVE_EMBED_WIDTH);
+      const naturalHeight = Math.max(80, content.scrollHeight);
+      setScale(nextScale);
+      setScaledHeight(naturalHeight * nextScale);
     };
-    updateScale();
+    updateSize();
 
-    const observer = new ResizeObserver(updateScale);
+    const observer = new ResizeObserver(updateSize);
     observer.observe(frame);
+    observer.observe(content);
     return () => observer.disconnect();
   }, []);
 
-  return { frameRef, scale };
+  return { frameRef, contentRef, scale, scaledHeight };
 }
 
 function YouTubeEmbed({ url }: { url: string }) {
@@ -180,12 +187,11 @@ function LinkPreviewCard({ url }: { url: string }) {
 
 function TwitterEmbed({ url }: { url: string }) {
   const tweetId = url.match(/status\/(\d+)/)?.[1];
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { frameRef, scale } = useResponsiveEmbedScale();
+  const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const container = containerRef.current;
+    const container = contentRef.current;
     if (!tweetId || !container) return;
 
     const render = () => {
@@ -211,7 +217,7 @@ function TwitterEmbed({ url }: { url: string }) {
       window.twttr = window.twttr || { _e: [] };
       (window.twttr._e ||= []).push(render);
     }
-  }, [tweetId]);
+  }, [tweetId, contentRef]);
 
   if (!tweetId) return null;
 
@@ -219,26 +225,24 @@ function TwitterEmbed({ url }: { url: string }) {
     <div
       ref={frameRef}
       className="native-chat-embed"
-      style={{ position: "relative", width: `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", minHeight: loading ? "80px" : undefined, overflow: "hidden", borderRadius: "12px" }}
+      style={{ position: "relative", width: `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "80px" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
     >
       {loading && <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "var(--gray-bubble)" }}><MediaLoadingDots minHeight="80px" /></div>}
       <div
+        ref={contentRef}
         className="native-chat-embed-scale"
-        style={{ width: `${NATIVE_EMBED_WIDTH}px`, zoom: scale }}
-      >
-        <div ref={containerRef} style={{ width: `${NATIVE_EMBED_WIDTH}px` }} />
-      </div>
+        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left" }}
+      />
     </div>
   );
 }
 
 function InstagramEmbed({ url }: { url: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { frameRef, scale } = useResponsiveEmbedScale();
+  const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const container = containerRef.current;
+    const container = contentRef.current;
     if (!container) return;
 
     container.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:${NATIVE_EMBED_WIDTH}px;width:${NATIVE_EMBED_WIDTH}px;min-width:0;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
@@ -271,21 +275,20 @@ function InstagramEmbed({ url }: { url: string }) {
     }
 
     return () => observer.disconnect();
-  }, [url]);
+  }, [url, contentRef]);
 
   return (
     <div
       ref={frameRef}
       className="native-chat-embed"
-      style={{ position: "relative", width: `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", minHeight: loading ? "80px" : undefined, overflow: "hidden", borderRadius: "12px" }}
+      style={{ position: "relative", width: `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "80px" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
     >
       {loading && <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "var(--gray-bubble)" }}><MediaLoadingDots minHeight="80px" /></div>}
       <div
+        ref={contentRef}
         className="native-chat-embed-scale"
-        style={{ width: `${NATIVE_EMBED_WIDTH}px`, zoom: scale }}
-      >
-        <div ref={containerRef} style={{ width: `${NATIVE_EMBED_WIDTH}px` }} />
-      </div>
+        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left" }}
+      />
     </div>
   );
 }
