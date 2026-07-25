@@ -232,6 +232,17 @@ export const en: Record<LocaleKeys, string> = {
 
   // Dashboard
   dashboardTitle: "My Channels",
+  dashboardDesc: "Manage all of your anonymous chat channels in one place",
+  dashboardSearch: "Search by channel name or URL",
+  dashboardAccount: "Account",
+  dashboardCopyLink: "Copy link",
+  dashboardCopied: "Copied",
+  dashboardOpen: "Open",
+  dashboardEmptyDesc: "Create your own channel for anonymous conversations.",
+  dashboardFirstChannel: "Create your first channel",
+  dashboardNoSearchResults: "No channels match your search",
+  dashboardCreateDesc: "Choose a channel name and a shareable URL.",
+  dashboardCreateFailed: "Could not create the channel. Please try again.",
   noChannels: "No channels yet",
   createChannel: "Create New Channel",
   channelSlug: "Channel URL",

@@ -230,6 +230,17 @@ export const ko = {
 
   // Dashboard
   dashboardTitle: "내 채널",
+  dashboardDesc: "생성한 익명 채팅 채널을 한곳에서 관리하세요",
+  dashboardSearch: "채널 이름 또는 주소 검색",
+  dashboardAccount: "계정",
+  dashboardCopyLink: "링크 복사",
+  dashboardCopied: "복사됨",
+  dashboardOpen: "입장",
+  dashboardEmptyDesc: "익명으로 대화할 수 있는 나만의 채널을 만들어 보세요.",
+  dashboardFirstChannel: "첫 채널 만들기",
+  dashboardNoSearchResults: "검색 결과가 없습니다",
+  dashboardCreateDesc: "채널 이름과 공유할 주소를 정해주세요.",
+  dashboardCreateFailed: "채널 생성에 실패했습니다. 다시 시도해 주세요.",
   noChannels: "아직 채널이 없습니다",
   createChannel: "새 채널 만들기",
   channelSlug: "채널 주소",
