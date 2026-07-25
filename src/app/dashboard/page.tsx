@@ -49,7 +49,10 @@ export default function DashboardPage() {
   const [editing, setEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
-  const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(null);
+  const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try { return localStorage.getItem("letmetellu_prioritized_owned_channel"); } catch { return null; }
+  });
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
@@ -153,6 +156,7 @@ export default function DashboardPage() {
 
   const prioritizeOwned = (channelId: string) => {
     setPrioritizedOwnedId(channelId);
+    try { localStorage.setItem("letmetellu_prioritized_owned_channel", channelId); } catch {}
     setSwipe({ id: null, offset: 0 });
   };
 
