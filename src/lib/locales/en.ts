@@ -67,7 +67,7 @@ export const en: Record<LocaleKeys, string> = {
   liveEndMessage: "End live session?<br>All messages will be deleted.",
   liveEndBtn: "End",
   liveJoinTitle: "Live chat has started.",
-  liveJoinDesc: "Would you like to join?<br>All messages are deleted when live ends.",
+  liveJoinDesc: "Would you like to join?\nAll messages are deleted when live ends.",
   liveJoin: "Join",
   liveDismiss: "No thanks",
   liveLeave: "Leave",

@@ -65,7 +65,7 @@ export const ko = {
   liveEndMessage: "라이브를 종료하시겠습니까?<br>모든 메시지가 삭제됩니다.",
   liveEndBtn: "종료",
   liveJoinTitle: "라이브 채팅이 시작되었습니다.",
-  liveJoinDesc: "참여하시겠습니까?<br>라이브 종료 시 모든 메시지가 삭제됩니다.",
+  liveJoinDesc: "참여하시겠습니까?\n라이브 종료 시 모든 메시지가 삭제됩니다.",
   liveJoin: "참여",
   liveDismiss: "안할래",
   liveLeave: "나가기",

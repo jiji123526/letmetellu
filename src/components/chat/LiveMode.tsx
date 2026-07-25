@@ -18,7 +18,7 @@ export function LivePopup({ title, onJoin, onDismiss }: { title: string; onJoin:
           </svg>
         </div>
         <div style={{ fontSize: "var(--bubble-font-size, 17px)", color: "var(--gray-text)", marginBottom: "8px" }}>{title}</div>
-        <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", color: "var(--meta)", lineHeight: 1.5, marginBottom: "20px" }}>
+        <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", color: "var(--meta)", lineHeight: 1.5, marginBottom: "20px", whiteSpace: "pre-line" }}>
           {t("liveJoinDesc")}
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
