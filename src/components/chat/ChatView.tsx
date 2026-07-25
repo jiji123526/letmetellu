@@ -575,6 +575,103 @@ const MessageRow = React.memo(function MessageRow({
   );
 });
 
+interface MessageListProps {
+  threadedMessages: { topLevel: Message[]; repliesMap: Record<string, Message[]> };
+  effectiveAdmin: boolean;
+  uid: string;
+  authUserId?: string | null;
+  bubbleColor: string;
+  reportedMsgIds: Set<string>;
+  reportedTargetIds: Set<string>;
+  blockedUidSet: Set<string>;
+  searchQuery: string;
+  searchResultIdSet: Set<string>;
+  activeSearchId: string | null;
+  deletedMessageLabel: string;
+  onLongPress: MessageRowProps["onLongPress"];
+  onTouchStart: MessageRowProps["onTouchStart"];
+  onTouchEnd: MessageRowProps["onTouchEnd"];
+  onOpenImage: MessageRowProps["onOpenImage"];
+  onExpand: MessageRowProps["onExpand"];
+  onReaction: MessageRowProps["onReaction"];
+  onEmojiPicker: MessageRowProps["onEmojiPicker"];
+}
+
+const MessageList = React.memo(function MessageList({
+  threadedMessages,
+  effectiveAdmin,
+  uid,
+  authUserId,
+  bubbleColor,
+  reportedMsgIds,
+  reportedTargetIds,
+  blockedUidSet,
+  searchQuery,
+  searchResultIdSet,
+  activeSearchId,
+  deletedMessageLabel,
+  onLongPress,
+  onTouchStart,
+  onTouchEnd,
+  onOpenImage,
+  onExpand,
+  onReaction,
+  onEmojiPicker,
+}: MessageListProps) {
+  const commonProps = {
+    effectiveAdmin,
+    uid,
+    authUserId,
+    bubbleColor,
+    deletedMessageLabel,
+    onLongPress,
+    onTouchStart,
+    onTouchEnd,
+    onOpenImage,
+    onExpand,
+    onReaction,
+    onEmojiPicker,
+  };
+
+  return threadedMessages.topLevel.flatMap((message) => {
+    const rows: React.ReactElement[] = [
+      <MessageRow
+        key={message.id}
+        {...commonProps}
+        msg={message}
+        isReply={false}
+        parentIsAdmin={null}
+        isReported={reportedMsgIds.has(message.id)}
+        isReportedTarget={reportedTargetIds.has(message.id)}
+        isBlockedSender={blockedUidSet.has(message.uid)}
+        searchQuery={searchQuery}
+        isSearchMatch={searchResultIdSet.has(message.id)}
+        isActiveMatch={message.id === activeSearchId}
+      />,
+    ];
+
+    for (const reply of threadedMessages.repliesMap[message.id] || []) {
+      rows.push(
+        <MessageRow
+          key={reply.id}
+          {...commonProps}
+          msg={reply}
+          isReply
+          parentIsAdmin={!!message.is_admin}
+          isReported={reportedMsgIds.has(reply.id)}
+          isReportedTarget={reportedTargetIds.has(reply.id)}
+          isBlockedSender={blockedUidSet.has(reply.uid)}
+          searchQuery={searchQuery}
+          isSearchMatch={searchResultIdSet.has(reply.id)}
+          isActiveMatch={reply.id === activeSearchId}
+        />,
+      );
+    }
+
+    return rows;
+  });
+});
+
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -1772,57 +1869,27 @@ export function ChatView({ channelId }: { channelId: string }) {
         className="messages-scroll flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
         style={{ position: "relative", padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
       >
-        {threadedMessages.topLevel.flatMap((message) => {
-          const rows: React.ReactElement[] = [];
-          const replies = threadedMessages.repliesMap[message.id] || [];
-          const commonProps = {
-            effectiveAdmin,
-            uid,
-            authUserId,
-            bubbleColor,
-            deletedMessageLabel: t("deletedMessage"),
-            onLongPress: handleMemoizedLongPress,
-            onTouchStart: handleMemoizedTouchStart,
-            onTouchEnd: handleMemoizedTouchEnd,
-            onOpenImage: handleOpenMessageImage,
-            onExpand: openExpandedPost,
-            onReaction: handleMemoizedReaction,
-            onEmojiPicker: handleMemoizedEmojiPicker,
-          };
-          rows.push(
-            <MessageRow
-              key={message.id}
-              {...commonProps}
-              msg={message}
-              isReply={false}
-              parentIsAdmin={null}
-              isReported={reportedMsgIds.has(message.id)}
-              isReportedTarget={reportedTargetIds.has(message.id)}
-              isBlockedSender={blockedUidSet.has(message.uid)}
-              searchQuery={searchState.query}
-              isSearchMatch={searchResultIdSet.has(message.id)}
-              isActiveMatch={message.id === searchState.activeId}
-            />,
-          );
-          for (const reply of replies) {
-            rows.push(
-              <MessageRow
-                key={reply.id}
-                {...commonProps}
-                msg={reply}
-                isReply
-                parentIsAdmin={!!message.is_admin}
-                isReported={reportedMsgIds.has(reply.id)}
-                isReportedTarget={reportedTargetIds.has(reply.id)}
-                isBlockedSender={blockedUidSet.has(reply.uid)}
-                searchQuery={searchState.query}
-                isSearchMatch={searchResultIdSet.has(reply.id)}
-                isActiveMatch={reply.id === searchState.activeId}
-              />,
-            );
-          }
-          return rows;
-        })}
+        <MessageList
+          threadedMessages={threadedMessages}
+          effectiveAdmin={effectiveAdmin}
+          uid={uid}
+          authUserId={authUserId}
+          bubbleColor={bubbleColor}
+          reportedMsgIds={reportedMsgIds}
+          reportedTargetIds={reportedTargetIds}
+          blockedUidSet={blockedUidSet}
+          searchQuery={searchState.query}
+          searchResultIdSet={searchResultIdSet}
+          activeSearchId={searchState.activeId}
+          deletedMessageLabel={t("deletedMessage")}
+          onLongPress={handleMemoizedLongPress}
+          onTouchStart={handleMemoizedTouchStart}
+          onTouchEnd={handleMemoizedTouchEnd}
+          onOpenImage={handleOpenMessageImage}
+          onExpand={openExpandedPost}
+          onReaction={handleMemoizedReaction}
+          onEmojiPicker={handleMemoizedEmojiPicker}
+        />
         <div ref={messagesEndRef} />
       </main>
 
