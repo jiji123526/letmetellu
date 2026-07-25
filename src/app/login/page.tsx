@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 export default function LoginPage() {
@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [signupSubmitting, setSignupSubmitting] = useState(false);
+  const signupSubmittingRef = useRef(false);
 
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
@@ -30,32 +32,48 @@ export default function LoginPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (signupSubmittingRef.current) return;
     setError("");
     if (!email || !password) { setError(t("allFieldsRequired")); return; }
     if (!isValidEmail(email)) { setError(t("invalidEmail")); return; }
     if (password.length < 8 || !/\d/.test(password)) { setError(t("weakPassword")); return; }
 
-    // Create account on Worker
-    const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "";
-    const signupRes = await fetch(`${workerUrl}/api/auth`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "signup", email, password }),
-    });
-    const signupData = await signupRes.json() as { ok?: boolean; error?: string };
-    if (!signupData.ok) {
-      if (signupData.error === "user_exists") setError(t("userExists"));
-      else if (signupData.error === "weak_password") setError(t("weakPassword"));
-      else setError(t("signupError"));
-      return;
-    }
+    signupSubmittingRef.current = true;
+    setSignupSubmitting(true);
+    let redirecting = false;
+    try {
+      // Create account on Worker
+      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "";
+      const signupRes = await fetch(`${workerUrl}/api/auth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "signup", email, password }),
+      });
+      const signupData = await signupRes.json() as { ok?: boolean; error?: string };
+      if (!signupData.ok) {
+        if (signupData.error === "user_exists") setError(t("userExists"));
+        else if (signupData.error === "weak_password") setError(t("weakPassword"));
+        else setError(t("signupError"));
+        return;
+      }
 
-    // Auto sign in after signup
-    const result = await signIn("credentials", { email, password, redirect: false });
-    if (result?.error) {
-      setError(t("signupError"));
-    } else {
+      // Auto sign in after signup
+      const result = await signIn("credentials", { email, password, redirect: false });
+      if (result?.error) {
+        setError(t("signupError"));
+        return;
+      }
+
+      redirecting = true;
+      setError("");
       window.location.href = "/onboarding";
+    } catch {
+      setError(t("signupError"));
+    } finally {
+      if (!redirecting) {
+        signupSubmittingRef.current = false;
+        setSignupSubmitting(false);
+      }
     }
   };
 
@@ -146,7 +164,7 @@ export default function LoginPage() {
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("passwordHint")} style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e0e0e0", borderRadius: "12px", fontSize: "14px", fontFamily: "inherit", outline: "none", background: "#f8f8f8", boxSizing: "border-box" }} onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#3b8df0"; }} onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }} />
                 <div style={{ fontSize: "11px", color: "#bbb", marginTop: "4px" }}>{t("passwordHint")}</div>
               </div>
-              <button type="submit" style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: "#3b8df0", cursor: "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}>{ t("signupTab")}</button>
+              <button disabled={signupSubmitting} type="submit" style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: signupSubmitting ? "#9bbfe8" : "#3b8df0", cursor: signupSubmitting ? "wait" : "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}>{signupSubmitting ? t("loading") : t("signupTab")}</button>
             </form>
           </>
         )}

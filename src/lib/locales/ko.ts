@@ -233,6 +233,7 @@ export const ko = {
   noChannels: "아직 채널이 없습니다",
   createChannel: "새 채널 만들기",
   channelSlug: "채널 주소",
+  channelExists: "이미 사용 중인 채널 주소입니다",
   create: "만들기",
   logout: "로그아웃",
 

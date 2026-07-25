@@ -235,6 +235,7 @@ export const en: Record<LocaleKeys, string> = {
   noChannels: "No channels yet",
   createChannel: "Create New Channel",
   channelSlug: "Channel URL",
+  channelExists: "This channel URL is already in use",
   create: "Create",
   logout: "Log Out",
 

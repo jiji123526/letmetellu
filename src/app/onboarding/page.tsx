@@ -55,7 +55,7 @@ export default function OnboardingPage() {
     });
     const data = await res.json();
     if (data.error) {
-      if (data.error === "channel already exists") setError(t("userExists"));
+      if (data.error === "channel already exists") setError(t("channelExists"));
       else setError(data.error);
       return;
     }
@@ -66,7 +66,8 @@ export default function OnboardingPage() {
   const toggleItem = (i: number) => {
     setOpenItems((prev) => {
       const next = new Set(prev);
-      next.has(i) ? next.delete(i) : next.add(i);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
       return next;
     });
   };
