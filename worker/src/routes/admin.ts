@@ -163,6 +163,23 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "set-notice": {
       const { text } = payload || {};
       const noticeText = (text as string) || "";
+      if (noticeText) {
+        try {
+          const parsed = JSON.parse(noticeText) as { title?: unknown; body?: unknown };
+          if (
+            typeof parsed.title !== "string"
+            || parsed.title.length > 100
+            || (parsed.body !== undefined && (typeof parsed.body !== "string" || parsed.body.length > 1000))
+          ) {
+            return Response.json({ error: "notice_too_long" }, { status: 400 });
+          }
+        } catch {
+          // Backward-compatible title-only notices.
+          if (noticeText.length > 1000) {
+            return Response.json({ error: "notice_too_long" }, { status: 400 });
+          }
+        }
+      }
       // Upsert into config table
       await env.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
