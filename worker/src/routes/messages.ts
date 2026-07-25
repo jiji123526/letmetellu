@@ -19,8 +19,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // Passcode gate — check if channel requires passcode for writing
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
-    const channel = await env.DB.prepare("SELECT id, is_frozen, owner_uid, passcode FROM channels WHERE id = ?")
-      .bind(parentChannelId).first();
+    const channel = await env.DB.prepare(`
+      SELECT id, is_frozen, owner_uid, passcode,
+        (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
+      FROM channels
+      WHERE id = ?
+    `).bind(channel_id, parentChannelId).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
 
     if ((channel as any).passcode && !isVerifiedAdmin) {
@@ -32,14 +36,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       }
     }
 
-    // Freeze check — normal: check parent; live: check _live row
-    if (isLiveChannel) {
-      const liveRow = await env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?")
-        .bind(channel_id).first();
-      if (liveRow && (liveRow as any).is_frozen && !isVerifiedAdmin) {
-        return Response.json({ error: "channel frozen" }, { status: 403 });
-      }
-    } else if ((channel as any).is_frozen && !isVerifiedAdmin) {
+    // The target channel's freeze state is fetched with the parent channel,
+    // avoiding a second D1 round trip for live messages.
+    const isTargetFrozen = isLiveChannel
+      ? (channel as any).target_is_frozen
+      : (channel as any).is_frozen;
+    if (isTargetFrozen && !isVerifiedAdmin) {
       return Response.json({ error: "channel frozen" }, { status: 403 });
     }
 
@@ -53,15 +55,19 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "message_too_long" }, { status: 400 });
     }
 
-    // Check if user is blocked (check parent channel)
-    const blocked = await env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-      .bind(uid, fingerprint || "", parentChannelId).first();
+    // These are independent read-only checks. Run them together only after
+    // passcode, freeze, rate-limit and length validation have succeeded.
+    const [blocked, allowedByBannedWords] = await Promise.all([
+      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
+        .bind(uid, fingerprint || "", parentChannelId).first(),
+      text
+        ? checkBannedWords(text as string, parentChannelId, env)
+        : Promise.resolve(true),
+    ]);
     if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
 
-    // Banned words check (check parent channel)
-    if (text) {
-      const allowed = await checkBannedWords(text as string, parentChannelId, env);
-      if (!allowed) return Response.json({ error: "banned_word" }, { status: 403 });
+    if (!allowedByBannedWords) {
+      return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
     // Insert message (+ gallery if image) in a single batch
