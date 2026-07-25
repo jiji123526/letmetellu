@@ -230,6 +230,14 @@ export const ko = {
 
   // Dashboard
   dashboardTitle: "내 채널",
+  dashboardChats: "채팅",
+  dashboardOwnedTab: "내 채널",
+  dashboardRecentTab: "최근 방문",
+  dashboardManaged: "관리 중",
+  dashboardClear: "전체 삭제",
+  dashboardNoRecent: "최근 방문한 채널이 없습니다",
+  dashboardRecentDesc: "방문한 채널이 이 기기에 표시됩니다.",
+  dashboardGuestCta: "로그인하고 내 채널 만들기",
   dashboardDesc: "생성한 익명 채팅 채널을 한곳에서 관리하세요",
   dashboardSearch: "채널 이름 또는 주소 검색",
   dashboardAccount: "계정",

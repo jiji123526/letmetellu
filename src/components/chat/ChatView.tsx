@@ -30,6 +30,7 @@ import { MessageEmbeds } from "./MessageEmbeds";
 import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MediaLoadingDots } from "./MediaLoadingDots";
+import { recordRecentChannel } from "@/lib/recent-channels";
 
 interface Message {
   id: string;
@@ -823,6 +824,12 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const applyInitData = useCallback((data: InitData) => {
     setChannel(data.channel);
+    recordRecentChannel({
+      id: channelId,
+      name: data.channel.name,
+      profileImage: data.channel.profile_image,
+      bubbleColor: data.channel.bubble_color || "#3b8df0",
+    });
     setMessages(data.messages || []);
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
@@ -2205,6 +2212,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {headerMenu && (
         <HeaderMenu
           anchorRect={headerMenu}
+          onDashboard={() => { window.location.href = "/dashboard"; }}
           onSettings={() => setShowSettings(true)}
           onGallery={() => {
             setShowGallery(true);

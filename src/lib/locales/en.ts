@@ -232,6 +232,14 @@ export const en: Record<LocaleKeys, string> = {
 
   // Dashboard
   dashboardTitle: "My Channels",
+  dashboardChats: "Chats",
+  dashboardOwnedTab: "My Channels",
+  dashboardRecentTab: "Recent",
+  dashboardManaged: "Managed",
+  dashboardClear: "Clear All",
+  dashboardNoRecent: "No recently visited channels",
+  dashboardRecentDesc: "Channels you visit will appear on this device.",
+  dashboardGuestCta: "Log in to create a channel",
   dashboardDesc: "Manage all of your anonymous chat channels in one place",
   dashboardSearch: "Search by channel name or URL",
   dashboardAccount: "Account",
