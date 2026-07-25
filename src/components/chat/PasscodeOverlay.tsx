@@ -9,11 +9,12 @@ interface PasscodeOverlayProps {
   channelName: string;
   profileImage: string | null;
   bubbleColor: string;
+  passcodeHint?: string;
   notice?: string;
   onSuccess: () => void;
 }
 
-export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleColor, notice, onSuccess }: PasscodeOverlayProps) {
+export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleColor, passcodeHint, notice, onSuccess }: PasscodeOverlayProps) {
   const { t } = useLocale();
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState("");
@@ -70,6 +71,13 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
         <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--meta)", marginBottom: "24px" }}>
           {t("passcodeRequired")}
         </div>
+
+        {passcodeHint && (
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--gray-text)", background: "var(--gray-bubble)", borderRadius: "10px", padding: "10px 12px", marginBottom: "12px", overflowWrap: "anywhere" }}>
+            <span style={{ color: "var(--meta)" }}>{t("passcodeHintLabel")}: </span>
+            {passcodeHint}
+          </div>
+        )}
 
         {notice && (
           <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "#d32f2f", marginBottom: "12px" }}>

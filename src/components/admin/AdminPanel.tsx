@@ -9,6 +9,7 @@ interface AdminPanelProps {
   channelName: string;
   profileImage: string | null;
   currentColor: string;
+  passcodeHint: string;
   isFrozen: boolean;
   liveActive: boolean;
   petitionEnabled: boolean;
@@ -46,7 +47,7 @@ function darkenColor(hex: string, amount: number): string {
 interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; }
 
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, currentColor, passcodeHint, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
   const { t } = useLocale();
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
@@ -251,10 +252,14 @@ export function AdminPanel(props: AdminPanelProps) {
             <div style={{ fontSize: "13px", color: "var(--meta)", marginBottom: "6px" }}>{t("currentChannel")}: {channelName}</div>
             <input id="passcode-input" style={inputStyle} type="text" placeholder={t("newPasscode")} autoComplete="off" />
             <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>{t("passcodeHint")}</div>
+            <input id="passcode-hint-input" style={inputStyle} type="text" defaultValue={passcodeHint} placeholder={t("passcodeHintPlaceholder")} maxLength={200} autoComplete="off" />
+            <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>{t("passcodeHintPublic")}</div>
             <button style={saveBtnStyle} onClick={() => {
               const input = document.getElementById("passcode-input") as HTMLInputElement;
+              const hintInput = document.getElementById("passcode-hint-input") as HTMLInputElement;
               const value = input?.value?.trim() || "";
-              adminAction("set-passcode", channelId, { passcode: value || null });
+              const hint = hintInput?.value?.trim() || "";
+              adminAction("set-passcode", channelId, { passcode: value || null, hint });
               goBack();
             }}>{ t("save")}</button>
           </div>

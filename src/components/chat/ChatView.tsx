@@ -58,6 +58,7 @@ interface Channel {
   bubble_color: string;
   is_frozen: number;
   notice: string;
+  passcode_hint?: string | null;
 }
 
 interface InitData {
@@ -73,6 +74,7 @@ interface InitData {
   petitionEnabled?: boolean;
   dmEnabled?: boolean;
   hasPasscode?: boolean;
+  passcodeHint?: string;
   adminDataStatus?: "authorized" | "unauthorized";
 }
 
@@ -683,7 +685,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
-  const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; notice?: string } | null>(null);
+  const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; passcodeHint?: string; notice?: string } | null>(null);
   const [uid] = useState(getOrCreateUid);
   const [myFingerprint] = useState(() => typeof window !== "undefined" ? generateFingerprint() : "");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -890,7 +892,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         if (requestId !== initRequestIdRef.current) return;
         // Check if passcode-gated
         if (data.hasPasscode && !data.messages) {
-          setPasscodeGate({ name: data.channel.name, profile_image: data.channel.profile_image, bubble_color: data.channel.bubble_color });
+          setPasscodeGate({ name: data.channel.name, profile_image: data.channel.profile_image, bubble_color: data.channel.bubble_color, passcodeHint: data.passcodeHint });
           setLoading(false);
           return;
         }
@@ -1636,6 +1638,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         channelName={passcodeGate.name}
         profileImage={passcodeGate.profile_image}
         bubbleColor={passcodeGate.bubble_color || "#3b8df0"}
+        passcodeHint={passcodeGate.passcodeHint}
         notice={passcodeGate.notice}
         onSuccess={() => {
           // A passcode unlock always enters the normal channel first. Live
@@ -2271,6 +2274,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           channelName={channel?.name || ""}
           profileImage={channel?.profile_image || null}
           currentColor={bubbleColor}
+          passcodeHint={channel?.passcode_hint || ""}
           isFrozen={!!channel?.is_frozen}
           liveActive={liveActive}
           petitionEnabled={petitionEnabled}

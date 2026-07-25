@@ -41,12 +41,14 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
           return Response.json({
             hasPasscode: true,
+            passcodeHint: (channel as any).passcode_hint || "",
             channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
           });
         }
       } else {
         return Response.json({
           hasPasscode: true,
+          passcodeHint: (channel as any).passcode_hint || "",
           channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
         });
       }
@@ -145,6 +147,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   return Response.json({
     channel: safeChannel,
     hasPasscode: Boolean((channel as any).passcode),
+    passcodeHint: (channel as any).passcode_hint || "",
     messages,
     blocked,
     viewerBlocked,
