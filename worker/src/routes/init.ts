@@ -58,11 +58,21 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   // Administrative data must never be sent to ordinary channel entrants.
   let blocked: unknown[] = [];
+  let viewerBlocked = false;
   if (isOwner) {
     const result = await env.DB.prepare(
       "SELECT * FROM blocked WHERE channel_id = ?"
     ).bind(parentChannelId).all();
     blocked = result.results;
+  } else {
+    const viewerUid = request.headers.get("X-Viewer-Uid") || "";
+    const viewerFingerprint = request.headers.get("X-Viewer-Fingerprint") || "";
+    if (viewerUid.length <= 128 && viewerFingerprint.length <= 128 && (viewerUid || viewerFingerprint)) {
+      const match = await env.DB.prepare(
+        "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR fingerprint = ?) LIMIT 1"
+      ).bind(parentChannelId, viewerUid, viewerFingerprint).first();
+      viewerBlocked = !!match;
+    }
   }
 
   // Fetch banner notice from config table (from requested channel — separate for live)
@@ -128,6 +138,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     channel: safeChannel,
     messages,
     blocked,
+    viewerBlocked,
     dm: dmMessages || [],
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",

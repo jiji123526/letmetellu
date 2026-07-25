@@ -27,6 +27,13 @@ export async function GET(request: Request) {
     headers["X-Room-Token"] = roomToken;
   }
 
+  // Forward only the anonymous identifiers already used by the Worker when
+  // enforcing a block. The Worker returns a boolean, never the block list.
+  const viewerUid = request.headers.get("X-Viewer-Uid");
+  const viewerFingerprint = request.headers.get("X-Viewer-Fingerprint");
+  if (viewerUid) headers["X-Viewer-Uid"] = viewerUid;
+  if (viewerFingerprint) headers["X-Viewer-Fingerprint"] = viewerFingerprint;
+
   const res = await fetch(`${workerUrl}/api/init?channel=${channel}`, { headers });
   const data = await res.json();
 

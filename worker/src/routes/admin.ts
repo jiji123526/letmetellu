@@ -79,6 +79,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     case "unblock": {
       const { uid: unblockUid } = payload || {};
+      const blockedEntry = await env.DB.prepare(
+        "SELECT fingerprint FROM blocked WHERE uid = ? AND channel_id = ? LIMIT 1"
+      ).bind(unblockUid, channel_id).first();
       await env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
         .bind(unblockUid, channel_id).run();
       // Clean up old petition DMs from this user
@@ -92,7 +95,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "user-unblocked", uid: unblockUid }),
+        body: JSON.stringify({
+          type: "user-unblocked",
+          uid: unblockUid,
+          fingerprint: blockedEntry?.fingerprint || null,
+        }),
       }));
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",

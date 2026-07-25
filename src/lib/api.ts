@@ -1,3 +1,5 @@
+import { generateFingerprint } from "./fingerprint";
+
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 
@@ -30,6 +32,11 @@ export async function fetchInit(channelId: string) {
   const roomToken = getRoomToken(parentChannelId);
   const headers: Record<string, string> = {};
   if (roomToken) headers["X-Room-Token"] = roomToken;
+  if (typeof window !== "undefined") {
+    const viewerUid = localStorage.getItem("letsplay_uid");
+    if (viewerUid) headers["X-Viewer-Uid"] = viewerUid;
+    headers["X-Viewer-Fingerprint"] = generateFingerprint();
+  }
 
   // Always use the same-origin proxy. Auth.js session cookies are HttpOnly, so
   // client-side cookie inspection cannot reliably decide whether the user is

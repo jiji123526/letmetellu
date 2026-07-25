@@ -63,6 +63,7 @@ interface InitData {
   channel: Channel;
   messages?: Message[];
   blocked?: { uid: string; reason: string }[];
+  viewerBlocked?: boolean;
   dm?: Message[];
   bannerNotice?: string;
   welcomeConfig?: string;
@@ -351,6 +352,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
+  const [viewerBlocked, setViewerBlocked] = useState(false);
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -485,6 +487,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setChannel(data.channel);
     setMessages(data.messages || []);
     setBlockedUsers(data.blocked || []);
+    setViewerBlocked(data.viewerBlocked ?? false);
     setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     setActiveNotice(data.bannerNotice || "");
     setWelcomeConfig(data.welcomeConfig || "");
@@ -673,16 +676,24 @@ export function ChatView({ channelId }: { channelId: string }) {
         setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: newReactions } : m));
       }
       if (event.type === "user-blocked") {
-        // Update local blocked list so blocked user's input reflects immediately
         const blockedUid = event.uid as string;
         const blockedFp = event.fingerprint as string | null;
-        setBlockedUsers((prev) => {
-          if (prev.some((b) => b.uid === blockedUid)) return prev;
-          return [...prev, { uid: blockedUid, reason: "" }];
-        });
+        if (blockedUid === uid || (!!blockedFp && blockedFp === myFingerprint)) {
+          setViewerBlocked(true);
+        }
+        if (isOwner) {
+          setBlockedUsers((prev) => {
+            if (prev.some((b) => b.uid === blockedUid)) return prev;
+            return [...prev, { uid: blockedUid, reason: "" }];
+          });
+        }
       }
       if (event.type === "user-unblocked") {
         const unblockedUid = event.uid as string;
+        const unblockedFp = event.fingerprint as string | null;
+        if (unblockedUid === uid || (!!unblockedFp && unblockedFp === myFingerprint)) {
+          setViewerBlocked(false);
+        }
         setBlockedUsers((prev) => prev.filter((b) => b.uid !== unblockedUid));
       }
       if (event.type === "petition-changed") {
@@ -745,7 +756,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, uid, myFingerprint, t]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1095,7 +1106,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const effectiveAdmin = isAdmin && !adminViewAsUser;
 
   // Check if current user is blocked
-  const isUserBlocked = !effectiveAdmin && blockedUsers.some((b) => b.uid === uid || (myFingerprint && (b as any).fingerprint === myFingerprint));
+  const isUserBlocked = !effectiveAdmin && (
+    viewerBlocked
+    || blockedUsers.some((b) => b.uid === uid || (myFingerprint && (b as any).fingerprint === myFingerprint))
+  );
   const hasPetitioned = typeof window !== "undefined" && localStorage.getItem("petitionSent") === uid;
   // Reset petition status when unblocked (gives another chance on re-block)
   if (!isUserBlocked && hasPetitioned && typeof window !== "undefined") {
