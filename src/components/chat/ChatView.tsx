@@ -493,6 +493,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const initialScrollDoneRef = useRef(false);
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
   const reactionFrameRef = useRef<number | null>(null);
+  const handleReactionRef = useRef<(messageId: string, emoji: string) => void>(() => {});
 
   useEffect(() => () => {
     if (reactionFrameRef.current !== null) {
@@ -1334,6 +1335,14 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   };
 
+  handleReactionRef.current = handleReaction;
+  const handleMemoizedReaction = useCallback((messageId: string, emoji: string) => {
+    handleReactionRef.current(messageId, emoji);
+  }, []);
+  const handleMemoizedEmojiPicker = useCallback((messageId: string, rect: DOMRect) => {
+    setEmojiPicker({ msgId: messageId, rect });
+  }, []);
+
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
     return (
@@ -1594,8 +1603,6 @@ export function ChatView({ channelId }: { channelId: string }) {
 
             const isGroupStart = !isReply && (!prev || !isSameGroup(prev, msg, uid));
             const isLast = !isReply && (!next || !isSameGroup(msg, next, uid));
-            const reactions = parseReactions(msg.reactions);
-
             const bubble = (
               <div
                 data-bubble
@@ -1737,12 +1744,13 @@ export function ChatView({ channelId }: { channelId: string }) {
 
                   {/* Reactions */}
                   <ReactionBadge
-                    reactions={reactions}
+                    messageId={msg.id}
+                    reactions={msg.reactions}
                     myUid={effectiveAdmin && authUserId ? authUserId : uid}
                     isSent={isSent}
                     isReply={isReply}
-                    onReaction={(emoji) => handleReaction(msg.id, emoji)}
-                    onEmojiPicker={(rect) => setEmojiPicker({ msgId: msg.id, rect })}
+                    onReaction={handleMemoizedReaction}
+                    onEmojiPicker={handleMemoizedEmojiPicker}
                   />
                 </div>
               </div>

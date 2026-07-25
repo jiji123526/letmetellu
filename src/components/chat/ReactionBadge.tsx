@@ -1,16 +1,26 @@
 "use client";
 
+import { memo, useMemo } from "react";
+
 interface ReactionBadgeProps {
-  reactions: Record<string, string>; // key: "{uid}_{timestamp}" → value: emoji
+  messageId: string;
+  reactions: string;
   myUid: string;
   isSent: boolean;
   isReply?: boolean;
-  onReaction: (emoji: string) => void;
-  onEmojiPicker?: (rect: DOMRect) => void;
+  onReaction: (messageId: string, emoji: string) => void;
+  onEmojiPicker?: (messageId: string, rect: DOMRect) => void;
 }
 
-export function ReactionBadge({ reactions, myUid, isSent, isReply, onReaction, onEmojiPicker }: ReactionBadgeProps) {
-  if (!reactions || Object.keys(reactions).length === 0) return null;
+export const ReactionBadge = memo(function ReactionBadge({ messageId, reactions: reactionsJson, myUid, isSent, isReply, onReaction, onEmojiPicker }: ReactionBadgeProps) {
+  const reactions = useMemo(() => {
+    try {
+      return JSON.parse(reactionsJson || "{}") as Record<string, string>;
+    } catch {
+      return {};
+    }
+  }, [reactionsJson]);
+  if (Object.keys(reactions).length === 0) return null;
 
   // Group by emoji, count occurrences, track if current user reacted
   const counts: Record<string, { count: number; mine: boolean }> = {};
@@ -53,7 +63,7 @@ export function ReactionBadge({ reactions, myUid, isSent, isReply, onReaction, o
             }}
             onClick={(e) => {
               e.stopPropagation();
-              onReaction(emoji);
+              onReaction(messageId, emoji);
             }}
           >
             <span>{emoji}</span>
@@ -83,11 +93,11 @@ export function ReactionBadge({ reactions, myUid, isSent, isReply, onReaction, o
         }}
         onClick={(e) => {
           e.stopPropagation();
-          if (onEmojiPicker) onEmojiPicker(e.currentTarget.getBoundingClientRect());
+          if (onEmojiPicker) onEmojiPicker(messageId, e.currentTarget.getBoundingClientRect());
         }}
       >
         +
       </button>
     </div>
   );
-}
+});
