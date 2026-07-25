@@ -453,7 +453,6 @@ const MessageRow = React.memo(function MessageRow({
     : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
   const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
-  const hasTextAlongsideLink = !!msg.text?.replace(URL_LINK_REGEX, "").trim();
 
   const bubble = (
     <div
@@ -462,9 +461,7 @@ const MessageRow = React.memo(function MessageRow({
       style={{
         padding: msg.image
           ? "4px 4px 0"
-          : hasNativeEmbed && !hasTextAlongsideLink
-            ? "4px"
-            : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+          : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
         fontSize: "var(--bubble-font-size)",
         lineHeight: 1.38,
         overflowWrap: "anywhere",
@@ -551,7 +548,14 @@ const MessageRow = React.memo(function MessageRow({
         paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
       }}
     >
-      <div className={`flex flex-col ${isSent ? "items-end" : "items-start"}`} style={{ maxWidth: isReply ? "85%" : "74%" }}>
+      <div
+        className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
+        style={{
+          maxWidth: hasNativeEmbed
+            ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
+            : isReply ? "85%" : "74%",
+        }}
+      >
         {isReply ? (
           <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
             {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
