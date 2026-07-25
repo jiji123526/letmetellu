@@ -713,7 +713,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           bubble_color: channel?.bubble_color || "#3b8df0",
           notice: t("passcodeChanged"),
         });
-        setBanner({ text: t("passcodeChanged"), color: "#d32f2f" });
       }
       if (event.type === "user-blocked") {
         const blockedUid = event.uid as string;
