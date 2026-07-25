@@ -451,20 +451,23 @@ export function ChatView({ channelId }: { channelId: string }) {
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
   // Authenticate admin on WebSocket for DM privacy
-  const wsTokenRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (isOwner && channelId) {
-      fetch(`/api/ws-token?channel=${channelId}`)
-        .then((r) => r.json())
-        .then((data: { token?: string }) => {
-          if (data.token) {
-            wsTokenRef.current = data.token;
-            send({ type: "auth-admin", token: data.token });
-          }
-        })
-        .catch(() => {});
+  const authenticateAdminSocket = useCallback(async () => {
+    if (!isOwner || !channelId) return;
+    try {
+      const response = await fetch(`/api/ws-token?channel=${encodeURIComponent(channelId)}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const data = await response.json() as { token?: string };
+      if (data.token) send({ type: "auth-admin", token: data.token });
+    } catch {
+      // The next reconnect will request a fresh token again.
     }
   }, [isOwner, channelId, send]);
+
+  useEffect(() => {
+    authenticateAdminSocket();
+  }, [authenticateAdminSocket]);
 
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
@@ -625,9 +628,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "reconnected" && inLiveModeRef.current) {
         send({ type: "join-live" });
       }
-      // Re-authenticate admin on reconnect
-      if (event.type === "reconnected" && wsTokenRef.current) {
-        send({ type: "auth-admin", token: wsTokenRef.current });
+      // Always request a fresh short-lived token on reconnect.
+      if (event.type === "reconnected") {
+        authenticateAdminSocket();
       }
       if (event.type === "dm-new") {
         const dm = event.dm as Message;
@@ -742,7 +745,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send]);
+  }, [subscribe, channelId, send, authenticateAdminSocket]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
