@@ -1389,7 +1389,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 data-bubble
                 className="relative max-w-full break-words whitespace-pre-wrap select-none"
                 style={{
-                  padding: msg.image ? "4px 4px 0" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                  padding: msg.image || hasNativeEmbed ? "4px 4px 0" : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
                   fontSize: "var(--bubble-font-size)",
                   lineHeight: 1.38,
                   overflowWrap: "anywhere",
