@@ -320,9 +320,27 @@ export default function DashboardPage() {
                     ) : (
                       <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#007aff", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
                     )}
-                    <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#111" }} onClick={() => setLocale(locale === "ko" ? "en" : "ko")}>
-                      {t("language")}: {locale === "ko" ? "English" : "한국어"}
-                    </button>
+                    <div className="px-3 py-3">
+                      <div className="px-1 pb-2 text-[12px]" style={{ color: "#8e8e93" }}>{t("language")}</div>
+                      <div className="flex rounded-[8px] p-[2px]" style={{ background: "#e9e9ee" }}>
+                        {(["ko", "en"] as const).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            aria-pressed={locale === option}
+                            className="flex-1 border-none rounded-[6px] py-1.5 text-[12px] cursor-pointer"
+                            style={{
+                              background: locale === option ? "#fff" : "transparent",
+                              color: locale === option ? "#111" : "#6d6d72",
+                              boxShadow: locale === option ? "0 1px 3px rgba(0,0,0,.12)" : "none",
+                            }}
+                            onClick={() => setLocale(option)}
+                          >
+                            {option === "ko" ? "한국어" : "English"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

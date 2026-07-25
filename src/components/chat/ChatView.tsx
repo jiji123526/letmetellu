@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
+import { clearRoomToken, fetchInit, fetchOwnerChannels, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -706,6 +706,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showOwnerChannels, setShowOwnerChannels] = useState(false);
+  const [ownerChannelCount, setOwnerChannelCount] = useState(1);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
   const { t } = useLocale();
   const [manualAdmin] = useState(() => {
@@ -722,6 +723,15 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (typeof window === "undefined") return false;
     return localStorage.getItem(`inLiveMode_${channelId}`) === "true";
   });
+
+  useEffect(() => {
+    if (!channel?.id) return;
+    let active = true;
+    fetchOwnerChannels(channelId)
+      .then((data) => { if (active) setOwnerChannelCount(data.channels?.length || 1); })
+      .catch(() => { if (active) setOwnerChannelCount(1); });
+    return () => { active = false; };
+  }, [channel?.id, channelId]);
   const [liveTitle, setLiveTitle] = useState(() => {
     if (typeof window === "undefined") return t("liveTitle");
     return localStorage.getItem(`liveTitle_${channelId}`) || t("liveTitle");
@@ -1724,10 +1734,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         <div className="flex-1 flex flex-col items-center gap-[6px]">
           <button
             type="button"
-            className="rounded-full overflow-hidden relative top-[3px] cursor-pointer border-none p-0"
+            disabled={ownerChannelCount <= 1}
+            className="rounded-full overflow-hidden relative top-[3px] border-none p-0"
             aria-label={t("dashboardOwnerChannels")}
-            style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)" }}
-            onClick={() => setShowOwnerChannels(true)}
+            style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", cursor: ownerChannelCount > 1 ? "pointer" : "default" }}
+            onClick={() => { if (ownerChannelCount > 1) setShowOwnerChannels(true); }}
           >
             {channel?.profile_image ? (
               <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
