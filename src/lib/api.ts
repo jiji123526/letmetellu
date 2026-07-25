@@ -79,7 +79,7 @@ export async function fetchGallery(channelId: string, cursor?: string) {
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "gallery", channel: channelId });
   if (cursor) params.set("cursor", cursor);
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+  const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
   return res.json();
@@ -90,7 +90,7 @@ export async function fetchLinks(channelId: string, cursor?: string) {
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const params = new URLSearchParams({ type: "links", channel: channelId });
   if (cursor) params.set("cursor", cursor);
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+  const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
   return res.json();
