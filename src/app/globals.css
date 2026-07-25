@@ -134,8 +134,8 @@ body {
   padding: calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824) !important;
 }
 
-/* Match the original: hide an image caption until the image has loaded. */
-[data-bubble]:has(.message-image-loading) > .message-text {
+/* Match the original: show only the loading bubble until media is ready. */
+[data-bubble]:has(.media-loading-dots) > .message-text {
   display: none !important;
 }
 

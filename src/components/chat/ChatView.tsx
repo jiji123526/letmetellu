@@ -229,7 +229,7 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
   const [attempt, setAttempt] = useState(0);
 
   return (
-    <div className={`relative inline-block ${!loaded && !failed ? "message-image-loading" : ""}`}>
+    <div className="relative inline-block">
       {!loaded && !failed && <MediaLoadingDots />}
       {failed ? (
         <button
