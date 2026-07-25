@@ -829,6 +829,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       name: data.channel.name,
       profileImage: data.channel.profile_image,
       bubbleColor: data.channel.bubble_color || "#3b8df0",
+      hasPasscode: data.hasPasscode === true,
     });
     setMessages(data.messages || []);
     setBlockedUsers(data.blocked || []);

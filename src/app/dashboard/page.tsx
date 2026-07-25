@@ -12,6 +12,7 @@ interface Channel {
   profile_image: string | null;
   bubble_color: string;
   created_at: string;
+  has_passcode: number;
 }
 
 type DashboardTab = "owned" | "recent";
@@ -76,6 +77,7 @@ export default function DashboardPage() {
           name: channel.name,
           profileImage: channel.profile_image,
           bubbleColor: channel.bubble_color,
+          hasPasscode: channel.has_passcode === 1,
           meta: `/ch/${channel.id}`,
           time: formatDate(channel.created_at, locale),
           owned: true,
@@ -85,6 +87,7 @@ export default function DashboardPage() {
           name: channel.name,
           profileImage: channel.profileImage,
           bubbleColor: channel.bubbleColor,
+          hasPasscode: channel.hasPasscode,
           meta: `/ch/${channel.id}`,
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
@@ -233,6 +236,22 @@ export default function DashboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h2 className="m-0 truncate text-[16px] font-semibold">{item.name}</h2>
+                      {item.hasPasscode && (
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="w-3.5 h-3.5 flex-shrink-0"
+                          fill="none"
+                          stroke="#8e8e93"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          role="img"
+                          aria-label={t("passcodeRequired")}
+                        >
+                          <rect x="5" y="10" width="14" height="11" rx="2" />
+                          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                        </svg>
+                      )}
                       {item.owned && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "#eaf3ff", color: "#007aff" }}>{t("dashboardManaged")}</span>}
                     </div>
                     <p className="m-0 mt-1 truncate text-[14px]" style={{ color: "#8e8e93" }}>{item.meta}</p>

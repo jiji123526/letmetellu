@@ -144,6 +144,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   return Response.json({
     channel: safeChannel,
+    hasPasscode: Boolean((channel as any).passcode),
     messages,
     blocked,
     viewerBlocked,

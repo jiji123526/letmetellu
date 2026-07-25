@@ -22,7 +22,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
 
     // Fetch user's channels
     const { results: channels } = await env.DB.prepare(
-      "SELECT id, name, profile_image, bubble_color, created_at FROM channels WHERE owner_uid = ?"
+      "SELECT id, name, profile_image, bubble_color, created_at, passcode IS NOT NULL AS has_passcode FROM channels WHERE owner_uid = ?"
     ).bind(id).all();
 
     return Response.json({ ok: true, channels });
