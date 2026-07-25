@@ -132,6 +132,57 @@ function parseReactions(reactionsStr: string): Record<string, string> {
   }
 }
 
+function messagesEqual(left: Message, right: Message): boolean {
+  return left.id === right.id
+    && left.uid === right.uid
+    && left.nick === right.nick
+    && left.text === right.text
+    && left.is_admin === right.is_admin
+    && left.image === right.image
+    && left.reactions === right.reactions
+    && left.reply_to === right.reply_to
+    && left.created_at === right.created_at
+    && left.channel_id === right.channel_id
+    && left.dm === right.dm
+    && left.deleted === right.deleted
+    && left.edited === right.edited
+    && left.report === right.report
+    && left.reported_msg_id === right.reported_msg_id;
+}
+
+function mergeServerMessageSnapshot(previous: Message[], incoming: Message[]): Message[] {
+  if (previous.length === 0) return incoming;
+  if (incoming.length === 0) return [];
+
+  const previousById = new Map(previous.map((message) => [message.id, message]));
+  const incomingIds = new Set(incoming.map((message) => message.id));
+  const oldestIncomingTime = incoming[0]?.created_at || "";
+  const merged: Message[] = [];
+
+  // Preserve locally loaded history older than the server snapshot. Within the
+  // snapshot window, absence means the server deleted the message.
+  for (const message of previous) {
+    if (message.created_at < oldestIncomingTime || incomingIds.has(message.id)) {
+      merged.push(message);
+    }
+  }
+
+  const mergedById = new Map(merged.map((message) => [message.id, message]));
+  for (const message of incoming) {
+    const previousMessage = previousById.get(message.id);
+    mergedById.set(
+      message.id,
+      previousMessage && messagesEqual(previousMessage, message)
+        ? previousMessage
+        : message,
+    );
+  }
+
+  return [...mergedById.values()].sort((left, right) =>
+    (left.created_at || "").localeCompare(right.created_at || "")
+  );
+}
+
 function isSameGroup(_a: Message, _b: Message, _myUid: string) {
   return false;
 }
@@ -349,6 +400,8 @@ function MessageTextWithEmbeds({
   );
 }
 
+const MemoizedMessageTextWithEmbeds = React.memo(MessageTextWithEmbeds);
+
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -438,6 +491,14 @@ export function ChatView({ channelId }: { channelId: string }) {
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRequestIdRef = useRef(0);
   const initialScrollDoneRef = useRef(false);
+  const pendingReactionUpdatesRef = useRef(new Map<string, string>());
+  const reactionFrameRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (reactionFrameRef.current !== null) {
+      cancelAnimationFrame(reactionFrameRef.current);
+    }
+  }, []);
 
   const openExpandedPost = useCallback((text: string) => {
     const rect = messagesContainerRef.current?.getBoundingClientRect();
@@ -628,7 +689,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "reconnected" || event.type === "messages-sync") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) setMessages(data.messages);
+          if (data.messages) {
+            setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
+          }
         }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
@@ -677,7 +740,24 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "reaction-changed") {
         const msgId = event.message_id as string;
         const newReactions = event.reactions as string;
-        setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: newReactions } : m));
+        pendingReactionUpdatesRef.current.set(msgId, newReactions);
+        if (reactionFrameRef.current === null) {
+          reactionFrameRef.current = requestAnimationFrame(() => {
+            reactionFrameRef.current = null;
+            const updates = new Map(pendingReactionUpdatesRef.current);
+            pendingReactionUpdatesRef.current.clear();
+            setMessages((previous) => {
+              let changed = false;
+              const next = previous.map((message) => {
+                const reactions = updates.get(message.id);
+                if (reactions === undefined || reactions === message.reactions) return message;
+                changed = true;
+                return { ...message, reactions };
+              });
+              return changed ? next : previous;
+            });
+          });
+        }
       }
       if (event.type === "room-auth-failed") {
         clearRoomToken(channelId);
@@ -806,7 +886,9 @@ export function ChatView({ channelId }: { channelId: string }) {
       } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) setMessages(data.messages);
+          if (data.messages) {
+            setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
+          }
         });
       }
     };
@@ -1120,7 +1202,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     } catch {
       // A failed optimistic update must not remain visible only to this client.
       fetchMessages(activeChannelId).then((data) => {
-        if (data.messages) setMessages(data.messages);
+        if (data.messages) {
+          setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
+        }
       }).catch(() => {});
       setBanner({ text: t("sendFailed"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
@@ -1586,7 +1670,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                       />
                     )}
                     {msg.text && (
-                      <MessageTextWithEmbeds
+                      <MemoizedMessageTextWithEmbeds
                         key={`${msg.id}:${msg.text}`}
                         text={msg.text}
                         image={!!msg.image}
