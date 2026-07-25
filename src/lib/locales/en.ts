@@ -32,6 +32,7 @@ export const en: Record<LocaleKeys, string> = {
   blocked: "You are blocked from sending",
   chatFrozen: "Chat is frozen",
   sendFailed: "Failed to send",
+  adminDataAuthFailed: "Could not load admin data. Check the server authentication configuration.",
   chatUnfrozen: "Chat unfrozen",
   adminModeOn: "Admin mode enabled",
   adminModeOff: "Admin mode disabled",

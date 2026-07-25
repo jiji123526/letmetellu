@@ -28,6 +28,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const userId = request.headers.get("X-User-Id");
   const isOwner = internalToken === env.INTERNAL_SECRET
     && userId === (channel as any).owner_uid;
+  const adminDataStatus = userId === (channel as any).owner_uid
+    ? (isOwner ? "authorized" : "unauthorized")
+    : undefined;
 
   // Passcode gate: if channel has passcode, verify token or owner identity
   if ((channel as any).passcode) {
@@ -140,6 +143,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     blocked,
     viewerBlocked,
     dm: dmMessages || [],
+    adminDataStatus,
     presence: presence.count,
     bannerNotice: noticeConfig?.text || "",
     welcomeConfig: welcomeConfig?.text || "",

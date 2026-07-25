@@ -72,6 +72,7 @@ interface InitData {
   petitionEnabled?: boolean;
   dmEnabled?: boolean;
   hasPasscode?: boolean;
+  adminDataStatus?: "authorized" | "unauthorized";
 }
 
 interface ContextMenuState {
@@ -493,6 +494,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     setWelcomeConfig(data.welcomeConfig || "");
     setPetitionEnabled(data.petitionEnabled ?? true);
     setDmEnabled(data.dmEnabled ?? true);
+    if (data.adminDataStatus === "unauthorized") {
+      setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
+    }
 
     if (data.emojiPresets) {
       localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);

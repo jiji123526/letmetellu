@@ -30,6 +30,7 @@ export const ko = {
   blocked: "차단되어 전송할 수 없습니다",
   chatFrozen: "채팅이 얼려져 있습니다",
   sendFailed: "전송 실패",
+  adminDataAuthFailed: "관리자 데이터를 불러오지 못했습니다. 서버 인증 설정을 확인해 주세요.",
   chatUnfrozen: "채팅이 해제되었습니다",
   adminModeOn: "관리자 모드 활성화",
   adminModeOff: "관리자 모드 해제",
