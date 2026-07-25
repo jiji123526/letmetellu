@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { clearRoomToken, fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -1144,6 +1144,44 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
 
+  const displayMessages = useMemo(
+    () => effectiveAdmin
+      ? [...messages, ...dmMessages].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
+      : messages.filter((message) => !message.report),
+    [effectiveAdmin, messages, dmMessages],
+  );
+  const blockedUidSet = useMemo(
+    () => new Set(blockedUsers.map((blockedUser) => blockedUser.uid)),
+    [blockedUsers],
+  );
+  const reportedTargetIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (effectiveAdmin) {
+      for (const message of displayMessages) {
+        if (message.report && message.reported_msg_id) ids.add(message.reported_msg_id);
+      }
+    }
+    return ids;
+  }, [effectiveAdmin, displayMessages]);
+  const searchResultIdSet = useMemo(
+    () => new Set(searchState.resultIds),
+    [searchState.resultIds],
+  );
+  const threadedMessages = useMemo(() => {
+    const topLevel: Message[] = [];
+    const repliesMap: Record<string, Message[]> = {};
+    const messageIds = new Set(displayMessages.map((message) => message.id));
+    for (const message of displayMessages) {
+      if (message.reply_to && messageIds.has(message.reply_to)) {
+        if (!repliesMap[message.reply_to]) repliesMap[message.reply_to] = [];
+        repliesMap[message.reply_to].push(message);
+      } else {
+        topLevel.push(message);
+      }
+    }
+    return { topLevel, repliesMap };
+  }, [displayMessages]);
+
   // Check if current user is blocked
   const isUserBlocked = !effectiveAdmin && (
     viewerBlocked
@@ -1448,24 +1486,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         style={{ position: "relative", padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
       >
         {(() => {
-          // Merge DMs into messages when admin is active
-          const allMsgs = effectiveAdmin
-            ? [...messages, ...dmMessages].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
-            : messages.filter((m) => !m.report);
-
-          // Separate top-level messages and replies (threaded under parent)
-          const topLevel: Message[] = [];
-          const repliesMap: Record<string, Message[]> = {};
-          const messageIds = new Set(allMsgs.map((m) => m.id));
-
-          allMsgs.forEach((m) => {
-            if (m.reply_to && messageIds.has(m.reply_to)) {
-              if (!repliesMap[m.reply_to]) repliesMap[m.reply_to] = [];
-              repliesMap[m.reply_to].push(m);
-            } else {
-              topLevel.push(m);
-            }
-          });
+          const { topLevel, repliesMap } = threadedMessages;
 
           const renderBubble = (msg: Message, prev: Message | null, next: Message | null, isReply: boolean, parentMsg: Message | null) => {
             // Determine parent's side (replies always follow parent's side)
@@ -1512,7 +1533,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                     ? "#ffeaea"
                     : reportedMsgIds.has(msg.id)
                       ? "#ffe0e0"
-                      : (effectiveAdmin && !msg.report && allMsgs.some((r) => r.report && r.reported_msg_id === msg.id))
+                      : (effectiveAdmin && !msg.report && reportedTargetIds.has(msg.id))
                         ? "#ffe0e0"
                         : msg.dm
                           ? (isMine ? "#7b3fa0" : "#ddc8ed")
@@ -1521,14 +1542,14 @@ export function ChatView({ channelId }: { channelId: string }) {
                             : "var(--gray-bubble)",
                   color: msg.report
                     ? "#c00"
-                    : reportedMsgIds.has(msg.id) || (effectiveAdmin && allMsgs.some((r) => r.report && r.reported_msg_id === msg.id))
+                    : reportedMsgIds.has(msg.id) || reportedTargetIds.has(msg.id)
                       ? "#a00"
                       : msg.dm
                         ? (isMine ? "#fff" : "#5a1580")
                         : isMine ? "#fff" : "var(--gray-text)",
                   cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
                   opacity: reportedMsgIds.has(msg.id) ? 0.6
-                    : (effectiveAdmin && blockedUsers.some((b) => b.uid === msg.uid)) ? 0.4
+                    : (effectiveAdmin && blockedUidSet.has(msg.uid)) ? 0.4
                     : undefined,
                 }}
                 onContextMenu={(e) => {
@@ -1571,7 +1592,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                         image={!!msg.image}
                         isMine={isMine}
                         searchQuery={searchState.query}
-                        isSearchMatch={searchState.resultIds.includes(msg.id)}
+                        isSearchMatch={searchResultIdSet.has(msg.id)}
                         isActiveMatch={msg.id === searchState.activeId}
                         showEmbeds={!msg.report && !msg.image}
                         onExpand={openExpandedPost}
