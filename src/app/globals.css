@@ -134,6 +134,11 @@ body {
   padding: calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824) !important;
 }
 
+/* Match the original: hide an image caption until the image has loaded. */
+[data-bubble]:has(.message-image-loading) > .message-text {
+  display: none !important;
+}
+
 /* Native widgets render at 320px, then their wrapper scales them proportionally. */
 .native-chat-embed,
 .native-chat-embed-scale {

@@ -229,7 +229,7 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
   const [attempt, setAttempt] = useState(0);
 
   return (
-    <div className="relative inline-block">
+    <div className={`relative inline-block ${!loaded && !failed ? "message-image-loading" : ""}`}>
       {!loaded && !failed && <MediaLoadingDots />}
       {failed ? (
         <button
@@ -286,7 +286,7 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
 
   return (
     <>
-      <span style={image ? { display: "block", padding: "2px 10px 8px" } : undefined}>
+      <span className="message-text" style={image ? { display: "block", padding: "2px 10px 8px" } : undefined}>
         {content}
         {isLong && (
           <button
