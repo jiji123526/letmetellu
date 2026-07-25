@@ -254,8 +254,8 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
           key={attempt}
           src={src}
           alt=""
-          className="block w-full max-w-[260px] h-auto rounded-[15px]"
-          style={{ display: loaded ? "block" : "none", objectFit: "contain" }}
+          className="block h-auto rounded-[15px]"
+          style={{ display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain" }}
           onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
         />
@@ -1492,8 +1492,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 <div
                   className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
                   style={{
-                    width: hasNativeEmbed ? "min(340px, 100%)" : undefined,
-                    maxWidth: hasNativeEmbed ? "min(340px, 100%)" : (isReply ? "85%" : "74%"),
+                    maxWidth: isReply ? "85%" : "74%",
                   }}
                 >
                   {/* Bubble with reply arrow */}
