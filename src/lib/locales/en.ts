@@ -236,6 +236,7 @@ export const en: Record<LocaleKeys, string> = {
   // Dashboard
   dashboardTitle: "My Channels",
   dashboardChats: "Chats",
+  dashboardOwnerChannels: "More channels from this admin",
   dashboardOwnedTab: "My Channels",
   dashboardRecentTab: "Recent",
   dashboardManaged: "Managed",

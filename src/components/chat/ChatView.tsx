@@ -31,6 +31,7 @@ import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 import { recordRecentChannel } from "@/lib/recent-channels";
+import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 
 interface Message {
   id: string;
@@ -704,6 +705,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const galleryLoading = useRef(false);
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showOwnerChannels, setShowOwnerChannels] = useState(false);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
   const { t } = useLocale();
   const [manualAdmin] = useState(() => {
@@ -1708,27 +1710,24 @@ export function ChatView({ channelId }: { channelId: string }) {
           messagesContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
         }}
       >
-        {/* Notice button — only show if rules exist */}
-        {channel?.notice && channel.notice !== "[]" && (
         <button
           className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
           style={{ color: bubbleColor }}
-          onClick={() => setShowNotice(true)}
+          onClick={() => { window.location.href = "/dashboard"; }}
+          aria-label={t("dashboardChats")}
         >
           <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}>
-            <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M12 16v-4M12 8h.01" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        )}
 
         <div className="flex-1 flex flex-col items-center gap-[6px]">
           <button
             type="button"
             className="rounded-full overflow-hidden relative top-[3px] cursor-pointer border-none p-0"
-            aria-label={t("dashboardChats")}
+            aria-label={t("dashboardOwnerChannels")}
             style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)" }}
-            onClick={() => { window.location.href = "/dashboard"; }}
+            onClick={() => setShowOwnerChannels(true)}
           >
             {channel?.profile_image ? (
               <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
@@ -2216,8 +2215,17 @@ export function ChatView({ channelId }: { channelId: string }) {
             });
           }}
           onLinks={() => setShowLinks(true)}
+          onRules={channel?.notice && channel.notice !== "[]" ? () => setShowNotice(true) : undefined}
           onAdmin={effectiveAdmin ? () => setShowAdminPanel(true) : undefined}
           onClose={() => setHeaderMenu(null)}
+        />
+      )}
+
+      {showOwnerChannels && (
+        <OwnerChannelsPopup
+          currentChannelId={channelId}
+          bubbleColor={bubbleColor}
+          onClose={() => setShowOwnerChannels(false)}
         />
       )}
 

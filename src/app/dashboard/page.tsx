@@ -303,17 +303,24 @@ export default function DashboardPage() {
               {showAccount && (
                 <>
                   <button className="fixed inset-0 z-10 border-none bg-transparent" aria-label={t("close")} onClick={() => setShowAccount(false)} />
-                  <div className="absolute right-0 top-[42px] z-20 w-[230px] rounded-[14px] p-2 text-left" style={{ background: "#fff", border: "1px solid #e5e5ea", boxShadow: "0 14px 40px rgba(0,0,0,.14)" }}>
+                  <div
+                    className="absolute right-0 top-[42px] z-20 min-w-[180px] overflow-hidden rounded-[12px] text-left"
+                    style={{
+                      background: "rgba(255,255,255,.82)",
+                      boxShadow: "0 4px 20px rgba(0,0,0,.15)",
+                      backdropFilter: "saturate(180%) blur(20px)",
+                      WebkitBackdropFilter: "saturate(180%) blur(20px)",
+                    }}
+                  >
                     {isLoggedIn ? (
                       <>
-                        <div className="px-3 py-2 text-[12px] truncate" style={{ color: "#8e8e93" }}>{session.user?.email}</div>
-                        <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#ff3b30" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
+                        <div className="px-4 py-3 text-[12px] truncate" style={{ color: "#8e8e93", borderBottom: "0.5px solid #e5e5ea" }}>{session.user?.email}</div>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff3b30", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
                       </>
                     ) : (
-                      <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#007aff" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
+                      <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#007aff", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
                     )}
-                    <div className="h-px my-1" style={{ background: "#e5e5ea" }} />
-                    <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#111" }} onClick={() => setLocale(locale === "ko" ? "en" : "ko")}>
+                    <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#111" }} onClick={() => setLocale(locale === "ko" ? "en" : "ko")}>
                       {t("language")}: {locale === "ko" ? "English" : "한국어"}
                     </button>
                   </div>

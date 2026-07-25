@@ -53,6 +53,20 @@ export async function fetchInit(channelId: string) {
   return res.json();
 }
 
+export async function fetchOwnerChannels(channelId: string): Promise<{
+  channels?: Array<{
+    id: string;
+    name: string;
+    profile_image: string | null;
+    bubble_color: string;
+    has_passcode: number;
+  }>;
+}> {
+  const res = await fetch(`${WORKER_URL}/api/user?channel=${encodeURIComponent(channelId)}`);
+  if (!res.ok) throw new Error(`Owner channels failed: ${res.status}`);
+  return res.json();
+}
+
 export async function verifyPasscode(channelId: string, passcode: string): Promise<{ token?: string; error?: string }> {
   const res = await fetch(`${WORKER_URL}/api/verify-passcode`, {
     method: "POST",

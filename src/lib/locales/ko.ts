@@ -234,6 +234,7 @@ export const ko = {
   // Dashboard
   dashboardTitle: "내 채널",
   dashboardChats: "채팅",
+  dashboardOwnerChannels: "관리자의 다른 채널",
   dashboardOwnedTab: "내 채널",
   dashboardRecentTab: "최근 방문",
   dashboardManaged: "관리 중",
