@@ -54,82 +54,87 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     // Owner or valid token — continue to full data
   }
 
-  // Fetch recent messages (from the requested channel — live or normal)
-  const { results: messages } = await env.DB.prepare(
-    "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
-  ).bind(channelId, channelId).all();
+  // Collect independent reads into one D1 batch. This removes the accumulated
+  // latency of issuing messages, settings and moderation queries one by one.
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare(
+      "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+    ).bind(channelId, channelId),
+    env.DB.prepare(`
+      SELECT id, text FROM config
+      WHERE (channel_id = ? AND id = ?)
+         OR (channel_id = ? AND id IN (?, ?, ?, ?, ?))
+    `).bind(
+      channelId,
+      `notice_${channelId}`,
+      parentChannelId,
+      `welcome_${parentChannelId}`,
+      `live_${parentChannelId}`,
+      `liveEmojis_${parentChannelId}`,
+      `petition_${parentChannelId}`,
+      `dm_${parentChannelId}`,
+    ),
+    env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
+  ];
 
-  // Administrative data must never be sent to ordinary channel entrants.
-  let blocked: unknown[] = [];
-  let viewerBlocked = false;
+  let blockedIndex: number | null = null;
+  let viewerBlockedIndex: number | null = null;
+  let dmIndex: number | null = null;
   if (isOwner) {
-    const result = await env.DB.prepare(
-      "SELECT * FROM blocked WHERE channel_id = ?"
-    ).bind(parentChannelId).all();
-    blocked = result.results;
+    blockedIndex = statements.length;
+    statements.push(
+      env.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?").bind(parentChannelId)
+    );
+    dmIndex = statements.length;
+    statements.push(
+      env.DB.prepare(
+        "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+      ).bind(channelId)
+    );
   } else {
     const viewerUid = request.headers.get("X-Viewer-Uid") || "";
     const viewerFingerprint = request.headers.get("X-Viewer-Fingerprint") || "";
     if (viewerUid.length <= 128 && viewerFingerprint.length <= 128 && (viewerUid || viewerFingerprint)) {
-      const match = await env.DB.prepare(
-        "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR fingerprint = ?) LIMIT 1"
-      ).bind(parentChannelId, viewerUid, viewerFingerprint).first();
-      viewerBlocked = !!match;
+      viewerBlockedIndex = statements.length;
+      statements.push(
+        env.DB.prepare(
+          "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR fingerprint = ?) LIMIT 1"
+        ).bind(parentChannelId, viewerUid, viewerFingerprint)
+      );
     }
   }
 
-  // Fetch banner notice from config table (from requested channel — separate for live)
-  const noticeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`notice_${channelId}`, channelId).first();
-
-  // Fetch welcome popup config (from parent channel)
-  const welcomeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`welcome_${parentChannelId}`, parentChannelId).first();
-
-  // Fetch live mode status (from parent channel)
-  const liveConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`live_${parentChannelId}`, parentChannelId).first();
-
-  // Fetch emoji presets for live mode (from parent channel)
-  const emojiPresetsConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`liveEmojis_${parentChannelId}`, parentChannelId).first();
-
-  // Fetch petition/dm toggle settings
-  const petitionConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`petition_${parentChannelId}`, parentChannelId).first();
-  const dmConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
-    .bind(`dm_${parentChannelId}`, parentChannelId).first();
-
-  let dmMessages: unknown[] = [];
-  if (isOwner) {
-    const result = await env.DB.prepare(
-      "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
-    ).bind(channelId).all();
-    dmMessages = result.results;
-  }
-
-  // Gallery fetched on-demand when panel opens (not included in init to save payload)
-
-  // Get presence count from DO (always from parent channel where clients connect)
+  // Presence is served by the Durable Object, so it can run concurrently with
+  // the single D1 batch instead of extending the critical path.
   const doId = env.CHAT_ROOM.idFromName(parentChannelId);
   const stub = env.CHAT_ROOM.get(doId);
-  const presenceRes = await stub.fetch(new Request("http://internal/presence"));
+  const [batchResults, presenceRes] = await Promise.all([
+    env.DB.batch(statements),
+    stub.fetch(new Request("http://internal/presence")),
+  ]);
   const presence = await presenceRes.json() as { count: number };
+
+  const messages = batchResults[0].results || [];
+  const configRows = (batchResults[1].results || []) as { id: string; text: string }[];
+  const config = new Map(configRows.map((row) => [row.id, row.text]));
+  const liveRow = batchResults[2].results?.[0] as { is_frozen?: number } | undefined;
+  const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
+  const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
+  const viewerBlocked = viewerBlockedIndex === null
+    ? false
+    : (batchResults[viewerBlockedIndex].results?.length || 0) > 0;
 
   // Parse live status
   let liveStatus: { active: boolean; title: string; sessionId: string } | null = null;
-  if (liveConfig?.text && liveConfig.text !== "false") {
-    try { liveStatus = JSON.parse(liveConfig.text as string); } catch {}
+  const liveConfig = config.get(`live_${parentChannelId}`);
+  if (liveConfig && liveConfig !== "false") {
+    try { liveStatus = JSON.parse(liveConfig); } catch {}
   }
 
   // For live channels, override is_frozen with the _live row's value
   let responseChannel = channel;
-  if (isLiveChannel) {
-    const liveRow = await env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?")
-      .bind(channelId).first();
-    if (liveRow) {
-      responseChannel = { ...channel, is_frozen: (liveRow as any).is_frozen ?? 0 };
-    }
+  if (isLiveChannel && liveRow) {
+    responseChannel = { ...channel, is_frozen: liveRow.is_frozen ?? 0 };
   }
 
   // The passcode column contains the stored credential hash. Clients only
@@ -145,11 +150,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     dm: dmMessages || [],
     adminDataStatus,
     presence: presence.count,
-    bannerNotice: noticeConfig?.text || "",
-    welcomeConfig: welcomeConfig?.text || "",
+    bannerNotice: config.get(`notice_${channelId}`) || "",
+    welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
     live: liveStatus,
-    emojiPresets: emojiPresetsConfig?.text || null,
-    petitionEnabled: petitionConfig?.text !== "false",
-    dmEnabled: dmConfig?.text !== "false",
+    emojiPresets: config.get(`liveEmojis_${parentChannelId}`) || null,
+    petitionEnabled: config.get(`petition_${parentChannelId}`) !== "false",
+    dmEnabled: config.get(`dm_${parentChannelId}`) !== "false",
   });
 }
