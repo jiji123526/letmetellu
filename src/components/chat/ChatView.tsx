@@ -235,7 +235,7 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
 
   return (
     <div className="relative inline-block">
-      {!loaded && !failed && <MediaLoadingDots imageBubble />}
+      {!loaded && !failed && <MediaLoadingDots />}
       {failed ? (
         <button
           type="button"

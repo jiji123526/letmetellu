@@ -128,6 +128,12 @@ body {
   background: #777;
 }
 
+/* While media is loading, use the exact same bubble padding as text. */
+[data-bubble]:has(.media-loading-dots) {
+  width: fit-content !important;
+  padding: calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824) !important;
+}
+
 /* Native widgets render at 320px, then their wrapper scales them proportionally. */
 .native-chat-embed,
 .native-chat-embed-scale {
