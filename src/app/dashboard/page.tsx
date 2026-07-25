@@ -228,39 +228,41 @@ export default function DashboardPage() {
         ) : (
           <section>
             {activeItems.map((item) => (
-              <div key={item.id} className="flex items-center min-h-[82px] pl-4 cursor-pointer" onClick={() => router.push(`/ch/${item.id}`)}>
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
+              <div key={item.id} className="flex items-center min-h-[74px] pl-4 cursor-pointer" onClick={() => router.push(`/ch/${item.id}`)}>
+                <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
                   {!item.profileImage && item.name.slice(0, 1).toUpperCase()}
                 </div>
-                <div className="self-stretch min-w-0 flex-1 ml-4 pr-4 flex items-center border-b" style={{ borderColor: "#e5e5ea" }}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                <div className="self-stretch min-w-0 flex-1 ml-3.5 pr-4 py-2 flex flex-col justify-center border-b" style={{ borderColor: "#e5e5ea" }}>
+                  <div className="flex min-w-0 items-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
                       <h2 className="m-0 truncate text-[16px] font-semibold">{item.name}</h2>
-                      {item.hasPasscode && (
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="w-3.5 h-3.5 flex-shrink-0"
-                          fill="none"
-                          stroke="#8e8e93"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          role="img"
-                          aria-label={t("passcodeRequired")}
-                        >
-                          <rect x="5" y="10" width="14" height="11" rx="2" />
-                          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                        </svg>
-                      )}
                       {item.owned && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "#eaf3ff", color: "#007aff" }}>{t("dashboardManaged")}</span>}
                     </div>
-                    <p className="m-0 mt-1 truncate text-[14px]" style={{ color: "#8e8e93" }}>{item.meta}</p>
+                    <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "#8e8e93" }}>{item.time}</span>
+                    <span className="ml-2 text-[19px] font-light leading-none" style={{ color: "#c7c7cc" }}>›</span>
                   </div>
-                  <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "#8e8e93" }}>{item.time}</span>
-                  <span className="ml-2 text-[23px] font-light" style={{ color: "#c7c7cc" }}>›</span>
-                  {!item.owned && (
-                    <button type="button" className="ml-1 border-none bg-transparent cursor-pointer text-[18px]" style={{ color: "#c7c7cc" }} aria-label={t("delete")} onClick={(event) => { event.stopPropagation(); removeRecent(item.id); }}>×</button>
-                  )}
+                  <div className="mt-1 flex min-w-0 items-center">
+                    <p className="m-0 min-w-0 flex-1 truncate text-[14px]" style={{ color: "#8e8e93" }}>{item.meta}</p>
+                    {item.hasPasscode && (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="ml-2 w-3.5 h-3.5 flex-shrink-0"
+                        fill="none"
+                        stroke="#8e8e93"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        role="img"
+                        aria-label={t("passcodeRequired")}
+                      >
+                        <rect x="5" y="10" width="14" height="11" rx="2" />
+                        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                      </svg>
+                    )}
+                    {!item.owned && (
+                      <button type="button" className="ml-2 border-none bg-transparent cursor-pointer text-[18px] leading-none" style={{ color: "#c7c7cc" }} aria-label={t("delete")} onClick={(event) => { event.stopPropagation(); removeRecent(item.id); }}>×</button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
