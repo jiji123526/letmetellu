@@ -4,7 +4,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { clearRecentChannels, getRecentChannels, removeRecentChannel, type RecentChannel } from "@/lib/recent-channels";
+import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 
 interface Channel {
   id: string;
@@ -86,6 +86,7 @@ export default function DashboardPage() {
           time: formatDate(channel.created_at, locale),
           owned: true,
           managed: true,
+          pinned: false,
         }))
       : recentChannels.map((channel) => ({
           id: channel.id,
@@ -97,6 +98,7 @@ export default function DashboardPage() {
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
           managed: channels.some((ownedChannel) => ownedChannel.id === channel.id),
+          pinned: channel.pinned,
         }));
     if (!normalized) return items;
     return items.filter((item) => item.name.toLowerCase().includes(normalized) || item.id.toLowerCase().includes(normalized));
@@ -142,6 +144,12 @@ export default function DashboardPage() {
     setRecentChannels([]);
   };
 
+  const togglePinned = (channelId: string) => {
+    toggleRecentChannelPinned(channelId);
+    setRecentChannels(getRecentChannels());
+    setSwipe({ id: null, offset: 0 });
+  };
+
   const startSwipe = (event: ReactPointerEvent<HTMLDivElement>, channelId: string) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     swipeStartRef.current = {
@@ -163,7 +171,7 @@ export default function DashboardPage() {
     if (!start.moved && Math.abs(deltaX) < 8) return;
     if (!start.moved && Math.abs(deltaY) > Math.abs(deltaX)) return;
     start.moved = true;
-    const offset = Math.max(-76, Math.min(0, start.startOffset + deltaX));
+    const offset = Math.max(-152, Math.min(0, start.startOffset + deltaX));
     setSwipe({ id: channelId, offset });
   };
 
@@ -173,7 +181,7 @@ export default function DashboardPage() {
     suppressClickRef.current = start.moved;
     setSwipe((current) => ({
       id: current.id,
-      offset: current.id === channelId && current.offset < -36 ? -76 : 0,
+      offset: current.id === channelId && current.offset < -48 ? -152 : 0,
     }));
     swipeStartRef.current = null;
     setDraggingId(null);
@@ -283,17 +291,27 @@ export default function DashboardPage() {
             {activeItems.map((item) => (
               <div key={item.id} className="relative min-h-[74px] overflow-hidden">
                 {!item.owned && (
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[14px] font-medium text-white"
-                    style={{ background: "#ff3b30" }}
-                    onClick={() => {
-                      removeRecent(item.id);
-                      setSwipe({ id: null, offset: 0 });
-                    }}
-                  >
-                    {t("delete")}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-[76px] w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
+                      style={{ background: "#8e8e93" }}
+                      onClick={() => togglePinned(item.id)}
+                    >
+                      {item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
+                    </button>
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[14px] font-medium text-white"
+                      style={{ background: "#ff3b30" }}
+                      onClick={() => {
+                        removeRecent(item.id);
+                        setSwipe({ id: null, offset: 0 });
+                      }}
+                    >
+                      {t("delete")}
+                    </button>
+                  </>
                 )}
                 <div
                   className="relative z-10 flex items-center min-h-[74px] pl-4 cursor-pointer bg-white"
@@ -339,6 +357,11 @@ export default function DashboardPage() {
                           >
                             <rect x="5" y="10" width="14" height="11" rx="2" />
                             <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                          </svg>
+                        )}
+                        {item.pinned && (
+                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="#007aff" aria-label={t("dashboardPin")} role="img">
+                            <path d="M14.5 3.5 20 9l-2 2-1.2-1.2-3.3 3.3.4 3.4-1.4 1.4-3.4-3.4L5 18.6 3.4 17l4.1-4.1-3.4-3.4 1.4-1.4 3.4.4 3.3-3.3L11 4l2-2 1.5 1.5Z" />
                           </svg>
                         )}
                         {item.managed && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "#eaf3ff", color: "#007aff" }}>{t("dashboardManaged")}</span>}

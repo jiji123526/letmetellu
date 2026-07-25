@@ -240,6 +240,8 @@ export const en: Record<LocaleKeys, string> = {
   dashboardRecentTab: "Recent",
   dashboardManaged: "Managed",
   dashboardClear: "Clear All",
+  dashboardPin: "Pin",
+  dashboardUnpin: "Unpin",
   dashboardNoRecent: "No recently visited channels",
   dashboardRecentDesc: "Channels you visit will appear on this device.",
   dashboardGuestCta: "Log in to create a channel",

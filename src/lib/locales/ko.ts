@@ -238,6 +238,8 @@ export const ko = {
   dashboardRecentTab: "최근 방문",
   dashboardManaged: "관리 중",
   dashboardClear: "전체 삭제",
+  dashboardPin: "고정",
+  dashboardUnpin: "고정 해제",
   dashboardNoRecent: "최근 방문한 채널이 없습니다",
   dashboardRecentDesc: "방문한 채널이 이 기기에 표시됩니다.",
   dashboardGuestCta: "로그인하고 내 채널 만들기",

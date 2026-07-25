@@ -4,6 +4,7 @@ export interface RecentChannel {
   profileImage: string | null;
   bubbleColor: string;
   hasPasscode: boolean;
+  pinned: boolean;
   lastVisitedAt: number;
 }
 
@@ -22,19 +23,20 @@ export function getRecentChannels(): RecentChannel[] {
         && typeof item.name === "string"
         && typeof item.lastVisitedAt === "number"
       )
-      .map((item) => ({ ...item, hasPasscode: item.hasPasscode === true }))
-      .sort((left, right) => right.lastVisitedAt - left.lastVisitedAt)
+      .map((item) => ({ ...item, hasPasscode: item.hasPasscode === true, pinned: item.pinned === true }))
+      .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastVisitedAt - left.lastVisitedAt)
       .slice(0, MAX_RECENT_CHANNELS);
   } catch {
     return [];
   }
 }
 
-export function recordRecentChannel(channel: Omit<RecentChannel, "lastVisitedAt">) {
+export function recordRecentChannel(channel: Omit<RecentChannel, "lastVisitedAt" | "pinned">) {
   if (typeof window === "undefined") return;
   try {
+    const existing = getRecentChannels().find((item) => item.id === channel.id);
     const next = [
-      { ...channel, lastVisitedAt: Date.now() },
+      { ...channel, pinned: existing?.pinned ?? false, lastVisitedAt: Date.now() },
       ...getRecentChannels().filter((item) => item.id !== channel.id),
     ].slice(0, MAX_RECENT_CHANNELS);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -47,6 +49,18 @@ export function removeRecentChannel(channelId: string) {
   if (typeof window === "undefined") return;
   try {
     const next = getRecentChannels().filter((item) => item.id !== channelId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Keep the dashboard usable when browser storage is unavailable.
+  }
+}
+
+export function toggleRecentChannelPinned(channelId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const next = getRecentChannels().map((item) =>
+      item.id === channelId ? { ...item, pinned: !item.pinned } : item
+    );
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
     // Keep the dashboard usable when browser storage is unavailable.
