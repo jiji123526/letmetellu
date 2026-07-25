@@ -21,13 +21,16 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
 
+  // Only the trusted app proxy can assert a user identity. Keep this check
+  // independent of passcode state so public channels receive the same
+  // owner-only data protection as private channels.
+  const internalToken = request.headers.get("X-Internal-Token");
+  const userId = request.headers.get("X-User-Id");
+  const isOwner = internalToken === env.INTERNAL_SECRET
+    && userId === (channel as any).owner_uid;
+
   // Passcode gate: if channel has passcode, verify token or owner identity
   if ((channel as any).passcode) {
-    // Check if requester is the channel owner (via Vercel proxy auth headers)
-    const internalToken = request.headers.get("X-Internal-Token");
-    const userId = request.headers.get("X-User-Id");
-    const isOwner = internalToken === env.INTERNAL_SECRET && userId === (channel as any).owner_uid;
-
     if (!isOwner) {
       const token = request.headers.get("X-Room-Token");
       if (token) {
@@ -53,10 +56,14 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
   ).bind(channelId, channelId).all();
 
-  // Fetch blocked users (from parent channel)
-  const { results: blocked } = await env.DB.prepare(
-    "SELECT * FROM blocked WHERE channel_id = ?"
-  ).bind(parentChannelId).all();
+  // Administrative data must never be sent to ordinary channel entrants.
+  let blocked: unknown[] = [];
+  if (isOwner) {
+    const result = await env.DB.prepare(
+      "SELECT * FROM blocked WHERE channel_id = ?"
+    ).bind(parentChannelId).all();
+    blocked = result.results;
+  }
 
   // Fetch banner notice from config table (from requested channel — separate for live)
   const noticeConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
@@ -80,10 +87,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const dmConfig = await env.DB.prepare("SELECT text FROM config WHERE id = ? AND channel_id = ?")
     .bind(`dm_${parentChannelId}`, parentChannelId).first();
 
-  // Fetch DM messages (visible to admin only — frontend filters)
-  const { results: dmMessages } = await env.DB.prepare(
-    "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
-  ).bind(channelId).all();
+  let dmMessages: unknown[] = [];
+  if (isOwner) {
+    const result = await env.DB.prepare(
+      "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+    ).bind(channelId).all();
+    dmMessages = result.results;
+  }
 
   // Gallery fetched on-demand when panel opens (not included in init to save payload)
 
@@ -109,8 +119,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     }
   }
 
+  // The passcode column contains the stored credential hash. Clients only
+  // need to know whether a gate exists, never the hash itself.
+  const safeChannel = { ...(responseChannel as Record<string, unknown>) };
+  delete safeChannel.passcode;
+
   return Response.json({
-    channel: responseChannel,
+    channel: safeChannel,
     messages,
     blocked,
     dm: dmMessages || [],

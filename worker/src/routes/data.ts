@@ -14,13 +14,11 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   // Passcode gate for data endpoints
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+  const internalToken = request.headers.get("X-Internal-Token");
+  const userId = request.headers.get("X-User-Id");
+  const isOwner = internalToken === env.INTERNAL_SECRET && userId === owner_uid;
 
   if (passcode) {
-    // Check owner bypass
-    const internalToken = request.headers.get("X-Internal-Token");
-    const userId = request.headers.get("X-User-Id");
-    const isOwner = internalToken === env.INTERNAL_SECRET && userId === owner_uid;
-
     if (!isOwner) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
@@ -28,6 +26,14 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
+    }
+  }
+
+  // These collections expose moderation rules or private user content.
+  // Enforce ownership at the data boundary instead of relying on UI hiding.
+  if (type === "blocked" || type === "dm" || type === "banned-words") {
+    if (!isOwner) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
     }
   }
 
