@@ -90,7 +90,7 @@ export default function DashboardPage() {
           time: formatDate(channel.created_at, locale),
           owned: true,
           managed: true,
-          pinned: false,
+          pinned: channel.id === prioritizedOwnedId,
         }))
       .sort((left, right) =>
         Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
@@ -380,11 +380,12 @@ export default function DashboardPage() {
                   </button>
                 </>
                 <div
-                  className="relative z-10 flex items-center min-h-[74px] pl-4 cursor-pointer bg-white"
+                  className="relative z-10 flex items-center min-h-[74px] pl-4 cursor-pointer"
                   style={{
                     touchAction: editing ? "auto" : "pan-y",
                     transform: `translateX(${!editing && swipe.id === item.id ? swipe.offset : 0}px)`,
                     transition: draggingId === item.id ? "none" : "transform 180ms ease-out",
+                    background: item.owned ? "#f4f8ff" : "#fff",
                   }}
                   onPointerDown={!editing ? (event) => startSwipe(event, item.id) : undefined}
                   onPointerMove={!editing ? (event) => moveSwipe(event, item.id) : undefined}
