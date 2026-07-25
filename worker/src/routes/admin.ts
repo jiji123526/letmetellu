@@ -43,6 +43,37 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       return Response.json({ ok: true, channel_id });
     }
 
+    case "delete-channel": {
+      const channelIds = [channel_id, `${channel_id}_live`];
+      const placeholders = channelIds.map(() => "?").join(", ");
+      const [messageMedia, galleryMedia, dmMedia] = await Promise.all([
+        env.DB.prepare(`SELECT image FROM messages WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
+        env.DB.prepare(`SELECT image FROM gallery WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
+        env.DB.prepare(`SELECT image FROM dm WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
+      ]);
+
+      const mediaKeys = new Set(
+        [...messageMedia.results, ...galleryMedia.results, ...dmMedia.results]
+          .map((row) => typeof row.image === "string" ? row.image.split("/api/media/").pop() : null)
+          .filter((key): key is string => Boolean(key))
+      );
+
+      await env.DB.batch([
+        env.DB.prepare(`DELETE FROM messages WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM gallery WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM dm WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM blocked WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM moderators WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM banned_words WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM channels WHERE id IN (${placeholders})`).bind(...channelIds),
+      ]);
+      await Promise.all([...mediaKeys].map((key) => env.MEDIA.delete(key).catch(() => {})));
+      invalidatePasscodeCache(channel_id);
+      invalidateBannedWordsCache(channel_id);
+      return Response.json({ ok: true });
+    }
+
     case "freeze": {
       const frozen = payload?.frozen ? 1 : 0;
       await env.DB.prepare("UPDATE channels SET is_frozen = ? WHERE id = ?")

@@ -4,7 +4,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 
 interface Channel {
   id: string;
@@ -14,8 +14,6 @@ interface Channel {
   created_at: string;
   has_passcode: number;
 }
-
-type DashboardTab = "owned" | "recent";
 
 function formatDate(value: string, locale: "ko" | "en") {
   const date = new Date(value);
@@ -37,11 +35,10 @@ function formatRelativeTime(timestamp: number, locale: "ko" | "en") {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { locale, t } = useLocale();
+  const { locale, setLocale, t } = useLocale();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recentChannels, setRecentChannels] = useState<RecentChannel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<DashboardTab>("owned");
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -49,6 +46,10 @@ export default function DashboardPage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(null);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
@@ -66,7 +67,6 @@ export default function DashboardPage() {
       if (status === "authenticated") {
         void loadChannels().finally(() => setLoading(false));
       } else if (status === "unauthenticated") {
-        setTab("recent");
         setLoading(false);
       }
     }, 0);
@@ -75,8 +75,9 @@ export default function DashboardPage() {
 
   const activeItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const items = tab === "owned"
-      ? channels.map((channel) => ({
+    const ownedIds = new Set(channels.map((channel) => channel.id));
+    const ownedItems = channels
+      .map((channel) => ({
           id: channel.id,
           name: channel.name,
           profileImage: channel.profile_image,
@@ -88,7 +89,12 @@ export default function DashboardPage() {
           managed: true,
           pinned: false,
         }))
-      : recentChannels.map((channel) => ({
+      .sort((left, right) =>
+        Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
+      );
+    const recentItems = recentChannels
+      .filter((channel) => !ownedIds.has(channel.id))
+      .map((channel) => ({
           id: channel.id,
           name: channel.name,
           profileImage: channel.profileImage,
@@ -100,9 +106,10 @@ export default function DashboardPage() {
           managed: channels.some((ownedChannel) => ownedChannel.id === channel.id),
           pinned: channel.pinned,
         }));
+    const items = [...ownedItems, ...recentItems];
     if (!normalized) return items;
     return items.filter((item) => item.name.toLowerCase().includes(normalized) || item.id.toLowerCase().includes(normalized));
-  }, [tab, channels, recentChannels, query, locale]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId]);
 
   const handleCreate = async () => {
     const slug = newSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -126,7 +133,6 @@ export default function DashboardPage() {
       setNewSlug("");
       setNewName("");
       setShowCreate(false);
-      setTab("owned");
     } catch {
       setCreateError(t("dashboardCreateFailed"));
     } finally {
@@ -139,15 +145,61 @@ export default function DashboardPage() {
     setRecentChannels(getRecentChannels());
   };
 
-  const clearRecent = () => {
-    clearRecentChannels();
-    setRecentChannels([]);
-  };
-
   const togglePinned = (channelId: string) => {
     toggleRecentChannelPinned(channelId);
     setRecentChannels(getRecentChannels());
     setSwipe({ id: null, offset: 0 });
+  };
+
+  const prioritizeOwned = (channelId: string) => {
+    setPrioritizedOwnedId(channelId);
+    setSwipe({ id: null, offset: 0 });
+  };
+
+  const deleteOwnedChannel = async (channelId: string) => {
+    const response = await fetch("/api/admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete-channel", channel_id: channelId }),
+    });
+    if (!response.ok) throw new Error("delete failed");
+    removeRecentChannel(channelId);
+  };
+
+  const deleteSelected = async () => {
+    if (!selectedIds.size || deleting) return;
+    const ownedIds = [...selectedIds].filter((id) => channels.some((channel) => channel.id === id));
+    if (ownedIds.length && !window.confirm(t("dashboardDeleteOwnedConfirm"))) return;
+    setDeleting(true);
+    try {
+      await Promise.all(ownedIds.map(deleteOwnedChannel));
+      [...selectedIds]
+        .filter((id) => !ownedIds.includes(id))
+        .forEach(removeRecentChannel);
+      await loadChannels();
+      setRecentChannels(getRecentChannels());
+      setSelectedIds(new Set());
+      setEditing(false);
+    } catch {
+      window.alert(t("dashboardDeleteFailed"));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteSingleOwned = async (channelId: string) => {
+    if (!window.confirm(t("dashboardDeleteOwnedConfirm"))) return;
+    setDeleting(true);
+    try {
+      await deleteOwnedChannel(channelId);
+      await loadChannels();
+      setRecentChannels(getRecentChannels());
+      setSwipe({ id: null, offset: 0 });
+    } catch {
+      window.alert(t("dashboardDeleteFailed"));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const startSwipe = (event: ReactPointerEvent<HTMLDivElement>, channelId: string) => {
@@ -201,63 +253,70 @@ export default function DashboardPage() {
           <div className="h-[64px] px-4 flex items-center justify-between">
             <button
               type="button"
-              className="border-none bg-transparent cursor-pointer text-[14px] min-w-[72px] text-left"
+              className="border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
               style={{ color: "#007aff" }}
               onClick={() => {
-                if (tab === "recent" && recentChannels.length) clearRecent();
-                else if (isLoggedIn) setShowAccount((value) => !value);
+                setEditing((value) => !value);
+                setSelectedIds(new Set());
+                setSwipe({ id: null, offset: 0 });
               }}
             >
-              {tab === "recent" && recentChannels.length ? t("dashboardClear") : isLoggedIn ? t("dashboardAccount") : ""}
+              {editing ? t("dashboardDone") : t("edit")}
             </button>
             <h1 className="m-0 text-[17px] font-semibold">{t("dashboardChats")}</h1>
-            <div className="min-w-[72px] flex justify-end relative">
-              {isLoggedIn ? (
+            <div className="min-w-[72px] flex items-center justify-end gap-3 relative">
+              <button
+                type="button"
+                className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
+                style={{ color: "#007aff" }}
+                onClick={() => setShowAccount((value) => !value)}
+                aria-label={t("dashboardAccount")}
+              >
+                <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="12" cy="12" r="9" />
+                  <circle cx="8" cy="12" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+              {isLoggedIn && (
                 <button
                   type="button"
-                  className="w-9 h-9 rounded-full border-none cursor-pointer text-[20px] leading-none"
-                  style={{ background: "#f2f2f7" }}
+                  className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
+                  style={{ color: "#007aff" }}
                   onClick={() => {
                     setCreateError("");
                     setShowCreate(true);
                   }}
                   aria-label={t("createChannel")}
                 >
-                  ＋
+                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M13 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <path d="m17.5 3.5 3 3L11 16l-4 1 1-4 9.5-9.5Z" />
+                  </svg>
                 </button>
-              ) : (
-                <button type="button" className="border-none bg-transparent cursor-pointer text-[14px]" style={{ color: "#007aff" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
               )}
-              {showAccount && isLoggedIn && (
+              {showAccount && (
                 <>
                   <button className="fixed inset-0 z-10 border-none bg-transparent" aria-label={t("close")} onClick={() => setShowAccount(false)} />
                   <div className="absolute right-0 top-[42px] z-20 w-[230px] rounded-[14px] p-2 text-left" style={{ background: "#fff", border: "1px solid #e5e5ea", boxShadow: "0 14px 40px rgba(0,0,0,.14)" }}>
-                    <div className="px-3 py-2 text-[12px] truncate" style={{ color: "#8e8e93" }}>{session.user?.email}</div>
-                    <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "#f2f2f7", color: "#ff3b30" }} onClick={() => signOut({ callbackUrl: "/login" })}>{t("logout")}</button>
+                    {isLoggedIn ? (
+                      <>
+                        <div className="px-3 py-2 text-[12px] truncate" style={{ color: "#8e8e93" }}>{session.user?.email}</div>
+                        <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#ff3b30" }} onClick={() => signOut({ callbackUrl: "/login" })}>{t("logout")}</button>
+                      </>
+                    ) : (
+                      <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#007aff" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
+                    )}
+                    <div className="h-px my-1" style={{ background: "#e5e5ea" }} />
+                    <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#111" }} onClick={() => setLocale(locale === "ko" ? "en" : "ko")}>
+                      {t("language")}: {locale === "ko" ? "English" : "한국어"}
+                    </button>
                   </div>
                 </>
               )}
             </div>
           </div>
-
-          {isLoggedIn && (
-            <div className="mx-4 mb-3 p-1 rounded-[10px] flex" style={{ background: "#f2f2f7" }}>
-              {(["owned", "recent"] as DashboardTab[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className="flex-1 border-none rounded-[8px] cursor-pointer py-1.5 text-[13px] font-medium"
-                  style={{ background: tab === item ? "#fff" : "transparent", color: tab === item ? "#111" : "#6d6d72", boxShadow: tab === item ? "0 1px 3px rgba(0,0,0,.12)" : "none" }}
-                  onClick={() => {
-                    setTab(item);
-                    setQuery("");
-                  }}
-                >
-                  {item === "owned" ? t("dashboardOwnedTab") : t("dashboardRecentTab")}
-                </button>
-              ))}
-            </div>
-          )}
 
           <div className="px-4 pb-3">
             <div className="relative">
@@ -281,61 +340,86 @@ export default function DashboardPage() {
         {empty ? (
           <section className="px-8 py-24 text-center">
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-[28px] mb-4" style={{ background: "#f2f2f7" }}>💬</div>
-            <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : tab === "owned" ? t("noChannels") : t("dashboardNoRecent")}</h2>
-            {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "#8e8e93" }}>{tab === "owned" ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
-            {!query && tab === "owned" && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => setShowCreate(true)}>{t("dashboardFirstChannel")}</button>}
-            {!query && tab === "recent" && !isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => router.push("/login")}>{t("dashboardGuestCta")}</button>}
+            <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
+            {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "#8e8e93" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
+            {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => setShowCreate(true)}>{t("dashboardFirstChannel")}</button>}
+            {!query && !isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => router.push("/login")}>{t("dashboardGuestCta")}</button>}
           </section>
         ) : (
           <section>
             {activeItems.map((item) => (
               <div key={item.id} className="relative min-h-[74px] overflow-hidden">
-                {!item.owned && (
-                  <>
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-[76px] w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
-                      style={{ background: "#8e8e93" }}
-                      onClick={() => togglePinned(item.id)}
-                    >
-                      {item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
-                    </button>
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[14px] font-medium text-white"
-                      style={{ background: "#ff3b30" }}
-                      onClick={() => {
+                <>
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-[76px] w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
+                    style={{ background: "#8e8e93" }}
+                    onClick={() => item.owned ? prioritizeOwned(item.id) : togglePinned(item.id)}
+                  >
+                    {item.owned ? t("dashboardPinTop") : item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
+                    style={{ background: "#ff3b30" }}
+                    onClick={() => {
+                      if (item.owned) {
+                        void deleteSingleOwned(item.id);
+                      } else {
                         removeRecent(item.id);
                         setSwipe({ id: null, offset: 0 });
-                      }}
-                    >
-                      {t("delete")}
-                    </button>
-                  </>
-                )}
+                      }
+                    }}
+                  >
+                    {item.owned ? t("dashboardDeleteChannel") : t("delete")}
+                  </button>
+                </>
                 <div
                   className="relative z-10 flex items-center min-h-[74px] pl-4 cursor-pointer bg-white"
                   style={{
-                    touchAction: item.owned ? "auto" : "pan-y",
-                    transform: `translateX(${!item.owned && swipe.id === item.id ? swipe.offset : 0}px)`,
+                    touchAction: editing ? "auto" : "pan-y",
+                    transform: `translateX(${!editing && swipe.id === item.id ? swipe.offset : 0}px)`,
                     transition: draggingId === item.id ? "none" : "transform 180ms ease-out",
                   }}
-                  onPointerDown={!item.owned ? (event) => startSwipe(event, item.id) : undefined}
-                  onPointerMove={!item.owned ? (event) => moveSwipe(event, item.id) : undefined}
-                  onPointerUp={!item.owned ? () => finishSwipe(item.id) : undefined}
-                  onPointerCancel={!item.owned ? () => finishSwipe(item.id) : undefined}
+                  onPointerDown={!editing ? (event) => startSwipe(event, item.id) : undefined}
+                  onPointerMove={!editing ? (event) => moveSwipe(event, item.id) : undefined}
+                  onPointerUp={!editing ? () => finishSwipe(item.id) : undefined}
+                  onPointerCancel={!editing ? () => finishSwipe(item.id) : undefined}
                   onClick={() => {
+                    if (editing) {
+                      setSelectedIds((current) => {
+                        const next = new Set(current);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                      return;
+                    }
                     if (suppressClickRef.current) {
                       suppressClickRef.current = false;
                       return;
                     }
-                    if (!item.owned && swipe.id === item.id && swipe.offset < 0) {
+                    if (swipe.id === item.id && swipe.offset < 0) {
                       setSwipe({ id: null, offset: 0 });
                       return;
                     }
                     router.push(`/ch/${item.id}`);
                   }}
                 >
+                  {editing && (
+                    <span
+                      className="mr-3 w-[22px] h-[22px] rounded-full flex-shrink-0 flex items-center justify-center"
+                      style={{
+                        border: selectedIds.has(item.id) ? "none" : "1.5px solid #c7c7cc",
+                        background: selectedIds.has(item.id) ? "#007aff" : "#fff",
+                        color: "#fff",
+                      }}
+                      aria-hidden="true"
+                    >
+                      {selectedIds.has(item.id) ? "✓" : ""}
+                    </span>
+                  )}
                   <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
                     {!item.profileImage && item.name.slice(0, 1).toUpperCase()}
                   </div>
@@ -382,6 +466,21 @@ export default function DashboardPage() {
         {!isLoggedIn && recentChannels.length > 0 && (
           <div className="px-5 py-8 text-center">
             <button className="border-none bg-transparent cursor-pointer text-[14px]" style={{ color: "#007aff" }} onClick={() => router.push("/login")}>{t("dashboardGuestCta")}</button>
+          </div>
+        )}
+
+        {editing && (
+          <div className="sticky bottom-0 z-30 px-4 py-3 flex items-center justify-between border-t" style={{ background: "rgba(255,255,255,.96)", borderColor: "#e5e5ea", backdropFilter: "blur(20px)" }}>
+            <span className="text-[14px]" style={{ color: "#8e8e93" }}>{t("dashboardSelected").replace("{count}", String(selectedIds.size))}</span>
+            <button
+              type="button"
+              disabled={!selectedIds.size || deleting}
+              className="border-none bg-transparent text-[15px] font-medium"
+              style={{ color: selectedIds.size ? "#ff3b30" : "#c7c7cc", cursor: selectedIds.size && !deleting ? "pointer" : "default" }}
+              onClick={() => void deleteSelected()}
+            >
+              {deleting ? t("loading") : t("delete")}
+            </button>
           </div>
         )}
       </div>
