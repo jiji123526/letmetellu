@@ -43,14 +43,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
+      if (user?.id) {
         token.id = user.id;
+      }
+      // Auth.js stores the provider/credentials user ID in the standard `sub`
+      // claim. Keep using it as a fallback so sessions created without the
+      // custom `id` claim still receive a stable application user ID.
+      if (!token.id && token.sub) {
+        token.id = token.sub;
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
+      const userId = token.id ?? token.sub;
+      if (session.user && userId) {
+        session.user.id = userId as string;
       }
       return session;
     },

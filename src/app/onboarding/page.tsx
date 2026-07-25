@@ -40,6 +40,10 @@ export default function OnboardingPage() {
 
   const handleCreate = async () => {
     setError("");
+    if (status !== "authenticated" || !session?.user?.id) {
+      setError(t("loginError"));
+      return;
+    }
     if (!slug) { setError(t("allFieldsRequired")); return; }
     if (slug.length < 3) { setError(t("allFieldsRequired")); return; }
     if (!/^[a-z0-9-]{3,30}$/.test(slug)) { setError(t("allFieldsRequired")); return; }
@@ -125,8 +129,8 @@ export default function OnboardingPage() {
             </div>
             <button
               onClick={handleCreate}
-              disabled={!slug || !name.trim()}
-              style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: (!slug || !name.trim()) ? "#ccc" : "#3b8df0", cursor: (!slug || !name.trim()) ? "not-allowed" : "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}
+              disabled={status !== "authenticated" || !slug || !name.trim()}
+              style={{ width: "100%", padding: "13px", border: "none", borderRadius: "14px", fontSize: "15px", fontWeight: 500, color: "#fff", background: (status !== "authenticated" || !slug || !name.trim()) ? "#ccc" : "#3b8df0", cursor: (status !== "authenticated" || !slug || !name.trim()) ? "not-allowed" : "pointer", fontFamily: "inherit", marginTop: "8px", lineHeight: 1 }}
             >
               채널 만들기
             </button>
