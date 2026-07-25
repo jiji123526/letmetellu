@@ -1,7 +1,9 @@
 import { Env } from "../types";
+import { verifyAdminWsToken } from "../lib/admin-ws-token";
 
 interface Connection {
   uid: string;
+  channelId: string;
   joinedAt: number;
   isAdmin: boolean;
 }
@@ -27,9 +29,10 @@ export class ChatRoom {
 
       server.accept();
       const uid = url.searchParams.get("uid") || "anon";
-      this.connections.set(server, { uid, joinedAt: Date.now(), isAdmin: false });
+      const channelId = url.pathname.split("/ws/")[1]?.split("/")[0] || "";
+      this.connections.set(server, { uid, channelId, joinedAt: Date.now(), isAdmin: false });
 
-      server.addEventListener("message", (event) => {
+      server.addEventListener("message", async (event) => {
         if (typeof event.data !== "string") return;
         try {
           const data = JSON.parse(event.data);
@@ -45,9 +48,13 @@ export class ChatRoom {
             this.broadcastLivePresence();
           }
           // Admin authentication via WebSocket message
-          if (data.type === "auth-admin" && data.token === this.env.INTERNAL_SECRET) {
+          if (data.type === "auth-admin" && typeof data.token === "string") {
             const conn = this.connections.get(server);
-            if (conn) conn.isAdmin = true;
+            const payload = await verifyAdminWsToken(data.token, this.env);
+            if (conn && payload?.channel_id === conn.channelId) {
+              conn.uid = payload.user_id;
+              conn.isAdmin = true;
+            }
           }
         } catch {}
       });
