@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
+import { clearRoomToken, fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -679,6 +679,14 @@ export function ChatView({ channelId }: { channelId: string }) {
         const newReactions = event.reactions as string;
         setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: newReactions } : m));
       }
+      if (event.type === "room-access-revoked") {
+        clearRoomToken(channelId);
+        setPasscodeGate({
+          name: channel?.name || "",
+          profile_image: channel?.profile_image || null,
+          bubble_color: channel?.bubble_color || "#3b8df0",
+        });
+      }
       if (event.type === "user-blocked") {
         const blockedUid = event.uid as string;
         const blockedFp = event.fingerprint as string | null;
@@ -760,7 +768,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, uid, myFingerprint, t]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, uid, myFingerprint, t, channel]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {

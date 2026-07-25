@@ -39,6 +39,9 @@ export default {
 
     // WebSocket upgrade → route to Durable Object
     if (url.pathname.startsWith("/ws/")) {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("websocket upgrade required", { status: 426 });
+      }
       const channelId = url.pathname.split("/ws/")[1];
       if (!channelId) return new Response("missing channel", { status: 400 });
 

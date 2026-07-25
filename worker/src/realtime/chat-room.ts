@@ -1,11 +1,13 @@
 import { Env } from "../types";
 import { verifyAdminWsToken } from "../lib/admin-ws-token";
+import { verifyRoomToken } from "../routes/passcode";
 
 interface Connection {
   uid: string;
   channelId: string;
   joinedAt: number;
   isAdmin: boolean;
+  authorized: boolean;
 }
 
 export class ChatRoom {
@@ -13,6 +15,7 @@ export class ChatRoom {
   private liveViewers: Set<WebSocket> = new Set();
   private state: DurableObjectState;
   private env: Env;
+  private currentPasscode: string | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -24,36 +27,67 @@ export class ChatRoom {
 
     // WebSocket upgrade
     if (request.headers.get("Upgrade") === "websocket") {
+      const channelId = url.pathname.split("/ws/")[1]?.split("/")[0] || "";
+      if (!channelId) return new Response("missing channel", { status: 400 });
+
+      const channel = await this.env.DB.prepare(
+        "SELECT passcode FROM channels WHERE id = ?"
+      ).bind(channelId).first() as { passcode: string | null } | null;
+      if (!channel) return new Response("channel not found", { status: 404 });
+      this.currentPasscode = channel.passcode;
+
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 
       server.accept();
       const uid = url.searchParams.get("uid") || "anon";
-      const channelId = url.pathname.split("/ws/")[1]?.split("/")[0] || "";
-      this.connections.set(server, { uid, channelId, joinedAt: Date.now(), isAdmin: false });
+      this.connections.set(server, {
+        uid,
+        channelId,
+        joinedAt: Date.now(),
+        isAdmin: false,
+        authorized: !this.currentPasscode,
+      });
 
       server.addEventListener("message", async (event) => {
         if (typeof event.data !== "string") return;
         try {
           const data = JSON.parse(event.data);
+          const conn = this.connections.get(server);
+          if (!conn) return;
+
+          if (data.type === "auth-room" && typeof data.token === "string" && this.currentPasscode) {
+            const payload = await verifyRoomToken(data.token, this.env);
+            if (
+              payload?.channel_id === conn.channelId
+              && payload.passcode_hash === this.currentPasscode
+            ) {
+              conn.authorized = true;
+              this.broadcastPresence();
+            }
+          }
+
           if (data.type === "emoji-fx" || data.type === "typing") {
-            this.broadcast(event.data);
+            if (conn.authorized) this.broadcast(event.data);
           }
           if (data.type === "join-live") {
+            if (!conn.authorized) return;
             this.liveViewers.add(server);
             this.broadcastLivePresence();
           }
           if (data.type === "leave-live") {
+            if (!conn.authorized) return;
             this.liveViewers.delete(server);
             this.broadcastLivePresence();
           }
           // Admin authentication via WebSocket message
           if (data.type === "auth-admin" && typeof data.token === "string") {
-            const conn = this.connections.get(server);
             const payload = await verifyAdminWsToken(data.token, this.env);
             if (conn && payload?.channel_id === conn.channelId) {
               conn.uid = payload.user_id;
               conn.isAdmin = true;
+              conn.authorized = true;
+              this.broadcastPresence();
             }
           }
         } catch {}
@@ -78,6 +112,30 @@ export class ChatRoom {
       return new Response(null, { status: 101, webSocket: client });
     }
 
+    // Revoke existing room-token sessions immediately when the owner changes
+    // the passcode. Admin sessions remain authorized by their separate token.
+    if (url.pathname.endsWith("/access-policy-changed")) {
+      const body = await request.json() as { passcode: string | null };
+      this.currentPasscode = body.passcode || null;
+      for (const [ws, connection] of this.connections) {
+        if (connection.isAdmin) continue;
+        if (this.currentPasscode) {
+          if (connection.authorized) {
+            try {
+              ws.send(JSON.stringify({ type: "room-access-revoked" }));
+            } catch {}
+          }
+          connection.authorized = false;
+          this.liveViewers.delete(ws);
+        } else {
+          connection.authorized = true;
+        }
+      }
+      this.broadcastPresence();
+      this.broadcastLivePresence();
+      return new Response("ok");
+    }
+
     // Internal broadcast trigger (from Worker routes after D1 write)
     if (url.pathname.endsWith("/broadcast")) {
       const event = await request.json() as Record<string, unknown>;
@@ -95,14 +153,16 @@ export class ChatRoom {
 
     // Presence query
     if (url.pathname.endsWith("/presence")) {
-      return Response.json({ count: this.connections.size, liveCount: this.liveViewers.size });
+      const count = [...this.connections.values()].filter((connection) => connection.authorized).length;
+      return Response.json({ count, liveCount: this.liveViewers.size });
     }
 
     return new Response("not found", { status: 404 });
   }
 
   private broadcast(message: string) {
-    for (const [ws] of this.connections) {
+    for (const [ws, conn] of this.connections) {
+      if (!conn.authorized) continue;
       try {
         ws.send(message);
       } catch {
@@ -114,7 +174,7 @@ export class ChatRoom {
 
   private broadcastToAdmin(message: string) {
     for (const [ws, conn] of this.connections) {
-      if (!conn.isAdmin) continue;
+      if (!conn.isAdmin || !conn.authorized) continue;
       try {
         ws.send(message);
       } catch {
@@ -125,7 +185,8 @@ export class ChatRoom {
   }
 
   private broadcastPresence() {
-    this.broadcast(JSON.stringify({ type: "presence", count: this.connections.size, liveCount: this.liveViewers.size }));
+    const count = [...this.connections.values()].filter((connection) => connection.authorized).length;
+    this.broadcast(JSON.stringify({ type: "presence", count, liveCount: this.liveViewers.size }));
   }
 
   private broadcastLivePresence() {

@@ -263,6 +263,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("UPDATE channels SET passcode = ? WHERE id = ?")
         .bind(hashedPasscode, channel_id).run();
       invalidatePasscodeCache(channel_id);
+      const passcodeDoId = env.CHAT_ROOM.idFromName(channel_id);
+      const passcodeStub = env.CHAT_ROOM.get(passcodeDoId);
+      await passcodeStub.fetch(new Request("http://internal/access-policy-changed", {
+        method: "POST",
+        body: JSON.stringify({ passcode: hashedPasscode }),
+      }));
       return Response.json({ ok: true });
     }
 

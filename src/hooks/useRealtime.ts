@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { getWebSocketUrl } from "@/lib/api";
+import { getRoomToken, getWebSocketUrl } from "@/lib/api";
 
 type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 
@@ -28,6 +28,10 @@ export function useRealtime(channelId: string | null, uid: string) {
 
     ws.onopen = () => {
       setConnected(true);
+      const roomToken = getRoomToken(channelId);
+      if (roomToken) {
+        ws.send(JSON.stringify({ type: "auth-room", token: roomToken }));
+      }
       // Notify handlers that connection restored (trigger refetch)
       handlersRef.current.forEach((handler) => handler({ type: "reconnected" }));
     };
@@ -68,6 +72,19 @@ export function useRealtime(channelId: string | null, uid: string) {
       wsRef.current?.close();
     };
   }, [connect]);
+
+  useEffect(() => {
+    if (!channelId) return;
+    const handleRoomTokenChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ channelId: string; token: string | null }>).detail;
+      if (detail.channelId !== channelId || !detail.token) return;
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "auth-room", token: detail.token }));
+      }
+    };
+    window.addEventListener("room-token-changed", handleRoomTokenChanged);
+    return () => window.removeEventListener("room-token-changed", handleRoomTokenChanged);
+  }, [channelId]);
 
   const subscribe = useCallback((handler: MessageHandler) => {
     handlersRef.current.add(handler);

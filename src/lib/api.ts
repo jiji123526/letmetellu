@@ -4,17 +4,23 @@ const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 
 // Room token management
-function getRoomToken(channelId: string): string | null {
+export function getRoomToken(channelId: string): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(`roomToken_${channelId}`);
 }
 
 export function setRoomToken(channelId: string, token: string) {
   localStorage.setItem(`roomToken_${channelId}`, token);
+  window.dispatchEvent(new CustomEvent("room-token-changed", {
+    detail: { channelId, token },
+  }));
 }
 
 export function clearRoomToken(channelId: string) {
   localStorage.removeItem(`roomToken_${channelId}`);
+  window.dispatchEvent(new CustomEvent("room-token-changed", {
+    detail: { channelId, token: null },
+  }));
 }
 
 function roomTokenHeaders(channelId: string): Record<string, string> {
