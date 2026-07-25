@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useCallback } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 interface GalleryItem {
   id: string;
@@ -23,6 +24,7 @@ function galleryDateLabel(dateStr: string): string {
 }
 
 export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose }: GalleryPanelProps) {
+  const { t } = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleScroll = useCallback(() => {
@@ -56,7 +58,7 @@ export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose 
               <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
               <path d="M21 15l-5-5L5 21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            {" "}Gallery
+            {" "}{t("galleryTitle")}
           </h3>
           <button
             className="bg-transparent border-none cursor-pointer"
@@ -71,7 +73,7 @@ export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose 
         <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "4px" }}>
           {items.length === 0 ? (
             <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>
-              No photos yet
+              {t("galleryEmpty")}
             </div>
           ) : (
             (() => {
@@ -106,7 +108,7 @@ export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose 
           )}
           {hasMore && (
             <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center" }}>
-              <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>Loading...</span>
+              <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>{t("loading")}</span>
             </div>
           )}
         </div>

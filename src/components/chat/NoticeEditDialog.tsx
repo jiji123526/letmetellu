@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 const NOTICE_TITLE_MAX_LENGTH = 100;
 const NOTICE_BODY_MAX_LENGTH = 1000;
@@ -13,6 +14,7 @@ interface NoticeEditDialogProps {
 }
 
 export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }: NoticeEditDialogProps) {
+  const { t } = useLocale();
   const [title, setTitle] = useState(currentTitle);
   const [body, setBody] = useState(currentBody);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -26,7 +28,7 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{ width: "100%", maxWidth: "300px", background: "var(--bg)", borderRadius: "16px", padding: "20px" }}>
-        <div style={{ fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500, color: "var(--gray-text)", marginBottom: "12px" }}>공지 설정</div>
+        <div style={{ fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500, color: "var(--gray-text)", marginBottom: "12px" }}>{t("noticeEditTitle")}</div>
 
         <input
           ref={titleRef}
@@ -34,7 +36,7 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={NOTICE_TITLE_MAX_LENGTH}
-          placeholder="공지 제목 (비우면 공지 삭제)"
+          placeholder={t("noticeTitlePlaceholder")}
           style={{ width: "100%", background: "var(--card)", border: "1.5px solid #e0e0e0", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", boxSizing: "border-box" as const, marginBottom: "8px", outline: "none", lineHeight: 1 }}
           onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
           onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }}
@@ -45,7 +47,7 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
           onChange={(e) => setBody(e.target.value)}
           maxLength={NOTICE_BODY_MAX_LENGTH}
           rows={4}
-          placeholder="공지 내용 (선택사항)"
+          placeholder={t("noticeBodyPlaceholder")}
           style={{ width: "100%", background: "var(--card)", border: "1.5px solid #e0e0e0", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", resize: "none", lineHeight: 1.5, boxSizing: "border-box" as const, outline: "none" }}
           onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
           onBlur={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "#e0e0e0"; }}
@@ -55,8 +57,8 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
         </div>
 
         <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--card)", color: "var(--secondary-text)", lineHeight: 1 }} onClick={onClose}>취소</button>
-          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--bubble-sent, #3b8df0)", color: "#fff", lineHeight: 1 }} onClick={() => { onSave(title.trim(), body.trim()); onClose(); }}>저장</button>
+          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--card)", color: "var(--secondary-text)", lineHeight: 1 }} onClick={onClose}>{t("cancel")}</button>
+          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--bubble-sent, #3b8df0)", color: "#fff", lineHeight: 1 }} onClick={() => { onSave(title.trim(), body.trim()); onClose(); }}>{t("save")}</button>
         </div>
       </div>
     </div>

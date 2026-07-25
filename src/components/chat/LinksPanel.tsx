@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { fetchLinks, fetchPreview } from "@/lib/api";
+import { useLocale } from "@/hooks/useLocale";
 
 const URL_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))[^\s]*)/g;
 
@@ -21,6 +22,7 @@ interface LinksPanelProps {
 const previewCache = new Map<string, { title?: string; image?: string; siteName?: string } | null>();
 
 export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) {
+  const { t } = useLocale();
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -127,7 +129,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-            {" "}Links
+            {" "}{t("linksTitle")}
           </h3>
           <button
             className="bg-transparent border-none cursor-pointer"
@@ -141,9 +143,9 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
         {/* Links grid */}
         <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", alignContent: "start" }}>
           {loading ? (
-            <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>Loading...</div>
+            <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>{t("loading")}</div>
           ) : links.length === 0 ? (
-            <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>No links shared</div>
+            <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>{t("linksEmpty")}</div>
           ) : (
             <>
               {links.map((link, i) => (
@@ -193,7 +195,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
               ))}
               {hasMore && (
                 <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center" }}>
-                  <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>Loading...</span>
+                  <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>{t("loading")}</span>
                 </div>
               )}
             </>

@@ -1,11 +1,14 @@
 "use client";
 
+import { useLocale } from "@/hooks/useLocale";
+
 interface ReplyBarProps {
   replyingTo: { id: string; text: string; uid: string } | null;
   onClose: () => void;
 }
 
 export function ReplyBar({ replyingTo, onClose }: ReplyBarProps) {
+  const { t } = useLocale();
   if (!replyingTo) return null;
 
   return (
@@ -23,7 +26,7 @@ export function ReplyBar({ replyingTo, onClose }: ReplyBarProps) {
         <path d="M2 11h14a4 4 0 0 1 4 4v4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <span className="flex-1 truncate">
-        {replyingTo.text || "사진"}
+        {replyingTo.text || t("photo")}
       </span>
       <button
         className="bg-transparent border-none cursor-pointer p-[2px_6px]"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useLocale } from "@/hooks/useLocale";
 import { searchMessages } from "@/lib/api";
 
 interface SearchBarProps {
@@ -12,6 +13,7 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ channelId, messages, onNavigate, onSearchState, onClose }: SearchBarProps) {
+  const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ id: string; text: string }[]>([]);
   const [index, setIndex] = useState(-1);
@@ -91,7 +93,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
         onChange={(e) => { setQuery(e.target.value); setResults([]); setIndex(-1); updateState("", [], -1); }}
         onKeyDown={handleKeyDown}
         onBlur={() => { if (query && results.length === 0) performSearch(query); }}
-        placeholder="검색..."
+        placeholder={t("searchPlaceholder")}
         style={{ flex: 1, minWidth: 0, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "8px", padding: "6px 10px", fontSize: "var(--bubble-font-size, 15px)", fontFamily: "inherit", outline: "none", lineHeight: 1 }}
       />
       <button

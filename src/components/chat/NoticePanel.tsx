@@ -1,5 +1,7 @@
 "use client";
 
+import { useLocale } from "@/hooks/useLocale";
+
 interface NoticeSection {
   title: string;
   items: string[];
@@ -11,6 +13,7 @@ interface NoticePanelProps {
 }
 
 export function NoticePanel({ notice, onClose }: NoticePanelProps) {
+  const { t } = useLocale();
   if (!notice || notice.length === 0) return null;
 
   return (
@@ -30,7 +33,7 @@ export function NoticePanel({ notice, onClose }: NoticePanelProps) {
       >
         {/* Header */}
         <div className="flex items-center justify-between flex-none" style={{ padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)" }}>
-          <h3 className="m-0 font-medium" style={{ fontSize: "var(--bubble-font-size, 16px)" }}>채널 안내</h3>
+          <h3 className="m-0 font-medium" style={{ fontSize: "var(--bubble-font-size, 16px)" }}>{t("noticePanelTitle")}</h3>
           <button
             className="bg-transparent border-none cursor-pointer"
             style={{ fontSize: "18px", color: "var(--meta)", padding: "4px 8px" }}

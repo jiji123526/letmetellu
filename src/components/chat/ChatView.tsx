@@ -273,6 +273,7 @@ function linkifyText(text: string, isMine: boolean, hiddenEmbedUrls: Set<string>
 }
 
 function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
+  const { t } = useLocale();
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -291,7 +292,7 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
           }}
           style={{ minHeight: "80px", padding: "8px 14px", border: 0, background: "transparent", color: "inherit", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer" }}
         >
-          탭하여 다시 시도
+          {t("retryMedia")}
         </button>
       ) : (
         <img
@@ -445,6 +446,7 @@ const MessageRow = React.memo(function MessageRow({
   onReaction,
   onEmojiPicker,
 }: MessageRowProps) {
+  const { t } = useLocale();
   const parentIsSent = parentIsAdmin !== null
     ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
     : false;
@@ -524,7 +526,7 @@ const MessageRow = React.memo(function MessageRow({
               onExpand={onExpand}
             />
           )}
-          {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
+          {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>{t("edited")}</span>}
         </>
       )}
     </div>

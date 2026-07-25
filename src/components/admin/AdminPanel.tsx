@@ -64,7 +64,7 @@ export function AdminPanel(props: AdminPanelProps) {
     try { const p = JSON.parse(welcomeConfig || "{}"); return p.icon || "💬"; } catch { return "💬"; }
   });
   const [welcomeTitle, setWelcomeTitle] = useState(() => {
-    try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || "Welcome"; } catch { return "환영합니다!"; }
+    try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || t("welcomeDefaultTitle"); } catch { return t("welcomeDefaultTitle"); }
   });
   const [welcomeItems, setWelcomeItems] = useState(() => {
     try { const p = JSON.parse(welcomeConfig || "{}"); return (p.items || []).join("\n"); } catch { return ""; }
@@ -385,7 +385,7 @@ export function AdminPanel(props: AdminPanelProps) {
               <input value={welcomeTitle} onChange={(e) => setWelcomeTitle(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeTitlePlaceholder")} />
             </div>
             <div style={{ marginBottom: "14px" }}>
-              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>안내 {t("sectionItems")}</label>
+              <label style={{ display: "block", fontSize: "var(--bubble-font-size, 15px)", color: "var(--gray-text)", fontWeight: 400, marginBottom: "8px" }}>{t("welcomeItemsLabel")}</label>
               <textarea value={welcomeItems} onChange={(e) => setWelcomeItems(e.target.value)} rows={5} style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.5, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeItemsPlaceholder")} />
             </div>
             <button style={saveBtnStyle} onClick={() => {
@@ -410,7 +410,7 @@ export function AdminPanel(props: AdminPanelProps) {
             <div style={{ marginBottom: "16px" }}>
               <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideChannelTitle")}</h4>
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>프로필</strong> — 채널 이름과 프로필 {t("changePhoto")}. 정사각형 크롭 후 업로드</li>
+                <li>• {t("guideProfile")}</li>
                 <li>• {t("guideColor")}</li>
                 <li>• {t("guidePasscode")}</li>
                 <li>• {t("guideRules")}</li>
@@ -422,7 +422,7 @@ export function AdminPanel(props: AdminPanelProps) {
               <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
                 <li>• {t("guideReport")}</li>
                 <li>• {t("guideBlock")}</li>
-                <li>• <strong style={{ fontWeight: 500, color: "var(--card-text)" }}>{t("unblock")}</strong> — 관리 → 차단 사용자에서 해제 가능</li>
+                <li>• {t("guideUnblock")}</li>
                 <li>• {t("guidePetition")}</li>
                 <li>• {t("guideBannedWords")}</li>
                 <li>• {t("guideDelete")}</li>

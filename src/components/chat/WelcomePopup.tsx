@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 interface WelcomeConfig {
   icon: string;
@@ -8,19 +9,14 @@ interface WelcomeConfig {
   items: string[];
 }
 
-const DEFAULT_WELCOME: WelcomeConfig = {
-  icon: "💬",
-  title: "환영합니다!",
-  items: [
-    "메시지를 꾹 누르면 답장, 리액션, 신고가 가능합니다",
-    "본인이 보낸 메시지는 삭제 및 수정할 수 있습니다",
-    "비밀 메시지는 채널 관리자에게만 전달됩니다",
-    "우측 상단 메뉴에서 설정, 갤러리, 링크를 확인할 수 있습니다",
-  ],
-};
-
 export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channelId: string; bubbleColor?: string; customConfig?: string }) {
+  const { t } = useLocale();
   const [show, setShow] = useState(false);
+  const defaultWelcome: WelcomeConfig = {
+    icon: "💬",
+    title: t("welcomeDefaultTitle"),
+    items: [t("welcomeDefaultItem1"), t("welcomeDefaultItem2"), t("welcomeDefaultItem3"), t("welcomeDefaultItem4")],
+  };
 
   useEffect(() => {
     const key = `welcomed_${channelId}`;
@@ -32,11 +28,11 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
 
   if (!show) return null;
 
-  let config: WelcomeConfig = DEFAULT_WELCOME;
+  let config: WelcomeConfig = defaultWelcome;
   if (customConfig) {
     try {
       const parsed = JSON.parse(customConfig);
-      if (parsed.title) config = { ...DEFAULT_WELCOME, ...parsed };
+      if (parsed.title) config = { ...defaultWelcome, ...parsed };
     } catch {}
   }
 
@@ -67,7 +63,7 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
           style={{ background: bubbleColor || "var(--bubble-sent)", lineHeight: 1 }}
           onClick={() => setShow(false)}
         >
-          확인
+          {t("welcomeConfirm")}
         </button>
       </div>
     </div>

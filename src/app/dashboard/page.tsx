@@ -78,7 +78,7 @@ export default function DashboardPage() {
   if (status === "loading" || loading) {
     return (
       <main className="min-h-dvh flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <div style={{ color: "var(--meta)" }}>Loading...</div>
+        <div style={{ color: "var(--meta)" }}>{t("loading")}</div>
       </main>
     );
   }
@@ -124,7 +124,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <p style={{ color: "var(--meta)", textAlign: "center", padding: "40px 0" }}>
-            아직 채널이 없습니다
+            {t("noChannels")}
           </p>
         )}
 

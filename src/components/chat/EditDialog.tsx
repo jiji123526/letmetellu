@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useLocale } from "@/hooks/useLocale";
 
 interface EditDialogProps {
   currentText: string;
@@ -9,6 +10,7 @@ interface EditDialogProps {
 }
 
 export function EditDialog({ currentText, onSave, onClose }: EditDialogProps) {
+  const { t } = useLocale();
   const [text, setText] = useState(currentText);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -29,7 +31,7 @@ export function EditDialog({ currentText, onSave, onClose }: EditDialogProps) {
       <div style={{ width: "100%", maxWidth: "300px", background: "var(--bg)", borderRadius: "16px", padding: "20px" }}>
         {/* Title */}
         <div style={{ fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500, color: "var(--gray-text)", marginBottom: "12px" }}>
-          메시지 수정
+          {t("editMessageTitle")}
         </div>
 
         {/* Textarea */}
@@ -62,13 +64,13 @@ export function EditDialog({ currentText, onSave, onClose }: EditDialogProps) {
             style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card)", color: "var(--secondary-text)" }}
             onClick={onClose}
           >
-            취소
+            {t("cancel")}
           </button>
           <button
             style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--bubble-sent, #3b8df0)", color: "#fff" }}
             onClick={() => { if (text.trim()) { onSave(text.trim()); onClose(); } }}
           >
-            저장
+            {t("save")}
           </button>
         </div>
       </div>

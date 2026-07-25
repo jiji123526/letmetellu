@@ -8,6 +8,8 @@ export const en: Record<LocaleKeys, string> = {
   close: "Close",
   delete: "Delete",
   send: "Send",
+  loading: "Loading...",
+  or: "or",
 
   // Chat
   deletedMessage: "This message was deleted",
@@ -54,6 +56,8 @@ export const en: Record<LocaleKeys, string> = {
   dmAllowed: "DMs enabled",
   dmBlocked: "DMs disabled",
   edited: "(edited)",
+  retryMedia: "Tap to retry",
+  editMessageTitle: "Edit Message",
   returnToAdmin: "Return",
   viewingAsUser: "Viewing as user",
 
@@ -183,9 +187,18 @@ export const en: Record<LocaleKeys, string> = {
 
   // Notice
   noticeTitle: "Channel Rules",
+  noticePanelTitle: "Channel Information",
+  noticeEditTitle: "Notice Settings",
+  noticeTitlePlaceholder: "Notice title (leave empty to delete)",
+  noticeBodyPlaceholder: "Notice details (optional)",
 
   // Welcome popup
   welcomeConfirm: "Got it",
+  welcomeDefaultTitle: "Welcome!",
+  welcomeDefaultItem1: "Long-press messages to reply, react, or report",
+  welcomeDefaultItem2: "You can edit or delete messages you sent",
+  welcomeDefaultItem3: "Direct messages are only delivered to the channel admin",
+  welcomeDefaultItem4: "Use the top-right menu for settings, gallery, and links",
 
   // Search
   searchPlaceholder: "Search",
@@ -208,6 +221,8 @@ export const en: Record<LocaleKeys, string> = {
   loginBtn: "Log In",
   signupBtn: "Sign Up",
   googleLogin: "Continue with Google",
+  googleSignup: "Sign up with Google",
+  passwordHint: "8+ characters including a number",
   loginError: "Invalid email or password",
   signupError: "Failed to sign up",
   userExists: "Email already registered",
@@ -229,4 +244,10 @@ export const en: Record<LocaleKeys, string> = {
   onboardingStep2: "Admin Guide",
   onboardingComplete: "Get Started",
   onboardingGuideDesc: "Learn about admin features.",
+  onboardingIntro: "Create your own anonymous chat room!\nThe channel URL cannot be changed later.",
+  onboardingSlugHint: "Lowercase letters, numbers, and hyphens (3-30 characters)",
+  onboardingCreated: "Channel created!",
+  onboardingTip: "💡 Share the channel URL so anyone can join anonymously without logging in.",
+  onboardingGoToChannel: "Go to my channel →",
+  guideNotice: "Notice — A dismissible banner shown above chat. A new notice appears again",
 };

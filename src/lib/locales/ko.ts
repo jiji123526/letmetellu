@@ -6,6 +6,8 @@ export const ko = {
   close: "닫기",
   delete: "삭제",
   send: "보내기",
+  loading: "불러오는 중...",
+  or: "또는",
 
   // Chat
   deletedMessage: "삭제된 채팅입니다",
@@ -52,6 +54,8 @@ export const ko = {
   dmAllowed: "비밀 메시지가 허용됩니다",
   dmBlocked: "비밀 메시지가 차단됩니다",
   edited: "(수정됨)",
+  retryMedia: "탭하여 다시 시도",
+  editMessageTitle: "메시지 수정",
   returnToAdmin: "돌아가기",
   viewingAsUser: "사용자 시점으로 보는 중",
 
@@ -181,9 +185,18 @@ export const ko = {
 
   // Notice
   noticeTitle: "채널 규칙",
+  noticePanelTitle: "채널 안내",
+  noticeEditTitle: "공지 설정",
+  noticeTitlePlaceholder: "공지 제목 (비우면 공지 삭제)",
+  noticeBodyPlaceholder: "공지 내용 (선택사항)",
 
   // Welcome popup
   welcomeConfirm: "확인",
+  welcomeDefaultTitle: "환영합니다!",
+  welcomeDefaultItem1: "메시지를 꾹 누르면 답장, 리액션, 신고가 가능합니다",
+  welcomeDefaultItem2: "본인이 보낸 메시지는 삭제 및 수정할 수 있습니다",
+  welcomeDefaultItem3: "비밀 메시지는 채널 관리자에게만 전달됩니다",
+  welcomeDefaultItem4: "우측 상단 메뉴에서 설정, 갤러리, 링크를 확인할 수 있습니다",
 
   // Search
   searchPlaceholder: "검색",
@@ -206,6 +219,8 @@ export const ko = {
   loginBtn: "로그인",
   signupBtn: "가입하기",
   googleLogin: "Google로 계속하기",
+  googleSignup: "Google로 가입하기",
+  passwordHint: "8자 이상, 숫자 포함",
   loginError: "이메일 또는 비밀번호가 틀렸습니다",
   signupError: "가입에 실패했습니다",
   userExists: "이미 가입된 이메일입니다",
@@ -227,6 +242,12 @@ export const ko = {
   onboardingStep2: "관리자 가이드",
   onboardingComplete: "시작하기",
   onboardingGuideDesc: "채널 관리자 기능을 확인하세요.",
+  onboardingIntro: "나만의 익명 채팅방을 만들어 보세요!\n채널 주소는 나중에 변경할 수 없습니다.",
+  onboardingSlugHint: "영문 소문자, 숫자, 하이픈 (3-30자)",
+  onboardingCreated: "채널이 생성되었습니다!",
+  onboardingTip: "💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다. 로그인 없이 바로 채팅이 가능합니다.",
+  onboardingGoToChannel: "내 채널로 이동 →",
+  guideNotice: "공지 — 채팅 상단에 표시되는 배너. 사용자가 닫을 수 있으며 새 공지는 다시 표시됨",
 } as const;
 
 export type LocaleKeys = keyof typeof ko;
