@@ -98,12 +98,12 @@ body {
 
 /* Media/widget loading indicator — matches the original typing bubble. */
 .media-loading-dots {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  width: 100%;
-  padding: 0 14px;
+  width: auto;
+  padding: 0;
   line-height: 0;
 }
 

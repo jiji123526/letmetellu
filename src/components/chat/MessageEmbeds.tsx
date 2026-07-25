@@ -82,16 +82,12 @@ function YouTubeEmbed({ url }: { url: string }) {
       position: "relative",
       borderRadius: "12px",
       overflow: "hidden",
-      width: "min(320px, 100%)",
+      width: loading ? "auto" : "min(320px, 100%)",
       maxWidth: "100%",
-      background: "#000",
-      aspectRatio: isShorts ? "9/16" : "16/9",
+      background: loading ? "transparent" : "#000",
+      aspectRatio: loading ? undefined : (isShorts ? "9/16" : "16/9"),
     }}>
-      {loading && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", background: "var(--gray-bubble)" }}>
-          <MediaLoadingDots />
-        </div>
-      )}
+      {loading && <MediaLoadingDots />}
       <iframe
         width="100%"
         height="100%"
@@ -126,7 +122,7 @@ function LinkPreviewCard({ url }: { url: string }) {
       .finally(() => setLoading(false));
   }, [url]);
 
-  if (loading) return <MediaLoadingDots minHeight="72px" />;
+  if (loading) return <MediaLoadingDots />;
   if (!data) return null;
 
   return (
@@ -225,13 +221,13 @@ function TwitterEmbed({ url }: { url: string }) {
     <div
       ref={frameRef}
       className="native-chat-embed"
-      style={{ position: "relative", width: `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "80px" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
+      style={{ position: "relative", width: loading ? "auto" : `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "calc(var(--bubble-font-size) * 1.38)" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
     >
-      {loading && <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "var(--gray-bubble)" }}><MediaLoadingDots minHeight="80px" /></div>}
+      {loading && <MediaLoadingDots />}
       <div
         ref={contentRef}
         className="native-chat-embed-scale"
-        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left" }}
+        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left", visibility: loading ? "hidden" : "visible" }}
       />
     </div>
   );
@@ -281,13 +277,13 @@ function InstagramEmbed({ url }: { url: string }) {
     <div
       ref={frameRef}
       className="native-chat-embed"
-      style={{ position: "relative", width: `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "80px" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
+      style={{ position: "relative", width: loading ? "auto" : `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "calc(var(--bubble-font-size) * 1.38)" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
     >
-      {loading && <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "var(--gray-bubble)" }}><MediaLoadingDots minHeight="80px" /></div>}
+      {loading && <MediaLoadingDots />}
       <div
         ref={contentRef}
         className="native-chat-embed-scale"
-        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left" }}
+        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left", visibility: loading ? "hidden" : "visible" }}
       />
     </div>
   );
@@ -303,9 +299,9 @@ export function MessageEmbeds({ text }: { text: string }) {
 
   return (
     <div style={{
-      marginTop: "6px",
+      marginTop: 0,
       overflow: "visible",
-      width: "min(320px, 100%)",
+      width: "fit-content",
       maxWidth: "100%",
     }}>
       {unique.map((url) => {

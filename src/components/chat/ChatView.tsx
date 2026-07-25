@@ -234,8 +234,8 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
   const [attempt, setAttempt] = useState(0);
 
   return (
-    <div className="relative inline-block" style={{ minWidth: loaded ? undefined : "74px" }}>
-      {!loaded && !failed && <MediaLoadingDots />}
+    <div className="relative inline-block">
+      {!loaded && !failed && <MediaLoadingDots imageBubble />}
       {failed ? (
         <button
           type="button"
