@@ -61,16 +61,6 @@ export async function fetchMessages(channelId: string, cursor?: string) {
   return res.json();
 }
 
-export async function fetchDm(channelId: string) {
-  if (IS_MOCK) return { dm: [] };
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
-  const params = new URLSearchParams({ type: "dm", channel: channelId });
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
-    headers: roomTokenHeaders(parentChannelId),
-  });
-  return res.json();
-}
-
 export async function fetchGallery(channelId: string, cursor?: string) {
   if (IS_MOCK) return { gallery: [] };
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
