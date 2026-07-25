@@ -307,7 +307,7 @@ export default function DashboardPage() {
                     {isLoggedIn ? (
                       <>
                         <div className="px-3 py-2 text-[12px] truncate" style={{ color: "#8e8e93" }}>{session.user?.email}</div>
-                        <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#ff3b30" }} onClick={() => signOut({ callbackUrl: "/login" })}>{t("logout")}</button>
+                        <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#ff3b30" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
                       </>
                     ) : (
                       <button className="w-full border-none rounded-[10px] cursor-pointer text-left px-3 py-2.5 text-[13px]" style={{ background: "transparent", color: "#007aff" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
@@ -330,12 +330,8 @@ export default function DashboardPage() {
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
-                style={{ background: "#efeff4", padding: "0 42px", boxSizing: "border-box", color: "#111" }}
+                style={{ background: "#efeff4", padding: "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
               />
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="9" y="3" width="6" height="12" rx="3" />
-                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
-              </svg>
             </div>
           </div>
           <div className="h-px ml-[80px]" style={{ background: "#e5e5ea" }} />
