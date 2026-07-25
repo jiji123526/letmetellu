@@ -347,7 +347,6 @@ export default function DashboardPage() {
             <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
             {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "#8e8e93" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
             {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => setShowCreate(true)}>{t("dashboardFirstChannel")}</button>}
-            {!query && !isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => router.push("/login")}>{t("dashboardGuestCta")}</button>}
           </section>
         ) : (
           <section>
@@ -466,12 +465,6 @@ export default function DashboardPage() {
               </div>
             ))}
           </section>
-        )}
-
-        {!isLoggedIn && recentChannels.length > 0 && (
-          <div className="px-5 py-8 text-center">
-            <button className="border-none bg-transparent cursor-pointer text-[14px]" style={{ color: "#007aff" }} onClick={() => router.push("/login")}>{t("dashboardGuestCta")}</button>
-          </div>
         )}
 
         {editing && (
