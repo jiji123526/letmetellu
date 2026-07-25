@@ -85,6 +85,7 @@ export default function DashboardPage() {
           meta: `/ch/${channel.id}`,
           time: formatDate(channel.created_at, locale),
           owned: true,
+          managed: true,
         }))
       : recentChannels.map((channel) => ({
           id: channel.id,
@@ -95,6 +96,7 @@ export default function DashboardPage() {
           meta: `/ch/${channel.id}`,
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
+          managed: channels.some((ownedChannel) => ownedChannel.id === channel.id),
         }));
     if (!normalized) return items;
     return items.filter((item) => item.name.toLowerCase().includes(normalized) || item.id.toLowerCase().includes(normalized));
@@ -329,7 +331,7 @@ export default function DashboardPage() {
                             <path d="M8 10V7a4 4 0 0 1 8 0v3" />
                           </svg>
                         )}
-                        {item.owned && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "#eaf3ff", color: "#007aff" }}>{t("dashboardManaged")}</span>}
+                        {item.managed && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "#eaf3ff", color: "#007aff" }}>{t("dashboardManaged")}</span>}
                       </div>
                       <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "#8e8e93" }}>{item.time}</span>
                       <span className="ml-2 text-[19px] font-light leading-none" style={{ color: "#c7c7cc" }}>›</span>
