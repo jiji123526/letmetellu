@@ -3,6 +3,14 @@ import { NextResponse } from "next/server";
 
 // Admin message proxy — verifies session, forwards with trusted identity
 export async function POST(request: Request) {
+  return forwardAdminMessageRequest(request, "POST");
+}
+
+export async function PATCH(request: Request) {
+  return forwardAdminMessageRequest(request, "PATCH");
+}
+
+async function forwardAdminMessageRequest(request: Request, method: "POST" | "PATCH") {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -14,7 +22,7 @@ export async function POST(request: Request) {
 
   // Override uid with verified session user ID and mark as admin-verified
   const res = await fetch(`${workerUrl}/api/messages`, {
-    method: "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
       "X-Internal-Token": process.env.INTERNAL_SECRET || "",

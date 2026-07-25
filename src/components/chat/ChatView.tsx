@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
+import { fetchInit, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -973,16 +973,19 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   };
 
-  const handleReaction = (msgId: string, emoji: string) => {
+  const handleReaction = async (msgId: string, emoji: string) => {
+    const activeChannelId = inLiveModeRef.current ? `${channelId}_live` : channelId;
+    const reactionUid = effectiveAdmin && authUserId ? authUserId : uid;
+
     // Optimistic reaction update
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== msgId) return m;
         const reactions = parseReactions(m.reactions);
-        const key = `${uid}_${Date.now()}`;
+        const key = `${reactionUid}_${Date.now()}`;
         // Check if user already reacted with this emoji
         const existingKey = Object.entries(reactions).find(
-          ([k, v]) => k.startsWith(`${uid}_`) && v === emoji
+          ([k, v]) => k.startsWith(`${reactionUid}_`) && v === emoji
         )?.[0];
         if (existingKey) {
           delete reactions[existingKey]; // toggle off
@@ -992,7 +995,34 @@ export function ChatView({ channelId }: { channelId: string }) {
         return { ...m, reactions: JSON.stringify(reactions) };
       })
     );
-    toggleReaction({ uid, message_id: msgId, channel_id: channelId, emoji });
+
+    try {
+      const toggle = effectiveAdmin && authUserId ? toggleReactionAsAdmin : toggleReaction;
+      const result = await toggle({
+        uid: reactionUid,
+        message_id: msgId,
+        channel_id: activeChannelId,
+        emoji,
+      });
+
+      if (result.error) throw new Error(result.error);
+
+      // Reconcile the optimistic key with the server's canonical reaction map.
+      if (result.reactions) {
+        setMessages((prev) => prev.map((message) =>
+          message.id === msgId
+            ? { ...message, reactions: JSON.stringify(result.reactions) }
+            : message
+        ));
+      }
+    } catch {
+      // A failed optimistic update must not remain visible only to this client.
+      fetchMessages(activeChannelId).then((data) => {
+        if (data.messages) setMessages(data.messages);
+      }).catch(() => {});
+      setBanner({ text: t("sendFailed"), color: "#d32f2f" });
+      setTimeout(() => setBanner(null), 3000);
+    }
   };
 
   const handleAvatarClick = () => {
@@ -1482,7 +1512,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                   {/* Reactions */}
                   <ReactionBadge
                     reactions={reactions}
-                    myUid={uid}
+                    myUid={effectiveAdmin && authUserId ? authUserId : uid}
                     isSent={isSent}
                     isReply={isReply}
                     onReaction={(emoji) => handleReaction(msg.id, emoji)}

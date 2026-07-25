@@ -213,8 +213,18 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Passcode gate
     const patchParent = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const internalToken = request.headers.get("X-Internal-Token");
+    const verifiedUserId = request.headers.get("X-User-Id");
+    const isVerifiedAdmin = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+    if (isVerifiedAdmin) {
+      const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+        .bind(patchParent).first();
+      if (!channel || channel.owner_uid !== verifiedUserId) {
+        return Response.json({ error: "not owner" }, { status: 403 });
+      }
+    }
     const { passcode: patchPasscode } = await getChannelPasscodeInfo(patchParent, env);
-    if (patchPasscode) {
+    if (patchPasscode && !isVerifiedAdmin) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
       const decoded = await verifyRoomToken(roomToken, env);
@@ -229,7 +239,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
 
     const reactions: Record<string, string> = JSON.parse(msg.reactions || "{}");
-    const key = `${uid}_${(emoji as string).codePointAt(0)?.toString(16)}`;
+    const reactionUid = isVerifiedAdmin ? verifiedUserId! : uid as string;
+    const key = `${reactionUid}_${(emoji as string).codePointAt(0)?.toString(16)}`;
 
     // Toggle: if exists remove, otherwise add
     if (reactions[key]) {

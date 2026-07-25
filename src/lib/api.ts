@@ -228,6 +228,16 @@ export async function toggleReaction(payload: { uid: string; message_id: string;
   return res.json();
 }
 
+export async function toggleReactionAsAdmin(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
+  if (IS_MOCK) return { ok: true };
+  const res = await fetch("/api/messages", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 export async function uploadImage(blob: Blob, channelId: string): Promise<string | null> {
   if (IS_MOCK) return URL.createObjectURL(blob);
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
