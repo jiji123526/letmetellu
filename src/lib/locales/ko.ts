@@ -31,6 +31,8 @@ export const ko = {
   chatFrozen: "채팅이 얼려져 있습니다",
   sendFailed: "전송 실패",
   adminDataAuthFailed: "관리자 데이터를 불러오지 못했습니다. 서버 인증 설정을 확인해 주세요.",
+  roomAuthExpired: "채널 인증이 만료되었습니다. 비밀번호를 다시 입력해 주세요.",
+  passcodeChanged: "채널 비밀번호가 변경되었습니다. 작성 중인 내용은 그대로 보관됩니다.",
   chatUnfrozen: "채팅이 해제되었습니다",
   adminModeOn: "관리자 모드 활성화",
   adminModeOff: "관리자 모드 해제",

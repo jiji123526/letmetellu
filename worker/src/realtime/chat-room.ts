@@ -16,6 +16,7 @@ export class ChatRoom {
   private state: DurableObjectState;
   private env: Env;
   private currentPasscode: string | null = null;
+  private passcodeLoaded = false;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -30,11 +31,14 @@ export class ChatRoom {
       const channelId = url.pathname.split("/ws/")[1]?.split("/")[0] || "";
       if (!channelId) return new Response("missing channel", { status: 400 });
 
-      const channel = await this.env.DB.prepare(
-        "SELECT passcode FROM channels WHERE id = ?"
-      ).bind(channelId).first() as { passcode: string | null } | null;
-      if (!channel) return new Response("channel not found", { status: 404 });
-      this.currentPasscode = channel.passcode;
+      if (!this.passcodeLoaded) {
+        const channel = await this.env.DB.prepare(
+          "SELECT passcode FROM channels WHERE id = ?"
+        ).bind(channelId).first() as { passcode: string | null } | null;
+        if (!channel) return new Response("channel not found", { status: 404 });
+        this.currentPasscode = channel.passcode;
+        this.passcodeLoaded = true;
+      }
 
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
@@ -56,14 +60,26 @@ export class ChatRoom {
           const conn = this.connections.get(server);
           if (!conn) return;
 
-          if (data.type === "auth-room" && typeof data.token === "string" && this.currentPasscode) {
-            const payload = await verifyRoomToken(data.token, this.env);
-            if (
-              payload?.channel_id === conn.channelId
-              && payload.passcode_hash === this.currentPasscode
-            ) {
+          if (data.type === "auth-room") {
+            if (!this.currentPasscode) {
               conn.authorized = true;
-              this.broadcastPresence();
+              server.send(JSON.stringify({ type: "room-authenticated" }));
+            } else if (typeof data.token === "string" && data.token) {
+              const payload = await verifyRoomToken(data.token, this.env);
+              if (
+                payload?.channel_id === conn.channelId
+                && payload.passcode_hash === this.currentPasscode
+              ) {
+                conn.authorized = true;
+                server.send(JSON.stringify({ type: "room-authenticated" }));
+                this.broadcastPresence();
+              } else {
+                conn.authorized = false;
+                server.send(JSON.stringify({ type: "room-auth-failed" }));
+              }
+            } else {
+              conn.authorized = false;
+              server.send(JSON.stringify({ type: "room-auth-required" }));
             }
           }
 
@@ -87,7 +103,10 @@ export class ChatRoom {
               conn.uid = payload.user_id;
               conn.isAdmin = true;
               conn.authorized = true;
+              server.send(JSON.stringify({ type: "admin-authenticated" }));
               this.broadcastPresence();
+            } else {
+              server.send(JSON.stringify({ type: "admin-auth-failed" }));
             }
           }
         } catch {}
@@ -117,6 +136,7 @@ export class ChatRoom {
     if (url.pathname.endsWith("/access-policy-changed")) {
       const body = await request.json() as { passcode: string | null };
       this.currentPasscode = body.passcode || null;
+      this.passcodeLoaded = true;
       for (const [ws, connection] of this.connections) {
         if (connection.isAdmin) continue;
         if (this.currentPasscode) {
@@ -129,6 +149,9 @@ export class ChatRoom {
           this.liveViewers.delete(ws);
         } else {
           connection.authorized = true;
+          try {
+            ws.send(JSON.stringify({ type: "room-access-opened" }));
+          } catch {}
         }
       }
       this.broadcastPresence();

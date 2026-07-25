@@ -357,7 +357,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
-  const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string } | null>(null);
+  const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; notice?: string } | null>(null);
   const [uid] = useState(getOrCreateUid);
   const [myFingerprint] = useState(() => typeof window !== "undefined" ? generateFingerprint() : "");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -679,13 +679,41 @@ export function ChatView({ channelId }: { channelId: string }) {
         const newReactions = event.reactions as string;
         setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, reactions: newReactions } : m));
       }
+      if (event.type === "room-auth-failed") {
+        clearRoomToken(channelId);
+        setPasscodeGate({
+          name: channel?.name || "",
+          profile_image: channel?.profile_image || null,
+          bubble_color: channel?.bubble_color || "#3b8df0",
+          notice: t("roomAuthExpired"),
+        });
+        setBanner({ text: t("roomAuthExpired"), color: "#d32f2f" });
+      }
+      if (event.type === "admin-authenticated") {
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        fetchInit(fetchChannel).then((data: InitData) => {
+          applyInitData(data);
+        }).catch(() => {});
+      }
+      if (event.type === "admin-auth-failed" && isOwner) {
+        setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
+      }
+      if (event.type === "room-access-opened") {
+        setPasscodeGate(null);
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        fetchInit(fetchChannel).then((data: InitData) => {
+          applyInitData(data);
+        }).catch(() => {});
+      }
       if (event.type === "room-access-revoked") {
         clearRoomToken(channelId);
         setPasscodeGate({
           name: channel?.name || "",
           profile_image: channel?.profile_image || null,
           bubble_color: channel?.bubble_color || "#3b8df0",
+          notice: t("passcodeChanged"),
         });
+        setBanner({ text: t("passcodeChanged"), color: "#d32f2f" });
       }
       if (event.type === "user-blocked") {
         const blockedUid = event.uid as string;
@@ -768,7 +796,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, uid, myFingerprint, t, channel]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, uid, myFingerprint, t, channel, applyInitData]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1193,6 +1221,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         channelName={passcodeGate.name}
         profileImage={passcodeGate.profile_image}
         bubbleColor={passcodeGate.bubble_color || "#3b8df0"}
+        notice={passcodeGate.notice}
         onSuccess={() => {
           // A passcode unlock always enters the normal channel first. Live
           // availability is synchronized by applyInitData and the user can

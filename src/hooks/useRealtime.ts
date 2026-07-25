@@ -8,7 +8,8 @@ type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 export function useRealtime(channelId: string | null, uid: string) {
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
-  const [connected, setConnected] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [roomAuthenticated, setRoomAuthenticated] = useState(false);
   const [presence, setPresence] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -19,21 +20,26 @@ export function useRealtime(channelId: string | null, uid: string) {
     const url = getWebSocketUrl(channelId, uid);
     if (!url) {
       // Mock mode — no WebSocket
-      setConnected(true);
+      setSocketConnected(true);
+      setRoomAuthenticated(true);
       setPresence(3);
       return;
     }
 
     const ws = new WebSocket(url);
+    let synchronized = false;
+
+    const notifySynchronized = () => {
+      if (synchronized) return;
+      synchronized = true;
+      handlersRef.current.forEach((handler) => handler({ type: "reconnected" }));
+    };
 
     ws.onopen = () => {
-      setConnected(true);
+      setSocketConnected(true);
+      setRoomAuthenticated(false);
       const roomToken = getRoomToken(channelId);
-      if (roomToken) {
-        ws.send(JSON.stringify({ type: "auth-room", token: roomToken }));
-      }
-      // Notify handlers that connection restored (trigger refetch)
-      handlersRef.current.forEach((handler) => handler({ type: "reconnected" }));
+      ws.send(JSON.stringify({ type: "auth-room", token: roomToken }));
     };
 
     ws.onmessage = (e) => {
@@ -46,6 +52,20 @@ export function useRealtime(channelId: string | null, uid: string) {
         if (data.type === "live-presence") {
           setLiveCount(data.liveCount);
         }
+        if (
+          data.type === "room-authenticated"
+          || data.type === "admin-authenticated"
+          || data.type === "room-access-opened"
+        ) {
+          setRoomAuthenticated(true);
+          notifySynchronized();
+        }
+        if (
+          data.type === "room-auth-failed"
+          || data.type === "room-access-revoked"
+        ) {
+          setRoomAuthenticated(false);
+        }
         handlersRef.current.forEach((handler) => handler(data));
       } catch {
         // Ignore malformed
@@ -53,7 +73,8 @@ export function useRealtime(channelId: string | null, uid: string) {
     };
 
     ws.onclose = () => {
-      setConnected(false);
+      setSocketConnected(false);
+      setRoomAuthenticated(false);
       // Reconnect after 2s
       reconnectTimeout.current = setTimeout(connect, 2000);
     };
@@ -77,7 +98,11 @@ export function useRealtime(channelId: string | null, uid: string) {
     if (!channelId) return;
     const handleRoomTokenChanged = (event: Event) => {
       const detail = (event as CustomEvent<{ channelId: string; token: string | null }>).detail;
-      if (detail.channelId !== channelId || !detail.token) return;
+      if (detail.channelId !== channelId) return;
+      if (!detail.token) {
+        setRoomAuthenticated(false);
+        return;
+      }
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: "auth-room", token: detail.token }));
       }
@@ -99,5 +124,6 @@ export function useRealtime(channelId: string | null, uid: string) {
     }
   }, []);
 
-  return { connected, presence, liveCount, subscribe, send };
+  const connected = socketConnected && roomAuthenticated;
+  return { connected, socketConnected, roomAuthenticated, presence, liveCount, subscribe, send };
 }

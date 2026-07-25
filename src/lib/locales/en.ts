@@ -33,6 +33,8 @@ export const en: Record<LocaleKeys, string> = {
   chatFrozen: "Chat is frozen",
   sendFailed: "Failed to send",
   adminDataAuthFailed: "Could not load admin data. Check the server authentication configuration.",
+  roomAuthExpired: "Channel access has expired. Enter the passcode again.",
+  passcodeChanged: "The channel passcode changed. Your draft has been preserved.",
   chatUnfrozen: "Chat unfrozen",
   adminModeOn: "Admin mode enabled",
   adminModeOff: "Admin mode disabled",
