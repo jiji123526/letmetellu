@@ -393,6 +393,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRequestIdRef = useRef(0);
+  const initialScrollDoneRef = useRef(false);
 
   const openExpandedPost = useCallback((text: string) => {
     const rect = messagesContainerRef.current?.getBoundingClientRect();
@@ -719,12 +720,19 @@ export function ChatView({ channelId }: { channelId: string }) {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [channelId]);
 
-  // Auto-scroll on new messages
+  // Position the initial channel view at the latest message once. Subsequent
+  // message mutations (new/edit/delete/reaction/refetch) preserve scroll.
   useEffect(() => {
-    if (!showScrollBtn) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, showScrollBtn]);
+    initialScrollDoneRef.current = false;
+  }, [channelId]);
+
+  useEffect(() => {
+    if (loading || passcodeGate || initialScrollDoneRef.current) return;
+    initialScrollDoneRef.current = true;
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    });
+  }, [loading, passcodeGate]);
 
   // Scroll detection for scroll-to-bottom button
   const loadingMore = useRef(false);
