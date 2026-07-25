@@ -58,6 +58,20 @@ interface Channel {
   notice: string;
 }
 
+interface InitData {
+  channel: Channel;
+  messages?: Message[];
+  blocked?: { uid: string; reason: string }[];
+  dm?: Message[];
+  bannerNotice?: string;
+  welcomeConfig?: string;
+  live?: { active: boolean; title?: string; sessionId?: string } | null;
+  emojiPresets?: string | null;
+  petitionEnabled?: boolean;
+  dmEnabled?: boolean;
+  hasPasscode?: boolean;
+}
+
 interface ContextMenuState {
   msg: Message;
   isSent: boolean;
@@ -351,6 +365,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initRequestIdRef = useRef(0);
 
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
@@ -382,11 +397,63 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   }, [inLiveMode, send]);
 
+  const applyInitData = useCallback((data: InitData) => {
+    setChannel(data.channel);
+    setMessages(data.messages || []);
+    setBlockedUsers(data.blocked || []);
+    setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
+    setActiveNotice(data.bannerNotice || "");
+    setWelcomeConfig(data.welcomeConfig || "");
+    setPetitionEnabled(data.petitionEnabled ?? true);
+    setDmEnabled(data.dmEnabled ?? true);
+
+    if (data.emojiPresets) {
+      localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);
+      try {
+        setEmojiPresets(JSON.parse(data.emojiPresets));
+      } catch {
+        setEmojiPresets(null);
+      }
+    } else {
+      localStorage.removeItem(`liveEmojis_${channelId}_live`);
+      setEmojiPresets(null);
+    }
+
+    if (data.live?.active) {
+      const title = data.live.title || t("liveTitle");
+      const sessionId = data.live.sessionId || "";
+      setLiveActive(true);
+      setLiveTitle(title);
+      setLiveSessionId(sessionId);
+      localStorage.setItem(`liveActive_${channelId}`, "true");
+      localStorage.setItem(`liveTitle_${channelId}`, title);
+      if (sessionId) {
+        localStorage.setItem(`liveSession_${channelId}`, sessionId);
+      } else {
+        localStorage.removeItem(`liveSession_${channelId}`);
+      }
+    } else {
+      setLiveActive(false);
+      setLiveTitle(t("liveTitle"));
+      setLiveSessionId("");
+      setInLiveMode(false);
+      localStorage.setItem(`liveActive_${channelId}`, "false");
+      localStorage.setItem(`inLiveMode_${channelId}`, "false");
+      localStorage.removeItem(`liveTitle_${channelId}`);
+      localStorage.removeItem(`liveSession_${channelId}`);
+    }
+  }, [channelId, t]);
+
   // Load initial data
   useEffect(() => {
-    const initChannel = inLiveMode && liveActive ? `${channelId}_live` : channelId;
+    const shouldResumeLive =
+      localStorage.getItem(`inLiveMode_${channelId}`) === "true" &&
+      localStorage.getItem(`liveActive_${channelId}`) === "true";
+    const initChannel = shouldResumeLive ? `${channelId}_live` : channelId;
+    const requestId = ++initRequestIdRef.current;
     fetchInit(initChannel)
-      .then((data) => {
+      .then(async (data: InitData) => {
+        if (requestId !== initRequestIdRef.current) return;
         // Check if passcode-gated
         if (data.hasPasscode && !data.messages) {
           setPasscodeGate({ name: data.channel.name, profile_image: data.channel.profile_image, bubble_color: data.channel.bubble_color });
@@ -394,58 +461,24 @@ export function ChatView({ channelId }: { channelId: string }) {
           return;
         }
         setPasscodeGate(null);
-        setChannel(data.channel);
-        setMessages(data.messages);
-        if (data.blocked) setBlockedUsers(data.blocked);
-        if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
-        setLoading(false);
-        // Load banner notice from server
-        if (data.bannerNotice) {
-          setActiveNotice(data.bannerNotice);
-        }
-        // Load welcome config from server
-        if (data.welcomeConfig) {
-          setWelcomeConfig(data.welcomeConfig);
-        }
-        // Load live status from server
-        if (data.live && data.live.active) {
-          setLiveActive(true);
-          setLiveTitle(data.live.title || t("liveTitle"));
-          localStorage.setItem(`liveActive_${channelId}`, "true");
-          localStorage.setItem(`liveTitle_${channelId}`, data.live.title || t("liveTitle"));
-          if (data.live.sessionId) {
-            setLiveSessionId(data.live.sessionId);
-            localStorage.setItem(`liveSession_${channelId}`, data.live.sessionId);
-          }
-        }
-        // Load emoji presets from server
-        if (data.emojiPresets) {
-          localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);
-          try { setEmojiPresets(JSON.parse(data.emojiPresets)); } catch {}
-        }
-        // Load petition/dm toggle settings
-        if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
-        if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
+        applyInitData(data);
 
-        if (!data.live || !data.live.active) {
-          // Server says live is not active — reset local state if stale
-          if (liveActive || inLiveMode) {
-            setLiveActive(false);
-            setInLiveMode(false);
-            localStorage.setItem(`liveActive_${channelId}`, "false");
-            localStorage.setItem(`inLiveMode_${channelId}`, "false");
-            // Refetch from normal channel since we loaded from _live
-            if (initChannel !== channelId) {
-              fetchInit(channelId).then((d) => {
-                setMessages(d.messages);
-                if (d.dm) setDmMessages(d.dm.map((dm: any) => ({ ...dm, dm: true })));
-              });
-            }
-          }
+        // A stale local live flag may have made the first request target the
+        // live channel after that live session already ended. In that case,
+        // replace the empty live payload with the normal channel payload.
+        if (!data.live?.active && initChannel !== channelId) {
+          const normalData = await fetchInit(channelId) as InitData;
+          if (requestId !== initRequestIdRef.current) return;
+          applyInitData(normalData);
         }
+        setLoading(false);
       })
-      .catch(console.error);
-  }, [channelId]);
+      .catch((error) => {
+        if (requestId !== initRequestIdRef.current) return;
+        console.error(error);
+        setLoading(false);
+      });
+  }, [channelId, applyInitData]);
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
 
@@ -971,16 +1004,20 @@ export function ChatView({ channelId }: { channelId: string }) {
         profileImage={passcodeGate.profile_image}
         bubbleColor={passcodeGate.bubble_color || "#3b8df0"}
         onSuccess={() => {
-          // Re-fetch init with token
+          // A passcode unlock always enters the normal channel first. Live
+          // availability is synchronized by applyInitData and the user can
+          // explicitly enter live mode from its join banner.
+          setInLiveMode(false);
+          localStorage.setItem(`inLiveMode_${channelId}`, "false");
           setLoading(true);
           setPasscodeGate(null);
-          fetchInit(channelId).then((data) => {
-            setChannel(data.channel);
-            setMessages(data.messages || []);
-            if (data.blocked) setBlockedUsers(data.blocked);
-            if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true })));
+          const requestId = ++initRequestIdRef.current;
+          fetchInit(channelId).then((data: InitData) => {
+            if (requestId !== initRequestIdRef.current) return;
+            applyInitData(data);
             setLoading(false);
           }).catch(() => {
+            if (requestId !== initRequestIdRef.current) return;
             // Restore the gate instead of leaving the page stuck on loading
             // when the authenticated init request fails.
             setPasscodeGate(passcodeGate);
