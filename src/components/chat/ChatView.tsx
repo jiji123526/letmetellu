@@ -183,10 +183,6 @@ function mergeServerMessageSnapshot(previous: Message[], incoming: Message[]): M
   );
 }
 
-function isSameGroup(_a: Message, _b: Message, _myUid: string) {
-  return false;
-}
-
 // Skeleton loading
 function SkeletonLoading() {
   const rows = [
@@ -402,6 +398,179 @@ function MessageTextWithEmbeds({
 
 const MemoizedMessageTextWithEmbeds = React.memo(MessageTextWithEmbeds);
 
+interface MessageRowProps {
+  msg: Message;
+  isReply: boolean;
+  parentIsAdmin: boolean | null;
+  effectiveAdmin: boolean;
+  uid: string;
+  authUserId?: string | null;
+  bubbleColor: string;
+  isReported: boolean;
+  isReportedTarget: boolean;
+  isBlockedSender: boolean;
+  searchQuery: string;
+  isSearchMatch: boolean;
+  isActiveMatch: boolean;
+  deletedMessageLabel: string;
+  onLongPress: (msg: Message, isSent: boolean, el: HTMLElement) => void;
+  onTouchStart: (msg: Message, isSent: boolean, el: HTMLElement) => void;
+  onTouchEnd: () => void;
+  onOpenImage: (msg: Message) => void;
+  onExpand: (text: string) => void;
+  onReaction: (messageId: string, emoji: string) => void;
+  onEmojiPicker: (messageId: string, rect: DOMRect) => void;
+}
+
+const MessageRow = React.memo(function MessageRow({
+  msg,
+  isReply,
+  parentIsAdmin,
+  effectiveAdmin,
+  uid,
+  authUserId,
+  bubbleColor,
+  isReported,
+  isReportedTarget,
+  isBlockedSender,
+  searchQuery,
+  isSearchMatch,
+  isActiveMatch,
+  deletedMessageLabel,
+  onLongPress,
+  onTouchStart,
+  onTouchEnd,
+  onOpenImage,
+  onExpand,
+  onReaction,
+  onEmojiPicker,
+}: MessageRowProps) {
+  const parentIsSent = parentIsAdmin !== null
+    ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
+    : false;
+  const isSent = isReply
+    ? parentIsSent
+    : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
+  const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
+  const hasTextAlongsideLink = !!msg.text?.replace(URL_LINK_REGEX, "").trim();
+
+  const bubble = (
+    <div
+      data-bubble
+      className="relative max-w-full break-words whitespace-pre-wrap select-none"
+      style={{
+        padding: msg.image
+          ? "4px 4px 0"
+          : hasNativeEmbed && !hasTextAlongsideLink
+            ? "4px"
+            : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+        fontSize: "var(--bubble-font-size)",
+        lineHeight: 1.38,
+        overflowWrap: "anywhere",
+        width: hasNativeEmbed ? "100%" : undefined,
+        borderRadius: !isReply
+          ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
+          : "20px",
+        background: msg.report
+          ? "#ffeaea"
+          : isReported || (effectiveAdmin && !msg.report && isReportedTarget)
+            ? "#ffe0e0"
+            : msg.dm
+              ? (isMine ? "#7b3fa0" : "#ddc8ed")
+              : isMine ? bubbleColor : "var(--gray-bubble)",
+        color: msg.report
+          ? "#c00"
+          : isReported || isReportedTarget
+            ? "#a00"
+            : msg.dm
+              ? (isMine ? "#fff" : "#5a1580")
+              : isMine ? "#fff" : "var(--gray-text)",
+        cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
+        opacity: isReported ? 0.6 : (effectiveAdmin && isBlockedSender) ? 0.4 : undefined,
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        if (!msg.deleted || effectiveAdmin) onLongPress(msg, isSent, event.currentTarget);
+      }}
+      onClick={() => {
+        if (!msg.report || !msg.reported_msg_id || !effectiveAdmin) return;
+        const element = document.getElementById(`msg-${msg.reported_msg_id}`);
+        if (!element) return;
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        const targetBubble = element.querySelector("[data-bubble]") as HTMLElement | null;
+        if (!targetBubble) return;
+        targetBubble.style.boxShadow = "0 0 0 2px #ff1744 inset";
+        targetBubble.style.transition = "box-shadow 0.8s ease-out";
+        setTimeout(() => { targetBubble.style.boxShadow = "none"; }, 100);
+        setTimeout(() => { targetBubble.style.boxShadow = ""; targetBubble.style.transition = ""; }, 1000);
+      }}
+      onTouchStart={(event) => { if (!msg.deleted) onTouchStart(msg, isSent, event.currentTarget); }}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchEnd}
+    >
+      {msg.deleted ? (
+        <span style={{ fontStyle: "italic", opacity: 0.5 }}>{deletedMessageLabel}</span>
+      ) : (
+        <>
+          {msg.image && <MessageImage src={msg.image} onOpen={() => onOpenImage(msg)} />}
+          {msg.text && (
+            <MemoizedMessageTextWithEmbeds
+              key={`${msg.id}:${msg.text}`}
+              text={msg.text}
+              image={!!msg.image}
+              isMine={isMine}
+              searchQuery={searchQuery}
+              isSearchMatch={isSearchMatch}
+              isActiveMatch={isActiveMatch}
+              showEmbeds={!msg.report && !msg.image}
+              onExpand={onExpand}
+            />
+          )}
+          {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
+        </>
+      )}
+    </div>
+  );
+
+  const replyArrow = isReply ? (
+    <span className="flex items-center" style={{ color: "var(--meta)", opacity: 0.7, marginTop: "8px", transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)" }}>
+      <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
+        <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  ) : null;
+
+  return (
+    <div
+      id={`msg-${msg.id}`}
+      className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
+      style={{
+        paddingTop: "calc(var(--bubble-font-size) * 0.18)",
+        paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
+        paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
+      }}
+    >
+      <div className={`flex flex-col ${isSent ? "items-end" : "items-start"}`} style={{ maxWidth: isReply ? "85%" : "74%" }}>
+        {isReply ? (
+          <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
+            {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
+          </div>
+        ) : bubble}
+        <ReactionBadge
+          messageId={msg.id}
+          reactions={msg.reactions}
+          myUid={effectiveAdmin && authUserId ? authUserId : uid}
+          isSent={isSent}
+          isReply={isReply}
+          onReaction={onReaction}
+          onEmojiPicker={onEmojiPicker}
+        />
+      </div>
+    </div>
+  );
+});
+
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -494,6 +663,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
   const reactionFrameRef = useRef<number | null>(null);
   const handleReactionRef = useRef<(messageId: string, emoji: string) => void>(() => {});
+  const handleLongPressRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
+  const handleTouchStartRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
+  const handleTouchEndRef = useRef<() => void>(() => {});
 
   useEffect(() => () => {
     if (reactionFrameRef.current !== null) {
@@ -1335,12 +1507,30 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   };
 
-  handleReactionRef.current = handleReaction;
   const handleMemoizedReaction = useCallback((messageId: string, emoji: string) => {
     handleReactionRef.current(messageId, emoji);
   }, []);
   const handleMemoizedEmojiPicker = useCallback((messageId: string, rect: DOMRect) => {
     setEmojiPicker({ msgId: messageId, rect });
+  }, []);
+  useEffect(() => {
+    handleReactionRef.current = handleReaction;
+    handleLongPressRef.current = handleBubbleLongPress;
+    handleTouchStartRef.current = handleTouchStart;
+    handleTouchEndRef.current = handleTouchEnd;
+  });
+  const handleMemoizedLongPress = useCallback((message: Message, isSent: boolean, element: HTMLElement) => {
+    handleLongPressRef.current(message, isSent, element);
+  }, []);
+  const handleMemoizedTouchStart = useCallback((message: Message, isSent: boolean, element: HTMLElement) => {
+    handleTouchStartRef.current(message, isSent, element);
+  }, []);
+  const handleMemoizedTouchEnd = useCallback(() => {
+    handleTouchEndRef.current();
+  }, []);
+  const handleOpenMessageImage = useCallback((message: Message) => {
+    if (!message.image) return;
+    setFullViewImage({ src: message.image, caption: message.text || undefined, date: message.created_at, msgId: message.id });
   }, []);
 
   // Passcode gate — show overlay if channel requires passcode
@@ -1578,205 +1768,57 @@ export function ChatView({ channelId }: { channelId: string }) {
         className="messages-scroll flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
         style={{ position: "relative", padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
       >
-        {(() => {
-          const { topLevel, repliesMap } = threadedMessages;
-
-          const renderBubble = (msg: Message, prev: Message | null, next: Message | null, isReply: boolean, parentMsg: Message | null) => {
-            // Determine parent's side (replies always follow parent's side)
-            const parentIsSent = parentMsg
-              ? (effectiveAdmin ? !!parentMsg.is_admin : !parentMsg.is_admin)
-              : false;
-
-            // Reply messages follow parent's side; normal messages use their own side
-            // Non-admin view: admin messages = left (recv), all others = right (sent)
-            // Admin view: admin messages = right (sent), all others = left (recv)
-            const isSent = isReply
-              ? parentIsSent
-              : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-
-            // For bubble COLOR: replies use their own identity, not parent's side
-            // admin view: admin reply = mine (blue), user reply = other (gray)
-            // non-admin view: user reply = mine (blue), admin reply = other (gray)
-            const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
-            const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
-            const hasTextAlongsideLink = !!msg.text?.replace(URL_LINK_REGEX, "").trim();
-
-            const isGroupStart = !isReply && (!prev || !isSameGroup(prev, msg, uid));
-            const isLast = !isReply && (!next || !isSameGroup(msg, next, uid));
-            const bubble = (
-              <div
-                data-bubble
-                className="relative max-w-full break-words whitespace-pre-wrap select-none"
-                style={{
-                  padding: msg.image
-                    ? "4px 4px 0"
-                    : hasNativeEmbed && !hasTextAlongsideLink
-                      ? "4px"
-                      : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
-                  fontSize: "var(--bubble-font-size)",
-                  lineHeight: 1.38,
-                  overflowWrap: "anywhere",
-                  width: hasNativeEmbed ? "100%" : undefined,
-                  borderRadius: !isReply && isLast
-                    ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
-                    : "20px",
-                  background: msg.report
-                    ? "#ffeaea"
-                    : reportedMsgIds.has(msg.id)
-                      ? "#ffe0e0"
-                      : (effectiveAdmin && !msg.report && reportedTargetIds.has(msg.id))
-                        ? "#ffe0e0"
-                        : msg.dm
-                          ? (isMine ? "#7b3fa0" : "#ddc8ed")
-                          : isMine
-                            ? bubbleColor
-                            : "var(--gray-bubble)",
-                  color: msg.report
-                    ? "#c00"
-                    : reportedMsgIds.has(msg.id) || reportedTargetIds.has(msg.id)
-                      ? "#a00"
-                      : msg.dm
-                        ? (isMine ? "#fff" : "#5a1580")
-                        : isMine ? "#fff" : "var(--gray-text)",
-                  cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
-                  opacity: reportedMsgIds.has(msg.id) ? 0.6
-                    : (effectiveAdmin && blockedUidSet.has(msg.uid)) ? 0.4
-                    : undefined,
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  if (!msg.deleted || effectiveAdmin) handleBubbleLongPress(msg, isSent, e.currentTarget);
-                }}
-                onClick={() => {
-                  if (msg.report && msg.reported_msg_id && effectiveAdmin) {
-                    const el = document.getElementById(`msg-${msg.reported_msg_id}`);
-                    if (el) {
-                      el.scrollIntoView({ behavior: "smooth", block: "center" });
-                      const bubble = el.querySelector("[class*='relative']") as HTMLElement;
-                      if (bubble) {
-                        bubble.style.boxShadow = "0 0 0 2px #ff1744 inset";
-                        bubble.style.transition = "box-shadow 0.8s ease-out";
-                        setTimeout(() => { bubble.style.boxShadow = "none"; }, 100);
-                        setTimeout(() => { bubble.style.boxShadow = ""; bubble.style.transition = ""; }, 1000);
-                      }
-                    }
-                  }
-                }}
-                onTouchStart={(e) => { if (!msg.deleted) handleTouchStart(msg, isSent, e.currentTarget); }}
-                onTouchEnd={handleTouchEnd}
-                onTouchMove={handleTouchEnd}
-              >
-                {msg.deleted ? (
-                  <span style={{ fontStyle: "italic", opacity: 0.5 }}>{t("deletedMessage")}</span>
-                ) : (
-                  <>
-                    {msg.image && (
-                      <MessageImage
-                        src={msg.image}
-                        onOpen={() => setFullViewImage({ src: msg.image!, caption: msg.text || undefined, date: msg.created_at, msgId: msg.id })}
-                      />
-                    )}
-                    {msg.text && (
-                      <MemoizedMessageTextWithEmbeds
-                        key={`${msg.id}:${msg.text}`}
-                        text={msg.text}
-                        image={!!msg.image}
-                        isMine={isMine}
-                        searchQuery={searchState.query}
-                        isSearchMatch={searchResultIdSet.has(msg.id)}
-                        isActiveMatch={msg.id === searchState.activeId}
-                        showEmbeds={!msg.report && !msg.image}
-                        onExpand={openExpandedPost}
-                      />
-                    )}
-                    {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>(edited)</span>}
-                  </>
-                )}
-              </div>
-            );
-
-            // Reply arrow SVG
-            const replyArrow = isReply ? (
-              <span
-                className="flex items-center"
-                style={{
-                  color: "var(--meta)",
-                  opacity: 0.7,
-                  marginTop: "8px",
-                  transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
-                }}
-              >
-                <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
-                  <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-            ) : null;
-
-            return (
-              <div
-                key={msg.id}
-                id={`msg-${msg.id}`}
-                className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
-                style={{
-                  paddingTop: "calc(var(--bubble-font-size) * 0.18)",
-                  paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
-                  paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
-                }}
-              >
-                <div
-                  className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
-                  style={{
-                    maxWidth: isReply ? "85%" : "74%",
-                  }}
-                >
-                  {/* Bubble with reply arrow */}
-                  {isReply ? (
-                    <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
-                      {parentIsSent ? (
-                        <>{bubble}{replyArrow}</>
-                      ) : (
-                        <>{replyArrow}{bubble}</>
-                      )}
-                    </div>
-                  ) : (
-                    bubble
-                  )}
-
-                  {/* Reactions */}
-                  <ReactionBadge
-                    messageId={msg.id}
-                    reactions={msg.reactions}
-                    myUid={effectiveAdmin && authUserId ? authUserId : uid}
-                    isSent={isSent}
-                    isReply={isReply}
-                    onReaction={handleMemoizedReaction}
-                    onEmojiPicker={handleMemoizedEmojiPicker}
-                  />
-                </div>
-              </div>
-            );
+        {threadedMessages.topLevel.flatMap((message) => {
+          const rows: React.ReactElement[] = [];
+          const replies = threadedMessages.repliesMap[message.id] || [];
+          const commonProps = {
+            effectiveAdmin,
+            uid,
+            authUserId,
+            bubbleColor,
+            deletedMessageLabel: t("deletedMessage"),
+            onLongPress: handleMemoizedLongPress,
+            onTouchStart: handleMemoizedTouchStart,
+            onTouchEnd: handleMemoizedTouchEnd,
+            onOpenImage: handleOpenMessageImage,
+            onExpand: openExpandedPost,
+            onReaction: handleMemoizedReaction,
+            onEmojiPicker: handleMemoizedEmojiPicker,
           };
-
-          const elements: (string | React.ReactElement)[] = [];
-
-          topLevel.forEach((m, i) => {
-            const prev = topLevel[i - 1] || null;
-            const next = topLevel[i + 1] || null;
-            elements.push(renderBubble(m, prev, next, false, null));
-
-            // Render replies below parent
-            const replies = repliesMap[m.id];
-            if (replies) {
-              replies.forEach((r, ri) => {
-                const rPrev = ri === 0 ? m : replies[ri - 1];
-                const rNext = replies[ri + 1] || null;
-                elements.push(renderBubble(r, rPrev, rNext, true, m));
-              });
-            }
-          });
-
-          return elements;
-        })()}
+          rows.push(
+            <MessageRow
+              key={message.id}
+              {...commonProps}
+              msg={message}
+              isReply={false}
+              parentIsAdmin={null}
+              isReported={reportedMsgIds.has(message.id)}
+              isReportedTarget={reportedTargetIds.has(message.id)}
+              isBlockedSender={blockedUidSet.has(message.uid)}
+              searchQuery={searchState.query}
+              isSearchMatch={searchResultIdSet.has(message.id)}
+              isActiveMatch={message.id === searchState.activeId}
+            />,
+          );
+          for (const reply of replies) {
+            rows.push(
+              <MessageRow
+                key={reply.id}
+                {...commonProps}
+                msg={reply}
+                isReply
+                parentIsAdmin={!!message.is_admin}
+                isReported={reportedMsgIds.has(reply.id)}
+                isReportedTarget={reportedTargetIds.has(reply.id)}
+                isBlockedSender={blockedUidSet.has(reply.uid)}
+                searchQuery={searchState.query}
+                isSearchMatch={searchResultIdSet.has(reply.id)}
+                isActiveMatch={reply.id === searchState.activeId}
+              />,
+            );
+          }
+          return rows;
+        })}
         <div ref={messagesEndRef} />
       </main>
 
