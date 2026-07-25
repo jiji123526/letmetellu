@@ -13,6 +13,7 @@ interface Channel {
   bubble_color: string;
   created_at: string;
   has_passcode: number;
+  owner_name: string | null;
 }
 
 function formatDate(value: string, locale: "ko" | "en") {
@@ -86,6 +87,7 @@ export default function DashboardPage() {
           profileImage: channel.profile_image,
           bubbleColor: channel.bubble_color,
           hasPasscode: channel.has_passcode === 1,
+          ownerName: channel.owner_name || "",
           meta: `/ch/${channel.id}`,
           time: formatDate(channel.created_at, locale),
           owned: true,
@@ -103,6 +105,7 @@ export default function DashboardPage() {
           profileImage: channel.profileImage,
           bubbleColor: channel.bubbleColor,
           hasPasscode: channel.hasPasscode,
+          ownerName: channel.ownerName,
           meta: `/ch/${channel.id}`,
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
@@ -111,7 +114,11 @@ export default function DashboardPage() {
         }));
     const items = [...ownedItems, ...recentItems];
     if (!normalized) return items;
-    return items.filter((item) => item.name.toLowerCase().includes(normalized) || item.id.toLowerCase().includes(normalized));
+    return items.filter((item) =>
+      item.name.toLowerCase().includes(normalized)
+      || item.id.toLowerCase().includes(normalized)
+      || item.ownerName.toLowerCase().includes(normalized)
+    );
   }, [channels, recentChannels, query, locale, prioritizedOwnedId]);
 
   const handleCreate = async () => {

@@ -14,7 +14,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const parentChannelId = isLiveChannel ? channelId.replace(/_live$/, "") : channelId;
 
   // Fetch channel config (always from parent)
-  const channel = await env.DB.prepare("SELECT * FROM channels WHERE id = ?")
+  const channel = await env.DB.prepare(
+    `SELECT channels.*, users.name AS owner_name
+     FROM channels
+     LEFT JOIN users ON users.id = channels.owner_uid
+     WHERE channels.id = ?`
+  )
     .bind(parentChannelId).first();
 
   if (!channel) {

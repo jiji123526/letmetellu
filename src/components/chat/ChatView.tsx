@@ -60,6 +60,7 @@ interface Channel {
   is_frozen: number;
   notice: string;
   passcode_hint?: string | null;
+  owner_name?: string | null;
 }
 
 interface InitData {
@@ -842,6 +843,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       profileImage: data.channel.profile_image,
       bubbleColor: data.channel.bubble_color || "#3b8df0",
       hasPasscode: data.hasPasscode === true,
+      ownerName: data.channel.owner_name || "",
     });
     setMessages(data.messages || []);
     setBlockedUsers(data.blocked || []);

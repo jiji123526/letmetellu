@@ -4,6 +4,7 @@ export interface RecentChannel {
   profileImage: string | null;
   bubbleColor: string;
   hasPasscode: boolean;
+  ownerName: string;
   pinned: boolean;
   lastVisitedAt: number;
 }
@@ -23,7 +24,12 @@ export function getRecentChannels(): RecentChannel[] {
         && typeof item.name === "string"
         && typeof item.lastVisitedAt === "number"
       )
-      .map((item) => ({ ...item, hasPasscode: item.hasPasscode === true, pinned: item.pinned === true }))
+      .map((item) => ({
+        ...item,
+        hasPasscode: item.hasPasscode === true,
+        ownerName: typeof item.ownerName === "string" ? item.ownerName : "",
+        pinned: item.pinned === true,
+      }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastVisitedAt - left.lastVisitedAt)
       .slice(0, MAX_RECENT_CHANNELS);
   } catch {
