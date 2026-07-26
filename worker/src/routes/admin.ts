@@ -66,6 +66,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env.DB.prepare(`DELETE FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds),
         env.DB.prepare(`DELETE FROM moderators WHERE channel_id IN (${placeholders})`).bind(...channelIds),
         env.DB.prepare(`DELETE FROM banned_words WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+        env.DB.prepare(`DELETE FROM user_recent_channels WHERE channel_id IN (${placeholders})`).bind(...channelIds),
         env.DB.prepare(`DELETE FROM channels WHERE id IN (${placeholders})`).bind(...channelIds),
       ]);
       const doId = env.CHAT_ROOM.idFromName(channel_id);

@@ -9,6 +9,12 @@ import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboa
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
+import {
+  fetchAccountRecentChannels,
+  mergeAccountRecentChannels,
+  removeAccountRecentChannel,
+  setAccountRecentChannelPinned,
+} from "@/lib/account-recent-channels";
 
 interface Channel {
   id: string;
@@ -91,7 +97,7 @@ export default function DashboardPage() {
     setChannels(data.channels || []);
   }, []);
 
-  const loadRecentChannels = useCallback(async () => {
+  const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
     setRecentChannels(stored);
     if (stored.length === 0) return;
@@ -111,17 +117,35 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadAccountRecentChannels = useCallback(async (userId: string) => {
+    const migrationKey = `letmetellu_recent_channels_migrated_${userId}`;
+    try {
+      if (localStorage.getItem(migrationKey) !== "true") {
+        const localChannels = getRecentChannels();
+        if (localChannels.length) await mergeAccountRecentChannels(localChannels);
+        localStorage.setItem(migrationKey, "true");
+      }
+      setRecentChannels(await fetchAccountRecentChannels());
+    } catch {
+      // Do not replace account data with device-local history on a transient failure.
+      setRecentChannels([]);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void loadRecentChannels();
-      if (status === "authenticated") {
-        void loadChannels().finally(() => setLoading(false));
+      if (status === "authenticated" && session?.user?.id) {
+        void Promise.all([
+          loadChannels(),
+          loadAccountRecentChannels(session.user.id),
+        ]).finally(() => setLoading(false));
       } else if (status === "unauthenticated") {
+        void loadLocalRecentChannels();
         setLoading(false);
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [status, loadChannels, loadRecentChannels]);
+  }, [status, session?.user?.id, loadChannels, loadLocalRecentChannels, loadAccountRecentChannels]);
 
   useEffect(() => {
     if (loading || status !== "unauthenticated" || recentChannels.length > 0) return;
@@ -188,12 +212,17 @@ export default function DashboardPage() {
   const activeItems = useMemo(() => {
     const normalized = linkedChannelId || query.trim().toLowerCase();
     const ownedIds = new Set(channels.map((channel) => channel.id));
+    const personalColors = new Map(recentChannels.map((channel) => [channel.id, channel.bubbleColor]));
+    const previewColor = (channelId: string, fallback: string) =>
+      status === "authenticated"
+        ? personalColors.get(channelId) || fallback
+        : getChannelPreviewColor(channelId, fallback);
     const ownedItems = channels
       .map((channel) => ({
           id: channel.id,
           name: channel.name,
           profileImage: channel.profile_image,
-          bubbleColor: getChannelPreviewColor(channel.id, channel.bubble_color || "#3b8df0"),
+          bubbleColor: previewColor(channel.id, channel.bubble_color || "#3b8df0"),
           hasPasscode: channel.has_passcode === 1,
           ownerName: channel.owner_name || "",
           meta: `/ch/${channel.id}`,
@@ -211,7 +240,7 @@ export default function DashboardPage() {
           id: channel.id,
           name: channel.name,
           profileImage: channel.profileImage,
-          bubbleColor: getChannelPreviewColor(channel.id, channel.bubbleColor || "#3b8df0"),
+          bubbleColor: previewColor(channel.id, channel.bubbleColor || "#3b8df0"),
           hasPasscode: channel.hasPasscode,
           ownerName: channel.ownerName,
           meta: `/ch/${channel.id}`,
@@ -226,7 +255,7 @@ export default function DashboardPage() {
         id: linkedChannel.id,
         name: linkedChannel.name,
         profileImage: linkedChannel.profile_image,
-        bubbleColor: getChannelPreviewColor(linkedChannel.id, linkedChannel.bubble_color || "#3b8df0"),
+        bubbleColor: previewColor(linkedChannel.id, linkedChannel.bubble_color || "#3b8df0"),
         hasPasscode: linkedChannel.has_passcode === 1,
         ownerName: linkedChannel.owner_name || "",
         meta: `/ch/${linkedChannel.id}`,
@@ -241,7 +270,7 @@ export default function DashboardPage() {
       item.name.toLowerCase().includes(normalized)
       || item.id.toLowerCase().includes(normalized)
     );
-  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status]);
 
   const handleCreate = async () => {
     const slug = newSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -279,13 +308,26 @@ export default function DashboardPage() {
   };
 
   const removeRecent = (channelId: string) => {
-    removeRecentChannel(channelId);
-    setRecentChannels(getRecentChannels());
+    setRecentChannels((current) => current.filter((channel) => channel.id !== channelId));
+    if (status === "authenticated") {
+      void removeAccountRecentChannel(channelId);
+    } else {
+      removeRecentChannel(channelId);
+      setRecentChannels(getRecentChannels());
+    }
   };
 
   const togglePinned = (channelId: string) => {
-    toggleRecentChannelPinned(channelId);
-    setRecentChannels(getRecentChannels());
+    const nextPinned = !recentChannels.find((channel) => channel.id === channelId)?.pinned;
+    setRecentChannels((current) => current.map((channel) =>
+      channel.id === channelId ? { ...channel, pinned: nextPinned } : channel
+    ));
+    if (status === "authenticated") {
+      void setAccountRecentChannelPinned(channelId, nextPinned);
+    } else {
+      toggleRecentChannelPinned(channelId);
+      setRecentChannels(getRecentChannels());
+    }
     setSwipe({ id: null, offset: 0 });
   };
 
@@ -302,7 +344,11 @@ export default function DashboardPage() {
       body: JSON.stringify({ action: "delete-channel", channel_id: channelId }),
     });
     if (!response.ok) throw new Error("delete failed");
-    removeRecentChannel(channelId);
+    if (status === "authenticated") {
+      await removeAccountRecentChannel(channelId).catch(() => {});
+    } else {
+      removeRecentChannel(channelId);
+    }
   };
 
   const performDeleteSelected = async (channelIds: string[]) => {
@@ -310,11 +356,18 @@ export default function DashboardPage() {
     setDeleting(true);
     try {
       await Promise.all(ownedIds.map(deleteOwnedChannel));
-      channelIds
-        .filter((id) => !ownedIds.includes(id))
-        .forEach(removeRecentChannel);
+      const recentIds = channelIds.filter((id) => !ownedIds.includes(id));
+      if (status === "authenticated") {
+        await Promise.all(recentIds.map((id) => removeAccountRecentChannel(id)));
+      } else {
+        recentIds.forEach(removeRecentChannel);
+      }
       await loadChannels();
-      setRecentChannels(getRecentChannels());
+      if (status === "authenticated" && session?.user?.id) {
+        await loadAccountRecentChannels(session.user.id);
+      } else {
+        setRecentChannels(getRecentChannels());
+      }
       setSelectedIds(new Set());
       setEditing(false);
     } catch {
@@ -340,7 +393,11 @@ export default function DashboardPage() {
     try {
       await deleteOwnedChannel(channelId);
       await loadChannels();
-      setRecentChannels(getRecentChannels());
+      if (status === "authenticated" && session?.user?.id) {
+        await loadAccountRecentChannels(session.user.id);
+      } else {
+        setRecentChannels(getRecentChannels());
+      }
       setSwipe({ id: null, offset: 0 });
     } catch {
       setShowDeleteError(true);

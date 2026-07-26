@@ -10,6 +10,7 @@ import { handleDm } from "./routes/dm";
 import { handleUpload, handleMediaServe } from "./routes/upload";
 import { handlePreview } from "./routes/preview";
 import { handleVerifyPasscode } from "./routes/passcode";
+import { handleRecentChannels } from "./routes/recent-channels";
 
 export { ChatRoom };
 
@@ -64,6 +65,8 @@ export default {
         response = await handleAdmin(request, env);
       } else if (url.pathname.startsWith("/api/user")) {
         response = await handleUser(request, env);
+      } else if (url.pathname.startsWith("/api/recent-channels")) {
+        response = await handleRecentChannels(request, env);
       } else if (url.pathname.startsWith("/api/auth")) {
         response = await handleAuth(request, env);
       } else if (url.pathname.startsWith("/api/dm")) {

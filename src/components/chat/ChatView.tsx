@@ -31,6 +31,7 @@ import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
+import { recordAccountRecentChannel, setAccountChannelColor } from "@/lib/account-recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 
 interface Message {
@@ -709,7 +710,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showOwnerChannels, setShowOwnerChannels] = useState(false);
   const [showChannelDeleted, setShowChannelDeleted] = useState(false);
   const [ownerChannelCount, setOwnerChannelCount] = useState(1);
-  const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
+  const { isOwner, isLoggedIn, userId: authUserId } = useAuth(channel?.owner_uid);
   const { t } = useLocale();
   const [manualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -839,14 +840,25 @@ export function ChatView({ channelId }: { channelId: string }) {
   const applyInitData = useCallback((data: InitData) => {
     setChannel(data.channel);
     const savedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
-    recordRecentChannel({
-      id: channelId,
-      name: data.channel.name,
-      profileImage: data.channel.profile_image,
-      bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3b8df0",
-      hasPasscode: data.hasPasscode === true,
-      ownerName: data.channel.owner_name || "",
-    });
+    if (isLoggedIn) {
+      void recordAccountRecentChannel(channelId).then(({ record }) => {
+        if (!record?.bubble_color) return;
+        setLocalBubbleColor(record.bubble_color);
+        localStorage.setItem(`bubbleColor_${channelId}`, record.bubble_color);
+        document.documentElement.style.setProperty("--bubble-sent", record.bubble_color);
+      }).catch(() => {
+        // A temporary sync failure must not block channel entry.
+      });
+    } else {
+      recordRecentChannel({
+        id: channelId,
+        name: data.channel.name,
+        profileImage: data.channel.profile_image,
+        bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3b8df0",
+        hasPasscode: data.hasPasscode === true,
+        ownerName: data.channel.owner_name || "",
+      });
+    }
     setMessages(data.messages || []);
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
@@ -894,7 +906,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       localStorage.removeItem(`liveTitle_${channelId}`);
       localStorage.removeItem(`liveSession_${channelId}`);
     }
-  }, [channelId, t]);
+  }, [channelId, isLoggedIn, t]);
 
   // Load initial data
   useEffect(() => {
@@ -1180,7 +1192,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);
       }
       if (event.type === "channel-deleted" && !isAdmin) {
-        removeRecentChannel(channelId);
+        if (!isLoggedIn) removeRecentChannel(channelId);
         setShowChannelDeleted(true);
       }
       if (event.type === "emoji-presets-changed") {
@@ -1188,7 +1200,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, uid, myFingerprint, t, channel, applyInitData, localBubbleColor]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, myFingerprint, t, channel, applyInitData, localBubbleColor]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -2288,7 +2300,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           message={t("channelDeletedMessage")}
           confirmLabel={t("goToDashboard")}
           onConfirm={() => {
-            removeRecentChannel(channelId);
+            if (!isLoggedIn) removeRecentChannel(channelId);
             window.location.href = "/dashboard";
           }}
           onCancel={() => {}}
@@ -2336,7 +2348,14 @@ export function ChatView({ channelId }: { channelId: string }) {
           currentColor={bubbleColor}
           onColorChange={(color) => {
             setLocalBubbleColor(color);
-            updateRecentChannelAppearance(channelId, { bubbleColor: color });
+            localStorage.setItem(`bubbleColor_${channelId}`, color);
+            if (isLoggedIn) {
+              void setAccountChannelColor(channelId, color).catch(() => {
+                // Keep the selected color locally and retry on the next change.
+              });
+            } else {
+              updateRecentChannelAppearance(channelId, { bubbleColor: color });
+            }
           }}
           onClose={() => setShowSettings(false)}
         />
@@ -2436,9 +2455,15 @@ export function ChatView({ channelId }: { channelId: string }) {
           onColorChange={(color) => {
             setLocalBubbleColor(color);
             setChannel((prev) => prev ? { ...prev, bubble_color: color } : null);
-            updateRecentChannelAppearance(channelId, { bubbleColor: color });
             localStorage.setItem(`bubbleColor_${channelId}`, color);
             document.documentElement.style.setProperty("--bubble-sent", color);
+            if (isLoggedIn) {
+              void setAccountChannelColor(channelId, color).catch(() => {
+                // Channel color still updates even if personal sync is temporarily unavailable.
+              });
+            } else {
+              updateRecentChannelAppearance(channelId, { bubbleColor: color });
+            }
             adminAction("update-profile", channelId, { bubble_color: color });
           }}
           onNameChange={(name) => {
