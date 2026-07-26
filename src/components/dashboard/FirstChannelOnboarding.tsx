@@ -11,7 +11,7 @@ interface FirstChannelOnboardingProps {
 }
 
 const featureIcons = [
-  { icon: "🔗", color: "#eaf3ff" },
+  { icon: "↗", color: "#eaf3ff" },
   { icon: "✉", color: "#f0edff" },
   { icon: "◉", color: "#fff0ea" },
   { icon: "❄", color: "#edf7ff" },

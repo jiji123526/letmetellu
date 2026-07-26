@@ -278,7 +278,7 @@ export const en: Record<LocaleKeys, string> = {
   firstOnboardingDmTitle: "Private messages only you can see",
   firstOnboardingDmDesc: "DMs are visible only to the admin and disappear from the sender's chat immediately after they are sent.",
   firstOnboardingLiveTitle: "Live chat for shared moments",
-  firstOnboardingLiveDesc: "Open a separate live space with custom reactions for shows, games, and events.",
+  firstOnboardingLiveDesc: "Open a live space with custom reactions; session messages are deleted when it ends.",
   firstOnboardingControlTitle: "You control the pace",
   firstOnboardingControlDesc: "Freeze chat, post notices, filter words, and block users to keep the space comfortable.",
   firstOnboardingCreate: "Create My Channel",

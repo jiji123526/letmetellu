@@ -276,7 +276,7 @@ export const ko = {
   firstOnboardingDmTitle: "관리자에게만 도착하는 비밀 메시지",
   firstOnboardingDmDesc: "DM은 관리자만 확인할 수 있고, 전송 후에는 보낸 사람의 채팅 화면에도 기록이 남지 않아요.",
   firstOnboardingLiveTitle: "같은 순간을 함께하는 라이브",
-  firstOnboardingLiveDesc: "방송·경기·공연을 위한 별도 라이브 공간과 전용 이모지를 열 수 있어요.",
+  firstOnboardingLiveDesc: "별도 라이브 공간과 전용 이모지를 열고, 종료하면 세션 메시지는 삭제돼요.",
   firstOnboardingControlTitle: "관리자가 조절하는 대화의 흐름",
   firstOnboardingControlDesc: "채팅방 얼리기, 공지, 금지어와 차단으로 공간을 편안하게 운영하세요.",
   firstOnboardingCreate: "내 채널 만들기",
