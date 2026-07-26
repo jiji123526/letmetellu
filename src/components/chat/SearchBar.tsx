@@ -112,7 +112,8 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
       </button>
       <button
         onClick={handleClose}
-        style={{ background: "none", border: "none", color: "var(--meta)", cursor: "pointer", fontSize: "calc(var(--bubble-font-size) + 2px)", padding: "5px", lineHeight: 1 }}
+        aria-label={t("close")}
+        style={{ background: "none", border: "none", color: "var(--meta)", cursor: "pointer", fontSize: "18px", padding: "4px 8px", lineHeight: 1 }}
       >
         ✕
       </button>

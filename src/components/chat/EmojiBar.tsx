@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { adminAction } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
@@ -177,6 +177,9 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
   const { t } = useLocale();
   const [emojis, setEmojis] = useState<string[]>(() => getPresetEmojis(channelId));
   const [showPicker, setShowPicker] = useState(false);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const dragIndexRef = useRef<number | null>(null);
+  const dragDraftRef = useRef<string[] | null>(null);
 
   const save = (next: string[]) => {
     setEmojis(next);
@@ -193,6 +196,46 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
 
   const removeEmoji = (idx: number) => {
     const next = emojis.filter((_, i) => i !== idx);
+    save(next);
+  };
+
+  const startReorder = (event: ReactPointerEvent<HTMLButtonElement>, index: number) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragIndexRef.current = index;
+    dragDraftRef.current = emojis;
+    setDraggingIndex(index);
+  };
+
+  const moveReorder = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const fromIndex = dragIndexRef.current;
+    if (fromIndex === null) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-emoji-index]");
+    const toIndex = Number(target?.dataset.emojiIndex);
+    if (!Number.isInteger(toIndex) || toIndex === fromIndex || toIndex < 0 || toIndex >= emojis.length) return;
+
+    setEmojis((current) => {
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      dragDraftRef.current = next;
+      return next;
+    });
+    dragIndexRef.current = toIndex;
+    setDraggingIndex(toIndex);
+  };
+
+  const finishReorder = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (dragIndexRef.current === null) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const next = dragDraftRef.current || emojis;
+    dragIndexRef.current = null;
+    dragDraftRef.current = null;
+    setDraggingIndex(null);
     save(next);
   };
 
@@ -214,8 +257,32 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
           {/* Emoji list */}
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
             {emojis.map((emoji, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--card)", borderRadius: "10px" }}>
-                <span style={{ color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)", marginRight: "8px" }}>☰</span>
+              <div
+                key={emoji}
+                data-emoji-index={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 12px",
+                  background: "var(--card)",
+                  borderRadius: "10px",
+                  transform: draggingIndex === i ? "scale(1.02)" : "scale(1)",
+                  boxShadow: draggingIndex === i ? "0 5px 16px rgba(0,0,0,.14)" : "none",
+                  transition: "transform 120ms ease, box-shadow 120ms ease",
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label={`Move ${emoji}`}
+                  style={{ appearance: "none", border: "none", background: "transparent", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)", marginRight: "8px", padding: "4px", cursor: draggingIndex === i ? "grabbing" : "grab", touchAction: "none", userSelect: "none", lineHeight: 1 }}
+                  onPointerDown={(event) => startReorder(event, i)}
+                  onPointerMove={moveReorder}
+                  onPointerUp={finishReorder}
+                  onPointerCancel={finishReorder}
+                >
+                  ☰
+                </button>
                 <span style={{ flex: 1, fontSize: "calc(var(--bubble-font-size) + 4px)" }}>{emoji}</span>
                 <button style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontSize: "var(--bubble-font-size, 14px)", padding: "0 4px", lineHeight: 1 }} onClick={() => removeEmoji(i)}>✕</button>
               </div>
