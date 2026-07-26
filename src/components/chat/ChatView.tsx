@@ -1009,6 +1009,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       .catch((error) => {
         if (requestId !== initRequestIdRef.current) return;
         console.error(error);
+        if (error instanceof Error && error.message.includes("Init failed: 404")) {
+          clearChannelLocalState(channelId);
+          setShowChannelDeleted(true);
+        }
         setLoading(false);
       });
   }, [channelId, applyInitData]);
@@ -1094,6 +1098,21 @@ export function ChatView({ channelId }: { channelId: string }) {
             }
           }).catch(() => {});
         }
+      }
+      // A reconnect can happen while a settings broadcast is in flight (and
+      // local Wrangler restarts its isolated Durable Object during development).
+      // Refresh channel configuration as well as messages so non-admin viewers
+      // do not keep a stale profile or background until a manual reload.
+      if (event.type === "reconnected") {
+        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+        fetchInit(fetchChannel).then((data: InitData) => {
+          if (!data.channel || data.messages === undefined) return;
+          setChannel(data.channel);
+          if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
+          if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
+          if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
+          if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
+        }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
       if (event.type === "reconnected" && inLiveModeRef.current) {
@@ -1842,8 +1861,15 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (requestId !== initRequestIdRef.current) return;
             applyInitData(data);
             setLoading(false);
-          }).catch(() => {
+          }).catch((error) => {
             if (requestId !== initRequestIdRef.current) return;
+            if (error instanceof Error && error.message.includes("Init failed: 404")) {
+              clearChannelLocalState(channelId);
+              setPasscodeGate(null);
+              setShowChannelDeleted(true);
+              setLoading(false);
+              return;
+            }
             // Restore the gate instead of leaving the page stuck on loading
             // when the authenticated init request fails.
             setPasscodeGate(passcodeGate);
@@ -1851,6 +1877,25 @@ export function ChatView({ channelId }: { channelId: string }) {
           });
         }}
       />
+    );
+  }
+
+  if (showChannelDeleted) {
+    return (
+      <div className="h-dvh max-w-[480px] mx-auto relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
+        <ConfirmDialog
+          title={t("channelDeletedTitle")}
+          message={t("channelDeletedMessage")}
+          confirmLabel={t("goToDashboard")}
+          onConfirm={() => {
+            if (!isLoggedIn) removeRecentChannel(channelId);
+            window.location.href = "/dashboard";
+          }}
+          onCancel={() => {}}
+          showCancel={false}
+          closeOnBackdrop={false}
+        />
+      </div>
     );
   }
 
@@ -2470,21 +2515,6 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Welcome Popup */}
       <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} profileImage={channel?.profile_image} customConfig={welcomeConfig} />
-
-      {showChannelDeleted && (
-        <ConfirmDialog
-          title={t("channelDeletedTitle")}
-          message={t("channelDeletedMessage")}
-          confirmLabel={t("goToDashboard")}
-          onConfirm={() => {
-            if (!isLoggedIn) removeRecentChannel(channelId);
-            window.location.href = "/dashboard";
-          }}
-          onCancel={() => {}}
-          showCancel={false}
-          closeOnBackdrop={false}
-        />
-      )}
 
       {/* Header Menu */}
       {headerMenu && (

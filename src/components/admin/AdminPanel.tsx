@@ -50,6 +50,7 @@ interface AdminPanelProps {
 type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "background" | "passcode" | "rules" | "welcome" | "banned-words" | "blocked" | "guide";
 
 const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
+const BACKGROUND_COLORS = ["#f2f2f7", "#eef5ff", "#f2efff", "#eef8f2", "#fff5e8", "#fff0f3", "#202124"];
 
 function darkenColor(hex: string, amount: number): string {
   const num = parseInt(hex.slice(1), 16);
@@ -395,10 +396,51 @@ export function AdminPanel(props: AdminPanelProps) {
               ))}
             </div>
             {selectedBackgroundType === "color" && (
-              <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0 14px", fontSize: "13px", color: "var(--meta)" }}>
-                {t("backgroundColor")}
-                <input type="color" value={selectedBackgroundColor} onChange={(event) => setSelectedBackgroundColor(event.target.value)} style={{ width: "42px", height: "30px", border: 0, padding: 0, background: "transparent" }} />
-              </label>
+              <div style={{ padding: "4px 0 14px" }}>
+                <div style={{ fontSize: "12px", color: "var(--meta)", textAlign: "center", marginBottom: "12px" }}>{t("backgroundColor")}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "9px", width: "210px", margin: "0 auto", justifyItems: "center", padding: "3px" }}>
+                  {BACKGROUND_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      aria-label={color}
+                      onClick={() => setSelectedBackgroundColor(color)}
+                      style={{
+                        width: "calc(var(--bubble-font-size, 17px) + 13px)",
+                        height: "calc(var(--bubble-font-size, 17px) + 13px)",
+                        borderRadius: "50%",
+                        background: color,
+                        border: "1px solid var(--hairline)",
+                        outline: selectedBackgroundColor.toLowerCase() === color.toLowerCase() ? `3px solid var(--bubble-sent)` : "3px solid transparent",
+                        outlineOffset: "1px",
+                        cursor: "pointer",
+                      }}
+                    />
+                  ))}
+                  <label
+                    aria-label={t("customColor")}
+                    style={{
+                      width: "calc(var(--bubble-font-size, 17px) + 13px)",
+                      height: "calc(var(--bubble-font-size, 17px) + 13px)",
+                      borderRadius: "50%",
+                      background: "conic-gradient(red,orange,yellow,green,cyan,blue,violet,red)",
+                      border: "1px solid var(--hairline)",
+                      outline: !BACKGROUND_COLORS.some((color) => color.toLowerCase() === selectedBackgroundColor.toLowerCase()) ? "3px solid var(--bubble-sent)" : "3px solid transparent",
+                      outlineOffset: "1px",
+                      cursor: "pointer",
+                      position: "relative",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <input
+                      type="color"
+                      value={selectedBackgroundColor}
+                      onChange={(event) => setSelectedBackgroundColor(event.target.value)}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+                    />
+                  </label>
+                </div>
+              </div>
             )}
             {selectedBackgroundType === "image" && (
               <>
@@ -656,6 +698,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 entries: [
                   { ...guideParts(t("guideProfile")), icon: "☺" },
                   { ...guideParts(t("guideColor")), icon: "●" },
+                  { ...guideParts(t("guideBackground")), icon: "▧" },
                   { ...guideParts(t("guidePasscode")), icon: "⌨" },
                   { ...guideParts(t("guideRules")), icon: "ℹ" },
                   { ...guideParts(t("guideWelcome")), icon: "✦" },

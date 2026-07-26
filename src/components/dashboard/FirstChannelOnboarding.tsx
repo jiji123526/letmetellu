@@ -38,6 +38,14 @@ const DmIcon = () => (
   </svg>
 );
 
+const BackgroundIcon = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <circle cx="8.5" cy="9" r="1.4" />
+    <path d="m4.5 17 4.5-4.5 4 4 2-2 4.5 4.5" />
+  </svg>
+);
+
 const featureIcons = [
   { icon: "↗", color: "#eaf3ff" },
   {
@@ -62,6 +70,7 @@ const guideIcons = [
       <path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" />
     </svg>
   ),
+  <BackgroundIcon key="background" />,
   <WelcomeIcon key="welcome" />,
   <PasscodeIcon key="passcode" />,
   <DmIcon key="dm" />,
@@ -98,6 +107,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
     [t("firstGuideInviteTitle"), t("firstGuideInviteDesc")],
     [t("firstGuideLimitTitle"), t("firstGuideLimitDesc")],
     [t("firstGuideProfileTitle"), t("firstGuideProfileDesc")],
+    [t("firstGuideBackgroundTitle"), t("firstGuideBackgroundDesc")],
     [t("firstGuideWelcomeTitle"), t("firstGuideWelcomeDesc")],
     [t("firstGuidePasscodeTitle"), t("firstGuidePasscodeDesc")],
     [t("firstGuideDmTitle"), t("firstGuideDmDesc")],
