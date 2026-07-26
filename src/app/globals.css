@@ -160,6 +160,11 @@ body {
   display: none !important;
 }
 
+/* Rectangular widgets look uneven with text bubbles' wider side padding. */
+[data-bubble]:has(.message-embeds):not(:has(.media-loading-dots)) {
+  padding: calc(var(--bubble-font-size) * 0.588) !important;
+}
+
 /* Native widgets render at 320px, then their wrapper scales them proportionally. */
 .native-chat-embed,
 .native-chat-embed-scale {

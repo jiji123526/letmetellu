@@ -315,7 +315,7 @@ export function MessageEmbeds({ text, isMine, onEmbedReady }: { text: string; is
   const unique = [...new Set(urls)];
 
   return (
-    <div style={{
+    <div className="message-embeds" style={{
       marginTop: 0,
       overflow: "visible",
       width: "fit-content",
