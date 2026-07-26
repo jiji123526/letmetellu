@@ -1179,6 +1179,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);
       }
       if (event.type === "channel-deleted" && !isAdmin) {
+        removeRecentChannel(channelId);
         setShowChannelDeleted(true);
       }
       if (event.type === "emoji-presets-changed") {

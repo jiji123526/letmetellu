@@ -2,7 +2,21 @@ import { Env } from "../types";
 
 export async function handleUser(request: Request, env: Env): Promise<Response> {
   if (request.method === "GET") {
-    const channelId = new URL(request.url).searchParams.get("channel");
+    const url = new URL(request.url);
+    const existenceQuery = url.searchParams.get("exists");
+    if (existenceQuery !== null) {
+      const ids = [...new Set(
+        existenceQuery.split(",").filter((id) => /^[a-z0-9-]{3,30}$/.test(id))
+      )].slice(0, 20);
+      if (ids.length === 0) return Response.json({ existingIds: [] });
+      const placeholders = ids.map(() => "?").join(", ");
+      const { results } = await env.DB.prepare(
+        `SELECT id FROM channels WHERE id IN (${placeholders}) AND id NOT LIKE '%_live'`
+      ).bind(...ids).all<{ id: string }>();
+      return Response.json({ existingIds: results.map((row) => row.id) });
+    }
+
+    const channelId = url.searchParams.get("channel");
     if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
 
     const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")

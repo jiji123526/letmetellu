@@ -71,9 +71,29 @@ export default function DashboardPage() {
     setChannels(data.channels || []);
   }, []);
 
+  const loadRecentChannels = useCallback(async () => {
+    const stored = getRecentChannels();
+    setRecentChannels(stored);
+    if (stored.length === 0) return;
+    try {
+      const ids = stored.map((channel) => channel.id).join(",");
+      const response = await fetch(`/api/channels/exists?ids=${encodeURIComponent(ids)}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { existingIds?: string[] };
+      if (!Array.isArray(data.existingIds)) return;
+      const existingIds = new Set(data.existingIds);
+      stored.forEach((channel) => {
+        if (!existingIds.has(channel.id)) removeRecentChannel(channel.id);
+      });
+      setRecentChannels(getRecentChannels());
+    } catch {
+      // Keep locally stored channels when validation is temporarily unavailable.
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setRecentChannels(getRecentChannels());
+      void loadRecentChannels();
       if (status === "authenticated") {
         void loadChannels().finally(() => setLoading(false));
       } else if (status === "unauthenticated") {
@@ -81,7 +101,7 @@ export default function DashboardPage() {
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [status, loadChannels]);
+  }, [status, loadChannels, loadRecentChannels]);
 
   useEffect(() => {
     if (!showAccount) return;
