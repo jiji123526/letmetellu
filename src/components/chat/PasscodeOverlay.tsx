@@ -58,7 +58,12 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
           {profileImage ? (
             <img src={profileImage} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-3xl" style={{ background: "var(--gray-bubble)" }}>💬</div>
+            <div
+              className="w-full h-full flex items-center justify-center text-white text-[28px] font-semibold"
+              style={{ background: bubbleColor }}
+            >
+              {channelName.slice(0, 1).toUpperCase() || "?"}
+            </div>
           )}
         </div>
 
