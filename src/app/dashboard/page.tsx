@@ -542,7 +542,7 @@ export default function DashboardPage() {
           <div className="h-[64px] px-4 flex items-center justify-between">
             <button
               type="button"
-              className="p-0 border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
+              className="border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
               style={{ color: "#007aff" }}
               onClick={() => {
                 setEditing((value) => !value);
