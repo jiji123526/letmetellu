@@ -560,8 +560,11 @@ export default function DashboardPage() {
           style={{
             right: "max(20px, calc((100vw - 760px) / 2 + 20px))",
             bottom: "max(20px, env(safe-area-inset-bottom))",
-            background: "#007aff",
-            boxShadow: "0 8px 24px rgba(0,122,255,.32)",
+            background: "rgba(0,122,255,.82)",
+            border: "1px solid rgba(255,255,255,.45)",
+            boxShadow: "0 6px 18px rgba(0,122,255,.22)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
           }}
           onClick={openCreateFlow}
           aria-label={t("createChannel")}
