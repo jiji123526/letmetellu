@@ -114,6 +114,325 @@ Before opening credential signup to the public, verify a sending domain and fini
 - SQL uses bound parameters.
 - CORS is restricted to the production origin and local development.
 
+## Platform moderation roadmap
+
+> **Status:** This section describes a planned platform-wide moderation system.
+> It is not implemented yet. Channel-owner administration remains the only
+> administrative role in the current production application.
+
+Platform moderation must remain separate from channel ownership. A channel
+owner may manage only channels they own, while a platform operator may review
+reports and apply explicitly authorized service-level actions. Platform access
+must never be implemented as a client-provided `is_admin` flag or as a blanket
+bypass in the existing channel-admin API.
+
+### Proposed roles
+
+| Role | Scope |
+| --- | --- |
+| `reviewer` | View reports and evidence, add internal review notes |
+| `moderator` | Resolve reports, warn owners, restrict, suspend and restore channels |
+| `super_admin` | Grant and revoke operator roles, perform destructive or system-level actions |
+
+The first deployment may use one `super_admin`, but the permission checks
+should still be role-based so review access can later be delegated without
+granting suspension, deletion or role-management privileges.
+
+### Authorization boundary
+
+```text
+Operator browser
+  └─ Auth.js session
+      └─ Vercel /api/platform-admin/*
+          └─ INTERNAL_SECRET + authenticated user ID
+              └─ Cloudflare Worker
+                  └─ D1 platform_admins role check on every request
+```
+
+- Hiding the operator UI is not authorization.
+- The browser must never choose or submit its own trusted role.
+- Vercel authenticates the session, but the Worker makes the final role and
+  permission decision.
+- The Worker checks `platform_admins` on every sensitive request so role
+  revocation takes effect immediately.
+- Platform endpoints live under a dedicated `/api/platform-admin` namespace;
+  they do not reuse `/api/admin`, which is scoped to channel ownership.
+- Authorization defaults to deny when no explicit permission matches.
+
+### Proposed data model
+
+`platform_admins` stores operator assignments:
+
+```sql
+CREATE TABLE platform_admins (
+  user_id TEXT PRIMARY KEY,
+  role TEXT NOT NULL CHECK (
+    role IN ('reviewer', 'moderator', 'super_admin')
+  ),
+  status TEXT NOT NULL DEFAULT 'active',
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+```
+
+`channel_reports` stores platform-level reports. Reporter network and device
+signals are HMAC-hashed; raw IP addresses and fingerprints are not retained.
+
+```sql
+CREATE TABLE channel_reports (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  reporter_user_id TEXT,
+  reporter_session_hash TEXT,
+  fingerprint_hash TEXT,
+  ip_hash TEXT,
+  reason TEXT NOT NULL,
+  description TEXT,
+  evidence_message_ids TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  priority INTEGER NOT NULL DEFAULT 0,
+  assigned_to TEXT,
+  resolution TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+```
+
+`platform_audit_logs` is an append-only record of privileged activity:
+
+```sql
+CREATE TABLE platform_audit_logs (
+  id TEXT PRIMARY KEY,
+  actor_user_id TEXT NOT NULL,
+  actor_role TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  reason TEXT,
+  before_json TEXT,
+  after_json TEXT,
+  created_at TEXT NOT NULL
+);
+```
+
+Application routes must not update or delete audit records. Every report
+resolution, warning, restriction, suspension, restoration, permanent deletion,
+operator assignment and operator revocation records the actor, target, reason,
+previous state and resulting state.
+
+### Report submission policy
+
+- A reporter may have one active report per channel.
+- A resolved report may be submitted again after a seven-day cooldown when a
+  new violation occurs.
+- A reporter may report at most three different channels per day.
+- Anonymous deduplication uses a signed anonymous session plus hashed
+  fingerprint and IP signals; browser-local UID alone is not trusted.
+- The reporter selects a structured reason and may add up to 500 characters of
+  context and up to three evidence message IDs.
+- Duplicate submissions update the existing active report rather than creating
+  an unlimited number of records.
+- Report volume changes review priority only. It must never automatically
+  delete a channel.
+- Child-safety or immediate-danger categories bypass normal queue priority and
+  are flagged for urgent review.
+
+Suggested report categories are illegal or dangerous content, harassment or
+hate, sexual content, privacy exposure, impersonation or fraud, spam and other.
+
+### Moderation states and actions
+
+Enforcement should be reversible by default:
+
+```text
+active → restricted → suspended → removed
+```
+
+- `active`: normal service.
+- `restricted`: new messages or uploads are limited while evidence is reviewed.
+- `suspended`: visitors see a suspension dialog; channel data remains intact.
+- `removed`: public access is disabled after a confirmed violation.
+- Permanent deletion is a separate `super_admin` action requiring explicit
+  confirmation, a reason and recent re-authentication.
+
+The initial operator console should support:
+
+- report queue filtering by status, category, priority and assignee;
+- report details with selected evidence, current channel state, recent relevant
+  messages, previous reports and previous actions;
+- no-violation resolution, internal notes, owner warning, restriction,
+  suspension and restoration;
+- mandatory reason entry for every enforcement action;
+- an audit-history view.
+
+Reporter identity, account ID, UID, fingerprint and IP signals are never shown
+to the reported channel owner. Owners receive the violated policy category,
+affected content and allowed appeal path, but not the reporter's identity.
+
+### Operator account security
+
+- Bootstrap the first `super_admin` by inserting the exact ID of an existing,
+  verified account through Wrangler/D1 tooling; there is no public operator
+  signup flow.
+- Require Google/OIDC authentication for operators rather than credential
+  passwords.
+- Use shorter operator sessions and re-authentication for permanent deletion,
+  data export and role changes.
+- Protect a future custom admin domain with Cloudflare Access and MFA.
+- Validate request origin, session, internal proxy token and D1 role on every
+  operator API request.
+- Rate-limit report reads, exports and enforcement actions.
+- Revoke active operator sessions when a role is removed.
+- Never expose raw secrets, IP addresses, fingerprints or authentication tokens
+  in audit logs.
+
+### Recommended delivery phases
+
+1. Define report categories, enforcement states, retention and appeal policy.
+2. Add `platform_admins`, `channel_reports`, `platform_audit_logs` and channel
+   moderation-state migrations.
+3. Implement shared `requirePlatformRole()` and append-only audit helpers.
+4. Add non-owner channel reporting with deduplication and rate limits.
+5. Build `/platform/reports` queue and report-detail views.
+6. Add reversible restriction, suspension and restoration actions.
+7. Add owner notifications and one appeal per enforcement decision.
+8. Add MFA, recent re-authentication, monitoring, export controls and role
+   administration.
+
+The recommended MVP is one manually bootstrapped `super_admin`, channel-report
+submission, a private report queue, no-violation/suspend/restore actions,
+mandatory reasons and audit logs. Automatic deletion, multiple operator roles,
+appeals and permanent deletion should follow only after the core review flow is
+stable.
+
+## 플랫폼 운영 및 신고 시스템 로드맵
+
+> **현재 상태:** 이 절은 앞으로 구현할 플랫폼 전체 운영 시스템의
+> 설계안입니다. 아직 프로덕션에 구현되지 않았으며, 현재 서비스에는 자신이
+> 소유한 채널만 관리하는 채널 관리자 권한만 존재합니다.
+
+플랫폼 운영자 권한은 채널 소유권과 완전히 분리합니다. 채널 관리자는 자신이
+소유한 채널만 관리하고, 플랫폼 운영자는 신고를 검토한 뒤 허용된 서비스
+차원의 조치만 실행합니다. 클라이언트가 보내는 `is_admin` 값이나 기존 채널
+관리 API의 무조건적인 우회 플래그로 구현하면 안 됩니다.
+
+### 제안 역할
+
+| 역할 | 권한 범위 |
+| --- | --- |
+| `reviewer` | 신고와 증거 열람, 내부 검토 메모 작성 |
+| `moderator` | 신고 처리, 채널 경고·제한·정지·복구 |
+| `super_admin` | 운영자 지정·해제, 영구 삭제와 시스템 수준 작업 |
+
+초기에는 한 계정만 `super_admin`으로 사용할 수 있지만, 코드에서는 처음부터
+역할별 권한을 분리합니다. 그래야 나중에 신고 검토만 맡길 사람에게 정지,
+삭제, 운영자 관리 권한까지 주는 일을 피할 수 있습니다.
+
+### 권한 확인 경계
+
+```text
+운영자 브라우저
+  └─ Auth.js 세션
+      └─ Vercel /api/platform-admin/*
+          └─ INTERNAL_SECRET + 인증된 사용자 ID
+              └─ Cloudflare Worker
+                  └─ 매 요청마다 D1 platform_admins 역할 확인
+```
+
+- 운영 화면을 숨기는 것은 권한 검사가 아닙니다.
+- 브라우저가 역할을 선택하거나 신뢰 가능한 역할 값을 보내게 하지 않습니다.
+- Vercel은 로그인 세션을 인증하고, 최종 권한 판단은 Worker가 수행합니다.
+- Worker는 민감한 요청마다 `platform_admins`를 조회하므로 권한을 해제하면
+  즉시 적용됩니다.
+- 플랫폼 API는 `/api/platform-admin`으로 분리하고, 채널 소유자 전용
+  `/api/admin`과 섞지 않습니다.
+- 명시적으로 허용된 권한이 없으면 기본적으로 거부합니다.
+
+### 제안 데이터 구조
+
+- `platform_admins`: 운영자 계정, 역할, 활성 상태와 지정·해제 기록
+- `channel_reports`: 신고 사유, 설명, 증거 메시지, 처리 상태와 담당자
+- `platform_audit_logs`: 모든 운영자 조회·처리·권한 변경의 추가 전용 기록
+
+신고자의 IP와 fingerprint 원문은 저장하지 않고 `INTERNAL_SECRET` 기반 HMAC
+해시만 저장합니다. 감사 로그는 애플리케이션 API에서 수정하거나 삭제할 수
+없어야 합니다. 신고 처리, 경고, 제한, 정지, 복구, 영구 삭제, 운영자
+지정·해제에는 작업자, 대상, 사유, 변경 전 상태와 변경 후 상태를 기록합니다.
+
+### 채널 신고 규칙
+
+- 사용자 한 명은 같은 채널에 활성 신고 1건만 유지할 수 있습니다.
+- 신고 처리 완료 후 새로운 위반이 있으면 7일 뒤 다시 신고할 수 있습니다.
+- 사용자 한 명이 신고할 수 있는 채널은 하루 최대 3개입니다.
+- 익명 사용자는 서명된 익명 세션, fingerprint 해시와 IP 해시를 조합해
+  중복을 판단하며 브라우저 UID만 신뢰하지 않습니다.
+- 신고 사유는 필수 선택이고, 추가 설명은 최대 500자, 증거 메시지는 최대
+  3개까지 첨부할 수 있습니다.
+- 중복 신고는 새 레코드를 계속 만들지 않고 기존 활성 신고에 증거와
+  갱신 시각을 추가합니다.
+- 신고 수는 검토 우선순위만 높이며 채널을 자동 삭제하지 않습니다.
+- 아동 안전이나 즉각적인 위험 신고는 건수와 관계없이 긴급 검토 대상으로
+  표시합니다.
+
+권장 신고 분류는 불법·위험 콘텐츠, 괴롭힘·혐오, 성적 콘텐츠, 개인정보
+노출, 사칭·사기, 스팸, 기타입니다.
+
+### 채널 상태와 운영 조치
+
+운영 조치는 기본적으로 복구 가능해야 합니다.
+
+```text
+active → restricted → suspended → removed
+```
+
+- `active`: 정상 상태
+- `restricted`: 검토 중 새 메시지나 업로드 일부 제한
+- `suspended`: 방문자에게 정지 안내를 표시하고 데이터는 유지
+- `removed`: 위반 확정 후 공개 접근 차단
+- 영구 삭제: `super_admin`만 최근 재인증, 명시적 확인과 사유 입력 후 실행
+
+초기 운영자 화면에는 신고 상태·분류·우선순위·담당자 필터, 증거 메시지,
+현재 채널 상태, 관련 최근 메시지, 과거 신고와 조치 이력, 문제없음 처리,
+내부 메모, 경고, 제한, 정지, 복구, 감사 로그가 필요합니다. 모든 조치에는
+사유 입력을 필수로 받습니다.
+
+신고자의 계정, UID, fingerprint와 IP 신호는 신고 대상 채널 관리자에게
+공개하지 않습니다. 채널 관리자에게는 위반 분류, 대상 콘텐츠와 이의 제기
+방법만 안내합니다.
+
+### 운영자 계정 보안
+
+- 공개 운영자 가입 기능을 만들지 않습니다.
+- 기존 인증 완료 계정의 정확한 사용자 ID를 Wrangler/D1 도구로 직접
+  등록해 최초 `super_admin`을 만듭니다.
+- 운영자는 이메일 비밀번호보다 Google/OIDC 인증만 허용합니다.
+- 운영자 세션은 일반 세션보다 짧게 유지합니다.
+- 영구 삭제, 데이터 내보내기, 역할 변경에는 최근 재인증을 요구합니다.
+- 커스텀 관리자 도메인을 연결한 뒤 Cloudflare Access와 MFA를 적용합니다.
+- 모든 운영 API 요청에서 Origin, 세션, 내부 프록시 토큰과 D1 역할을
+  확인합니다.
+- 신고 조회, 내보내기와 운영 조치에 rate limit을 적용합니다.
+- 운영자 권한을 해제하면 활성 운영자 세션도 무효화합니다.
+- 감사 로그에 비밀키, 원본 IP, fingerprint와 인증 토큰을 기록하지 않습니다.
+
+### 권장 구현 순서
+
+1. 신고 분류, 운영 조치, 데이터 보존 기간과 이의 제기 정책을 확정합니다.
+2. 운영자, 신고, 감사 로그와 채널 운영 상태 D1 마이그레이션을 추가합니다.
+3. 공통 `requirePlatformRole()`과 추가 전용 감사 로그 함수를 구현합니다.
+4. 비관리자 채널 신고, 중복 방지와 rate limit을 구현합니다.
+5. `/platform/reports` 신고 목록과 상세 화면을 구현합니다.
+6. 복구 가능한 제한, 정지와 복구 조치를 구현합니다.
+7. 채널 관리자 통보와 운영 조치별 이의 제기 1회를 구현합니다.
+8. MFA, 최근 재인증, 모니터링, 내보내기 통제와 운영자 관리를 추가합니다.
+
+권장 MVP는 직접 등록한 `super_admin` 한 명, 채널 신고 접수, 비공개 신고
+대기열, 문제없음·정지·복구 처리, 필수 처리 사유와 감사 로그입니다. 자동
+삭제, 여러 운영자 역할, 이의 제기와 영구 삭제는 핵심 검토 흐름이 안정된
+뒤 추가합니다.
+
 ## Local development
 
 Requirements:

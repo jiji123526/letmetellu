@@ -65,7 +65,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   // latency of issuing messages, settings and moderation queries one by one.
   const statements: D1PreparedStatement[] = [
     env.DB.prepare(
-      "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+      "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC"
     ).bind(channelId, channelId),
     env.DB.prepare(`
       SELECT id, text FROM config

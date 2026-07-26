@@ -86,6 +86,10 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     const { results: channels } = await env.DB.prepare(
       `SELECT channels.id, channels.name, channels.profile_image,
               channels.bubble_color, channels.created_at,
+              COALESCE(
+                (SELECT MAX(messages.created_at) FROM messages WHERE messages.channel_id = channels.id AND messages.deleted = 0),
+                channels.created_at
+              ) AS last_message_at,
               channels.passcode IS NOT NULL AS has_passcode,
               users.name AS owner_name
        FROM channels

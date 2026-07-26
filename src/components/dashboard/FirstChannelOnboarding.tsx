@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 
@@ -14,6 +14,27 @@ interface FirstChannelOnboardingProps {
 const FreezeIcon = ({ size = 20 }: { size?: number }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M12 2v20M4.8 6.2l14.4 11.6M4.8 17.8 19.2 6.2M8.5 4.2 12 7l3.5-2.8M8.5 19.8 12 17l3.5 2.8M3.8 10.1 8 10.7 7.5 6.5M20.2 13.9 16 13.3l.5 4.2M3.8 13.9 8 13.3l-.5 4.2M20.2 10.1l-4.2.6.5-4.2" />
+  </svg>
+);
+
+const WelcomeIcon = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 5.5h14v10H9l-4 3v-13Z" />
+    <path d="M9 10h.01M12 10h.01M15 10h.01" strokeWidth="2.4" />
+  </svg>
+);
+
+const PasscodeIcon = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="5" y="10" width="14" height="10" rx="2" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+  </svg>
+);
+
+const DmIcon = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+    <path d="m5 7 7 5 7-5" />
   </svg>
 );
 
@@ -34,15 +55,16 @@ const featureIcons = [
 
 const guideIcons = [
   "↗",
+  "5",
   (
     <svg key="profile" viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" />
     </svg>
   ),
-  "☺",
-  "⌨",
-  "✉",
+  <WelcomeIcon key="welcome" />,
+  <PasscodeIcon key="passcode" />,
+  <DmIcon key="dm" />,
   <FreezeIcon key="freeze" size={17} />,
   "◉",
   "!",
@@ -62,6 +84,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const horizontalDrag = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const stepIndex = step === "features" ? 0 : step === "create" ? 1 : 2;
   const createFieldsValid = Boolean(name.trim()) && /^[a-z0-9-]{3,30}$/.test(slug.trim());
@@ -73,6 +96,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   ];
   const guides = [
     [t("firstGuideInviteTitle"), t("firstGuideInviteDesc")],
+    [t("firstGuideLimitTitle"), t("firstGuideLimitDesc")],
     [t("firstGuideProfileTitle"), t("firstGuideProfileDesc")],
     [t("firstGuideWelcomeTitle"), t("firstGuideWelcomeDesc")],
     [t("firstGuidePasscodeTitle"), t("firstGuidePasscodeDesc")],
@@ -83,6 +107,10 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
     [t("firstGuideBlockTitle"), t("firstGuideBlockDesc")],
     [t("firstGuideSafetyTitle"), t("firstGuideSafetyDesc")],
   ];
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [step]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || step === "guide") return;
@@ -156,8 +184,8 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,.35)", backdropFilter: "blur(5px)" }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !submitting && step !== "guide") onClose();
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onClose();
       }}
     >
       <div className="w-full max-w-[430px] max-h-[calc(100dvh-32px)] overflow-hidden rounded-[24px] flex flex-col" style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
@@ -194,8 +222,9 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
         </header>
 
         <div
-          className="min-h-0 overflow-x-hidden overflow-y-auto"
-          style={{ touchAction: "pan-y" }}
+          ref={contentRef}
+          className="onboarding-scroll min-h-0 overflow-x-hidden overflow-y-auto"
+          style={{ touchAction: "pan-y", overflowY: step === "guide" ? "auto" : "hidden" }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}

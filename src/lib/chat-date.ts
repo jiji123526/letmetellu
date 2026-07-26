@@ -1,4 +1,4 @@
-function parseServerDate(value: string): Date | null {
+export function parseServerDate(value: string): Date | null {
   if (!value) return null;
   // D1 DATETIME values have no timezone suffix but are stored in UTC.
   const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(value)

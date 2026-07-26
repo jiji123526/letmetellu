@@ -241,6 +241,16 @@ export function AdminPanel(props: AdminPanelProps) {
                 if (!file) return;
                 e.target.value = "";
                 setProfileSaveError("");
+                if (file.type === "image/gif") {
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setProfileImageFile(file);
+                    setProfileImagePreview(typeof reader.result === "string" ? reader.result : "");
+                    setCropFile(null);
+                  };
+                  reader.readAsDataURL(file);
+                  return;
+                }
                 setCropFile(file);
               }} />
             </div>

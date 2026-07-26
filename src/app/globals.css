@@ -87,6 +87,17 @@ body {
   width: 0;
 }
 
+/* Onboarding pages remain scrollable on short screens without showing a
+   nested browser scrollbar inside the dialog. */
+.onboarding-scroll {
+  scrollbar-width: none;
+}
+
+.onboarding-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 /* Context menu animations */
 @keyframes ctxFade {
   from { opacity: 0; }

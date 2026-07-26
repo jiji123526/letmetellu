@@ -175,11 +175,12 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
           {/* Language */}
           <div className="flex items-center justify-between" style={{ padding: "12px 0" }}>
             <span style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>{t("language")}</span>
-            <div className="flex" style={{ gap: "4px" }}>
+            <div className="flex" style={{ gap: "4px", width: "140px" }}>
               <button
                 className="cursor-pointer"
                 style={{
-                  padding: "6px 12px",
+                  padding: "6px 0",
+                  flex: 1,
                   borderRadius: "8px",
                   border: locale === "ko" ? `2px solid var(--bubble-sent)` : "2px solid var(--input-border)",
                   background: locale === "ko" ? "color-mix(in srgb, var(--bubble-sent) 10%, transparent)" : "var(--input-bg)",
@@ -196,7 +197,8 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
               <button
                 className="cursor-pointer"
                 style={{
-                  padding: "6px 12px",
+                  padding: "6px 0",
+                  flex: 1,
                   borderRadius: "8px",
                   border: locale === "en" ? `2px solid var(--bubble-sent)` : "2px solid var(--input-border)",
                   background: locale === "en" ? "color-mix(in srgb, var(--bubble-sent) 10%, transparent)" : "var(--input-bg)",

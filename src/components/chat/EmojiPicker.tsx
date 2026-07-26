@@ -2,6 +2,51 @@
 
 import { useEffect, useRef } from "react";
 
+const EN_EMOJI_DATA = "https://cdn.jsdelivr.net/npm/emoji-picker-element-data@^1/en/emojibase/data.json";
+const KO_EMOJI_DATA = "https://cdn.jsdelivr.net/npm/emoji-picker-element-data@^1/ko/cldr/data.json";
+
+interface EmojiDataEntry {
+  emoji: string;
+  annotation?: string;
+  tags?: string[];
+  shortcodes?: string[];
+  [key: string]: unknown;
+}
+
+let bilingualDataSourcePromise: Promise<string> | null = null;
+
+function getBilingualDataSource() {
+  if (bilingualDataSourcePromise) return bilingualDataSourcePromise;
+  bilingualDataSourcePromise = Promise.all([
+    fetch(EN_EMOJI_DATA).then((response) => {
+      if (!response.ok) throw new Error("English emoji data unavailable");
+      return response.json() as Promise<EmojiDataEntry[]>;
+    }),
+    fetch(KO_EMOJI_DATA).then((response) => {
+      if (!response.ok) throw new Error("Korean emoji data unavailable");
+      return response.json() as Promise<EmojiDataEntry[]>;
+    }),
+  ]).then(([english, korean]) => {
+    const koreanByEmoji = new Map(korean.map((entry) => [entry.emoji, entry]));
+    const merged = english.map((entry) => {
+      const localized = koreanByEmoji.get(entry.emoji);
+      if (!localized) return entry;
+      return {
+        ...entry,
+        tags: [...new Set([
+          ...(entry.tags || []),
+          ...(entry.shortcodes || []),
+          localized.annotation || "",
+          ...(localized.tags || []),
+          ...(localized.shortcodes || []),
+        ].filter(Boolean))],
+      };
+    });
+    return URL.createObjectURL(new Blob([JSON.stringify(merged)], { type: "application/json" }));
+  }).catch(() => KO_EMOJI_DATA);
+  return bilingualDataSourcePromise;
+}
+
 interface EmojiPickerProps {
   anchorRect: DOMRect;
   onSelect: (emoji: string) => void;
@@ -11,17 +56,28 @@ interface EmojiPickerProps {
 export function EmojiPicker({ anchorRect, onSelect, onClose }: EmojiPickerProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLElement | null>(null);
+  const onSelectRef = useRef(onSelect);
 
   useEffect(() => {
-    // Dynamically import and create the emoji-picker-element
-    import("emoji-picker-element").then(() => {
-      if (!wrapRef.current) return;
-      const picker = document.createElement("emoji-picker");
-      picker.setAttribute("locale", "ko");
-      picker.setAttribute("data-source", "https://cdn.jsdelivr.net/npm/emoji-picker-element-data/ko/cldr/data.json");
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let picker: HTMLElement | null = null;
+
+    Promise.all([
+      import("emoji-picker-element"),
+      getBilingualDataSource(),
+    ]).then(([module, dataSource]) => {
+      if (cancelled || !wrapRef.current) return;
+      picker = new module.Picker({
+        locale: "ko-x-yap-bilingual",
+        dataSource,
+      }) as HTMLElement;
       picker.addEventListener("emoji-click", (ev: Event) => {
         const detail = (ev as CustomEvent).detail;
-        onSelect(detail.unicode);
+        onSelectRef.current(detail.unicode);
       });
       // Style the picker via CSS vars
       picker.style.setProperty("--border-color", "var(--hairline)");
@@ -35,9 +91,11 @@ export function EmojiPicker({ anchorRect, onSelect, onClose }: EmojiPickerProps)
     });
 
     return () => {
-      pickerRef.current?.remove();
+      cancelled = true;
+      picker?.remove();
+      if (pickerRef.current === picker) pickerRef.current = null;
     };
-  }, [onSelect]);
+  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -46,8 +104,11 @@ export function EmojiPicker({ anchorRect, onSelect, onClose }: EmojiPickerProps)
         onClose();
       }
     };
-    setTimeout(() => document.addEventListener("click", handler), 10);
-    return () => document.removeEventListener("click", handler);
+    const timer = window.setTimeout(() => document.addEventListener("click", handler), 10);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("click", handler);
+    };
   }, [onClose]);
 
   // Position

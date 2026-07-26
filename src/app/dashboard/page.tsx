@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useLocale } from "@/hooks/useLocale";
 import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
+import { parseServerDate } from "@/lib/chat-date";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
@@ -23,13 +24,14 @@ interface Channel {
   profile_image: string | null;
   bubble_color: string;
   created_at: string;
+  last_message_at?: string;
   has_passcode: number;
   owner_name: string | null;
 }
 
 function formatDate(value: string, locale: "ko" | "en") {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
+  const date = parseServerDate(value);
+  if (!date) return "";
   return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric" }).format(date);
 }
 
@@ -104,10 +106,18 @@ export default function DashboardPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
+  const channelLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copiedChannelId, setCopiedChannelId] = useState<string | null>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const linkedChannelId = submittedLinkedChannelId;
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
+
+  useEffect(() => () => {
+    if (channelLongPressTimerRef.current) clearTimeout(channelLongPressTimerRef.current);
+    if (copiedResetTimerRef.current) clearTimeout(copiedResetTimerRef.current);
+  }, []);
 
   const loadChannels = useCallback(async () => {
     const response = await fetch("/api/user", { cache: "no-store" });
@@ -294,12 +304,17 @@ export default function DashboardPage() {
           hasPasscode: channel.has_passcode === 1,
           ownerName: channel.owner_name || "",
           meta: `/ch/${channel.id}`,
-          time: formatDate(channel.created_at, locale),
+          time: formatRelativeTime(
+            parseServerDate(channel.last_message_at || channel.created_at)?.getTime() || Date.now(),
+            locale,
+          ),
           owned: true,
           pinned: channel.id === prioritizedOwnedId,
+          activityAt: channel.last_message_at || channel.created_at,
         }))
       .sort((left, right) =>
         Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
+        || (parseServerDate(right.activityAt)?.getTime() || 0) - (parseServerDate(left.activityAt)?.getTime() || 0)
       );
     const recentItems = recentChannels
       .filter((channel) => !ownedIds.has(channel.id))
@@ -506,6 +521,31 @@ export default function DashboardPage() {
     }
   };
 
+  const clearChannelLongPress = () => {
+    if (!channelLongPressTimerRef.current) return;
+    clearTimeout(channelLongPressTimerRef.current);
+    channelLongPressTimerRef.current = null;
+  };
+
+  const copyChannelLink = async (channelId: string) => {
+    const link = `${window.location.origin}/ch/${channelId}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      const input = document.createElement("textarea");
+      input.value = link;
+      input.style.position = "fixed";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      input.remove();
+    }
+    setCopiedChannelId(channelId);
+    if (copiedResetTimerRef.current) clearTimeout(copiedResetTimerRef.current);
+    copiedResetTimerRef.current = setTimeout(() => setCopiedChannelId(null), 1600);
+  };
+
   const startSwipe = (event: ReactPointerEvent<HTMLDivElement>, channelId: string) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     swipeStartRef.current = {
@@ -517,6 +557,15 @@ export default function DashboardPage() {
     };
     setDraggingId(channelId);
     if (swipe.id !== channelId) setSwipe({ id: channelId, offset: 0 });
+    clearChannelLongPress();
+    channelLongPressTimerRef.current = setTimeout(() => {
+      const start = swipeStartRef.current;
+      if (!start || start.id !== channelId || start.moved) return;
+      start.moved = true;
+      suppressClickRef.current = true;
+      if (navigator.vibrate) navigator.vibrate(20);
+      void copyChannelLink(channelId);
+    }, 550);
   };
 
   const moveSwipe = (event: ReactPointerEvent<HTMLDivElement>, channelId: string) => {
@@ -524,6 +573,7 @@ export default function DashboardPage() {
     if (!start || start.id !== channelId) return;
     const deltaX = event.clientX - start.x;
     const deltaY = event.clientY - start.y;
+    if (Math.abs(deltaX) >= 8 || Math.abs(deltaY) >= 8) clearChannelLongPress();
     if (!start.moved && Math.abs(deltaX) < 8) return;
     if (!start.moved && Math.abs(deltaY) > Math.abs(deltaX)) return;
     start.moved = true;
@@ -532,9 +582,10 @@ export default function DashboardPage() {
   };
 
   const finishSwipe = (channelId: string) => {
+    clearChannelLongPress();
     const start = swipeStartRef.current;
     if (!start || start.id !== channelId) return;
-    suppressClickRef.current = start.moved;
+    suppressClickRef.current = suppressClickRef.current || start.moved;
     setSwipe((current) => ({
       id: current.id,
       offset: current.id === channelId && current.offset < -48 ? -152 : 0,
@@ -755,6 +806,12 @@ export default function DashboardPage() {
                   onPointerMove={!editing ? (event) => moveSwipe(event, item.id) : undefined}
                   onPointerUp={!editing ? () => finishSwipe(item.id) : undefined}
                   onPointerCancel={!editing ? () => finishSwipe(item.id) : undefined}
+                  onContextMenu={!editing ? (event) => {
+                    event.preventDefault();
+                    clearChannelLongPress();
+                    suppressClickRef.current = true;
+                    void copyChannelLink(item.id);
+                  } : undefined}
                   onClick={() => {
                     if (editing) {
                       setSelectedIds((current) => {
@@ -822,7 +879,9 @@ export default function DashboardPage() {
                       <span className="ml-2 text-[19px] font-light leading-none" style={{ color: "#c7c7cc" }}>›</span>
                     </div>
                     <div className="mt-1 flex min-w-0 items-center">
-                      <p className="m-0 min-w-0 flex-1 truncate text-[14px]" style={{ color: "var(--meta)" }}>{item.meta}</p>
+                      <p className="m-0 min-w-0 flex-1 truncate text-[14px]" style={{ color: copiedChannelId === item.id ? "#007aff" : "var(--meta)" }}>
+                        {copiedChannelId === item.id ? t("dashboardCopied") : item.meta}
+                      </p>
                     </div>
                   </div>
                 </div>

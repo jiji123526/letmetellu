@@ -171,7 +171,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         query += " AND g.created_at < ?";
         params.push(cursor);
       }
-      query += " ORDER BY g.created_at DESC LIMIT 50";
+      query += " ORDER BY g.created_at DESC, g.id DESC LIMIT 50";
       const { results } = await env.DB.prepare(query).bind(...params).all();
       return Response.json({ gallery: results });
     }

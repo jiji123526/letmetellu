@@ -74,19 +74,23 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Insert message (+ gallery if image) in a single batch
     const id = crypto.randomUUID();
+    // D1's datetime('now') default has only second precision. Persist an
+    // explicit millisecond timestamp so consecutive photo messages keep their
+    // original order after reconnecting.
+    const created_at = new Date().toISOString();
     // Only a verified owner is stored and broadcast as the channel admin.
     const senderUid = isChannelOwner ? verifiedUserId! : uid as string;
     const isAdmin = isChannelOwner ? 1 : 0;
     const stmts = [
       env.DB.prepare(`
-        INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null),
+        INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
     ];
     if (image) {
       stmts.push(
-        env.DB.prepare("INSERT INTO gallery (id, image, auth_uid, channel_id) VALUES (?, ?, ?, ?)")
-          .bind(id, image, senderUid, channel_id)
+        env.DB.prepare("INSERT INTO gallery (id, image, auth_uid, channel_id, created_at) VALUES (?, ?, ?, ?, ?)")
+          .bind(id, image, senderUid, channel_id, created_at)
       );
     }
     await env.DB.batch(stmts);
@@ -96,7 +100,6 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const broadcastChannelId = (channel_id as string).endsWith("_live")
       ? (channel_id as string).replace(/_live$/, "")
       : channel_id as string;
-    const created_at = new Date().toISOString();
     const newMessage = {
       id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
       channel_id, image: image || null, reply_to: reply_to || null, fingerprint: fingerprint || null,

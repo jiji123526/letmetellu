@@ -147,7 +147,7 @@ export function ContextMenu({
           gap: "4px",
           borderRadius: "22px",
           padding: "6px 8px",
-          background: "rgba(255,255,255,.85)",
+          background: "color-mix(in srgb, var(--card) 88%, transparent)",
           backdropFilter: "saturate(180%) blur(20px)",
           WebkitBackdropFilter: "saturate(180%) blur(20px)",
           boxShadow: "0 4px 20px rgba(0,0,0,.15)",
@@ -197,7 +197,7 @@ export function ContextMenu({
         style={{
           ...positionStyle,
           top: actionY,
-          background: "rgba(255,255,255,.85)",
+          background: "color-mix(in srgb, var(--card) 92%, transparent)",
           backdropFilter: "saturate(180%) blur(20px)",
           WebkitBackdropFilter: "saturate(180%) blur(20px)",
           boxShadow: "0 4px 20px rgba(0,0,0,.15)",

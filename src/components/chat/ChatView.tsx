@@ -289,7 +289,7 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
   const [attempt, setAttempt] = useState(0);
 
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block select-none" onContextMenu={(event) => event.preventDefault()}>
       {!loaded && !failed && <MediaLoadingDots />}
       {failed ? (
         <button
@@ -309,8 +309,9 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
           key={attempt}
           src={src}
           alt=""
-          className="block h-auto rounded-[15px]"
-          style={{ display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain" }}
+          draggable={false}
+          className="block h-auto rounded-[15px] select-none"
+          style={{ display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain", userSelect: "none" }}
           onLoad={() => setLoaded(true)}
           onError={() => setFailed(true)}
         />
@@ -1528,8 +1529,8 @@ export function ChatView({ channelId }: { channelId: string }) {
         });
         sendError = result.error;
       } else {
-        // Match the original behavior: caption/reply on the first image, then
-        // send every remaining image as its own consecutive message.
+        // Caption stays on the first image, while every image in a reply batch
+        // remains attached to the same parent message.
         for (let index = 0; index < photos.length; index += 1) {
           const image = await uploadImage(photos[index].blob, activeChannelId);
           if (!image) {
@@ -1543,7 +1544,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             text: index === 0 ? text : "",
             channel_id: activeChannelId,
             image,
-            reply_to: index === 0 ? savedReplyTo : undefined,
+            reply_to: savedReplyTo,
             fingerprint: myFingerprint,
           });
 
