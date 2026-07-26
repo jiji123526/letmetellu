@@ -388,17 +388,28 @@ export default function DashboardPage() {
                     )}
                     <div className="px-3 py-3">
                       <div className="px-1 pb-2 text-[12px]" style={{ color: "#8e8e93" }}>{t("language")}</div>
-                      <div className="flex rounded-[8px] p-[2px]" style={{ background: "#e9e9ee" }}>
+                      <div className="relative flex rounded-[8px] p-[2px]" style={{ background: "#e9e9ee" }}>
+                        <span
+                          className="pointer-events-none absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px]"
+                          style={{
+                            width: "calc(50% - 2px)",
+                            background: "#fff",
+                            boxShadow: "0 1px 3px rgba(0,0,0,.12)",
+                            transform: locale === "en" ? "translateX(100%)" : "translateX(0)",
+                            transition: "transform 240ms cubic-bezier(.22,.8,.36,1)",
+                          }}
+                          aria-hidden="true"
+                        />
                         {(["ko", "en"] as const).map((option) => (
                           <button
                             key={option}
                             type="button"
                             aria-pressed={locale === option}
-                            className="flex-1 border-none rounded-[6px] py-1.5 text-[12px] cursor-pointer"
+                            className="relative z-10 flex-1 border-none rounded-[6px] py-1.5 text-[12px] cursor-pointer"
                             style={{
-                              background: locale === option ? "#fff" : "transparent",
+                              background: "transparent",
                               color: locale === option ? "#111" : "#6d6d72",
-                              boxShadow: locale === option ? "0 1px 3px rgba(0,0,0,.12)" : "none",
+                              transition: "color 180ms ease",
                             }}
                             onClick={() => setLocale(option)}
                           >

@@ -1274,7 +1274,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     let el = document.getElementById(`msg-${msgId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .3s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 2000); }
+      const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .2s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 800); }
       return;
     }
 
@@ -1303,7 +1303,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       el = document.getElementById(`msg-${msgId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
-        const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .3s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 2000); }
+        const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .2s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 800); }
         return;
       }
       attempts++;
