@@ -12,11 +12,12 @@ interface FirstChannelOnboardingProps {
 
 const featureIcons = [
   { icon: "🔗", color: "#eaf3ff" },
+  { icon: "✉", color: "#f0edff" },
   { icon: "◉", color: "#fff0ea" },
   { icon: "❄", color: "#edf7ff" },
 ];
 
-const guideIcons = ["↗", "☺", "⌨", "❄", "◉", "!", "⊘"];
+const guideIcons = ["↗", "☺", "⌨", "✉", "❄", "◉", "!", "⊘", "⚑"];
 
 export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboardingProps) {
   const { t } = useLocale();
@@ -30,6 +31,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   const stepIndex = step === "features" ? 0 : step === "create" ? 1 : 2;
   const features = [
     [t("firstOnboardingPrivateTitle"), t("firstOnboardingPrivateDesc")],
+    [t("firstOnboardingDmTitle"), t("firstOnboardingDmDesc")],
     [t("firstOnboardingLiveTitle"), t("firstOnboardingLiveDesc")],
     [t("firstOnboardingControlTitle"), t("firstOnboardingControlDesc")],
   ];
@@ -37,9 +39,11 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
     [t("firstGuideInviteTitle"), t("firstGuideInviteDesc")],
     [t("firstGuideWelcomeTitle"), t("firstGuideWelcomeDesc")],
     [t("firstGuidePasscodeTitle"), t("firstGuidePasscodeDesc")],
+    [t("firstGuideDmTitle"), t("firstGuideDmDesc")],
     [t("firstGuideFreezeTitle"), t("firstGuideFreezeDesc")],
     [t("firstGuideLiveTitle"), t("firstGuideLiveDesc")],
     [t("firstGuideNoticeTitle"), t("firstGuideNoticeDesc")],
+    [t("firstGuideBlockTitle"), t("firstGuideBlockDesc")],
     [t("firstGuideSafetyTitle"), t("firstGuideSafetyDesc")],
   ];
 

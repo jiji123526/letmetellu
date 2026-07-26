@@ -23,8 +23,10 @@ export default function OnboardingPage() {
     { title: t("color"), detail: t("guideColor") },
     { title: t("passcode"), detail: t("guidePasscode") },
     { title: t("welcomePopup"), detail: t("guideWelcome") },
+    { title: t("dmToggle"), detail: t("guideDmPrivacy") },
     { title: t("bannedWords"), detail: t("guideBannedWords") },
     { title: t("blockedUsers"), detail: t("guideBlock") },
+    { title: t("petition"), detail: t("guidePetition") },
     { title: t("freezeChat"), detail: t("guideFreeze") },
     { title: t("liveTitle"), detail: t("guideLive") },
   ];
