@@ -207,11 +207,25 @@ async function handleVerifyEmail(body: { token?: string }, env: Env) {
   const tokenHash = await sha256(rawToken);
   const now = Date.now();
   const record = await env.DB.prepare(`
-    SELECT token_hash, user_id, email
-    FROM email_verification_tokens
-    WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?
-  `).bind(tokenHash, now).first<{ token_hash: string; user_id: string; email: string }>();
+    SELECT tokens.token_hash, tokens.user_id, tokens.email, tokens.used_at,
+           users.email_verified_at
+    FROM email_verification_tokens AS tokens
+    JOIN users ON users.id = tokens.user_id
+    WHERE tokens.token_hash = ? AND tokens.expires_at > ?
+  `).bind(tokenHash, now).first<{
+    token_hash: string;
+    user_id: string;
+    email: string;
+    used_at: number | null;
+    email_verified_at: string | null;
+  }>();
   if (!record) return Response.json({ error: "invalid_or_expired_token" }, { status: 400 });
+  if (record.used_at && record.email_verified_at) {
+    return Response.json({ ok: true, already_verified: true });
+  }
+  if (record.used_at) {
+    return Response.json({ error: "invalid_or_expired_token" }, { status: 400 });
+  }
 
   await env.DB.batch([
     env.DB.prepare(
