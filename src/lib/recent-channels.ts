@@ -26,6 +26,7 @@ export function getRecentChannels(): RecentChannel[] {
       )
       .map((item) => ({
         ...item,
+        bubbleColor: typeof item.bubbleColor === "string" && item.bubbleColor ? item.bubbleColor : "#3b8df0",
         hasPasscode: item.hasPasscode === true,
         ownerName: typeof item.ownerName === "string" ? item.ownerName : "",
         pinned: item.pinned === true,
@@ -48,6 +49,23 @@ export function recordRecentChannel(channel: Omit<RecentChannel, "lastVisitedAt"
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
     // Recent history is optional and must never prevent channel entry.
+  }
+}
+
+export function updateRecentChannelAppearance(
+  channelId: string,
+  changes: Partial<Pick<RecentChannel, "name" | "profileImage" | "bubbleColor">>,
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const channels = getRecentChannels();
+    if (!channels.some((item) => item.id === channelId)) return;
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(channels.map((item) => item.id === channelId ? { ...item, ...changes } : item)),
+    );
+  } catch {
+    // Recent history is optional and must never prevent channel updates.
   }
 }
 

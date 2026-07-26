@@ -30,7 +30,7 @@ import { MessageEmbeds } from "./MessageEmbeds";
 import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MediaLoadingDots } from "./MediaLoadingDots";
-import { recordRecentChannel, removeRecentChannel } from "@/lib/recent-channels";
+import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 
 interface Message {
@@ -1028,6 +1028,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         }
       }
       if (event.type === "profile-change") {
+        updateRecentChannelAppearance(channelId, {
+          ...(event.name ? { name: event.name as string } : {}),
+          ...(event.profile_image !== undefined ? { profileImage: event.profile_image as string | null } : {}),
+          ...(event.bubble_color ? { bubbleColor: event.bubble_color as string } : {}),
+        });
         setChannel((prev) => {
           if (!prev) return null;
           const updated = { ...prev };
@@ -2425,18 +2430,22 @@ export function ChatView({ channelId }: { channelId: string }) {
           }}
           onColorChange={(color) => {
             setLocalBubbleColor(color);
+            setChannel((prev) => prev ? { ...prev, bubble_color: color } : null);
+            updateRecentChannelAppearance(channelId, { bubbleColor: color });
             localStorage.setItem(`bubbleColor_${channelId}`, color);
             document.documentElement.style.setProperty("--bubble-sent", color);
             adminAction("update-profile", channelId, { bubble_color: color });
           }}
           onNameChange={(name) => {
             setChannel((prev) => prev ? { ...prev, name } : null);
+            updateRecentChannelAppearance(channelId, { name });
             adminAction("update-profile", channelId, { name });
             setBanner({ text: t("nameChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
           onProfileImageChange={(url) => {
             setChannel((prev) => prev ? { ...prev, profile_image: url } : null);
+            updateRecentChannelAppearance(channelId, { profileImage: url });
             adminAction("update-profile", channelId, { profile_image: url });
             setBanner({ text: t("profileChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
