@@ -8,6 +8,7 @@ import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
+import { LoginDialog } from "@/components/dashboard/LoginDialog";
 
 interface Channel {
   id: string;
@@ -45,6 +46,11 @@ function getChannelPreviewColor(channelId: string, fallback: string) {
   }
 }
 
+function getChannelIdFromLink(value: string) {
+  const match = value.trim().match(/^(?:https?:\/\/[^/\s]+)?\/ch\/([a-z0-9-]{3,30})(?:[/?#].*)?$/i);
+  return match?.[1]?.toLowerCase() || null;
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -57,6 +63,7 @@ export default function DashboardPage() {
   const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [newSlug, setNewSlug] = useState("");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -124,6 +131,19 @@ export default function DashboardPage() {
       // The dashboard remains usable when storage is unavailable.
     }
   }, [loading, status, recentChannels.length]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("login") === "true" && status === "unauthenticated") {
+      setShowGuestOnboarding(false);
+      setShowLogin(true);
+    }
+  }, [status]);
+
+  const closeLogin = () => {
+    setShowLogin(false);
+    if (window.location.search) window.history.replaceState(null, "", "/dashboard");
+  };
 
   const closeGuestOnboarding = () => {
     try { localStorage.setItem("letmetellu_guest_onboarding_seen", "true"); } catch {}
@@ -333,6 +353,7 @@ export default function DashboardPage() {
 
   const isLoggedIn = !!session;
   const empty = activeItems.length === 0;
+  const linkedChannelId = getChannelIdFromLink(query);
 
   return (
     <main className="min-h-dvh bg-white" style={{ color: "#111" }}>
@@ -383,7 +404,7 @@ export default function DashboardPage() {
                         <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff3b30", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
                       </>
                     ) : (
-                      <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#007aff", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => router.push("/login")}>{t("loginTab")}</button>
+                      <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#007aff", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setShowLogin(true); }}>{t("loginTab")}</button>
                     )}
                     <div className="px-3 py-3">
                       <div className="px-1 pb-2 text-[12px]" style={{ color: "#8e8e93" }}>{t("language")}</div>
@@ -428,10 +449,26 @@ export default function DashboardPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && linkedChannelId) router.push(`/ch/${linkedChannelId}`);
+                }}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
-                style={{ background: "#efeff4", padding: "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
+                style={{ background: "#efeff4", padding: linkedChannelId ? "0 48px 0 42px" : "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
               />
+              {linkedChannelId && (
+                <button
+                  type="button"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-none cursor-pointer flex items-center justify-center text-white"
+                  style={{ background: "#007aff" }}
+                  onClick={() => router.push(`/ch/${linkedChannelId}`)}
+                  aria-label={t("enterChannel")}
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -611,6 +648,10 @@ export default function DashboardPage() {
 
       {showGuestOnboarding && !isLoggedIn && (
         <GuestOnboarding onClose={closeGuestOnboarding} />
+      )}
+
+      {showLogin && !isLoggedIn && (
+        <LoginDialog onClose={closeLogin} />
       )}
 
       {isLoggedIn && !editing && (
