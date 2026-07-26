@@ -230,6 +230,7 @@ export const ko = {
   passwordHint: "8자 이상, 숫자 포함",
   loginError: "이메일 또는 비밀번호가 틀렸습니다",
   signupError: "가입에 실패했습니다",
+  emailSignupDisabled: "이메일 소유 확인 기능을 준비 중입니다. 현재 신규 가입은 Google 인증을 이용해 주세요.",
   userExists: "이미 가입된 이메일입니다",
   weakPassword: "비밀번호는 8자 이상, 숫자를 포함해야 합니다",
   allFieldsRequired: "모든 필드를 입력해주세요",

@@ -1,7 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 interface LoginDialogProps {
@@ -24,7 +24,6 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
   const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
   const switchTab = (next: "login" | "signup") => {
@@ -45,46 +44,6 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
       setSubmitting(false);
     } else {
       window.location.href = "/dashboard";
-    }
-  };
-
-  const handleSignup = async (event: FormEvent) => {
-    event.preventDefault();
-    if (submittingRef.current) return;
-    setError("");
-    if (!email || !password) return setError(t("allFieldsRequired"));
-    if (!isValidEmail(email)) return setError(t("invalidEmail"));
-    if (password.length < 8 || !/\d/.test(password)) return setError(t("weakPassword"));
-
-    submittingRef.current = true;
-    setSubmitting(true);
-    let redirecting = false;
-    try {
-      const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "";
-      const response = await fetch(`${workerUrl}/api/auth`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "signup", email, password }),
-      });
-      const data = await response.json() as { ok?: boolean; error?: string };
-      if (!data.ok) {
-        setError(data.error === "user_exists" ? t("userExists") : data.error === "weak_password" ? t("weakPassword") : t("signupError"));
-        return;
-      }
-      const result = await signIn("credentials", { email, password, redirect: false });
-      if (result?.error) {
-        setError(t("signupError"));
-        return;
-      }
-      redirecting = true;
-      window.location.href = "/onboarding";
-    } catch {
-      setError(t("signupError"));
-    } finally {
-      if (!redirecting) {
-        submittingRef.current = false;
-        setSubmitting(false);
-      }
     }
   };
 
@@ -111,19 +70,25 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
         <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid #d1d1d6", background: "#fff", color: "#333" }} onClick={() => void signIn("google", { callbackUrl: tab === "login" ? "/dashboard" : "/onboarding" })}>
           <GoogleIcon /> {t(tab === "login" ? "googleLogin" : "googleSignup")}
         </button>
-        <div className="flex items-center gap-3 my-4"><span className="h-px flex-1 bg-[#e5e5ea]" /><span className="text-[11px]" style={{ color: "#8e8e93" }}>{t("or")}</span><span className="h-px flex-1 bg-[#e5e5ea]" /></div>
-
-        <form onSubmit={tab === "login" ? handleLogin : handleSignup}>
+        {tab === "login" ? (
+          <>
+          <div className="flex items-center gap-3 my-4"><span className="h-px flex-1 bg-[#e5e5ea]" /><span className="text-[11px]" style={{ color: "#8e8e93" }}>{t("or")}</span><span className="h-px flex-1 bg-[#e5e5ea]" /></div>
+          <form onSubmit={handleLogin}>
           <label className="block text-[12px] font-medium mb-1.5">{t("email")}</label>
           <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
           <label className="block text-[12px] font-medium mb-1.5">{t("password")}</label>
-          <input type="password" autoComplete={tab === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={tab === "signup" ? t("passwordHint") : undefined} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
-          {tab === "signup" && <div className="mt-1.5 text-[11px]" style={{ color: "#8e8e93" }}>{t("passwordHint")}</div>}
+          <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
           <div className="min-h-[30px] pt-2 text-[12px] text-center" style={{ color: "#ff3b30" }}>{error}</div>
           <button disabled={submitting} type="submit" className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold" style={{ background: submitting ? "#9ec9f5" : "#007aff", cursor: submitting ? "wait" : "pointer" }}>
-            {submitting ? t("loading") : t(tab === "login" ? "loginTab" : "signupTab")}
+            {submitting ? t("loading") : t("loginTab")}
           </button>
-        </form>
+          </form>
+          </>
+        ) : (
+          <div className="mt-4 rounded-[12px] px-4 py-3 text-[12px] leading-[1.5] text-center" style={{ background: "#f2f2f7", color: "#6d6d72" }}>
+            {t("emailSignupDisabled")}
+          </div>
+        )}
       </div>
     </div>
   );

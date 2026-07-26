@@ -232,6 +232,7 @@ export const en: Record<LocaleKeys, string> = {
   passwordHint: "8+ characters including a number",
   loginError: "Invalid email or password",
   signupError: "Failed to sign up",
+  emailSignupDisabled: "Email ownership verification is being prepared. Please use Google to create a new account for now.",
   userExists: "Email already registered",
   weakPassword: "Password must be 8+ chars with a number",
   allFieldsRequired: "All fields are required",
