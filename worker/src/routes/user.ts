@@ -33,7 +33,9 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       `SELECT id, name, profile_image, bubble_color,
               passcode IS NOT NULL AS has_passcode
        FROM channels
-       WHERE owner_uid = ? AND id NOT LIKE '%_live'
+       WHERE owner_uid = ?
+         AND id NOT LIKE '%_live'
+         AND show_on_profile = 1
        ORDER BY created_at ASC
        LIMIT 50`
     ).bind(channel.owner_uid).all();

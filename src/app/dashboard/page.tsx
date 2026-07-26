@@ -62,6 +62,10 @@ function looksLikeChannelAddress(value: string) {
   return /^(?:(?:https?:\/\/[^/\s]+|letmetellu\.vercel\.app))?\/ch\//i.test(value.trim());
 }
 
+function localMigrationSignature(channels: RecentChannel[]) {
+  return channels.map((channel) => channel.id).sort().join(",");
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -143,11 +147,18 @@ export default function DashboardPage() {
       const accountChannels = await fetchAccountRecentChannels();
       setRecentChannels(accountChannels);
       const migrationState = localStorage.getItem(migrationKey);
-      if (!migrationState) {
-        const localChannels = getRecentChannels();
-        if (localChannels.length > 0) {
-          setPendingLocalChannels(localChannels);
-        } else {
+      const accountChannelIds = new Set(accountChannels.map((channel) => channel.id));
+      const unsyncedLocalChannels = getRecentChannels().filter(
+        (channel) => !accountChannelIds.has(channel.id)
+      );
+      if (unsyncedLocalChannels.length > 0) {
+        const skippedState = `skipped:${localMigrationSignature(unsyncedLocalChannels)}`;
+        if (migrationState !== skippedState) {
+          setPendingLocalChannels(unsyncedLocalChannels);
+        }
+      } else {
+        setPendingLocalChannels(null);
+        if (!migrationState) {
           localStorage.setItem(migrationKey, "merged");
         }
       }
@@ -179,7 +190,10 @@ export default function DashboardPage() {
   const skipLocalChannelMigration = () => {
     if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
     try {
-      localStorage.setItem(`letmetellu_recent_channels_migrated_${session.user.id}`, "skipped");
+      localStorage.setItem(
+        `letmetellu_recent_channels_migrated_${session.user.id}`,
+        `skipped:${localMigrationSignature(pendingLocalChannels)}`
+      );
     } catch {}
     setLocalMigrationError(false);
     setPendingLocalChannels(null);
@@ -539,7 +553,7 @@ export default function DashboardPage() {
     <main className="dashboard-font-scaled min-h-dvh" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       <div className={`max-w-[480px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
         <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
-          <div className="h-[64px] pl-4 pr-0 flex items-center justify-between">
+          <div className="h-[64px] px-4 flex items-center justify-between">
             <button
               type="button"
               className="border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
@@ -550,7 +564,7 @@ export default function DashboardPage() {
                 setSwipe({ id: null, offset: 0 });
               }}
             >
-              {editing ? t("dashboardDone") : t("edit")}
+              {editing ? t("dashboardDone") : t("dashboardEdit")}
             </button>
             <h1 className="m-0 text-[17px] font-semibold">{t("dashboardChats")}</h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">

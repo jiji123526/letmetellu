@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { adminAction, uploadAdminImage } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
+import { ProfileImageCropper } from "./ProfileImageCropper";
 
 interface AdminPanelProps {
   channelId: string;
@@ -14,6 +15,7 @@ interface AdminPanelProps {
   liveActive: boolean;
   petitionEnabled: boolean;
   dmEnabled: boolean;
+  showOnProfile: boolean;
   notice: string;
   blockedUsers: { uid: string; reason: string }[];
   onFreeze: () => void;
@@ -22,6 +24,7 @@ interface AdminPanelProps {
   onToggleView: () => void;
   onPetitionToggle: () => void;
   onDmToggle: () => void;
+  onShowOnProfileToggle: (visible: boolean) => void;
   onColorChange: (color: string) => void;
   onNameChange: (name: string) => void;
   onProfileImageChange: (url: string) => void;
@@ -46,12 +49,23 @@ function darkenColor(hex: string, amount: number): string {
 
 interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; }
 
+function guideParts(value: string) {
+  const [title, ...description] = value.split(" — ");
+  return { title, description: description.join(" — ") };
+}
+
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, passcodeHint, isFrozen, liveActive, petitionEnabled, dmEnabled, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, currentColor, passcodeHint, isFrozen, liveActive, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
   const { t } = useLocale();
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
   const [selectedColor, setSelectedColor] = useState(currentColor);
+  const [visibleOnProfile, setVisibleOnProfile] = useState(showOnProfile);
+  const [profileImagePreview, setProfileImagePreview] = useState(profileImage);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState("");
   const [rules, setRules] = useState<{ title: string; items: string[] }[]>(() => {
     try { return JSON.parse(notice || "[]"); } catch { return []; }
   });
@@ -64,8 +78,8 @@ export function AdminPanel(props: AdminPanelProps) {
   const [welcomeIcon, setWelcomeIcon] = useState(() => {
     try {
       const p = JSON.parse(welcomeConfig || "{}");
-      return typeof p.icon === "string" && !p.icon.startsWith("blob:") ? p.icon || "💬" : "💬";
-    } catch { return "💬"; }
+      return typeof p.icon === "string" && !p.icon.startsWith("blob:") && p.icon !== "💬" ? p.icon : "";
+    } catch { return ""; }
   });
   const [welcomeTitle, setWelcomeTitle] = useState(() => {
     try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || t("welcomeDefaultTitle"); } catch { return t("welcomeDefaultTitle"); }
@@ -74,6 +88,30 @@ export function AdminPanel(props: AdminPanelProps) {
     try { const p = JSON.parse(welcomeConfig || "{}"); return (p.items || []).join("\n"); } catch { return ""; }
   });
   const colorInputRef = useRef<HTMLInputElement>(null);
+
+  const saveProfile = async () => {
+    if (savingProfile) return;
+    setSavingProfile(true);
+    setProfileSaveError("");
+    let uploadedImage: string | null = null;
+    if (profileImageFile) {
+      try {
+        uploadedImage = await uploadAdminImage(profileImageFile, channelId);
+      } catch {
+        uploadedImage = null;
+      }
+      if (!uploadedImage) {
+        setProfileSaveError(t("profileSaveFailed"));
+        setSavingProfile(false);
+        return;
+      }
+    }
+    if (nameInput !== channelName) onNameChange(nameInput);
+    if (uploadedImage) onProfileImageChange(uploadedImage);
+    if (visibleOnProfile !== showOnProfile) onShowOnProfileToggle(visibleOnProfile);
+    setSavingProfile(false);
+    onClose();
+  };
 
   const mainItems: MenuItem[] = [
     { key: "channel", label: t("channel"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>`, arrow: "›" },
@@ -186,8 +224,8 @@ export function AdminPanel(props: AdminPanelProps) {
                 style={{ width: "80px", height: "80px", borderRadius: "20px", overflow: "hidden", border: "2px dashed var(--hairline)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--card)" }}
                 onClick={() => document.getElementById("profileImgInput")?.click()}
               >
-                {profileImage ? (
-                  <img src={profileImage} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                {profileImagePreview ? (
+                  <img src={profileImagePreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : (
                   <span style={{ fontSize: "28px" }}>💬</span>
                 )}
@@ -198,12 +236,12 @@ export function AdminPanel(props: AdminPanelProps) {
               >
                 {t("changePhoto")}
               </button>
-              <input id="profileImgInput" type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
+              <input id="profileImgInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 e.target.value = "";
-                const url = await uploadAdminImage(file, channelId);
-                if (url) onProfileImageChange(url);
+                setProfileSaveError("");
+                setCropFile(file);
               }} />
             </div>
 
@@ -219,7 +257,41 @@ export function AdminPanel(props: AdminPanelProps) {
               />
             </div>
 
-            <button style={saveBtnStyle} onClick={() => { onNameChange(nameInput); goBack(); }}>{ t("save")}</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: "13px 0", marginBottom: "16px", borderTop: "0.5px solid var(--hairline)", borderBottom: "0.5px solid var(--hairline)" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--gray-text)", fontWeight: 500 }}>{t("showChannelOnProfile")}</div>
+                <div style={{ marginTop: "3px", fontSize: "calc(var(--bubble-font-size) - 6px)", lineHeight: 1.4, color: "var(--meta)" }}>{t("showChannelOnProfileDesc")}</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={visibleOnProfile}
+                aria-label={t("showChannelOnProfile")}
+                onClick={() => {
+                  const next = !visibleOnProfile;
+                  setVisibleOnProfile(next);
+                }}
+                style={{
+                  position: "relative",
+                  width: "46px",
+                  height: "28px",
+                  flexShrink: 0,
+                  border: "none",
+                  borderRadius: "999px",
+                  padding: 0,
+                  cursor: "pointer",
+                  background: visibleOnProfile ? "#34c759" : "var(--input-border)",
+                  transition: "background 180ms ease",
+                }}
+              >
+                <span style={{ position: "absolute", top: "2px", left: "2px", width: "24px", height: "24px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.25)", transform: visibleOnProfile ? "translateX(18px)" : "translateX(0)", transition: "transform 180ms ease" }} />
+              </button>
+            </div>
+
+            {profileSaveError && <div className="mb-3 text-center text-[12px]" style={{ color: "#ff3b30" }}>{profileSaveError}</div>}
+            <button disabled={savingProfile} style={{ ...saveBtnStyle, cursor: savingProfile ? "wait" : "pointer", opacity: savingProfile ? 0.65 : 1 }} onClick={() => void saveProfile()}>
+              {savingProfile ? t("loading") : t("save")}
+            </button>
           </div>
         )}
 
@@ -361,8 +433,8 @@ export function AdminPanel(props: AdminPanelProps) {
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 {/* Preview */}
                 <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "var(--card)" }}>
-                  {welcomeIcon.startsWith("http")
-                    ? <img src={welcomeIcon} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {(welcomeIcon.startsWith("http") || (!welcomeIcon && profileImage))
+                    ? <img src={welcomeIcon || profileImage || ""} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <span style={{ fontSize: "28px" }}>{welcomeIcon || "💬"}</span>
                   }
                 </div>
@@ -393,7 +465,7 @@ export function AdminPanel(props: AdminPanelProps) {
             </div>
             <button style={saveBtnStyle} onClick={() => {
               const config = JSON.stringify({
-                icon: welcomeIcon.trim() || "💬",
+                icon: welcomeIcon.trim(),
                 title: welcomeTitle.trim() || t("welcomeTitlePlaceholder"),
                 items: welcomeItems.split("\n").map((s: string) => s.trim()).filter(Boolean),
               });
@@ -405,45 +477,72 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {/* Guide panel */}
         {view === "guide" && (
-          <div style={{ padding: "12px 18px", fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.6, color: "var(--gray-text)", maxHeight: "60vh", overflowY: "auto" }}>
-            <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideOpenAdmin")}</h4>
-              <p style={{ color: "var(--tertiary-text)", margin: 0 }}>{ t("guideOpenAdminDesc")}</p>
-            </div>
-            <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideChannelTitle")}</h4>
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• {t("guideProfile")}</li>
-                <li>• {t("guideColor")}</li>
-                <li>• {t("guidePasscode")}</li>
-                <li>• {t("guideRules")}</li>
-                <li>• {t("guideWelcome")}</li>
-              </ul>
-            </div>
-            <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideManageTitle")}</h4>
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• {t("guideReport")}</li>
-                <li>• {t("guideBlock")}</li>
-                <li>• {t("guideUnblock")}</li>
-                <li>• {t("guidePetition")}</li>
-                <li>• {t("guideBannedWords")}</li>
-                <li>• {t("guideDelete")}</li>
-              </ul>
-            </div>
-            <div style={{ marginBottom: "16px" }}>
-              <h4 style={{ fontWeight: 500, margin: "0 0 8px", color: "var(--gray-text)", fontSize: "calc(var(--bubble-font-size) - 2px)" }}>{ t("guideSpecialTitle")}</h4>
-              <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: "6px", margin: 0, color: "var(--tertiary-text)" }}>
-                <li>• {t("guideFreeze")}</li>
-                <li>• {t("guideLive")}</li>
-              </ul>
-            </div>
-            <div style={{ padding: "10px 12px", background: "var(--guide-bg)", borderRadius: "10px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--bubble-sent)", lineHeight: 1.5 }}>
-              {t("guideTip")}
-            </div>
+          <div style={{ padding: "16px 14px 18px", maxHeight: "65vh", overflowY: "auto" }}>
+            {[
+              {
+                title: t("guideOpenAdmin"),
+                entries: [{ title: t("guideOpenAdmin"), description: t("guideOpenAdminDesc"), icon: "⚙" }],
+              },
+              {
+                title: t("guideChannelTitle"),
+                entries: [
+                  { ...guideParts(t("guideProfile")), icon: "☺" },
+                  { ...guideParts(t("guideColor")), icon: "●" },
+                  { ...guideParts(t("guidePasscode")), icon: "⌨" },
+                  { ...guideParts(t("guideRules")), icon: "ℹ" },
+                  { ...guideParts(t("guideWelcome")), icon: "✦" },
+                ],
+              },
+              {
+                title: t("guideManageTitle"),
+                entries: [
+                  { ...guideParts(t("guideDmPrivacy")), icon: "✉" },
+                  { ...guideParts(t("guideReport")), icon: "⚑" },
+                  { ...guideParts(t("guideBlock")), icon: "⊘" },
+                  { ...guideParts(t("guideUnblock")), icon: "↺" },
+                  { ...guideParts(t("guidePetition")), icon: "!" },
+                  { ...guideParts(t("guideBannedWords")), icon: "Aa" },
+                  { ...guideParts(t("guideDelete")), icon: "⌫" },
+                ],
+              },
+              {
+                title: t("guideSpecialTitle"),
+                entries: [
+                  { ...guideParts(t("guideFreeze")), icon: "❄" },
+                  { ...guideParts(t("guideLive")), icon: "◉" },
+                ],
+              },
+            ].map((section, sectionIndex) => (
+              <section key={`${section.title}-${sectionIndex}`} style={{ marginBottom: "18px" }}>
+                {sectionIndex > 0 && <h4 style={{ margin: "0 0 7px 4px", fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 600, color: "var(--meta)" }}>{section.title}</h4>}
+                <div style={{ borderRadius: "15px", overflow: "hidden", background: "var(--card)" }}>
+                  {section.entries.map((entry, index) => (
+                    <div key={`${entry.title}-${index}`} style={{ display: "flex", gap: "11px", padding: "13px 12px", borderBottom: index < section.entries.length - 1 ? "0.5px solid var(--hairline)" : "none" }}>
+                      <span style={{ width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "color-mix(in srgb, var(--bubble-sent) 12%, var(--bg))", color: "var(--bubble-sent)", fontSize: entry.icon === "Aa" ? "11px" : "14px", fontWeight: 600 }}>{entry.icon}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <h5 style={{ margin: 0, fontSize: "calc(var(--bubble-font-size) - 3px)", lineHeight: 1.3, fontWeight: 600, color: "var(--gray-text)" }}>{entry.title}</h5>
+                        {entry.description && <p style={{ margin: "3px 0 0", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.45, color: "var(--secondary-text)" }}>{entry.description}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+            <div style={{ padding: "11px 13px", background: "var(--guide-bg)", borderRadius: "12px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--bubble-sent)", lineHeight: 1.5 }}>{t("guideTip")}</div>
           </div>
         )}
       </div>
+      {cropFile && (
+        <ProfileImageCropper
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onConfirm={(file, preview) => {
+            setProfileImageFile(file);
+            setProfileImagePreview(preview);
+            setCropFile(null);
+          }}
+        />
+      )}
     </div>
   );
 }

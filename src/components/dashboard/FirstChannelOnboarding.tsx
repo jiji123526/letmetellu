@@ -11,6 +11,12 @@ interface FirstChannelOnboardingProps {
   onClose: () => void;
 }
 
+const FreezeIcon = ({ size = 20 }: { size?: number }) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 2v20M4.8 6.2l14.4 11.6M4.8 17.8 19.2 6.2M8.5 4.2 12 7l3.5-2.8M8.5 19.8 12 17l3.5 2.8M3.8 10.1 8 10.7 7.5 6.5M20.2 13.9 16 13.3l.5 4.2M3.8 13.9 8 13.3l-.5 4.2M20.2 10.1l-4.2.6.5-4.2" />
+  </svg>
+);
+
 const featureIcons = [
   { icon: "↗", color: "#eaf3ff" },
   {
@@ -23,10 +29,10 @@ const featureIcons = [
     color: "#f0edff",
   },
   { icon: "◉", color: "#fff0ea" },
-  { icon: "❄", color: "#edf7ff" },
+  { icon: <FreezeIcon />, color: "#edf7ff" },
 ];
 
-const guideIcons = ["↗", "☺", "⌨", "✉", "❄", "◉", "!", "⊘", "⚑"];
+const guideIcons = ["↗", "☺", "⌨", "✉", <FreezeIcon key="freeze" size={17} />, "◉", "!", "⊘", "⚑"];
 
 export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboardingProps) {
   const { t } = useLocale();

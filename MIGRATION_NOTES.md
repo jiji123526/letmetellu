@@ -102,6 +102,33 @@ Adds `users.email_verified_at`, verification tokens and hashed signup request re
 
 Apply this migration before deploying the Worker version that reads `email_verified_at`.
 
+#### `0009_channel_instance_id.sql`
+
+Adds a random `channels.instance_id` and backfills existing channels. The client compares this value with its browser record so recreating a deleted channel at the same address does not inherit the previous channel's colors or other channel-scoped local state.
+
+#### `0010_user_font_size.sql`
+
+Adds nullable `users.font_size`. Logged-in users synchronize their preferred chat font size through the account; guest users continue to store it only in the current browser.
+
+#### `0011_channel_profile_visibility.sql`
+
+Adds `channels.show_on_profile` with a private (`0`) default. Owners may publish individual channels from channel settings. Public owner-channel lookup returns only explicitly published channels and the profile selector is enabled only when at least two channels are visible.
+
+#### `0012_default_channels_private.sql`
+
+Sets all existing non-live channels to private on owner profiles. This is intentionally separate from the column migration so the privacy default and existing-data policy remain explicit.
+
+#### `0013_password_reset_tokens.sql`
+
+Adds hashed, single-use password-reset tokens with expiry, use time and a user/time index.
+
+- Raw reset tokens are delivered by email and never stored in D1.
+- Requests return a generic success response to reduce account enumeration.
+- Email and IP-based throttles reuse hashed request identifiers.
+- Successful reset invalidates the token and stores a salted PBKDF2 password.
+
+Apply `0013` before deploying the Worker routes that request or consume password-reset tokens.
+
 ### Operational checks
 
 After a migration:
@@ -214,12 +241,41 @@ Media bubbles, embedded widgets and loading bubbles intentionally use their own 
 - Kept Google OAuth as the supported signup path.
 - Retained login support for existing credential accounts.
 - Added a salted PBKDF2 format and legacy SHA-256 verification/upgrade code.
+- Added dashboard-based password-reset request UI and localized reset pages.
+- Added generic responses and hashed email/IP throttling for password-reset requests.
 - Do not introduce a platform-wide administrator account for UI testing; use a scoped QA account and test channels.
+
+### Channel identity, profiles and preferences
+
+- Added channel incarnation IDs so a deleted address can be safely reused without inheriting stale browser settings.
+- Added cropped profile-image upload; temporary `blob:` previews are never persisted as channel profile URLs.
+- Made owner-profile channel visibility opt-in and private by default.
+- Added account-synced font size for logged-in users while retaining browser-local guest preferences.
+- Fixed system dark-mode changes so dashboard and channel UI follow them without requiring a reload.
+
+### Date grouping and historical navigation
+
+- Chat, gallery and link panels share one date parser for D1 UTC timestamps.
+- Date boundaries use the viewer's browser timezone rather than fixed KST.
+- Korean dates use `YYYY. M. D`; English dates use `Mon D, YYYY`.
+- Gallery loads 50 image records per page; links load 30 link-bearing messages per page. Deleted source messages are filtered at the data boundary.
+- Selecting an unloaded gallery/link source uses its message ID to fetch the target, 25 surrounding messages on each side and a distant reply parent when needed.
+- Historical context is isolated from the latest-message window. Scrolling upward or downward loads 50 messages using `(created_at, id)` cursors, preventing collisions when multiple messages share a timestamp.
+- Realtime messages received while reading history are counted rather than appended, preserving the reader's position. The **Latest messages** control reloads the newest window.
+
+Trade-offs of historical context mode:
+
+- Returning to latest requires one additional server request.
+- The initial context request performs multiple bounded D1 reads: target lookup, older/newer windows and an optional reply-parent lookup.
+- New realtime message contents are intentionally hidden until the user returns to latest; only the pending count is shown.
+- Continued two-way scrolling grows the in-memory React message list in 50-message pages. It avoids unbounded request loops but does not virtualize an extremely long reading session.
+- Failed access tokens, deleted targets and network errors cannot resolve the requested message.
 
 ## Current follow-up work
 
-- finish email verification, password reset and monitored legacy-password migration;
-- add optional owner-profile visibility per channel;
+- verify a production Resend sending domain and monitor verification/reset delivery;
+- finish monitored legacy-password migration;
+- consider message-list virtualization for exceptionally long historical browsing sessions;
 - add typing indicators;
 - add operational metrics and retention policies;
 - continue mobile and accessibility testing for widgets, dialogs and dashboard gestures.

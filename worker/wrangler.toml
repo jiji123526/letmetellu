@@ -15,11 +15,13 @@ new_sqlite_classes = ["ChatRoom"]
 binding = "DB"
 database_name = "letsplay-db"
 database_id = "66a364d6-b00a-42df-b1b4-004e284dd686"
+remote = true
 
 # R2 Storage
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "letmetellu-media"
+remote = true
 
 [vars]
 ALLOWED_ORIGIN = "https://letmetellu.vercel.app,http://localhost:3000"

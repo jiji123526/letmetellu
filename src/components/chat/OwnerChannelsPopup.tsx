@@ -39,7 +39,7 @@ export function OwnerChannelsPopup({ currentChannelId, bubbleColor, onClose }: O
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-[300px] rounded-[20px] p-5"
+        className="w-full max-w-[430px] rounded-[20px] p-5"
         style={{
           background: "var(--header-bg)",
           backdropFilter: "blur(16px)",
@@ -50,7 +50,10 @@ export function OwnerChannelsPopup({ currentChannelId, bubbleColor, onClose }: O
         {loading ? (
           <div className="py-8 text-center text-[13px]" style={{ color: "var(--meta)" }}>{t("loading")}</div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
+          <div
+            className="grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${Math.max(channels.length, 1)}, minmax(0, 1fr))` }}
+          >
             {channels.map((ownerChannel) => {
               const active = ownerChannel.id === currentChannelId;
               return (

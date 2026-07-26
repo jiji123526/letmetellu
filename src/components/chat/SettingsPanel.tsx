@@ -19,10 +19,11 @@ interface SettingsPanelProps {
   channelId: string;
   currentColor: string;
   onColorChange: (color: string) => void;
+  onAdmin?: () => void;
   onClose: () => void;
 }
 
-export function SettingsPanel({ channelId, currentColor, onColorChange, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin, onClose }: SettingsPanelProps) {
   const { locale, setLocale, t } = useLocale();
   const { status } = useSession();
   const [fontSize, setFontSize] = useState(() => {
@@ -211,6 +212,26 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onClose 
               </button>
             </div>
           </div>
+
+          {onAdmin && (
+            <>
+              <div style={{ height: "1px", background: "var(--hairline)", margin: "8px 0" }} />
+              <button
+                type="button"
+                className="w-full border-none bg-transparent cursor-pointer flex items-center justify-between"
+                style={{ padding: "12px 0", color: "var(--gray-text)", fontFamily: "inherit" }}
+                onClick={onAdmin}
+              >
+                <span className="flex items-center gap-2.5" style={{ fontSize: "var(--bubble-font-size, 15px)" }}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path d="M12 2 3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                  </svg>
+                  {t("adminSettings")}
+                </span>
+                <span style={{ color: "var(--meta)", fontSize: "20px", lineHeight: 1 }}>›</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

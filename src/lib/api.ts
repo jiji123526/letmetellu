@@ -88,6 +88,52 @@ export async function fetchMessages(channelId: string, cursor?: string) {
   return res.json();
 }
 
+export async function fetchMessagePage(
+  channelId: string,
+  direction: "before" | "after",
+  cursor: { createdAt: string; id: string },
+) {
+  if (IS_MOCK) return mockApi.fetchMessages(channelId, direction === "before" ? cursor.createdAt : undefined);
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const params = new URLSearchParams({
+    type: "messages",
+    channel: channelId,
+    cursor: cursor.createdAt,
+    cursor_id: cursor.id,
+    direction,
+  });
+  const res = await fetch(`/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
+  if (!res.ok) throw new Error(`Message page failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMessageContext(channelId: string, messageId: string) {
+  if (IS_MOCK) {
+    const data = await mockApi.fetchMessages(channelId);
+    const messages = data.messages || [];
+    const index = messages.findIndex((message: { id: string }) => message.id === messageId);
+    return {
+      messages: index < 0 ? [] : messages.slice(Math.max(0, index - 25), index + 26),
+      target_id: index < 0 ? null : messageId,
+      has_older: index > 25,
+      has_newer: index >= 0 && index + 26 < messages.length,
+    };
+  }
+  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const params = new URLSearchParams({
+    type: "message-context",
+    channel: channelId,
+    message_id: messageId,
+  });
+  const res = await fetch(`/api/data?${params}`, {
+    headers: roomTokenHeaders(parentChannelId),
+  });
+  if (!res.ok) throw new Error(`Message context failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchGallery(channelId: string, cursor?: string) {
   if (IS_MOCK) return { gallery: [] };
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;

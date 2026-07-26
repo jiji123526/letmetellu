@@ -10,12 +10,14 @@ const locales: Record<Locale, LocaleMap> = { ko, en };
 
 interface LocaleContextValue {
   locale: Locale;
+  timeZone: string;
   setLocale: (locale: Locale) => void;
   t: (key: LocaleKeys) => string;
 }
 
 const LocaleContext = createContext<LocaleContextValue>({
   locale: "ko",
+  timeZone: "UTC",
   setLocale: () => {},
   t: (key) => ko[key],
 });
@@ -25,6 +27,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   // localStorage in the state initializer makes saved English preferences
   // hydrate over Korean server HTML and causes React to discard the tree.
   const [locale, setLocaleState] = useState<Locale>("ko");
+  const [timeZone, setTimeZone] = useState("UTC");
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
@@ -50,6 +53,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
         ? "ko"
         : "en";
     setLocaleState(nextLocale);
+    setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   }, []);
 
   useEffect(() => {
@@ -57,7 +61,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, [locale]);
 
   return (
-    <LocaleContext.Provider value={{ locale, setLocale, t }}>
+    <LocaleContext.Provider value={{ locale, timeZone, setLocale, t }}>
       {children}
     </LocaleContext.Provider>
   );

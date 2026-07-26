@@ -45,23 +45,26 @@ Normal channel and live-session traffic share the parent channel's Durable Objec
 - The dashboard is the main entry point for logged-in and guest users.
 - Logged-in users can own up to **5 channels**. The Worker enforces this limit.
 - Logged-in users' recent channels, pinned state and personal channel colors are stored in `user_recent_channels` and follow the account across devices.
+- Logged-in users' font-size preference follows the account; guest preferences remain browser-local.
 - Guest users' recent channel list and personal colors stay in that browser only.
 - Recent joined channels have no application-level count limit.
 - Name search covers only owned or previously joined channels.
 - A new channel can be resolved by entering an exact `/ch/name`, domain path or full URL and pressing Enter. Pasting a complete address resolves it immediately.
 - Owned and joined channels are labeled separately for logged-in owners.
+- Owned channels are private on the owner's public channel profile by default. Owners can explicitly publish individual channels.
 - Deleting an owned channel removes its messages, DMs, gallery entries, configuration, media and recent-list references.
 
 ## Authentication status
 
 - Google OAuth is the supported signup path.
 - The Credentials provider remains available for existing email/password accounts.
-- New credential signup is enabled in Resend sandbox mode for the configured test recipient.
+- New credential signup and password-reset email are enabled in Resend sandbox mode for the configured test recipient.
 - New accounts remain pending until a single-use, 30-minute email link is confirmed.
+- Password-reset links are single-use, expire after 30 minutes and do not reveal whether an address exists.
 - Legacy SHA-256 password records are still recognized by the Worker; the current code attempts to upgrade a successful legacy login to salted PBKDF2.
 - There is no platform-wide administrator role. Administration is scoped to channel ownership.
 
-Before opening credential signup to the public, verify a sending domain, add password reset, and finish production monitoring for the legacy-hash upgrade path.
+Before opening credential signup to the public, verify a sending domain and finish production monitoring for email delivery, rate limits and the legacy-hash upgrade path.
 
 ## Chat and moderation
 
@@ -72,6 +75,9 @@ Before opening credential signup to the public, verify a sending domain, add pas
 - multi-image upload with captions
 - YouTube, X/Twitter, Instagram and Open Graph embeds
 - cursor-based message, gallery and link pagination
+- local-timezone date grouping in chat, gallery and link panels, localized for Korean and English
+- direct message-context lookup for old gallery/link entries, with bidirectional 50-message pagination
+- a dedicated context-reading mode that counts incoming realtime messages and offers a return-to-latest control
 - full-text search using D1 FTS5
 - loading and reconnect states without forced scroll jumps
 
@@ -85,6 +91,7 @@ Before opening credential signup to the public, verify a sending domain, add pas
 - optional petitions from blocked users
 - optional private DM to the owner
 - profile image, channel name and channel color
+- optional owner-profile visibility, private by default
 
 ### Live sessions
 
@@ -197,6 +204,11 @@ Current migrations:
 | `0006_passcode_hint.sql` | optional channel passcode hint |
 | `0007_user_recent_channels.sql` | account-synced recents, pins and personal colors |
 | `0008_email_verification.sql` | verified-email state, single-use verification tokens and signup rate-limit records |
+| `0009_channel_instance_id.sql` | unique channel incarnation ID for clearing stale browser state after address reuse |
+| `0010_user_font_size.sql` | account-synced font-size preference |
+| `0011_channel_profile_visibility.sql` | per-channel owner-profile visibility flag |
+| `0012_default_channels_private.sql` | makes existing normal channels private on owner profiles |
+| `0013_password_reset_tokens.sql` | single-use expiring credential password-reset tokens |
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for schema details and the deployment runbook.
 
@@ -248,9 +260,8 @@ worker/
 
 ## Known follow-up work
 
-- verified sending domain and password reset;
+- verified Resend sending domain and production email-delivery monitoring;
 - validate and harden the legacy credential upgrade path;
-- optional profile visibility controls for owner channels;
 - typing indicators;
 - additional social login providers;
 - operational metrics, abuse controls and retention policies.

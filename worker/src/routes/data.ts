@@ -40,23 +40,116 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   switch (type) {
     case "messages": {
       const cursor = url.searchParams.get("cursor");
+      const cursorId = url.searchParams.get("cursor_id");
+      const direction = url.searchParams.get("direction");
       const limit = 50;
 
       let innerQuery = "SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL)))";
       const params: unknown[] = [channelId, channelId];
 
       if (cursor) {
-        innerQuery += " AND created_at < ?";
-        params.push(cursor);
+        if (direction === "after") {
+          innerQuery += cursorId
+            ? " AND (created_at > ? OR (created_at = ? AND id > ?))"
+            : " AND created_at > ?";
+          params.push(cursor, ...(cursorId ? [cursor, cursorId] : []));
+        } else {
+          innerQuery += cursorId
+            ? " AND (created_at < ? OR (created_at = ? AND id < ?))"
+            : " AND created_at < ?";
+          params.push(cursor, ...(cursorId ? [cursor, cursorId] : []));
+        }
       }
 
-      innerQuery += " ORDER BY created_at DESC LIMIT ?";
+      innerQuery += direction === "after"
+        ? " ORDER BY created_at ASC, id ASC LIMIT ?"
+        : " ORDER BY created_at DESC, id DESC LIMIT ?";
       params.push(limit);
 
-      const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC`;
+      const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
       const stmt = env.DB.prepare(query);
       const { results } = await stmt.bind(...params).all();
       return Response.json({ messages: results });
+    }
+
+    case "message-context": {
+      const messageId = url.searchParams.get("message_id");
+      if (!messageId) {
+        return Response.json({ error: "missing message id" }, { status: 400 });
+      }
+
+      const target = await env.DB.prepare(
+        "SELECT id, created_at, reply_to FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0"
+      ).bind(messageId, channelId).first<{ id: string; created_at: string; reply_to: string | null }>();
+      if (!target) {
+        return Response.json({ error: "message not found" }, { status: 404 });
+      }
+
+      const visibleMessageCondition = `
+        channel_id = ?
+        AND (
+          deleted = 0
+          OR (
+            deleted = 1
+            AND id IN (
+              SELECT reply_to FROM messages
+              WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
+            )
+          )
+        )
+      `;
+      const [beforeResult, afterResult, parentResult] = await Promise.all([
+        env.DB.prepare(`
+          SELECT * FROM messages
+          WHERE ${visibleMessageCondition}
+            AND (created_at < ? OR (created_at = ? AND id <= ?))
+          ORDER BY created_at DESC, id DESC
+          LIMIT 27
+        `).bind(channelId, channelId, target.created_at, target.created_at, target.id).all(),
+        env.DB.prepare(`
+          SELECT * FROM messages
+          WHERE ${visibleMessageCondition}
+            AND (created_at > ? OR (created_at = ? AND id > ?))
+          ORDER BY created_at ASC, id ASC
+          LIMIT 26
+        `).bind(channelId, channelId, target.created_at, target.created_at, target.id).all(),
+        target.reply_to
+          ? env.DB.prepare(`
+              SELECT * FROM messages
+              WHERE id = ? AND channel_id = ?
+                AND (
+                  deleted = 0
+                  OR id IN (
+                    SELECT reply_to FROM messages
+                    WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
+                  )
+                )
+              LIMIT 1
+            `).bind(target.reply_to, channelId, channelId).all()
+          : Promise.resolve({ results: [] }),
+      ]);
+
+      const hasOlder = beforeResult.results.length > 26;
+      const hasNewer = afterResult.results.length > 25;
+      const beforeMessages = beforeResult.results.slice(0, 26);
+      const afterMessages = afterResult.results.slice(0, 25);
+      const byId = new Map<string, Record<string, unknown>>();
+      for (const message of [
+        ...beforeMessages,
+        ...afterMessages,
+        ...parentResult.results,
+      ] as Record<string, unknown>[]) {
+        byId.set(String(message.id), message);
+      }
+      const messages = [...byId.values()].sort((left, right) =>
+        String(left.created_at || "").localeCompare(String(right.created_at || ""))
+      );
+      return Response.json({
+        messages,
+        target_id: target.id,
+        has_older: hasOlder,
+        has_newer: hasNewer,
+      });
     }
 
     case "blocked": {

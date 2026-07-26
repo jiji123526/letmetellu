@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { fetchLinks, fetchPreview } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
+import { chatDateLabel } from "@/lib/chat-date";
 
 const URL_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))[^\s]*)/g;
 
@@ -22,7 +23,7 @@ interface LinksPanelProps {
 const previewCache = new Map<string, { title?: string; image?: string; siteName?: string } | null>();
 
 export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) {
-  const { t } = useLocale();
+  const { t, locale, timeZone } = useLocale();
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -148,51 +149,52 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
             <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>{t("linksEmpty")}</div>
           ) : (
             <>
-              {links.map((link, i) => (
-                <div
-                  key={`${link.url}-${i}`}
-                  className="cursor-pointer"
-                  style={{
-                    border: "1px solid var(--hairline)",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    transition: "background .15s",
-                  }}
-                  onClick={() => {
-                    if (onNavigate) {
-                      onClose();
-                      setTimeout(() => onNavigate(link.msgId), 100);
-                    } else {
-                      window.open(link.url, "_blank");
-                    }
-                  }}
-                >
-                  {link.preview && link.preview.image ? (
-                    <img
-                      src={link.preview.image}
-                      alt=""
-                      style={{ width: "100%", maxHeight: "80px", objectFit: "cover", display: "block" }}
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                    />
-                  ) : null}
-                  <div style={{ padding: "8px 10px" }}>
-                    {link.preview?.siteName && (
-                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
-                        {link.preview.siteName}
+              {(() => {
+                let lastDate = "";
+                return links.flatMap((link, i) => {
+                  const dateLabel = chatDateLabel(link.date, locale, timeZone);
+                  const showDivider = Boolean(dateLabel) && dateLabel !== lastDate;
+                  lastDate = dateLabel;
+                  return [
+                    ...(showDivider ? [(
+                      <div key={`date-${dateLabel}-${i}`} style={{ gridColumn: "1 / -1", fontSize: "calc(var(--bubble-font-size, 15px) - 3px)", color: "var(--meta)", padding: "8px 4px 0", fontWeight: 400 }}>
+                        {dateLabel}
                       </div>
-                    )}
-                    {link.preview?.title ? (
-                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 400, color: "var(--gray-text)", lineHeight: 1.3 }}>
-                        {link.preview.title.length > 30 ? link.preview.title.slice(0, 30) + "…" : link.preview.title}
+                    )] : []),
+                    <div
+                      key={`${link.url}-${i}`}
+                      className="cursor-pointer"
+                      style={{ border: "1px solid var(--hairline)", borderRadius: "12px", overflow: "hidden", transition: "background .15s" }}
+                      onClick={() => {
+                        if (onNavigate) {
+                          onClose();
+                          setTimeout(() => onNavigate(link.msgId), 100);
+                        } else {
+                          window.open(link.url, "_blank");
+                        }
+                      }}
+                    >
+                      {link.preview && link.preview.image ? (
+                        <img src={link.preview.image} alt="" style={{ width: "100%", maxHeight: "80px", objectFit: "cover", display: "block" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      ) : null}
+                      <div style={{ padding: "8px 10px" }}>
+                        {link.preview?.siteName && (
+                          <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>{link.preview.siteName}</div>
+                        )}
+                        {link.preview?.title ? (
+                          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 400, color: "var(--gray-text)", lineHeight: 1.3 }}>
+                            {link.preview.title.length > 30 ? link.preview.title.slice(0, 30) + "…" : link.preview.title}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
+                            {link.url.replace(/^https?:\/\//, "").slice(0, 25)}…
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
-                        {link.url.replace(/^https?:\/\//, "").slice(0, 25)}…
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                    </div>,
+                  ];
+                });
+              })()}
               {hasMore && (
                 <div style={{ gridColumn: "1 / -1", padding: "12px", textAlign: "center" }}>
                   <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>{t("loading")}</span>

@@ -39,8 +39,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       if (existing) return Response.json({ error: "channel already exists" }, { status: 409 });
 
       const result = await env.DB.prepare(`
-        INSERT INTO channels (id, owner_uid, name, instance_id)
-        SELECT ?, ?, ?, ?
+        INSERT INTO channels (id, owner_uid, name, instance_id, show_on_profile)
+        SELECT ?, ?, ?, ?, 0
         WHERE (
           SELECT COUNT(*)
           FROM channels
@@ -213,13 +213,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "update-profile": {
-      const { name, profile_image, bubble_color } = payload || {};
+      const { name, profile_image, bubble_color, show_on_profile } = payload || {};
       const updates: string[] = [];
       const values: unknown[] = [];
 
       if (name !== undefined) { updates.push("name = ?"); values.push(name); }
       if (profile_image !== undefined) { updates.push("profile_image = ?"); values.push(profile_image); }
       if (bubble_color !== undefined) { updates.push("bubble_color = ?"); values.push(bubble_color); }
+      if (show_on_profile !== undefined) {
+        updates.push("show_on_profile = ?");
+        values.push(show_on_profile === true ? 1 : 0);
+      }
 
       if (updates.length > 0) {
         values.push(channel_id);
@@ -230,7 +234,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         const stub = env.CHAT_ROOM.get(doId);
         await stub.fetch(new Request("http://internal/broadcast", {
           method: "POST",
-          body: JSON.stringify({ type: "profile-change", channel_id, name, profile_image, bubble_color }),
+          body: JSON.stringify({ type: "profile-change", channel_id, name, profile_image, bubble_color, show_on_profile }),
         }));
       }
 

@@ -2,6 +2,7 @@
 
 import { useRef, useCallback } from "react";
 import { useLocale } from "@/hooks/useLocale";
+import { chatDateLabel } from "@/lib/chat-date";
 
 interface GalleryItem {
   id: string;
@@ -17,14 +18,8 @@ interface GalleryPanelProps {
   onClose: () => void;
 }
 
-function galleryDateLabel(dateStr: string): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose }: GalleryPanelProps) {
-  const { t } = useLocale();
+  const { t, locale, timeZone } = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleScroll = useCallback(() => {
@@ -79,8 +74,8 @@ export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose 
             (() => {
               let lastDate = "";
               return items.map((item) => {
-                const dateLabel = galleryDateLabel(item.created_at);
-                const showDivider = dateLabel !== lastDate;
+                const dateLabel = chatDateLabel(item.created_at, locale, timeZone);
+                const showDivider = Boolean(dateLabel) && dateLabel !== lastDate;
                 lastDate = dateLabel;
                 return (
                   <div key={item.id} style={{ display: "contents" }}>

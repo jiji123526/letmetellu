@@ -1,0 +1,1 @@
+ALTER TABLE channels ADD COLUMN show_on_profile INTEGER NOT NULL DEFAULT 0;

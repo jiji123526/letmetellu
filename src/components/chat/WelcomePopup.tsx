@@ -9,7 +9,7 @@ interface WelcomeConfig {
   items: string[];
 }
 
-export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channelId: string; bubbleColor?: string; customConfig?: string }) {
+export function WelcomePopup({ channelId, bubbleColor, profileImage, customConfig }: { channelId: string; bubbleColor?: string; profileImage?: string | null; customConfig?: string }) {
   const { t } = useLocale();
   const [show, setShow] = useState(false);
   const config = useMemo<WelcomeConfig | null>(() => {
@@ -19,9 +19,9 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
       if (!parsed.title) return null;
       const parsedIcon = typeof parsed.icon === "string" ? parsed.icon : "";
       return {
-        icon: parsedIcon && !parsedIcon.startsWith("blob:") && !parsedIcon.startsWith("data:")
+        icon: parsedIcon && parsedIcon !== "💬" && !parsedIcon.startsWith("blob:") && !parsedIcon.startsWith("data:")
           ? parsedIcon
-          : "💬",
+          : profileImage || "💬",
         title: parsed.title,
         items: Array.isArray(parsed.items)
           ? parsed.items.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
@@ -30,7 +30,7 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
     } catch {
       return null;
     }
-  }, [customConfig]);
+  }, [customConfig, profileImage]);
 
   useEffect(() => {
     if (!config || !customConfig) {

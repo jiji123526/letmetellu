@@ -69,7 +69,10 @@ export class ChatRoom {
               type,
               requestId: typeof data.requestId === "string" ? data.requestId : undefined,
             });
-            if (!this.currentPasscode) {
+            if (conn.isAdmin) {
+              conn.authorized = true;
+              server.send(authResponse("room-authenticated"));
+            } else if (!this.currentPasscode) {
               conn.authorized = true;
               server.send(authResponse("room-authenticated"));
             } else if (typeof data.token === "string" && data.token) {
@@ -114,6 +117,9 @@ export class ChatRoom {
           if (data.type === "auth-admin" && typeof data.token === "string") {
             const payload = await verifyAdminWsToken(data.token, this.env);
             if (conn && payload?.channel_id === conn.channelId) {
+              // Invalidate any slower room-token verification that began before
+              // this admin token succeeded, so it cannot revoke admin access.
+              conn.authAttempt++;
               conn.uid = payload.user_id;
               conn.isAdmin = true;
               conn.authorized = true;

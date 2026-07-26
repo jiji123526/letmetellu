@@ -39,6 +39,7 @@ export function useRealtime(channelId: string | null, uid: string) {
     ws.onopen = () => {
       setSocketConnected(true);
       setRoomAuthenticated(false);
+      handlersRef.current.forEach((handler) => handler({ type: "socket-opened" }));
       const roomToken = getRoomToken(channelId);
       const requestId = crypto.randomUUID();
       latestRoomAuthRequest.current = requestId;

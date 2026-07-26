@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, fetchInit, fetchOwnerChannels, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchGallery } from "@/lib/api";
+import { clearRoomToken, fetchInit, fetchOwnerChannels, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +31,7 @@ import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
+import { chatDateKey, chatDateLabel } from "@/lib/chat-date";
 import { recordAccountRecentChannel, setAccountChannelColor } from "@/lib/account-recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
@@ -64,6 +65,7 @@ interface Channel {
   passcode_hint?: string | null;
   owner_name?: string | null;
   instance_id?: string | null;
+  show_on_profile?: number;
 }
 
 interface InitData {
@@ -622,6 +624,8 @@ interface MessageListProps {
   searchResultIdSet: Set<string>;
   activeSearchId: string | null;
   deletedMessageLabel: string;
+  locale: "ko" | "en";
+  timeZone: string;
   onLongPress: MessageRowProps["onLongPress"];
   onTouchStart: MessageRowProps["onTouchStart"];
   onTouchEnd: MessageRowProps["onTouchEnd"];
@@ -644,6 +648,8 @@ const MessageList = React.memo(function MessageList({
   searchResultIdSet,
   activeSearchId,
   deletedMessageLabel,
+  locale,
+  timeZone,
   onLongPress,
   onTouchStart,
   onTouchEnd,
@@ -667,8 +673,22 @@ const MessageList = React.memo(function MessageList({
     onEmojiPicker,
   };
 
-  return threadedMessages.topLevel.flatMap((message) => {
+  return threadedMessages.topLevel.flatMap((message, messageIndex) => {
+    const previousMessage = threadedMessages.topLevel[messageIndex - 1];
+    const currentDateKey = chatDateKey(message.created_at, timeZone);
+    const showDate = Boolean(currentDateKey) && (
+      !previousMessage || chatDateKey(previousMessage.created_at, timeZone) !== currentDateKey
+    );
     const rows: React.ReactElement[] = [
+      ...(showDate ? [
+        <div
+          key={`date-${message.id}`}
+          className="self-center"
+          style={{ color: "var(--meta)", fontSize: "calc(var(--bubble-font-size, 17px) - 4px)", fontWeight: 400, margin: "16px 0 8px", letterSpacing: ".1px" }}
+        >
+          {chatDateLabel(message.created_at, locale, timeZone)}
+        </div>,
+      ] : []),
       <MessageRow
         key={message.id}
         {...commonProps}
@@ -720,6 +740,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [historyMode, setHistoryMode] = useState<"latest" | "context">("latest");
+  const [newerMessageCount, setNewerMessageCount] = useState(0);
   const [headerMenu, setHeaderMenu] = useState<DOMRect | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
@@ -735,9 +757,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showOwnerChannels, setShowOwnerChannels] = useState(false);
   const [showChannelDeleted, setShowChannelDeleted] = useState(false);
-  const [ownerChannelCount, setOwnerChannelCount] = useState(1);
+  const [ownerChannelCount, setOwnerChannelCount] = useState(0);
   const { isOwner, isLoggedIn, userId: authUserId } = useAuth(channel?.owner_uid);
-  const { t } = useLocale();
+  const { t, locale, timeZone } = useLocale();
   const [manualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("isAdmin") === "true";
@@ -757,10 +779,14 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!channel?.id) return;
     let active = true;
     fetchOwnerChannels(channelId)
-      .then((data) => { if (active) setOwnerChannelCount(data.channels?.length || 1); })
-      .catch(() => { if (active) setOwnerChannelCount(1); });
+      .then((data) => {
+        if (active) {
+          setOwnerChannelCount((data.channels || []).length);
+        }
+      })
+      .catch(() => { if (active) setOwnerChannelCount(0); });
     return () => { active = false; };
-  }, [channel?.id, channelId]);
+  }, [channel?.id, channel?.show_on_profile, channelId]);
   const [liveTitle, setLiveTitle] = useState(() => {
     if (typeof window === "undefined") return t("liveTitle");
     return localStorage.getItem(`liveTitle_${channelId}`) || t("liveTitle");
@@ -894,6 +920,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       });
     }
     setMessages(data.messages || []);
+    setHistoryMode("latest");
+    setNewerMessageCount(0);
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
     setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
@@ -988,6 +1016,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Track inLiveMode in a ref so the subscribe callback always has the latest value
   const inLiveModeRef = useRef(inLiveMode);
   useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
+  const historyModeRef = useRef(historyMode);
+  useEffect(() => { historyModeRef.current = historyMode; }, [historyMode]);
 
   // Debounce not needed — local patching handles most events, reconnect does full refetch
 
@@ -1000,6 +1030,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         // Only add if it belongs to the channel we're viewing
         const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         if (msg.channel_id === viewingChannel) {
+          if (historyModeRef.current === "context") {
+            setNewerMessageCount((count) => count + 1);
+            return;
+          }
           setMessages((prev) => {
             // Avoid duplicates (e.g. our own message already shown optimistically)
             if (prev.some((m) => m.id === msg.id)) return prev;
@@ -1037,19 +1071,22 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       // Reconnect or bulk sync — full refetch as safety net
       if (event.type === "reconnected" || event.type === "messages-sync") {
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) {
-            setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
-          }
-        }).catch(() => {});
+        if (historyModeRef.current === "latest") {
+          const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+          fetchMessages(fetchChannel).then((data) => {
+            if (data.messages) {
+              setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
+            }
+          }).catch(() => {});
+        }
       }
       // Re-send join-live on reconnect so DO has accurate count
       if (event.type === "reconnected" && inLiveModeRef.current) {
         send({ type: "join-live" });
       }
-      // Always request a fresh short-lived token on reconnect.
-      if (event.type === "reconnected") {
+      // Authenticate owners as soon as every new socket opens. Waiting for the
+      // generic room authentication to finish creates a deadlock in protected rooms.
+      if (event.type === "socket-opened") {
         authenticateAdminSocket();
       }
       if (event.type === "dm-new") {
@@ -1086,6 +1123,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           if (event.name) updated.name = event.name as string;
           if (event.profile_image !== undefined) updated.profile_image = event.profile_image as string | null;
           if (event.bubble_color) updated.bubble_color = event.bubble_color as string;
+          if (event.show_on_profile !== undefined) updated.show_on_profile = event.show_on_profile ? 1 : 0;
           return updated;
         });
       }
@@ -1116,13 +1154,15 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "room-auth-failed") {
         clearRoomToken(channelId);
-        setPasscodeGate({
-          name: channel?.name || "",
-          profile_image: channel?.profile_image || null,
-          bubble_color: channel?.bubble_color || "#3b8df0",
-          notice: t("roomAuthExpired"),
-        });
-        setBanner({ text: t("roomAuthExpired"), color: "#d32f2f" });
+        if (!isOwner) {
+          setPasscodeGate({
+            name: channel?.name || "",
+            profile_image: channel?.profile_image || null,
+            bubble_color: channel?.bubble_color || "#3b8df0",
+            notice: t("roomAuthExpired"),
+          });
+          setBanner({ text: t("roomAuthExpired"), color: "#d32f2f" });
+        }
       }
       if (event.type === "admin-authenticated") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
@@ -1142,12 +1182,14 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "room-access-revoked") {
         clearRoomToken(channelId);
-        setPasscodeGate({
-          name: channel?.name || "",
-          profile_image: channel?.profile_image || null,
-          bubble_color: channel?.bubble_color || "#3b8df0",
-          notice: t("passcodeChanged"),
-        });
+        if (!isOwner) {
+          setPasscodeGate({
+            name: channel?.name || "",
+            profile_image: channel?.profile_image || null,
+            bubble_color: channel?.bubble_color || "#3b8df0",
+            notice: t("passcodeChanged"),
+          });
+        }
       }
       if (event.type === "user-blocked") {
         const blockedUid = event.uid as string;
@@ -1244,6 +1286,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (document.visibilityState === "hidden") {
         lastHidden = Date.now();
       } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
+        if (historyModeRef.current === "context") return;
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchMessages(fetchChannel).then((data) => {
           if (data.messages) {
@@ -1273,6 +1316,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Scroll detection for scroll-to-bottom button
   const loadingMore = useRef(false);
   const hasMoreMessages = useRef(true);
+  const hasMoreNewerMessages = useRef(false);
 
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
@@ -1287,7 +1331,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       loadingMore.current = true;
       const prevHeight = el.scrollHeight;
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-      fetchMessages(fetchChannel, oldest.created_at).then((data) => {
+      fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id }).then((data) => {
         if (data.messages && data.messages.length > 0) {
           if (data.messages.length < 50) hasMoreMessages.current = false;
           setMessages((prev) => {
@@ -1305,17 +1349,66 @@ export function ChatView({ channelId }: { channelId: string }) {
         }
       }).finally(() => { loadingMore.current = false; });
     }
+
+    // Context windows can also grow toward newer messages.
+    if (
+      historyModeRef.current === "context"
+      && distanceFromBottom < 50
+      && !loadingMore.current
+      && hasMoreNewerMessages.current
+      && messages.length > 0
+    ) {
+      const newest = messages[messages.length - 1];
+      if (!newest?.created_at) return;
+      loadingMore.current = true;
+      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+      fetchMessagePage(fetchChannel, "after", { createdAt: newest.created_at, id: newest.id }).then((data) => {
+        if (data.messages?.length) {
+          if (data.messages.length < 50) hasMoreNewerMessages.current = false;
+          setMessages((prev) => {
+            const byId = new Map(prev.map((message) => [message.id, message]));
+            for (const message of data.messages as Message[]) byId.set(message.id, message);
+            return [...byId.values()].sort((left, right) =>
+              (left.created_at || "").localeCompare(right.created_at || "")
+            );
+          });
+        } else {
+          hasMoreNewerMessages.current = false;
+        }
+      }).finally(() => { loadingMore.current = false; });
+    }
   }, [messages, channelId]);
 
+  const returnToLatest = useCallback(async () => {
+    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+    try {
+      const data = await fetchMessages(fetchChannel);
+      setMessages(data.messages || []);
+      historyModeRef.current = "latest";
+      setHistoryMode("latest");
+      setNewerMessageCount(0);
+      hasMoreNewerMessages.current = false;
+      hasMoreMessages.current = (data.messages?.length || 0) >= 50;
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      });
+    } catch {
+      setBanner({ text: "Failed to load latest messages", color: "#d32f2f" });
+      setTimeout(() => setBanner(null), 2000);
+    }
+  }, [channelId]);
+
   const scrollToBottom = () => {
+    if (historyModeRef.current === "context") {
+      void returnToLatest();
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setShowScrollBtn(false);
   };
 
-  // Scroll to a specific message by ID — loads older messages if needed
-  const messagesRef = useRef(messages);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-
+  // Scroll to a specific message by ID. If it is not mounted, fetch only a
+  // small context window around that message instead of walking all history.
   const scrollToMessage = useCallback(async (msgId: string) => {
     // Try to find it in current DOM
     let el = document.getElementById(`msg-${msgId}`);
@@ -1325,39 +1418,31 @@ export function ChatView({ channelId }: { channelId: string }) {
       return;
     }
 
-    // Not loaded — load older messages until found
+    // Not loaded — fetch the target and 25 messages on either side in one request.
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    let attempts = 0;
-
-    while (attempts < 20) {
-      const current = messagesRef.current;
-      if (current.length === 0) break;
-      const oldest = current[0];
-      if (!oldest?.created_at) break;
-
-      const data = await fetchMessages(fetchChannel, oldest.created_at);
-      if (!data.messages || data.messages.length === 0) break;
-
-      setMessages((prev) => {
-        const ids = new Set(prev.map((m) => m.id));
-        const older = data.messages.filter((m: Message) => !ids.has(m.id));
-        return [...older, ...prev];
-      });
-
-      // Wait for React render
+    try {
+      const data = await fetchMessageContext(fetchChannel, msgId);
+      if (!data.messages?.some((message: Message) => message.id === msgId)) {
+        throw new Error("message not found");
+      }
+      setMessages(data.messages as Message[]);
+      historyModeRef.current = "context";
+      setHistoryMode("context");
+      setNewerMessageCount(0);
+      hasMoreMessages.current = data.has_older !== false;
+      hasMoreNewerMessages.current = data.has_newer !== false;
       await new Promise((r) => setTimeout(r, 100));
-
       el = document.getElementById(`msg-${msgId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .2s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 800); }
         return;
       }
-      attempts++;
+      throw new Error("message did not render");
+    } catch {
+      setBanner({ text: "Message not found", color: "var(--meta)" });
+      setTimeout(() => setBanner(null), 2000);
     }
-
-    setBanner({ text: "Message not found", color: "var(--meta)" });
-    setTimeout(() => setBanner(null), 2000);
   }, [channelId]);
 
   // Auto-resize textarea
@@ -1818,7 +1903,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           onClick={() => { window.location.href = "/dashboard"; }}
           aria-label={t("dashboardChats")}
         >
-          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}>
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
             <path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
@@ -1831,7 +1916,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             onClick={() => setShowNotice(true)}
             aria-label={t("rules")}
           >
-            <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 2px)", height: "calc(var(--bubble-font-size) + 2px)" }}>
+            <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
               <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
               <circle cx="12" cy="8" r="1.15" fill="currentColor" />
               <path d="M12 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1842,11 +1927,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         <div className="flex-1 flex flex-col items-center gap-[6px]">
           <button
             type="button"
-            disabled={ownerChannelCount <= 1}
+            disabled={ownerChannelCount < 2}
             className="rounded-full overflow-hidden relative top-[3px] border-none p-0"
             aria-label={t("dashboardOwnerChannels")}
-            style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", cursor: ownerChannelCount > 1 ? "pointer" : "default" }}
-            onClick={() => { if (ownerChannelCount > 1) setShowOwnerChannels(true); }}
+            style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", cursor: ownerChannelCount >= 2 ? "pointer" : "default" }}
+            onClick={() => { if (ownerChannelCount >= 2) setShowOwnerChannels(true); }}
           >
             {channel?.profile_image ? (
               <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
@@ -1872,8 +1957,8 @@ export function ChatView({ channelId }: { channelId: string }) {
           aria-label={t("shareChannel")}
         >
           <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
-            <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M6 11v8h12v-8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M12 15V3M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M6 11.5v7A2.5 2.5 0 0 0 8.5 21h7a2.5 2.5 0 0 0 2.5-2.5v-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
 
@@ -1893,7 +1978,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           style={{ color: bubbleColor }}
           onClick={(e) => setHeaderMenu(e.currentTarget.getBoundingClientRect())}
         >
-          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 5px)", height: "calc(var(--bubble-font-size) + 5px)" }}>
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
             <circle cx="12" cy="5" r="1.8" fill="currentColor" />
             <circle cx="12" cy="12" r="1.8" fill="currentColor" />
             <circle cx="12" cy="19" r="1.8" fill="currentColor" />
@@ -2017,6 +2102,8 @@ export function ChatView({ channelId }: { channelId: string }) {
           searchResultIdSet={searchResultIdSet}
           activeSearchId={searchState.activeId}
           deletedMessageLabel={t("deletedMessage")}
+          locale={locale}
+          timeZone={timeZone}
           onLongPress={handleMemoizedLongPress}
           onTouchStart={handleMemoizedTouchStart}
           onTouchEnd={handleMemoizedTouchEnd}
@@ -2059,7 +2146,12 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Scroll to bottom */}
-      <ScrollToBottom visible={showScrollBtn} onClick={scrollToBottom} />
+      <ScrollToBottom
+        visible={historyMode === "context" || showScrollBtn}
+        unreadCount={historyMode === "context" ? newerMessageCount : undefined}
+        label={historyMode === "context" ? (locale === "ko" ? "최신 메시지" : "Latest") : undefined}
+        onClick={scrollToBottom}
+      />
 
       {/* Toast banner */}
       {banner && (
@@ -2260,7 +2352,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             });
             const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
             sendMessageApi({ uid, text: `${t("reportPrefix")}: "${preview}"`, channel_id: channelId, report: true, reported_msg_id: msgId } as any);
-            setBanner({ text: t("report"), color: "#d32f2f" });
+            setBanner({ text: t("reported"), color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           onUnreport={!effectiveAdmin && !contextMenu.isOwn ? () => {
@@ -2277,7 +2369,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               deleteMessage({ uid, message_id: reportMsg.id, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
               setMessages((prev) => prev.filter((m) => m.id !== reportMsg.id));
             }
-            setBanner({ text: t("unreport"), color: "var(--meta)" });
+            setBanner({ text: t("unreported"), color: "var(--meta)" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           isReported={reportedMsgIds.has(contextMenu.msg.id)}
@@ -2332,7 +2424,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Welcome Popup */}
-      <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} customConfig={welcomeConfig} />
+      <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} profileImage={channel?.profile_image} customConfig={welcomeConfig} />
 
       {showChannelDeleted && (
         <ConfirmDialog
@@ -2367,7 +2459,6 @@ export function ChatView({ channelId }: { channelId: string }) {
             });
           }}
           onLinks={() => setShowLinks(true)}
-          onAdmin={effectiveAdmin ? () => setShowAdminPanel(true) : undefined}
           onClose={() => setHeaderMenu(null)}
         />
       )}
@@ -2396,6 +2487,10 @@ export function ChatView({ channelId }: { channelId: string }) {
               updateRecentChannelAppearance(channelId, { bubbleColor: color });
             }
           }}
+          onAdmin={effectiveAdmin ? () => {
+            setShowSettings(false);
+            setShowAdminPanel(true);
+          } : undefined}
           onClose={() => setShowSettings(false)}
         />
       )}
@@ -2448,6 +2543,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           liveActive={liveActive}
           petitionEnabled={petitionEnabled}
           dmEnabled={dmEnabled}
+          showOnProfile={channel?.show_on_profile === 1}
           notice={channel?.notice || "[]"}
           welcomeConfig={welcomeConfig}
           blockedUsers={blockedUsers}
@@ -2490,6 +2586,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             adminAction("set-dm", channelId, { enabled: newVal });
             setBanner({ text: newVal ? t("dmAllowed") : t("dmBlocked"), color: newVal ? "#2a9d4e" : "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
+          }}
+          onShowOnProfileToggle={(visible) => {
+            setChannel((prev) => prev ? { ...prev, show_on_profile: visible ? 1 : 0 } : null);
+            adminAction("update-profile", channelId, { show_on_profile: visible });
+            setBanner({ text: visible ? t("channelShownOnProfile") : t("channelHiddenFromProfile"), color: bubbleColor });
+            setTimeout(() => setBanner(null), 2500);
           }}
           onColorChange={(color) => {
             setLocalBubbleColor(color);
@@ -2741,7 +2843,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                   }}
                   style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.3)", color: "#fff", fontSize: "calc(var(--bubble-font-size) - 2px)", padding: "6px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
                 >
-                  {(() => { const d = new Date(fullViewImage.date!); return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}`; })()} →
+                  {chatDateLabel(fullViewImage.date!, locale, timeZone)} →
                 </button>
               )}
             </div>
