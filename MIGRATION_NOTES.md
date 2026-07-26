@@ -289,8 +289,107 @@ Trade-offs of historical context mode:
 - Continued two-way scrolling grows the in-memory React message list in 50-message pages. It avoids unbounded request loops but does not virtualize an extremely long reading session.
 - Failed access tokens, deleted targets and network errors cannot resolve the requested message.
 
+### Security audit — 2026-07-26
+
+This audit documents open findings; it does not mark them as remediated.
+
+#### P0 — signed anonymous identity
+
+Message creation, editing, deletion and reactions currently accept `uid` from
+the request body. Message rows also expose the sender UID, so equality with
+that value is not proof that a later caller is the same browser. Replace this
+boundary with a Worker-issued, HMAC-signed anonymous token:
+
+1. issue a random subject and expiry from a dedicated anonymous-session route;
+2. store the token in the browser and send it in a header;
+3. verify signature, expiry and version in the Worker;
+4. derive the mutation actor from the verified token, never the JSON body;
+5. use the same subject for messages, reactions, reports, DMs and blocks;
+6. rotate or revoke token versions when abuse requires it.
+
+Do not expose the signing secret or treat the existing canvas fingerprint as
+authentication. Fingerprints and IP HMACs may supplement abuse detection but
+must not establish ownership.
+
+#### P1 — upload and media lifecycle
+
+- Public-channel upload currently permits unauthenticated 10 MB image writes.
+- Add signed identity and durable quotas by subject, IP HMAC and channel.
+- Prefer a short-lived upload ticket bound to channel, media type and maximum
+  size.
+- Mark uploaded objects pending, attach them atomically to a message, and
+  remove expired pending objects.
+- Delete R2 objects during message/DM deletion, live cleanup and channel
+  deletion.
+- Decide whether passcode-room media is merely unlisted or actually private.
+  For private media, use an authenticated proxy or short-lived signed URL
+  instead of a permanent public object URL.
+- Validate decoded file type instead of trusting only `Content-Type`.
+
+#### P1 — server-side messaging policy
+
+- DM submission must read the parent channel's DM toggle and reject disabled
+  submissions.
+- DM and edit routes must enforce length, block, banned-word, freeze and
+  durable rate-limit policy where applicable.
+- Message image fields must refer to a valid object uploaded for the same
+  channel rather than accepting an arbitrary tracking URL.
+- Reports need a dedicated model or strict validation: existing target,
+  reporter/target uniqueness, cooldown, daily quota and server-side status.
+
+#### P1 — preview fetch isolation
+
+The preview endpoint must:
+
+- accept only absolute `http:` and `https:` URLs;
+- reject credentials, localhost, loopback, link-local, private and internal
+  destinations;
+- resolve DNS and repeat destination checks after every redirect;
+- use a short timeout and bounded redirect count;
+- stop reading after a small HTML response limit;
+- require an HTML-compatible content type;
+- apply durable caller/IP rate limits and cache successful results.
+
+An allowlist for supported native providers is safer than unrestricted
+arbitrary-site previewing.
+
+#### P2 — headers and dependencies
+
+Add and test CSP, `X-Content-Type-Options: nosniff`, Referrer Policy,
+Permissions Policy, frame restrictions and HSTS. CSP must account for the
+Twitter and Instagram scripts/frames already used by the client.
+
+The production dependency audit reported:
+
+- three high findings and one moderate finding;
+- Next.js `16.2.11`;
+- nested PostCSS `8.4.31`;
+- Sharp `0.34.5`;
+- a transitive NextAuth report through Next.js.
+
+At audit time npm reported Next.js `16.2.12`, PostCSS `8.5.23` and Sharp
+`0.35.3` as current releases. Do not accept the audit tool's incompatible
+Next.js `9.3.3` force-fix. Upgrade through normal dependency changes, verify
+Next compatibility with fixed transitive versions, run a production build and
+repeat `npm audit --omit=dev`.
+
+#### Remediation order and verification
+
+1. Signed anonymous identity; add cross-user edit/delete regression tests.
+2. Upload quotas and pending-object cleanup; verify R2 deletion on every path.
+3. DM/report server policy and direct-API tests with the UI bypassed.
+4. Preview SSRF controls with loopback, private IP, redirect and oversized-body
+   fixtures.
+5. Edit validation and durable rate limiting.
+6. Security headers and dependency upgrades, followed by widget tests.
+
+Every remediation should be deployed Worker-first when the frontend depends on
+new enforcement or token issuance. Keep backward compatibility bounded and
+remove it after clients have updated.
+
 ## Current follow-up work
 
+- complete the 2026-07-26 security-audit remediation in the documented order;
 - verify a production Resend sending domain and monitor verification/reset delivery;
 - finish monitored legacy-password migration;
 - consider message-list virtualization for exceptionally long historical browsing sessions;

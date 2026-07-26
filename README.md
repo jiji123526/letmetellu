@@ -108,11 +108,76 @@ Before opening credential signup to the public, verify a sending domain and fini
 - Anonymous users cannot mark messages as administrative.
 - WebSocket owner authentication uses short-lived tokens from `/api/ws-token`.
 - Passcode-protected endpoints require a signed room token tied to the current passcode hash.
-- Message length, upload type/size, rate limits, freeze state, blocked users and banned words are enforced server-side.
+- New-message length, upload type/size, freeze state, blocked users and banned words are enforced server-side.
 - Failed credential logins are throttled independently by hashed email and IP identifiers.
 - DMs are sent only to owner-authenticated WebSocket connections.
 - SQL uses bound parameters.
 - CORS is restricted to the production origin and local development.
+
+### Open security findings — 2026-07-26
+
+> **Release warning:** The items below were confirmed by code review and are
+> not fixed yet. Signed anonymous identity and storage-abuse prevention should
+> be completed before a public launch.
+
+| Priority | Finding | Current risk | Required direction |
+| --- | --- | --- | --- |
+| Critical | Anonymous message ownership trusts a client-provided `uid` | A caller can reuse a visible message UID to edit or delete another visitor's message and impersonate reactions | Issue a Worker-signed anonymous identity token and derive identity server-side for message, reaction, report and DM mutations |
+| High | Public-channel uploads have no durable rate limit or upload ticket | Automated callers can create unreferenced R2 objects and increase storage/request cost | Require signed identity, enforce user/IP/channel quotas and delete uploads not attached to a message |
+| High | Deleted message media is not removed from R2 | A known media URL can remain accessible after its message is deleted; passcode changes do not revoke the URL | Delete the R2 object with the message and use authenticated or expiring media delivery where confidentiality is expected |
+| High | DM policy is enforced primarily by the UI | Direct API calls can bypass the disabled-DM setting and omit message-length, block, banned-word and rate-limit checks | Apply channel DM configuration and normal mutation validation in the Worker |
+| High | Link preview fetch accepts an arbitrary URL | The Worker can be abused for SSRF-like requests, redirects and large downloads | Allow only HTTP(S), reject private/local destinations before and after redirects, and add timeout, response-size and rate limits |
+| High | Message edits skip normal content validation | A valid message can be edited into oversized or banned content | Reuse create-message validation for edits and honor freeze/block state |
+| Medium | Reports rely on browser-local deduplication | A caller can submit duplicate or fabricated report messages directly | Validate the target, enforce one active report per signed reporter/target and add durable throttling |
+| Medium | Message rate limiting is isolate-local and keyed by mutable UID | Limits reset across isolates/restarts and can be bypassed by changing UID | Move enforcement to a channel Durable Object, D1 or Cloudflare Rate Limiting and key it with signed identity plus IP HMAC |
+| Medium | No explicit application security-header policy | XSS and content-sniffing defenses depend on framework/platform defaults | Add CSP, `nosniff`, Referrer Policy, Permissions Policy, frame restrictions and HSTS with widget domains tested |
+
+`npm audit --omit=dev` reported three high and one moderate production
+dependency findings. The affected chain is Next.js `16.2.11` through bundled
+PostCSS `8.4.31` and Sharp `0.34.5`, with NextAuth reported transitively.
+Do **not** run `npm audit fix --force`: its proposed Next.js `9.3.3` downgrade
+is incompatible with this application. Upgrade Next.js normally, test the
+current fixed PostCSS/Sharp versions when compatible, and rerun the production
+build and audit.
+
+Recommended remediation order:
+
+1. signed anonymous identity and mutation ownership;
+2. upload quotas, media attachment lifecycle and R2 deletion;
+3. server-side DM and report policy;
+4. preview-fetch SSRF controls;
+5. edit validation and durable rate limits;
+6. dependency upgrades and response security headers.
+
+### 미해결 보안 점검 결과 — 2026-07-26
+
+아래 항목은 코드 검토로 확인했으며 아직 수정되지 않았습니다. 공개 출시
+전에는 서명된 익명 사용자 인증과 업로드 남용 방지를 먼저 적용해야 합니다.
+
+- **심각:** 비로그인 메시지 소유권을 클라이언트가 보내는 `uid`만으로
+  판단합니다. 노출된 UID를 재사용하면 다른 사용자의 메시지 수정·삭제와
+  리액션 사칭이 가능하므로, Worker가 발급한 서명 토큰에서 사용자 식별자를
+  추출해야 합니다.
+- **높음:** 공개 채널 업로드에는 지속적인 rate limit과 업로드 티켓이 없어
+  메시지에 연결되지 않은 R2 파일을 대량으로 만들 수 있습니다.
+- **높음:** 메시지를 삭제해도 연결된 R2 이미지가 삭제되지 않아 URL을 아는
+  사용자가 계속 접근할 수 있습니다. 비밀번호 변경도 기존 미디어 URL을
+  무효화하지 않습니다.
+- **높음:** DM 비활성화, 길이, 차단, 금지어와 rate limit이 DM Worker
+  경로에서 강제되지 않아 직접 API 호출로 우회할 수 있습니다.
+- **높음:** 링크 미리보기 Worker가 임의 URL을 가져오므로 프로토콜·사설
+  주소·리디렉션·응답 크기·timeout·rate limit 검사가 필요합니다.
+- **높음:** 메시지 수정 시 길이와 금지어 검사를 다시 하지 않아 정상
+  메시지를 제한 위반 내용으로 바꿀 수 있습니다.
+- **중간:** 신고 중복 제한은 브라우저 저장값에 의존하고, 메시지 rate
+  limit은 Worker 인스턴스 메모리와 변경 가능한 UID에 의존합니다.
+- **중간:** CSP, `nosniff`, Referrer Policy, Permissions Policy, 프레임
+  제한과 HSTS를 명시적으로 설정하지 않았습니다.
+
+수정 순서는 서명된 익명 인증 → 업로드와 R2 수명 관리 → DM·신고 정책 →
+미리보기 SSRF 방어 → 수정 검증과 지속형 rate limit → 의존성·보안 헤더
+순서를 권장합니다. 강제 `npm audit fix`는 Next.js 9로 잘못
+다운그레이드하므로 사용하지 않습니다.
 
 ## Platform moderation roadmap
 
