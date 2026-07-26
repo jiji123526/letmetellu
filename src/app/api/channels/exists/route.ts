@@ -15,6 +15,6 @@ export async function GET(request: NextRequest) {
   if (!response.ok) {
     return NextResponse.json({ error: "validation unavailable" }, { status: 502 });
   }
-  const data = await response.json() as { existingIds?: string[] };
-  return NextResponse.json({ existingIds: data.existingIds || [] });
+  const data = await response.json() as { existingIds?: string[]; channels?: unknown[] };
+  return NextResponse.json({ existingIds: data.existingIds || [], channels: data.channels || [] });
 }

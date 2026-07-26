@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [recentChannels, setRecentChannels] = useState<RecentChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [linkedChannel, setLinkedChannel] = useState<Channel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
@@ -82,6 +83,7 @@ export default function DashboardPage() {
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const linkedChannelId = getChannelIdFromLink(query);
 
   const loadChannels = useCallback(async () => {
     const response = await fetch("/api/user", { cache: "no-store" });
@@ -161,8 +163,30 @@ export default function DashboardPage() {
     return () => document.removeEventListener("click", closeOnOutsideClick);
   }, [showAccount]);
 
+  useEffect(() => {
+    setLinkedChannel(null);
+    if (!linkedChannelId) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`/api/channels/exists?ids=${encodeURIComponent(linkedChannelId)}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then((response) => response.ok ? response.json() : null)
+        .then((data: { channels?: Channel[] } | null) => {
+          const match = data?.channels?.find((channel) => channel.id === linkedChannelId);
+          if (match) setLinkedChannel(match);
+        })
+        .catch(() => {});
+    }, 180);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [linkedChannelId]);
+
   const activeItems = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = linkedChannelId || query.trim().toLowerCase();
     const ownedIds = new Set(channels.map((channel) => channel.id));
     const ownedItems = channels
       .map((channel) => ({
@@ -197,12 +221,27 @@ export default function DashboardPage() {
           pinned: channel.pinned,
         }));
     const items = [...ownedItems, ...recentItems];
+    if (linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
+      items.push({
+        id: linkedChannel.id,
+        name: linkedChannel.name,
+        profileImage: linkedChannel.profile_image,
+        bubbleColor: getChannelPreviewColor(linkedChannel.id, linkedChannel.bubble_color || "#3b8df0"),
+        hasPasscode: linkedChannel.has_passcode === 1,
+        ownerName: linkedChannel.owner_name || "",
+        meta: `/ch/${linkedChannel.id}`,
+        time: "",
+        owned: false,
+        managed: false,
+        pinned: false,
+      });
+    }
     if (!normalized) return items;
     return items.filter((item) =>
       item.name.toLowerCase().includes(normalized)
       || item.id.toLowerCase().includes(normalized)
     );
-  }, [channels, recentChannels, query, locale, prioritizedOwnedId]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId]);
 
   const handleCreate = async () => {
     const slug = newSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -353,7 +392,6 @@ export default function DashboardPage() {
 
   const isLoggedIn = !!session;
   const empty = activeItems.length === 0;
-  const linkedChannelId = getChannelIdFromLink(query);
 
   return (
     <main className="min-h-dvh bg-white" style={{ color: "#111" }}>
@@ -450,25 +488,14 @@ export default function DashboardPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && linkedChannelId) router.push(`/ch/${linkedChannelId}`);
+                  if (event.key === "Enter" && linkedChannelId && activeItems.some((item) => item.id === linkedChannelId)) {
+                    router.push(`/ch/${linkedChannelId}`);
+                  }
                 }}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
-                style={{ background: "#efeff4", padding: linkedChannelId ? "0 48px 0 42px" : "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
+                style={{ background: "#efeff4", padding: "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
               />
-              {linkedChannelId && (
-                <button
-                  type="button"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-none cursor-pointer flex items-center justify-center text-white"
-                  style={{ background: "#007aff" }}
-                  onClick={() => router.push(`/ch/${linkedChannelId}`)}
-                  aria-label={t("enterChannel")}
-                >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </button>
-              )}
             </div>
           </div>
         </header>

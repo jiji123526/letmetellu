@@ -11,9 +11,15 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       if (ids.length === 0) return Response.json({ existingIds: [] });
       const placeholders = ids.map(() => "?").join(", ");
       const { results } = await env.DB.prepare(
-        `SELECT id FROM channels WHERE id IN (${placeholders}) AND id NOT LIKE '%_live'`
+        `SELECT channels.id, channels.name, channels.profile_image,
+                channels.bubble_color, channels.created_at,
+                channels.passcode IS NOT NULL AS has_passcode,
+                users.name AS owner_name
+         FROM channels
+         LEFT JOIN users ON users.id = channels.owner_uid
+         WHERE channels.id IN (${placeholders}) AND channels.id NOT LIKE '%_live'`
       ).bind(...ids).all<{ id: string }>();
-      return Response.json({ existingIds: results.map((row) => row.id) });
+      return Response.json({ existingIds: results.map((row) => row.id), channels: results });
     }
 
     const channelId = url.searchParams.get("channel");
