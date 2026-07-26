@@ -397,7 +397,6 @@ export default function DashboardPage() {
               />
             </div>
           </div>
-          <div className="h-px ml-[80px]" style={{ background: "#e5e5ea" }} />
         </header>
 
         {empty ? (
@@ -581,8 +580,8 @@ export default function DashboardPage() {
             right: "max(20px, calc((100vw - 760px) / 2 + 20px))",
             bottom: "max(20px, env(safe-area-inset-bottom))",
             background: "rgba(0,122,255,.82)",
-            border: "1px solid rgba(255,255,255,.45)",
-            boxShadow: "0 6px 18px rgba(0,122,255,.22)",
+            border: "none",
+            boxShadow: "none",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
           }}
