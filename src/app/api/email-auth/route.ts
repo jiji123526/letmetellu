@@ -15,6 +15,12 @@ export async function POST(request: Request) {
     body: await request.text(),
     cache: "no-store",
   });
-  const data = await response.json();
+  const responseText = await response.text();
+  let data: unknown;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    data = { error: "upstream_error" };
+  }
   return NextResponse.json(data, { status: response.status });
 }

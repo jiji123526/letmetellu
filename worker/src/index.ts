@@ -85,7 +85,7 @@ export default {
       }
     } catch (err) {
       console.error(err);
-      response = new Response("internal error", { status: 500 });
+      response = Response.json({ error: "internal_error" }, { status: 500 });
     }
 
     // Attach CORS headers to response

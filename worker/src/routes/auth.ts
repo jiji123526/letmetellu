@@ -1,6 +1,7 @@
 import { Env } from "../types";
 
-const PBKDF2_ITERATIONS = 600_000;
+// Cloudflare Workers Web Crypto currently caps PBKDF2 at 100,000 iterations.
+const PBKDF2_ITERATIONS = 100_000;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VERIFICATION_TTL_MS = 30 * 60 * 1000;
 const REQUEST_WINDOW_MS = 60 * 60 * 1000;
@@ -9,7 +10,7 @@ const MAX_IP_REQUESTS = 10;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_EMAIL_FAILURES = 10;
 const MAX_LOGIN_IP_FAILURES = 50;
-const DUMMY_PASSWORD_HASH = "pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+const DUMMY_PASSWORD_HASH = "pbkdf2-sha256$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
