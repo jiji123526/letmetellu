@@ -176,7 +176,7 @@ export const ko = {
   guideDelete: "메시지 삭제 — 꾹 눌러 삭제. 답장도 함께 삭제됨",
   guideSpecialTitle: "특수 기능",
   guideFreeze: "얼리기 — 일반 채팅 중단. 관리자만 보낼 수 있고 사용자는 DM만 가능",
-  guideLive: "라이브 — 임시 세션 시작. 종료 시 모든 메시지 자동 삭제",
+  guideLive: "라이브 — 일반 채팅과 분리된 임시 세션. 이모지 프리셋을 설정할 수 있고 종료 시 모든 메시지가 자동 삭제됨",
   guideTip: "💡 채널 주소를 공유하면 누구나 익명으로 참여할 수 있습니다.",
 
   // Gallery
@@ -276,7 +276,7 @@ export const ko = {
   firstOnboardingDmTitle: "관리자에게만 도착하는 비밀 메시지",
   firstOnboardingDmDesc: "DM은 관리자만 확인할 수 있고, 전송 후에는 보낸 사람의 채팅 화면에도 기록이 남지 않아요.",
   firstOnboardingLiveTitle: "같은 순간을 함께하는 라이브",
-  firstOnboardingLiveDesc: "별도 라이브 공간과 전용 이모지를 열고, 종료하면 세션 메시지는 삭제돼요.",
+  firstOnboardingLiveDesc: "일반 채팅과 분리된 라이브 세션을 열고, 종료하면 세션 메시지는 모두 삭제돼요.",
   firstOnboardingControlTitle: "관리자가 조절하는 대화의 흐름",
   firstOnboardingControlDesc: "채팅방 얼리기, 공지, 금지어와 차단으로 공간을 편안하게 운영하세요.",
   firstOnboardingCreate: "내 채널 만들기",
@@ -294,7 +294,7 @@ export const ko = {
   firstGuideFreezeTitle: "채팅방 얼리기",
   firstGuideFreezeDesc: "관리자 메뉴에서 새 메시지를 잠시 멈추고 언제든 다시 해제할 수 있어요.",
   firstGuideLiveTitle: "라이브 시작하기",
-  firstGuideLiveDesc: "관리자 메뉴의 라이브 시작으로 일반 채팅과 분리된 실시간 공간을 열어요.",
+  firstGuideLiveDesc: "일반 채팅과 분리된 세션을 열고 전용 이모지 프리셋을 설정할 수 있어요. 종료하면 세션 메시지는 삭제됩니다.",
   firstGuideNoticeTitle: "공지와 채널 규칙",
   firstGuideNoticeDesc: "상단 공지 배너와 규칙을 설정해 참여자가 꼭 알아야 할 내용을 전달하세요.",
   firstGuideBlockTitle: "사용자 차단과 이의 제기",

@@ -178,7 +178,7 @@ export const en: Record<LocaleKeys, string> = {
   guideDelete: "Delete Messages — Long-press to delete. Replies are also removed",
   guideSpecialTitle: "Special Features",
   guideFreeze: "Freeze — Pause all chat. Only admin can send. Users can DM only",
-  guideLive: "Live — Start temporary session. All messages auto-deleted on end",
+  guideLive: "Live — Run a temporary session separate from regular chat, choose emoji presets, and automatically delete all messages when it ends",
   guideTip: "💡 Share your channel URL and anyone can join anonymously.",
 
   // Gallery
@@ -278,7 +278,7 @@ export const en: Record<LocaleKeys, string> = {
   firstOnboardingDmTitle: "Private messages only you can see",
   firstOnboardingDmDesc: "DMs are visible only to the admin and disappear from the sender's chat immediately after they are sent.",
   firstOnboardingLiveTitle: "Live chat for shared moments",
-  firstOnboardingLiveDesc: "Open a live space with custom reactions; session messages are deleted when it ends.",
+  firstOnboardingLiveDesc: "Open a live session separate from regular chat; all session messages are deleted when it ends.",
   firstOnboardingControlTitle: "You control the pace",
   firstOnboardingControlDesc: "Freeze chat, post notices, filter words, and block users to keep the space comfortable.",
   firstOnboardingCreate: "Create My Channel",
@@ -296,7 +296,7 @@ export const en: Record<LocaleKeys, string> = {
   firstGuideFreezeTitle: "Freeze the channel",
   firstGuideFreezeDesc: "Pause new messages from the admin menu and unfreeze the channel whenever you are ready.",
   firstGuideLiveTitle: "Start a live session",
-  firstGuideLiveDesc: "Open a real-time space separate from regular chat using Start Live in the admin menu.",
+  firstGuideLiveDesc: "Open a session separate from regular chat and choose its emoji presets. Session messages are deleted when it ends.",
   firstGuideNoticeTitle: "Notices and channel rules",
   firstGuideNoticeDesc: "Use the notice banner and rules to share information every participant should see.",
   firstGuideBlockTitle: "Block users and manage appeals",
