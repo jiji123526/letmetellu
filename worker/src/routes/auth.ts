@@ -81,9 +81,29 @@ function getVerificationOrigin(env: Env) {
   return origin.origin;
 }
 
-async function sendVerificationEmail(env: Env, email: string, rawToken: string, tokenHash: string) {
+async function sendVerificationEmail(
+  env: Env,
+  email: string,
+  rawToken: string,
+  tokenHash: string,
+  locale: "ko" | "en",
+) {
   const verificationUrl = new URL("/verify-email", getVerificationOrigin(env));
   verificationUrl.searchParams.set("token", rawToken);
+  verificationUrl.searchParams.set("lang", locale);
+  const korean = locale === "ko";
+  const subject = korean ? "Let Me Tell U 이메일을 인증해 주세요" : "Verify your Let Me Tell U email";
+  const title = korean ? "이메일을 인증해 주세요" : "Verify your email";
+  const description = korean
+    ? "Let Me Tell U 계정 생성을 완료하려면 이 이메일을 인증해 주세요."
+    : "Confirm this email to finish creating your Let Me Tell U account.";
+  const buttonLabel = korean ? "이메일 인증하기" : "Verify email";
+  const expiration = korean
+    ? "이 링크는 30분 동안 유효합니다. 요청하지 않았다면 이 메일을 무시해 주세요."
+    : "This link expires in 30 minutes. If you did not request this, you can ignore this email.";
+  const text = korean
+    ? `Let Me Tell U 이메일을 인증해 주세요:\n\n${verificationUrl.toString()}\n\n${expiration}`
+    : `Verify your email for Let Me Tell U:\n\n${verificationUrl.toString()}\n\n${expiration}`;
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -95,14 +115,14 @@ async function sendVerificationEmail(env: Env, email: string, rawToken: string, 
     body: JSON.stringify({
       from: "Let Me Tell U <onboarding@resend.dev>",
       to: [email],
-      subject: "Verify your Let Me Tell U email",
-      text: `Verify your email for Let Me Tell U:\n\n${verificationUrl.toString()}\n\nThis link expires in 30 minutes. If you did not request this, you can ignore this email.`,
+      subject,
+      text,
       html: `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:28px;color:#111">
-          <h1 style="font-size:22px;margin:0 0 12px">Verify your email</h1>
-          <p style="font-size:15px;line-height:1.6;color:#555;margin:0 0 24px">Confirm this email to finish creating your Let Me Tell U account.</p>
-          <a href="${verificationUrl.toString()}" style="display:inline-block;background:#007aff;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-size:15px;font-weight:600">Verify email</a>
-          <p style="font-size:12px;line-height:1.5;color:#8e8e93;margin:24px 0 0">This link expires in 30 minutes. If you did not request this, you can ignore this email.</p>
+          <h1 style="font-size:22px;margin:0 0 12px">${title}</h1>
+          <p style="font-size:15px;line-height:1.6;color:#555;margin:0 0 24px">${description}</p>
+          <a href="${verificationUrl.toString()}" style="display:inline-block;background:#007aff;color:#fff;text-decoration:none;border-radius:12px;padding:12px 18px;font-size:15px;font-weight:600">${buttonLabel}</a>
+          <p style="font-size:12px;line-height:1.5;color:#8e8e93;margin:24px 0 0">${expiration}</p>
         </div>
       `,
     }),
@@ -116,12 +136,13 @@ async function sendVerificationEmail(env: Env, email: string, rawToken: string, 
 }
 
 async function handleSignup(
-  body: { email?: string; password?: string; name?: string },
+  body: { email?: string; password?: string; name?: string; locale?: string },
   request: Request,
   env: Env,
 ) {
   const email = normalizeEmail(body.email || "");
   const password = body.password || "";
+  const locale = body.locale === "en" ? "en" : "ko";
   const name = typeof body.name === "string" ? body.name.trim().slice(0, 50) : "";
   if (!EMAIL_PATTERN.test(email) || email.length > 254) {
     return Response.json({ error: "invalid_email" }, { status: 400 });
@@ -189,7 +210,7 @@ async function handleSignup(
   ]);
 
   try {
-    await sendVerificationEmail(env, email, rawToken, tokenHash);
+    await sendVerificationEmail(env, email, rawToken, tokenHash, locale);
   } catch {
     await env.DB.prepare("DELETE FROM email_verification_tokens WHERE token_hash = ?")
       .bind(tokenHash).run();
@@ -247,6 +268,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
     password?: string;
     name?: string;
     token?: string;
+    locale?: string;
   };
 
   if (body.action === "signup" || body.action === "verify-email") {

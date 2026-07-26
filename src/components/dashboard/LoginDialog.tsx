@@ -18,7 +18,7 @@ const GoogleIcon = () => (
 );
 
 export function LoginDialog({ onClose }: LoginDialogProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,7 +47,7 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
       const response = await fetch("/api/email-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "signup", email, password }),
+        body: JSON.stringify({ action: "signup", email, password, locale }),
       });
       const data = await response.json() as { ok?: boolean; error?: string };
       if (!response.ok || !data.ok) {
