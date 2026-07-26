@@ -21,29 +21,40 @@ const LocaleContext = createContext<LocaleContextValue>({
 });
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window === "undefined") return "ko";
-    return (localStorage.getItem("locale") as Locale) || "ko";
-  });
+  // Keep the server render and the browser's first render identical. Reading
+  // localStorage in the state initializer makes saved English preferences
+  // hydrate over Korean server HTML and causes React to discard the tree.
+  const [locale, setLocaleState] = useState<Locale>("ko");
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
-    localStorage.setItem("locale", newLocale);
+    try {
+      localStorage.setItem("locale", newLocale);
+    } catch {}
   }, []);
 
   const t = useCallback((key: LocaleKeys): string => {
     return locales[locale][key] || locales.ko[key] || key;
   }, [locale]);
 
-  // Auto-detect on first visit (no saved preference)
+  // Restore the saved preference only after hydration. New visitors use their
+  // browser language without changing the initial server/client markup.
   useEffect(() => {
-    if (!localStorage.getItem("locale")) {
-      const browserLang = navigator.language.slice(0, 2);
-      if (browserLang !== "ko") {
-        setLocale("en");
-      }
-    }
-  }, [setLocale]);
+    let savedLocale: string | null = null;
+    try {
+      savedLocale = localStorage.getItem("locale");
+    } catch {}
+    const nextLocale: Locale = savedLocale === "ko" || savedLocale === "en"
+      ? savedLocale
+      : navigator.language.toLowerCase().startsWith("ko")
+        ? "ko"
+        : "en";
+    setLocaleState(nextLocale);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   return (
     <LocaleContext.Provider value={{ locale, setLocale, t }}>

@@ -556,13 +556,13 @@ export default function DashboardPage() {
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
                 type="button"
-                className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
+                className="w-6 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
                 style={{ color: "#007aff" }}
                 onClick={() => setShowAccount((value) => !value)}
                 aria-label={t("dashboardAccount")}
               >
                 <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <circle cx="12" cy="12" r="9" />
+                  <circle cx="12" cy="12" r="10.5" />
                   <circle cx="8" cy="12" r="1" fill="currentColor" stroke="none" />
                   <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
                   <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
