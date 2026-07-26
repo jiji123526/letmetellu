@@ -17,8 +17,11 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
     try {
       const parsed = JSON.parse(customConfig);
       if (!parsed.title) return null;
+      const parsedIcon = typeof parsed.icon === "string" ? parsed.icon : "";
       return {
-        icon: typeof parsed.icon === "string" && parsed.icon ? parsed.icon : "💬",
+        icon: parsedIcon && !parsedIcon.startsWith("blob:") && !parsedIcon.startsWith("data:")
+          ? parsedIcon
+          : "💬",
         title: parsed.title,
         items: Array.isArray(parsed.items)
           ? parsed.items.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
@@ -51,7 +54,7 @@ export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channel
     >
       <div className="w-full max-w-[320px] rounded-[20px] p-7 text-center" style={{ background: "var(--bg)", color: "var(--gray-text)", border: `2px solid ${bubbleColor || "var(--bubble-sent, #3b8df0)"}`, boxShadow: "0 12px 40px rgba(0,0,0,.15)" }}>
         <div className="text-[40px] mb-3">
-          {config.icon.startsWith("http") || config.icon.startsWith("blob:") || config.icon.startsWith("data:")
+          {config.icon.startsWith("http")
             ? <img src={config.icon} alt="" style={{ width: "64px", height: "64px", borderRadius: "16px", objectFit: "cover", margin: "0 auto" }} />
             : config.icon
           }

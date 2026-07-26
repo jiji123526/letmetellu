@@ -313,6 +313,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     case "set-welcome": {
       const { config } = payload || {};
+      if (typeof config !== "string" || config.length > 20_000) {
+        return Response.json({ error: "invalid welcome config" }, { status: 400 });
+      }
+      try {
+        const parsed = JSON.parse(config);
+        if (
+          typeof parsed.icon === "string"
+          && (parsed.icon.startsWith("blob:") || parsed.icon.startsWith("data:"))
+        ) {
+          return Response.json({ error: "temporary image URL not allowed" }, { status: 400 });
+        }
+      } catch {
+        return Response.json({ error: "invalid welcome config" }, { status: 400 });
+      }
       await env.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`welcome_${channel_id}`, config || "", channel_id, config || "").run();

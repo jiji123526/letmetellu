@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { adminAction } from "@/lib/api";
+import { adminAction, uploadAdminImage } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
 interface AdminPanelProps {
@@ -62,7 +62,10 @@ export function AdminPanel(props: AdminPanelProps) {
   const [bannedInput, setBannedInput] = useState("");
   const [bannedDuration, setBannedDuration] = useState("");
   const [welcomeIcon, setWelcomeIcon] = useState(() => {
-    try { const p = JSON.parse(welcomeConfig || "{}"); return p.icon || "💬"; } catch { return "💬"; }
+    try {
+      const p = JSON.parse(welcomeConfig || "{}");
+      return typeof p.icon === "string" && !p.icon.startsWith("blob:") ? p.icon || "💬" : "💬";
+    } catch { return "💬"; }
   });
   const [welcomeTitle, setWelcomeTitle] = useState(() => {
     try { const p = JSON.parse(welcomeConfig || "{}"); return p.title || t("welcomeDefaultTitle"); } catch { return t("welcomeDefaultTitle"); }
@@ -195,17 +198,12 @@ export function AdminPanel(props: AdminPanelProps) {
               >
                 {t("changePhoto")}
               </button>
-              <input id="profileImgInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+              <input id="profileImgInput" type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                // Convert to base64 data URL for persistence without R2
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const dataUrl = reader.result as string;
-                  onProfileImageChange(dataUrl);
-                };
-                reader.readAsDataURL(file);
                 e.target.value = "";
+                const url = await uploadAdminImage(file, channelId);
+                if (url) onProfileImageChange(url);
               }} />
             </div>
 
@@ -363,24 +361,24 @@ export function AdminPanel(props: AdminPanelProps) {
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 {/* Preview */}
                 <div style={{ width: "48px", height: "48px", borderRadius: "12px", border: "1.5px dashed var(--hairline)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, background: "var(--card)" }}>
-                  {welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:")
+                  {welcomeIcon.startsWith("http")
                     ? <img src={welcomeIcon} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <span style={{ fontSize: "28px" }}>{welcomeIcon || "💬"}</span>
                   }
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <input value={welcomeIcon.startsWith("http") || welcomeIcon.startsWith("blob:") || welcomeIcon.startsWith("data:") ? "" : welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeIconPlaceholder")} maxLength={4} />
+                  <input value={welcomeIcon.startsWith("http") ? "" : welcomeIcon} onChange={(e) => setWelcomeIcon(e.target.value)} style={{ ...inputStyle, marginBottom: 0, fontSize: "var(--bubble-font-size)" }} placeholder={t("welcomeIconPlaceholder")} maxLength={4} />
                   <button
                     type="button"
                     style={{ background: "var(--card)", border: "1px solid var(--input-border)", borderRadius: "8px", padding: "6px 10px", fontSize: "calc(var(--bubble-font-size) - 3px)", cursor: "pointer", fontFamily: "inherit", color: "var(--card-text)", lineHeight: 1 }}
                     onClick={() => document.getElementById("welcomeIconInput")?.click()}
                   >{ t("welcomeUpload")}</button>
-                  <input id="welcomeIconInput" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                  <input id="welcomeIconInput" type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const url = URL.createObjectURL(file);
-                    setWelcomeIcon(url);
                     e.target.value = "";
+                    const url = await uploadAdminImage(file, channelId);
+                    if (url) setWelcomeIcon(url);
                   }} />
                 </div>
               </div>

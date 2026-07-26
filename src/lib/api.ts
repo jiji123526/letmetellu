@@ -269,3 +269,16 @@ export async function uploadImage(blob: Blob, channelId: string): Promise<string
   }
   return null;
 }
+
+export async function uploadAdminImage(blob: Blob, channelId: string): Promise<string | null> {
+  const res = await fetch(`/api/upload?channel=${encodeURIComponent(channelId)}`, {
+    method: "POST",
+    headers: { "Content-Type": blob.type || "image/jpeg" },
+    body: blob,
+  });
+  const result = await res.json() as { ok?: boolean; key?: string };
+  if (result.ok && result.key) {
+    return `${WORKER_URL}/api/media/${result.key}`;
+  }
+  return null;
+}

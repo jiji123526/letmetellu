@@ -15,8 +15,18 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   // Passcode gate
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const internalRequest = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET;
+  const internalUserId = request.headers.get("X-User-Id") || "";
+  let ownerUpload = false;
+  if (internalRequest && internalUserId) {
+    const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+      .bind(parentChannelId).first<{ owner_uid: string }>();
+    ownerUpload = channel?.owner_uid === internalUserId;
+    if (!ownerUpload) return Response.json({ error: "not owner" }, { status: 403 });
+  }
+
   const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
-  if (passcode) {
+  if (!ownerUpload && passcode) {
     const roomToken = request.headers.get("X-Room-Token");
     if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
     const decoded = await verifyRoomToken(roomToken, env);
