@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 interface WelcomeConfig {
@@ -12,29 +12,36 @@ interface WelcomeConfig {
 export function WelcomePopup({ channelId, bubbleColor, customConfig }: { channelId: string; bubbleColor?: string; customConfig?: string }) {
   const { t } = useLocale();
   const [show, setShow] = useState(false);
-  const defaultWelcome: WelcomeConfig = {
-    icon: "💬",
-    title: t("welcomeDefaultTitle"),
-    items: [t("welcomeDefaultItem1"), t("welcomeDefaultItem2"), t("welcomeDefaultItem3"), t("welcomeDefaultItem4")],
-  };
-
-  useEffect(() => {
-    const key = `welcomed_${channelId}`;
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, "true");
-      setShow(true);
-    }
-  }, [channelId]);
-
-  if (!show) return null;
-
-  let config: WelcomeConfig = defaultWelcome;
-  if (customConfig) {
+  const config = useMemo<WelcomeConfig | null>(() => {
+    if (!customConfig) return null;
     try {
       const parsed = JSON.parse(customConfig);
-      if (parsed.title) config = { ...defaultWelcome, ...parsed };
-    } catch {}
-  }
+      if (!parsed.title) return null;
+      return {
+        icon: typeof parsed.icon === "string" && parsed.icon ? parsed.icon : "💬",
+        title: parsed.title,
+        items: Array.isArray(parsed.items)
+          ? parsed.items.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
+          : [],
+      };
+    } catch {
+      return null;
+    }
+  }, [customConfig]);
+
+  useEffect(() => {
+    if (!config || !customConfig) {
+      setShow(false);
+      return;
+    }
+    const key = `welcome_seen_${channelId}`;
+    if (localStorage.getItem(key) !== customConfig) {
+      localStorage.setItem(key, customConfig);
+      setShow(true);
+    }
+  }, [channelId, config, customConfig]);
+
+  if (!show || !config) return null;
 
   return (
     <div

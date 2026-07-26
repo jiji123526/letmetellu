@@ -141,13 +141,21 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (msg.uid !== uid) return Response.json({ error: "not owner" }, { status: 403 });
 
     if (soft) {
-      // Soft delete — mark as deleted, clear text/image
-      await env.DB.prepare("UPDATE messages SET deleted = 1, text = '삭제된 채팅입니다', image = NULL WHERE id = ?")
-        .bind(message_id).run();
+      // Keep the reply placeholder, but remove its media from both collections.
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+        env.DB.prepare("UPDATE messages SET deleted = 1, text = '삭제된 채팅입니다', image = NULL, gallery_id = NULL WHERE id = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+      ]);
     } else {
-      // Hard delete — remove from DB
-      await env.DB.prepare("DELETE FROM messages WHERE id = ?")
-        .bind(message_id).run();
+      // Hard delete — remove the message and its gallery entry together.
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+      ]);
     }
 
     // Broadcast deletion with payload

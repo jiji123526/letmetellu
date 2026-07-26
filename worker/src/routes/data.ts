@@ -67,13 +67,18 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
     case "gallery": {
       const cursor = url.searchParams.get("cursor");
-      let query = "SELECT * FROM gallery WHERE channel_id = ?";
+      let query = `
+        SELECT g.*
+        FROM gallery g
+        INNER JOIN messages m ON m.id = g.id AND m.channel_id = g.channel_id
+        WHERE g.channel_id = ? AND m.deleted = 0
+      `;
       const params: unknown[] = [channelId];
       if (cursor) {
-        query += " AND created_at < ?";
+        query += " AND g.created_at < ?";
         params.push(cursor);
       }
-      query += " ORDER BY created_at DESC LIMIT 50";
+      query += " ORDER BY g.created_at DESC LIMIT 50";
       const { results } = await env.DB.prepare(query).bind(...params).all();
       return Response.json({ gallery: results });
     }

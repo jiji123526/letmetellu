@@ -969,6 +969,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       // Message deleted — remove or mark as deleted
       if (event.type === "message-deleted") {
         const id = event.message_id as string;
+        const deletedIds = new Set(
+          Array.isArray(event.deleted_ids) ? event.deleted_ids as string[] : [id]
+        );
+        setGalleryItems((prev) => prev.filter((item) => !deletedIds.has(item.id)));
         if (event.soft) {
           // User soft-delete (own message with replies) — keep as placeholder if has replies
           setMessages((prev) => {
@@ -1563,10 +1567,13 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const handleDelete = (msgId: string) => {
     // Check if this message has replies (if so, soft delete; otherwise hard delete)
-    const hasReplies = messages.some((m) => m.reply_to === msgId);
+    const replyIds = messages.filter((m) => m.reply_to === msgId).map((m) => m.id);
+    const hasReplies = replyIds.length > 0;
     if (effectiveAdmin) {
       // Admin: always remove from view immediately
       setMessages((prev) => prev.filter((m) => m.id !== msgId && m.reply_to !== msgId));
+      const deletedIds = new Set([msgId, ...replyIds]);
+      setGalleryItems((prev) => prev.filter((item) => !deletedIds.has(item.id)));
       const msg = messages.find((m) => m.id === msgId) || dmMessages.find((m) => m.id === msgId);
       if (msg?.dm) {
         adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: msgId });
@@ -1579,10 +1586,12 @@ export function ChatView({ channelId }: { channelId: string }) {
       setMessages((prev) =>
         prev.map((m) => (m.id === msgId ? { ...m, text: t("deletedMessage"), image: null, deleted: true } as Message : m))
       );
+      setGalleryItems((prev) => prev.filter((item) => item.id !== msgId));
       deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: true });
     } else {
       // Non-admin no replies: hard delete
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
+      setGalleryItems((prev) => prev.filter((item) => item.id !== msgId));
       deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
     }
   };
@@ -1702,6 +1711,29 @@ export function ChatView({ channelId }: { channelId: string }) {
     );
   }
 
+  const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");
+  const handleShareChannel = async () => {
+    const url = `${window.location.origin}/ch/${encodeURIComponent(channelId)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: channel?.name || channelId, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setBanner({ text: t("channelLinkCopied"), color: bubbleColor });
+      setTimeout(() => setBanner(null), 2500);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(url);
+        setBanner({ text: t("channelLinkCopied"), color: bubbleColor });
+      } catch {
+        setBanner({ text: t("channelShareFailed"), color: "#d32f2f" });
+      }
+      setTimeout(() => setBanner(null), 2500);
+    }
+  };
+
   return (
     <div className="h-dvh flex flex-col relative" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       {/* Header */}
@@ -1733,6 +1765,21 @@ export function ChatView({ channelId }: { channelId: string }) {
           </svg>
         </button>
 
+        {hasChannelRules && (
+          <button
+            type="button"
+            className="absolute left-[50px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+            style={{ color: bubbleColor }}
+            onClick={() => setShowNotice(true)}
+            aria-label={t("rules")}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 2px)", height: "calc(var(--bubble-font-size) + 2px)" }}>
+              <path d="M5 4.5h14v15H5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
+
         <div className="flex-1 flex flex-col items-center gap-[6px]">
           <button
             type="button"
@@ -1752,6 +1799,19 @@ export function ChatView({ channelId }: { channelId: string }) {
             {channel?.name}
           </div>
         </div>
+
+        <button
+          type="button"
+          className="absolute right-[88px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          style={{ color: bubbleColor }}
+          onClick={handleShareChannel}
+          aria-label={t("shareChannel")}
+        >
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
+            <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M6 11v8h12v-8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
 
         <button
           className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"

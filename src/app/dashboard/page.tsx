@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
 
 interface Channel {
   id: string;
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [newSlug, setNewSlug] = useState("");
   const [newName, setNewName] = useState("");
@@ -58,6 +60,7 @@ export default function DashboardPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
 
   const loadChannels = useCallback(async () => {
     const response = await fetch("/api/user", { cache: "no-store" });
@@ -76,6 +79,17 @@ export default function DashboardPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [status, loadChannels]);
+
+  useEffect(() => {
+    if (!showAccount) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setShowAccount(false);
+      }
+    };
+    document.addEventListener("click", closeOnOutsideClick);
+    return () => document.removeEventListener("click", closeOnOutsideClick);
+  }, [showAccount]);
 
   const activeItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -148,6 +162,12 @@ export default function DashboardPage() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const openCreateFlow = () => {
+    setCreateError("");
+    if (channels.length === 0) setShowFirstOnboarding(true);
+    else setShowCreate(true);
   };
 
   const removeRecent = (channelId: string) => {
@@ -275,7 +295,7 @@ export default function DashboardPage() {
               {editing ? t("dashboardDone") : t("edit")}
             </button>
             <h1 className="m-0 text-[17px] font-semibold">{t("dashboardChats")}</h1>
-            <div className="min-w-[72px] flex items-center justify-end gap-3 relative">
+            <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
                 type="button"
                 className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
@@ -296,8 +316,7 @@ export default function DashboardPage() {
                   className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
                   style={{ color: "#007aff" }}
                   onClick={() => {
-                    setCreateError("");
-                    setShowCreate(true);
+                    openCreateFlow();
                   }}
                   aria-label={t("createChannel")}
                 >
@@ -308,8 +327,6 @@ export default function DashboardPage() {
                 </button>
               )}
               {showAccount && (
-                <>
-                  <button className="fixed inset-0 z-10 border-none bg-transparent" aria-label={t("close")} onClick={() => setShowAccount(false)} />
                   <div
                     className="absolute right-0 top-[42px] z-20 min-w-[180px] overflow-hidden rounded-[12px] text-left"
                     style={{
@@ -349,7 +366,6 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                </>
               )}
             </div>
           </div>
@@ -374,7 +390,7 @@ export default function DashboardPage() {
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-[28px] mb-4" style={{ background: "#f2f2f7" }}>💬</div>
             <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
             {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "#8e8e93" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
-            {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={() => setShowCreate(true)}>{t("dashboardFirstChannel")}</button>}
+            {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={openCreateFlow}>{t("dashboardFirstChannel")}</button>}
           </section>
         ) : (
           <section>
@@ -533,6 +549,13 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showFirstOnboarding && isLoggedIn && (
+        <FirstChannelOnboarding
+          onCreated={async () => { await loadChannels(); }}
+          onClose={() => setShowFirstOnboarding(false)}
+        />
       )}
     </main>
   );

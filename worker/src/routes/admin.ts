@@ -142,17 +142,27 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     case "delete-message": {
       const { message_id } = payload || {};
-      // Hard delete — remove message and its replies entirely
-      await env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
-        .bind(message_id, channel_id).run();
-      await env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
-        .bind(message_id, channel_id).run();
+      const { results: replies } = await env.DB.prepare(
+        "SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?"
+      ).bind(message_id, channel_id).all<{ id: string }>();
+      const deletedIds = [message_id, ...replies.map((reply) => reply.id)];
+
+      // Remove gallery rows before their source messages, including reply media.
+      await env.DB.batch([
+        env.DB.prepare(
+          "DELETE FROM gallery WHERE channel_id = ? AND (id = ? OR id IN (SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?))"
+        ).bind(channel_id, message_id, message_id, channel_id),
+        env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+      ]);
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "message-deleted", message_id, soft: false }),
+        body: JSON.stringify({ type: "message-deleted", message_id, deleted_ids: deletedIds, soft: false }),
       }));
 
       return Response.json({ ok: true });
