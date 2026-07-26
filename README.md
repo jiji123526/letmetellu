@@ -1,335 +1,250 @@
-# letsplay-v2
+# Let Me Tell U
 
-Multi-tenant anonymous chat platform — rebuilt on Next.js + Cloudflare.
+Link-based, multi-tenant anonymous chat built with Next.js and Cloudflare.
 
-## Status
+Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
 
-**Production-ready MVP.** Fully functional multi-tenant anonymous chat with real-time messaging, auth, admin controls, image upload (R2), search, reactions, DM, live mode, embeds (YouTube/Twitter/Instagram/link previews), passcode-protected channels, i18n (Korean + English), and full server-side security. Platform features remaining.
+## Current status
 
----
+The project is a deployed MVP with:
+
+- anonymous, link-only channel access with optional passcodes and hints;
+- real-time chat over WebSockets;
+- replies, reactions, editing, deletion, reporting, blocking and banned words;
+- multiple-image messages, R2 media storage, gallery and link panels;
+- private DMs visible only to the channel owner;
+- temporary live sessions with configurable emoji presets and automatic session cleanup;
+- channel notices, rules, welcome messages and chat freezing;
+- Korean and English UI;
+- an iMessage-style dashboard for owned and recently joined channels.
 
 ## Architecture
 
+```text
+Browser ── Next.js pages and authenticated API ──> Vercel
+Browser ── HTTP API and WebSocket ───────────────> Cloudflare Worker
+Cloudflare Worker ── relational data ───────────> D1
+Cloudflare Worker ── media ─────────────────────> R2
+Cloudflare Worker ── realtime room state ───────> Durable Objects
 ```
-Browser ←── HTTP/SSR ──→ Vercel (Next.js 16, App Router, Tailwind)
-Browser ←── WebSocket ──→ Cloudflare Worker (Durable Objects)
-Browser ←── HTTP/API ──→ Cloudflare Worker (D1, R2)
-```
 
-| Layer | Technology | Status |
-|-------|-----------|--------|
-| Frontend | Next.js 16 (App Router) + Tailwind CSS | ✅ Deployed |
-| Database | Cloudflare D1 (SQLite) | ✅ Schema applied, messages persisting |
-| Realtime | Cloudflare Durable Objects + WebSocket | ✅ Working (multi-tab confirmed) |
-| Auth | Auth.js (NextAuth v5) | ✅ Google OAuth + email/password |
-| Storage | Cloudflare R2 | ✅ Working (upload + serve) |
-| Backend API | Cloudflare Workers | ✅ Full validation (rate limit, banned words, fingerprint) |
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 16 App Router, React 19, Tailwind CSS |
+| Authentication | Auth.js / NextAuth v5, Google OAuth, existing credential accounts |
+| API | Cloudflare Workers |
+| Database | Cloudflare D1 |
+| Realtime | one `ChatRoom` Durable Object per channel |
+| Media | Cloudflare R2 |
+| Hosting | Vercel + Cloudflare |
 
----
+Normal channel and live-session traffic share the parent channel's Durable Object. Live messages use a temporary `${channelId}_live` D1 channel and are deleted when the session ends.
 
-## What's Done
+## Dashboard behavior
 
-### Chat UI (complete, mock mode)
-- [x] iMessage-style bubbles (scales with font setting)
-- [x] Context menu (long-press: reply, report, edit, delete)
-- [x] Emoji picker (quick bar + full picker via emoji-picker-element)
-- [x] Reaction badges (Slack-style pills below bubbles)
-- [x] Reply threading with curved arrows
-- [x] DM mode (purple styling, admin-only visibility)
-- [x] Photo staging with preview thumbnails + caption
-- [x] Report system (local marking + admin notification)
-- [x] Scroll-to-bottom button
-- [x] Welcome popup (first-time visitors)
-- [x] Korean IME Enter key fix
+- The dashboard is the main entry point for logged-in and guest users.
+- Logged-in users can own up to **5 channels**. The Worker enforces this limit.
+- Logged-in users' recent channels, pinned state and personal channel colors are stored in `user_recent_channels` and follow the account across devices.
+- Guest users' recent channel list and personal colors stay in that browser only.
+- Recent joined channels have no application-level count limit.
+- Name search covers only owned or previously joined channels.
+- A new channel can be resolved by entering an exact `/ch/name`, domain path or full URL and pressing Enter. Pasting a complete address resolves it immediately.
+- Owned and joined channels are labeled separately for logged-in owners.
+- Deleting an owned channel removes its messages, DMs, gallery entries, configuration, media and recent-list references.
 
-### Real-time Messaging (working)
-- [x] Messages persist in Cloudflare D1
-- [x] WebSocket realtime via Durable Objects (multi-tab/user confirmed)
-- [x] Send → D1 insert → DO broadcast → all clients refetch
-- [x] Presence counting via DO connections
+## Authentication status
 
-### Auth & Channel Management
-- [x] Auth.js (NextAuth v5) — Google OAuth + email/password
-- [x] Login page (Korean UI)
-- [x] Dashboard — list channels, create new channel
-- [x] Onboarding page — 2-step (create channel + admin guide accordion)
-- [x] User sync — upsert to D1 `users` table on login
-- [x] Channel ownership — `channels.owner_uid` = session user ID
-- [x] Admin auto-detection via `useAuth` hook (no triple-click needed)
-- [x] Admin proxy route — Vercel verifies session → forwards to Worker with signed token
-- [x] Root `/` redirect based on auth state
+- Google OAuth is the supported signup path.
+- The Credentials provider remains available for existing email/password accounts, but the production legacy-login upgrade path is currently under investigation.
+- New credential signup is intentionally disabled until email ownership verification is implemented.
+- Legacy SHA-256 password records are still recognized by the Worker; the current code attempts to upgrade a successful legacy login to salted PBKDF2.
+- There is no platform-wide administrator role. Administration is scoped to channel ownership.
 
-### Server-Side Security
-- [x] Rate limiting — 5 messages per 10 seconds per UID (429)
-- [x] Message length cap — 5000 characters max (400)
-- [x] Banned words — checked against `banned_words` table with expiry (403)
-- [x] Block check — by UID AND fingerprint (403)
-- [x] Freeze enforcement — non-admin can't send when frozen (403)
-- [x] Admin token verification — `X-Internal-Token` + `X-User-Id` + ownership check
-- [x] Delete/Edit ownership — only message sender can modify
-- [x] Fingerprint — canvas + UA hash, sent with every message, stored for ban evasion detection
+Before expanding credential login, finish and test email verification, password reset and the legacy-hash upgrade path in production.
 
-### Backend-Wired Features
-- [x] Reactions — toggle via PATCH, persisted in D1 `messages.reactions`
-- [x] DM messages — persisted in D1 `dm` table, broadcast via DO, image upload supported
-- [x] Search — FTS5 full-text search with highlight (yellow/orange, nav arrows)
-- [x] Photo upload — R2 binary upload, served via `/api/media/{key}`
-- [x] Banned words CRUD — admin panel → D1 `banned_words` table
-- [x] Welcome popup config — D1 `config` table, loaded on init
-- [x] Notice banner — D1 `config` table, broadcast via DO
-- [x] Channel profile/name/color/freeze — all persist via admin actions
-- [x] Admin messages detection — Worker checks `owner_uid`, stores `is_admin=1`
-- [x] Long message truncation — >1000 chars with expandable overlay
-- [x] Offline/reconnection banner — WebSocket state drives UI
-- [x] Auto-reload stale tabs — 5-min background refetch + version check
+## Chat and moderation
 
-### Admin Panel (fully backend-wired)
-- [x] Admin mode toggle (triple-click avatar + auto-detect via channel ownership)
-- [x] Admin/user view toggle with return banner
-- [x] 채널 settings: profile image, name, color, passcode, rules editor
-- [x] 관리 settings: banned words (with duration), blocked users, petition toggle, DM toggle
-- [x] Chat freeze/unfreeze (global, persisted, broadcast)
-- [x] Live mode — full backend (start/end, separate channel, emoji presets, auto-purge)
+### Messaging
 
-### Panels & Settings
-- [x] Header menu (설정, 갤러리, 링크, 관리자 설정)
-- [x] Settings panel (font size, bubble color with custom picker)
-- [x] Notice panel (channel rules display)
-- [x] Gallery panel (photo grid, empty state)
-- [x] Links panel (URL extraction from messages)
-- [x] Plus menu (photo, DM toggle)
+- D1-backed messages with WebSocket payload broadcasts
+- replies, reactions, edit/delete and long-message expansion
+- multi-image upload with captions
+- YouTube, X/Twitter, Instagram and Open Graph embeds
+- cursor-based message, gallery and link pagination
+- full-text search using D1 FTS5
+- loading and reconnect states without forced scroll jumps
 
-### Infrastructure
-- [x] Cloudflare Worker deployed (`letsplay-api.letmetellu.workers.dev`)
-- [x] D1 database with full schema + FTS5 search
-- [x] Durable Object (ChatRoom) for WebSocket + presence + broadcast
-- [x] API routes: `/api/init`, `/api/messages`, `/api/data`, `/api/admin`
-- [x] CORS configured
-- [x] Vercel deployment with Next.js framework preset
+### Channel controls
 
----
+- optional passcode and passcode hint
+- channel rules, notice banner and configurable welcome popup
+- freeze/unfreeze
+- banned words with expiry
+- block/unblock by anonymous UID and device fingerprint
+- optional petitions from blocked users
+- optional private DM to the owner
+- profile image, channel name and channel color
 
-## What's Next
+### Live sessions
 
-### Phase 2: Auth & Real Messages ✅
-- [x] Auth.js integration (Google OAuth + email/password)
-- [x] Wire send/receive to Worker (messages persist in D1)
-- [x] WebSocket realtime loop (signal + refetch)
-- [x] Admin determined by channel ownership
-- [x] Login page + onboarding
-- [x] Dashboard (list/create channels)
-- [x] Server-side validation (rate limit, banned words, fingerprint, message cap)
+- separate temporary message and DM storage
+- owner-configured title and emoji presets
+- live-only notice and freeze state
+- viewer count through the channel Durable Object
+- automatic deletion of live messages, DMs, gallery records and R2 media at session end
 
-### Phase 3: Media & Polish
-- [x] Enable R2, wire image upload
-- [x] Embeds (YouTube iframe, Twitter/Instagram native widgets, OG link preview cards)
-- [x] Search (FTS5 via Worker)
-- [x] Long message truncation (>1000 chars)
-- [x] Offline/reconnection banner
-- [x] Auto-reload stale tabs
-- [x] URL linkification (clickable links in messages, bare domain detection)
-- [x] Scroll-up to load older messages (cursor-based pagination)
-- [x] Gallery load-more (scroll-down pagination)
-- [x] Links panel with OG previews + load-more from server
-- [x] Header tap-to-scroll-top
-- [x] Gallery/links → navigate to source message (with history loading)
-- [x] Multiline input (Enter = new line on mobile, send on desktop)
-- [x] Responsive embeds (aspect-ratio for mobile)
+## Security model
 
-### Phase 3.5: Live Mode ✅
-- [x] Start/end live (admin action → D1 config + DO broadcast)
-- [x] Temporary `_live` channel for FK constraint (created on start, deleted on end)
-- [x] Live messages stored separately (`channel_id = 'x_live'`)
-- [x] Live DMs stored separately, purged on end
-- [x] Auto-purge all live data + R2 media on end-live
-- [x] Non-admin popup/banner on live-started broadcast
-- [x] Session tracking (liveSeen prevents re-popup on dismiss)
-- [x] localStorage persistence (survives page refresh)
-- [x] Live-only viewer count (join-live/leave-live DO tracking)
-- [x] Emoji bar with preset emojis (admin-configurable via emoji picker)
-- [x] Emoji presets synced to all clients in real-time (broadcast)
-- [x] Emoji effects broadcast via WebSocket
-- [x] Admin "종료" ends for everyone, non-admin "나가기" only leaves
-- [x] Live-ended popup shown to all users including admin
-- [x] Stale closure fixes (inLiveModeRef for all subscribe handlers)
-- [x] Live-only freeze (separate from normal chat, session-only)
-- [x] Live-only notice banner (separate from normal chat, auto-deleted)
-- [x] Blocked users: emoji bar + plus menu disabled in live
+- Vercel validates Auth.js sessions before forwarding owner actions.
+- Vercel and the Worker share `INTERNAL_SECRET`; the Worker also verifies `X-User-Id` ownership.
+- Anonymous users cannot mark messages as administrative.
+- WebSocket owner authentication uses short-lived tokens from `/api/ws-token`.
+- Passcode-protected endpoints require a signed room token tied to the current passcode hash.
+- Message length, upload type/size, rate limits, freeze state, blocked users and banned words are enforced server-side.
+- DMs are sent only to owner-authenticated WebSocket connections.
+- SQL uses bound parameters.
+- CORS is restricted to the production origin and local development.
 
-### Phase 3.6: Performance ✅
-- [x] Broadcast payload — zero DB queries per event (message-new, edited, deleted, reaction, dm, profile, rules)
-- [x] Gallery lazy-load — removed from init, fetched on-demand when panel opens
-- [x] Banned words cache — in-memory with 1-min TTL, invalidated on admin change
-- [x] Batch D1 writes — message + gallery insert in one round-trip
-- [x] ASC subquery — DB returns oldest-first directly, no .reverse()
-- [x] Rate limiter cleanup — stale UIDs purged every 60s
-- [x] Dark mode — all panels use CSS variables (--card, --card-text, etc.)
-- [x] Channel color — all colored elements follow channel color setting
-- [x] Rules broadcast — non-admin sees ℹ️ icon in real-time
+## Local development
 
-### Phase 3.7: Security ✅
-- [x] CORS restricted to Vercel domain + localhost (no more wildcard)
-- [x] `/api/user` Worker endpoint requires internal token
-- [x] Upload: file type validation (images only) + 10MB size limit
-- [x] Admin message spoofing prevented (session-verified proxy for admin sends)
-- [x] DM broadcasts private (only admin-authenticated WebSocket connections receive DMs)
-- [x] WebSocket admin auth via `/api/ws-token` endpoint (session + ownership verified)
-- [x] Channel passcode: server-side JWT gate (7-day token, hash-validated)
-- [x] Passcode gate on ALL endpoints (init, data, messages, DM, upload)
-- [x] Passcode brute-force rate limiting (5/min per channel)
-- [x] Passcode change instantly invalidates all tokens (hash mismatch)
-- [x] Admin auto-bypasses passcode (session-verified via Vercel proxy)
-- [x] Passcode cache (30s TTL) — minimal DB overhead
-- [x] Anonymous users skip Vercel proxy (direct Worker, faster)
+Requirements:
 
-### Phase 3.8: Internationalization ✅
-- [x] Locale system (ko.ts + en.ts, 200+ keys)
-- [x] useLocale hook + LocaleProvider (React context)
-- [x] Auto-detect browser language on first visit
-- [x] Language toggle in Settings panel
-- [x] ChatView fully migrated (banners, inputs, dialogs)
-- [x] HeaderMenu, PlusMenu, ContextMenu migrated
-- [x] AdminPanel fully migrated (menus, forms, guide)
+- Node.js 22 recommended
+- npm
+- Cloudflare Wrangler authentication for Worker and D1 work
 
-### Phase 3.9: Real-time & Polish ✅
-- [x] Block/unblock immediately reflected for affected user (broadcast)
-- [x] Petition/DM toggle immediately reflected for non-admin (broadcast)
-- [x] Admin delete = hard delete (removes message + replies from DB)
-- [x] Non-admin soft-delete preserves placeholder for threaded replies
-- [x] Soft-deleted messages with replies persist across refresh
-- [x] Petition/DM toggle settings persist to backend (D1 config)
-- [x] Plus menu disabled for blocked users (except petition)
-- [x] Live viewer badge positioned correctly (no overlap with banners)
-
-### Phase 4: Platform
-- [ ] Typing indicator
-- [ ] Channel deletion from dashboard
-- [ ] Channel discovery
-- [ ] Social login (Kakao, Apple)
-- [ ] SSR landing page
-- [ ] RSS feed
-- [ ] Email verification
-- [ ] Password hashing upgrade (SHA-256 → bcrypt)
-- [ ] i18n: login, dashboard, onboarding pages
-
----
-
-## Development
-
-### Local (mock mode)
 ```bash
 npm install
-npm run build
-npx next start --port 3000 --hostname 0.0.0.0
-# Visit /ch/test — uses in-memory mock data
+npm run dev
 ```
 
-Set `NEXT_PUBLIC_MOCK=true` in `.env.local` for mock mode.
+Production-style frontend verification:
 
-### Production
 ```bash
-# Frontend auto-deploys via Vercel on git push
-git push origin main
-
-# Worker
-cd worker && npx wrangler deploy
+npm run build
+npm start
 ```
 
-### Environment Variables
+Worker development:
 
-**`.env.local` (local dev):**
+```bash
+cd worker
+npm install
+npm run dev
 ```
+
+Set `NEXT_PUBLIC_MOCK=true` to use the frontend mock implementation instead of the Worker where supported.
+
+## Environment variables
+
+Create `.env.local` for Next.js:
+
+```dotenv
+AUTH_SECRET=<openssl-rand-base64-32>
+AUTH_URL=http://localhost:3000
+
+GOOGLE_CLIENT_ID=<google-oauth-client-id>
+GOOGLE_CLIENT_SECRET=<google-oauth-client-secret>
+
+NEXT_PUBLIC_WORKER_URL=https://letsplay-api.letmetellu.workers.dev
 NEXT_PUBLIC_MOCK=false
-NEXT_PUBLIC_WORKER_URL=https://letsplay-api.letmetellu.workers.dev
-NEXTAUTH_SECRET=<random-string>
-NEXTAUTH_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=<from-google-console>
-GOOGLE_CLIENT_SECRET=<from-google-console>
-INTERNAL_SECRET=<shared-with-worker>
+
+INTERNAL_SECRET=<same-value-as-worker-secret>
+APP_VERSION=<optional-local-version-label>
 ```
 
-**Vercel:**
-```
-NEXT_PUBLIC_WORKER_URL=https://letsplay-api.letmetellu.workers.dev
-NEXTAUTH_SECRET=<same-as-local>
-GOOGLE_CLIENT_ID=<same>
-GOOGLE_CLIENT_SECRET=<same>
-INTERNAL_SECRET=<same-as-worker>
+Configure the same frontend variables in Vercel. `VERCEL_GIT_COMMIT_SHA` is supplied by Vercel and is used as the deployed version identifier.
+
+Configure the Worker secret:
+
+```bash
+cd worker
+npx wrangler secret put INTERNAL_SECRET
 ```
 
-**Worker (via `wrangler secret put`):**
-```
-INTERNAL_SECRET=<same-as-vercel>
+Never commit `.env.local`, Worker secrets, OAuth client secrets or production database exports.
+
+## Database migrations
+
+D1 migrations live in `worker/migrations`.
+
+```bash
+cd worker
+
+# Local D1
+npm run db:migrate
+
+# Production D1
+npm run db:migrate:prod
 ```
 
----
+Apply a required migration **before** deploying Worker code that queries the new table or column.
 
-## Project Structure
+Current migrations:
 
+| Migration | Purpose |
+| --- | --- |
+| `0001_initial_schema.sql` | channels, messages, DMs, gallery, config, moderation, FTS5 |
+| `0002_banned_words.sql` | per-channel banned words and expiry |
+| `0003_users.sql` | user accounts |
+| `0004_user_password.sql` | credential password hash column |
+| `0005_hot_path_indexes.sql` | message, block and DM indexes |
+| `0006_passcode_hint.sql` | optional channel passcode hint |
+| `0007_user_recent_channels.sql` | account-synced recents, pins and personal colors |
+
+See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for schema details and the deployment runbook.
+
+## Deployment
+
+Frontend deployment is triggered by pushing `main` to GitHub:
+
+```bash
+git push origin main
 ```
-/
+
+Worker deployment:
+
+```bash
+cd worker
+npm run deploy
+```
+
+For changes involving D1, use this order:
+
+1. `npm run db:migrate:prod`
+2. `npm run deploy`
+3. run `npm run build` at the repository root
+4. push the frontend commit
+
+## Project structure
+
+```text
+src/
+├── app/
+│   ├── dashboard/             main dashboard
+│   ├── ch/[slug]/             chat route
+│   └── api/                   authenticated Next.js proxies
+├── components/
+│   ├── chat/                  chat, panels, dialogs and live UI
+│   ├── admin/                 channel administration
+│   └── dashboard/             login and onboarding dialogs
+├── hooks/                     auth, locale, realtime and version hooks
+└── lib/                       API clients, auth, locale and recent-channel storage
+
+worker/
+├── migrations/                ordered D1 migrations
 ├── src/
-│   ├── app/                    ← Next.js pages
-│   │   ├── page.tsx            → / (redirect based on auth)
-│   │   ├── login/page.tsx      → Login/signup (Korean UI)
-│   │   ├── onboarding/page.tsx → Channel creation + admin guide
-│   │   ├── dashboard/page.tsx  → List/create channels
-│   │   ├── ch/[slug]/page.tsx  → Chat page
-│   │   └── api/               → Auth, admin proxy, user sync, version
-│   ├── components/
-│   │   ├── chat/              → ChatView, ContextMenu, ReactionBadge, ReplyBar,
-│   │   │                        EmojiPicker, EmojiBar, HeaderMenu, PlusMenu,
-│   │   │                        SettingsPanel, NoticePanel, GalleryPanel, LinksPanel,
-│   │   │                        ScrollToBottom, WelcomePopup, SearchBar, LiveMode,
-│   │   │                        NoticeBanner, NoticeEditDialog, ConfirmDialog, EditDialog
-│   │   └── admin/             → AdminPanel (채널/관리 categories)
-│   ├── hooks/
-│   │   ├── useRealtime.ts     → WebSocket connection + presence + live count
-│   │   ├── useAuth.ts         → Channel ownership detection
-│   │   └── useAutoUpdate.ts   → Version check auto-reload
-│   └── lib/
-│       ├── api.ts             → Worker API client (mock/real switch)
-│       ├── mock-api.ts        → In-memory mock for local dev
-│       ├── auth.ts            → NextAuth config (Google + Credentials)
-│       └── fingerprint.ts     → Canvas + UA hash
-├── worker/
-│   ├── src/
-│   │   ├── index.ts           → Worker entry, router, CORS
-│   │   ├── types.ts           → Env interface (DB, MEDIA, CHAT_ROOM, secrets)
-│   │   ├── realtime/
-│   │   │   └── chat-room.ts   → Durable Object (WebSocket, presence, live viewers)
-│   │   ├── routes/
-│   │   │   ├── init.ts        → Consolidated page load (channel, messages, dm, gallery, live)
-│   │   │   ├── messages.ts    → Send/edit/delete/react (supports _live channels)
-│   │   │   ├── data.ts        → Read data (messages, search, blocked, gallery, dm)
-│   │   │   ├── admin.ts       → Admin actions (freeze, block, live, profile, notice, presets)
-│   │   │   ├── dm.ts          → Direct messages
-│   │   │   ├── upload.ts      → R2 image upload + media serve
-│   │   │   ├── auth.ts        → Signup/login (SHA-256 password hash)
-│   │   │   └── user.ts        → User sync + channel listing
-│   │   └── lib/
-│   │       └── validation.ts  → Rate limit, message length, banned words
-│   ├── migrations/            → D1 SQL migrations (schema, banned_words, users)
-│   └── wrangler.toml          → D1, R2, DO bindings
-├── .env.local                  → Local dev secrets (git-ignored)
-├── MIGRATION_NOTES.md          ← CSS→TSX porting notes + session logs
-├── vercel.json
-└── package.json
+│   ├── realtime/chat-room.ts  Durable Object
+│   ├── routes/                Worker API handlers
+│   └── lib/                   validation and shared server helpers
+└── wrangler.toml              D1, R2 and Durable Object bindings
 ```
 
----
+## Known follow-up work
 
-## Reference
-
-The original vanilla JS + Supabase prototype is at `/home/jjiwoo/letsplay-platform/`.
-Key reference files:
-- `src/app.js` — behavioral spec (all UI/UX logic)
-- `styles.css` — visual spec
-- `AI_GUIDE.md` — feature documentation
-- `MIGRATION_PLAN.md` — full rebuild plan
-
----
-
-## License
-
-Private project.
+- email verification and password reset;
+- validate and harden the legacy credential upgrade path;
+- optional profile visibility controls for owner channels;
+- typing indicators;
+- additional social login providers;
+- operational metrics, abuse controls and retention policies.
