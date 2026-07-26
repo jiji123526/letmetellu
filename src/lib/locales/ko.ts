@@ -242,6 +242,7 @@ export const ko = {
   dashboardOwnerChannels: "관리자의 다른 채널",
   dashboardOwnedTab: "내 채널",
   dashboardRecentTab: "최근 방문",
+  dashboardJoinedChannels: "참여 중인 채널",
   dashboardManaged: "관리 중",
   dashboardClear: "전체 삭제",
   dashboardPin: "고정",

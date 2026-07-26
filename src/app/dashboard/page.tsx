@@ -566,8 +566,22 @@ export default function DashboardPage() {
           </section>
         ) : (
           <section>
-            {activeItems.map((item) => (
-              <div key={item.id} className="relative min-h-[74px] overflow-hidden">
+            {activeItems.map((item, index) => {
+              const previousItem = activeItems[index - 1];
+              const showSectionLabel = isLoggedIn
+                && channels.length > 0
+                && (index === 0 || previousItem?.owned !== item.owned);
+              return (
+              <div key={item.id}>
+                {showSectionLabel && (
+                  <div
+                    className={`${index === 0 ? "pt-3" : "pt-5"} px-4 pb-1.5 text-[12px] font-semibold`}
+                    style={{ color: "#8e8e93", background: "#fff" }}
+                  >
+                    {item.owned ? t("dashboardOwnedTab") : t("dashboardJoinedChannels")}
+                  </div>
+                )}
+                <div className="relative min-h-[74px] overflow-hidden">
                 <>
                   <button
                     type="button"
@@ -679,7 +693,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-            ))}
+              </div>
+              );
+            })}
           </section>
         )}
 
