@@ -826,6 +826,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1034,11 +1035,19 @@ export function ChatView({ channelId }: { channelId: string }) {
             setNewerMessageCount((count) => count + 1);
             return;
           }
+          const shouldFollowNewMessage = isNearBottomRef.current;
           setMessages((prev) => {
             // Avoid duplicates (e.g. our own message already shown optimistically)
             if (prev.some((m) => m.id === msg.id)) return prev;
             return [...prev, msg];
           });
+          if (shouldFollowNewMessage) {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              });
+            });
+          }
         }
       }
       // Message edited — patch text in place
@@ -1322,6 +1331,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     const el = messagesContainerRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom <= 120;
     setShowScrollBtn(distanceFromBottom > 200);
 
     // Load older messages when scrolled to top
@@ -1389,6 +1399,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       setNewerMessageCount(0);
       hasMoreNewerMessages.current = false;
       hasMoreMessages.current = (data.messages?.length || 0) >= 50;
+      isNearBottomRef.current = true;
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       });
@@ -1403,6 +1414,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       void returnToLatest();
       return;
     }
+    isNearBottomRef.current = true;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setShowScrollBtn(false);
   };
