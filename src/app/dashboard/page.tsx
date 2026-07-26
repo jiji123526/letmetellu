@@ -4,7 +4,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
@@ -77,6 +77,9 @@ export default function DashboardPage() {
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [pendingLocalChannels, setPendingLocalChannels] = useState<RecentChannel[] | null>(null);
+  const [migratingLocalChannels, setMigratingLocalChannels] = useState(false);
+  const [localMigrationError, setLocalMigrationError] = useState(false);
   const [newSlug, setNewSlug] = useState("");
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -137,17 +140,50 @@ export default function DashboardPage() {
   const loadAccountRecentChannels = useCallback(async (userId: string) => {
     const migrationKey = `letmetellu_recent_channels_migrated_${userId}`;
     try {
-      if (localStorage.getItem(migrationKey) !== "true") {
+      const accountChannels = await fetchAccountRecentChannels();
+      setRecentChannels(accountChannels);
+      const migrationState = localStorage.getItem(migrationKey);
+      if (!migrationState) {
         const localChannels = getRecentChannels();
-        if (localChannels.length) await mergeAccountRecentChannels(localChannels);
-        localStorage.setItem(migrationKey, "true");
+        if (localChannels.length > 0) {
+          setPendingLocalChannels(localChannels);
+        } else {
+          localStorage.setItem(migrationKey, "merged");
+        }
       }
-      setRecentChannels(await fetchAccountRecentChannels());
     } catch {
       // Do not replace account data with device-local history on a transient failure.
       setRecentChannels([]);
     }
   }, []);
+
+  const connectLocalChannels = async () => {
+    if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
+    const migrationKey = `letmetellu_recent_channels_migrated_${session.user.id}`;
+    setMigratingLocalChannels(true);
+    setLocalMigrationError(false);
+    try {
+      await mergeAccountRecentChannels(pendingLocalChannels);
+      const accountChannels = await fetchAccountRecentChannels();
+      setRecentChannels(accountChannels);
+      localStorage.setItem(migrationKey, "merged");
+      clearRecentChannels();
+      setPendingLocalChannels(null);
+    } catch {
+      setLocalMigrationError(true);
+    } finally {
+      setMigratingLocalChannels(false);
+    }
+  };
+
+  const skipLocalChannelMigration = () => {
+    if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
+    try {
+      localStorage.setItem(`letmetellu_recent_channels_migrated_${session.user.id}`, "skipped");
+    } catch {}
+    setLocalMigrationError(false);
+    setPendingLocalChannels(null);
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -886,6 +922,19 @@ export default function DashboardPage() {
           onConfirm={() => setShowDeleteError(false)}
           onCancel={() => setShowDeleteError(false)}
           showCancel={false}
+        />
+      )}
+
+      {pendingLocalChannels && (
+        <ConfirmDialog
+          title={t("dashboardLocalMigrationTitle")}
+          message={`${t("dashboardLocalMigrationMessage").replace("{count}", String(pendingLocalChannels.length))}${localMigrationError ? `<br><span style="color:#ff3b30">${t("dashboardLocalMigrationError")}</span>` : ""}`}
+          confirmLabel={migratingLocalChannels ? t("loading") : t("dashboardLocalMigrationConnect")}
+          cancelLabel={t("dashboardLocalMigrationSkip")}
+          onConfirm={() => void connectLocalChannels()}
+          onCancel={skipLocalChannelMigration}
+          closeOnBackdrop={false}
+          disabled={migratingLocalChannels}
         />
       )}
     </main>
