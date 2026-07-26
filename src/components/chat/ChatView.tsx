@@ -532,7 +532,22 @@ const MessageRow = React.memo(function MessageRow({
               onExpand={onExpand}
             />
           )}
-          {!!msg.edited && <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>{t("edited")}</span>}
+          {!!msg.edited && (
+            <span
+              style={{
+                display: msg.image ? "block" : undefined,
+                padding: msg.image
+                  ? "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)"
+                  : undefined,
+                fontSize: "calc(var(--bubble-font-size) - 6px)",
+                opacity: 0.6,
+                fontStyle: "italic",
+                marginLeft: msg.image ? 0 : "4px",
+              }}
+            >
+              {t("edited")}
+            </span>
+          )}
         </>
       )}
     </div>
