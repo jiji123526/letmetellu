@@ -7,7 +7,7 @@ interface GuestOnboardingProps {
   onClose: () => void;
 }
 
-const introIcons = ["↗", "⌨", "◉"];
+const introIcons = ["↗", "lock", "◉"];
 const guideIcons = ["1", "2", "3"];
 
 export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
@@ -55,7 +55,14 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
           <div className="rounded-[16px] overflow-hidden" style={{ background: "#f7f7f9" }}>
             {cards.map(([title, description], index) => (
               <div key={title} className="flex gap-3 px-4 py-4" style={{ borderBottom: index < cards.length - 1 ? "0.5px solid #dedee3" : "none" }}>
-                <span className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[17px] font-semibold" style={{ background: "#eaf3ff", color: "#007aff" }}>{icons[index]}</span>
+                <span className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[17px] font-semibold" style={{ background: "#eaf3ff", color: "#007aff" }}>
+                  {icons[index] === "lock" ? (
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="5" y="10" width="14" height="10" rx="2.5" />
+                      <path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" />
+                    </svg>
+                  ) : icons[index]}
+                </span>
                 <div className="min-w-0">
                   <h3 className="m-0 text-[15px] font-semibold">{title}</h3>
                   <p className="mt-1 mb-0 text-[13px] leading-[1.45]" style={{ color: "#6d6d72" }}>{description}</p>

@@ -181,7 +181,6 @@ export default function DashboardPage() {
     return items.filter((item) =>
       item.name.toLowerCase().includes(normalized)
       || item.id.toLowerCase().includes(normalized)
-      || item.ownerName.toLowerCase().includes(normalized)
     );
   }, [channels, recentChannels, query, locale, prioritizedOwnedId]);
 

@@ -258,7 +258,7 @@ export const ko = {
   dashboardRecentDesc: "방문한 채널이 이 기기에 표시됩니다.",
   dashboardGuestCta: "로그인하고 내 채널 만들기",
   dashboardDesc: "생성한 익명 채팅 채널을 한곳에서 관리하세요",
-  dashboardSearch: "관리자, 채널 이름 또는 주소 검색",
+  dashboardSearch: "채널 이름 또는 주소 검색",
   dashboardAccount: "계정",
   dashboardCopyLink: "링크 복사",
   dashboardCopied: "복사됨",
