@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { useLocale } from "@/hooks/useLocale";
 import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
+import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
 
 interface Channel {
@@ -54,6 +55,7 @@ export default function DashboardPage() {
   const [query, setQuery] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
+  const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [newSlug, setNewSlug] = useState("");
   const [newName, setNewName] = useState("");
@@ -111,6 +113,22 @@ export default function DashboardPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [status, loadChannels, loadRecentChannels]);
+
+  useEffect(() => {
+    if (loading || status !== "unauthenticated" || recentChannels.length > 0) return;
+    try {
+      if (localStorage.getItem("letmetellu_guest_onboarding_seen") !== "true") {
+        setShowGuestOnboarding(true);
+      }
+    } catch {
+      // The dashboard remains usable when storage is unavailable.
+    }
+  }, [loading, status, recentChannels.length]);
+
+  const closeGuestOnboarding = () => {
+    try { localStorage.setItem("letmetellu_guest_onboarding_seen", "true"); } catch {}
+    setShowGuestOnboarding(false);
+  };
 
   useEffect(() => {
     if (!showAccount) return;
@@ -579,6 +597,10 @@ export default function DashboardPage() {
           onCreated={async () => { await loadChannels(); }}
           onClose={() => setShowFirstOnboarding(false)}
         />
+      )}
+
+      {showGuestOnboarding && !isLoggedIn && (
+        <GuestOnboarding onClose={closeGuestOnboarding} />
       )}
 
       {isLoggedIn && !editing && (
