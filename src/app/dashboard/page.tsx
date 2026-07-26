@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  const createFieldsValid = Boolean(newName.trim()) && /^[a-z0-9-]{3,30}$/.test(newSlug.trim());
   const [editing, setEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
@@ -853,21 +854,29 @@ export default function DashboardPage() {
           <div className="w-full max-w-[390px] rounded-[20px] p-6" style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="m-0 text-[19px] font-semibold">{t("onboardingTitle")}</h2>
-              <button className="border-none bg-transparent cursor-pointer text-[22px]" style={{ color: "var(--meta)" }} onClick={() => setShowCreate(false)}>×</button>
+              {createFieldsValid && (
+                <button
+                  type="button"
+                  disabled={creating}
+                  className="border-none bg-transparent p-0 text-[15px] font-medium"
+                  style={{ color: "#007aff", cursor: creating ? "wait" : "pointer", opacity: creating ? 0.6 : 1 }}
+                  onClick={() => void handleCreate()}
+                >
+                  {creating ? t("loading") : t("create")}
+                </button>
+              )}
             </div>
             <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
             <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
             <label className="block text-[12px] font-medium mb-1.5">{t("channelSlug")}</label>
             <div className="flex items-center rounded-[11px]" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)" }}>
               <span className="pl-3 text-[13px]" style={{ color: "var(--meta)" }}>/ch/</span>
-              <input value={newSlug} onChange={(event) => setNewSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent" }} onKeyDown={(event) => { if (event.key === "Enter" && !creating) void handleCreate(); }} />
+              <input value={newSlug} onChange={(event) => setNewSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent" }} onKeyDown={(event) => { if (event.key === "Enter" && !creating && createFieldsValid) void handleCreate(); }} />
             </div>
             <div className="mt-1.5 text-[11px]" style={{ color: "var(--meta)" }}>{t("onboardingSlugHint")}</div>
-            <div className="min-h-[20px] mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{createError}</div>
-            <div className="flex gap-2 mt-3">
-              <button className="flex-1 rounded-[11px] cursor-pointer text-[14px]" style={{ border: "1px solid var(--input-border)", background: "var(--card)", color: "var(--gray-text)", padding: "11px" }} onClick={() => setShowCreate(false)}>{t("cancel")}</button>
-              <button disabled={creating} className="flex-1 border-none rounded-[11px] text-white text-[14px] font-semibold" style={{ background: creating ? "#9ec9f5" : "#007aff", padding: "12px", cursor: creating ? "wait" : "pointer" }} onClick={() => void handleCreate()}>{creating ? t("loading") : t("create")}</button>
-            </div>
+            {createError && (
+              <div className="mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{createError}</div>
+            )}
           </div>
         </div>
       )}

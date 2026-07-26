@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 
@@ -42,8 +42,13 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   const [createdChannelId, setCreatedChannelId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const horizontalDrag = useRef(false);
 
   const stepIndex = step === "features" ? 0 : step === "create" ? 1 : 2;
+  const createFieldsValid = Boolean(name.trim()) && /^[a-z0-9-]{3,30}$/.test(slug.trim());
   const features = [
     [t("firstOnboardingPrivateTitle"), t("firstOnboardingPrivateDesc")],
     [t("firstOnboardingDmTitle"), t("firstOnboardingDmDesc")],
@@ -61,6 +66,45 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
     [t("firstGuideBlockTitle"), t("firstGuideBlockDesc")],
     [t("firstGuideSafetyTitle"), t("firstGuideSafetyDesc")],
   ];
+
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || step === "guide") return;
+    if ((event.target as HTMLElement).closest("input, textarea, button")) return;
+    dragStart.current = { x: event.clientX, y: event.clientY };
+    horizontalDrag.current = false;
+    setDragging(true);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragStart.current) return;
+    const dx = event.clientX - dragStart.current.x;
+    const dy = event.clientY - dragStart.current.y;
+    if (!horizontalDrag.current) {
+      if (Math.abs(dx) < 7) return;
+      if (Math.abs(dy) > Math.abs(dx)) {
+        dragStart.current = null;
+        setDragging(false);
+        return;
+      }
+      horizontalDrag.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    const blocked = (step === "features" && dx > 0) || (step === "create" && dx < 0);
+    setDragX(blocked ? dx * 0.18 : dx);
+  };
+
+  const handlePointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dx = dragX;
+    dragStart.current = null;
+    horizontalDrag.current = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDragging(false);
+    setDragX(0);
+    if (step === "features" && dx < -60) setStep("create");
+    else if (step === "create" && dx > 60) setStep("features");
+  };
 
   const createChannel = async () => {
     const normalizedSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -117,12 +161,37 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               <span key={index} className="w-1.5 h-1.5 rounded-full" style={{ background: index === stepIndex ? "#007aff" : "#d1d1d6" }} />
             ))}
           </div>
-          <span className="min-w-[54px] text-right text-[12px]" style={{ color: "var(--meta)" }}>{stepIndex + 1}/3</span>
+          {step === "create" && createFieldsValid ? (
+            <button
+              type="button"
+              disabled={submitting}
+              className="min-w-[54px] border-none bg-transparent p-0 text-right text-[15px] font-medium"
+              style={{ color: "#007aff", cursor: submitting ? "wait" : "pointer", opacity: submitting ? 0.6 : 1 }}
+              onClick={() => void createChannel()}
+            >
+              {submitting ? t("loading") : t("create")}
+            </button>
+          ) : (
+            <span className="min-w-[54px]" aria-hidden="true" />
+          )}
         </header>
 
-        <div className="min-h-0 overflow-y-auto px-6 py-6">
-          {step === "features" && (
-            <>
+        <div
+          className="min-h-0 overflow-x-hidden overflow-y-auto"
+          style={{ touchAction: "pan-y" }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+        >
+          <div
+            className="flex w-[300%]"
+            style={{
+              transform: `translateX(calc(-${stepIndex * (100 / 3)}% + ${dragX}px))`,
+              transition: dragging ? "none" : "transform 220ms cubic-bezier(.22,.61,.36,1)",
+            }}
+          >
+            <section className="w-1/3 flex-none px-6 py-6" aria-hidden={step !== "features"}>
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>💬</div>
                 <h2 className="m-0 text-[24px] font-bold tracking-[-.02em]">{t("firstOnboardingTitle")}</h2>
@@ -139,30 +208,26 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
                   </div>
                 ))}
               </div>
-            </>
-          )}
+            </section>
 
-          {step === "create" && (
-            <>
+            <section className="w-1/3 flex-none px-6 py-6" aria-hidden={step !== "create"}>
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>＋</div>
                 <h2 className="m-0 text-[24px] font-bold">{t("onboardingTitle")}</h2>
                 <p className="mt-2 mb-0 text-[14px]" style={{ color: "var(--meta)" }}>{t("dashboardCreateDesc")}</p>
               </div>
               <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
-              <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
+              <input value={name} onChange={(event) => setName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
               <label className="block text-[12px] font-medium mb-1.5">{t("channelSlug")}</label>
               <div className="flex items-center rounded-[11px]" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)" }}>
                 <span className="pl-3 text-[13px]" style={{ color: "var(--meta)" }}>/ch/</span>
-                <input value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent", color: "var(--gray-text)" }} onKeyDown={(event) => { if (event.key === "Enter" && !submitting) void createChannel(); }} />
+                <input value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent", color: "var(--gray-text)" }} onKeyDown={(event) => { if (event.key === "Enter" && !submitting && createFieldsValid) void createChannel(); }} />
               </div>
               <div className="mt-1.5 text-[11px]" style={{ color: "var(--meta)" }}>{t("onboardingSlugHint")}</div>
               <div className="min-h-[20px] mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{error}</div>
-            </>
-          )}
+            </section>
 
-          {step === "guide" && (
-            <>
+            <section className="w-1/3 flex-none px-6 py-6" aria-hidden={step !== "guide"}>
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf8ef" }}>✓</div>
                 <h2 className="m-0 text-[24px] font-bold">{t("firstGuideTitle")}</h2>
@@ -179,24 +244,18 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
                   </div>
                 ))}
               </div>
-            </>
-          )}
+            </section>
+          </div>
         </div>
 
-        <footer className="px-5 py-4 border-t" style={{ borderColor: "var(--hairline)", background: "var(--header-bg)" }}>
-          {step === "features" && (
-            <button className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold cursor-pointer" style={{ background: "#007aff" }} onClick={() => setStep("create")}>{t("firstOnboardingCreate")}</button>
-          )}
-          {step === "create" && (
-            <button disabled={submitting} className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold" style={{ background: submitting ? "#9ec9f5" : "#007aff", cursor: submitting ? "wait" : "pointer" }} onClick={() => void createChannel()}>{submitting ? t("loading") : t("create")}</button>
-          )}
-          {step === "guide" && (
+        {step === "guide" && (
+          <footer className="px-5 py-4 border-t" style={{ borderColor: "var(--hairline)", background: "var(--header-bg)" }}>
             <div className="flex gap-2">
               <button className="flex-1 rounded-[12px] py-3 text-[14px] cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--card)", color: "var(--gray-text)" }} onClick={onClose}>{t("dashboardBack")}</button>
               <button className="flex-[1.4] border-none rounded-[12px] py-3 text-white text-[14px] font-semibold cursor-pointer" style={{ background: "#007aff" }} onClick={() => { window.location.href = `/ch/${createdChannelId}`; }}>{t("onboardingGoToChannel")}</button>
             </div>
-          )}
-        </footer>
+          </footer>
+        )}
       </div>
     </div>
   );
