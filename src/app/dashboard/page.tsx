@@ -290,7 +290,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-dvh bg-white" style={{ color: "#111" }}>
-      <div className="max-w-[760px] mx-auto min-h-dvh md:border-x" style={{ borderColor: "#ededf0" }}>
+      <div className={`max-w-[760px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "#ededf0" }}>
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl">
           <div className="h-[64px] px-4 flex items-center justify-between">
             <button
@@ -321,22 +321,6 @@ export default function DashboardPage() {
                   <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
                 </svg>
               </button>
-              {isLoggedIn && (
-                <button
-                  type="button"
-                  className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
-                  style={{ color: "#007aff" }}
-                  onClick={() => {
-                    openCreateFlow();
-                  }}
-                  aria-label={t("createChannel")}
-                >
-                  <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M13 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                    <path d="m17.5 3.5 3 3L11 16l-4 1 1-4 9.5-9.5Z" />
-                  </svg>
-                </button>
-              )}
               {showAccount && (
                   <div
                     className="absolute right-0 top-[42px] z-20 min-w-[180px] overflow-hidden rounded-[12px] text-left"
@@ -567,6 +551,25 @@ export default function DashboardPage() {
           onCreated={async () => { await loadChannels(); }}
           onClose={() => setShowFirstOnboarding(false)}
         />
+      )}
+
+      {isLoggedIn && !editing && (
+        <button
+          type="button"
+          className="fixed z-40 w-14 h-14 rounded-full border-none cursor-pointer flex items-center justify-center text-white"
+          style={{
+            right: "max(20px, calc((100vw - 760px) / 2 + 20px))",
+            bottom: "max(20px, env(safe-area-inset-bottom))",
+            background: "#007aff",
+            boxShadow: "0 8px 24px rgba(0,122,255,.32)",
+          }}
+          onClick={openCreateFlow}
+          aria-label={t("createChannel")}
+        >
+          <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
       )}
 
       {pendingDelete && (
