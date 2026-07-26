@@ -327,7 +327,7 @@ function MessageImage({ src, onOpen }: { src: string; onOpen: () => void }) {
 }
 
 // Message text with truncation (>1000 chars), linkification, and search highlight
-function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hiddenEmbedUrls, onExpand }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hiddenEmbedUrls: Set<string>; onExpand: (text: string) => void }) {
+function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActiveMatch, hiddenEmbedUrls, editedLabel, onExpand }: { text: string; image: boolean; isMine: boolean; searchQuery: string; isSearchMatch: boolean; isActiveMatch: boolean; hiddenEmbedUrls: Set<string>; editedLabel?: string; onExpand: (text: string) => void }) {
 
   const isLong = text.length > 1000;
   const displayText = isLong ? text.slice(0, 1000) + "…" : text;
@@ -344,6 +344,11 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
     <>
       <span className="message-text" style={image ? { display: "block", padding: "2px 10px 8px" } : undefined}>
         {content}
+        {editedLabel && (
+          <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>
+            {editedLabel}
+          </span>
+        )}
         {isLong && (
           <button
             onClick={(e) => { e.stopPropagation(); onExpand(text); }}
@@ -365,6 +370,7 @@ function MessageTextWithEmbeds({
   isSearchMatch,
   isActiveMatch,
   showEmbeds,
+  editedLabel,
   onExpand,
 }: {
   text: string;
@@ -374,6 +380,7 @@ function MessageTextWithEmbeds({
   isSearchMatch: boolean;
   isActiveMatch: boolean;
   showEmbeds: boolean;
+  editedLabel?: string;
   onExpand: (text: string) => void;
 }) {
   const [hiddenEmbedUrls, setHiddenEmbedUrls] = useState<Set<string>>(() => new Set());
@@ -396,6 +403,7 @@ function MessageTextWithEmbeds({
         isSearchMatch={isSearchMatch}
         isActiveMatch={isActiveMatch}
         hiddenEmbedUrls={hiddenEmbedUrls}
+        editedLabel={editedLabel}
         onExpand={onExpand}
       />
       {showEmbeds && <MessageEmbeds text={text} isMine={isMine} onEmbedReady={handleEmbedReady} />}
@@ -529,10 +537,11 @@ const MessageRow = React.memo(function MessageRow({
               isSearchMatch={isSearchMatch}
               isActiveMatch={isActiveMatch}
               showEmbeds={!msg.report && !msg.image}
+              editedLabel={msg.image && msg.edited ? t("edited") : undefined}
               onExpand={onExpand}
             />
           )}
-          {!!msg.edited && (
+          {!!msg.edited && !(msg.image && msg.text) && (
             <span
               style={{
                 display: msg.image ? "block" : undefined,
