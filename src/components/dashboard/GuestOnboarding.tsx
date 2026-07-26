@@ -21,7 +21,7 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
   const pages = [
     {
       step: "intro" as const,
-      icon: "…",
+      icon: "yap.",
       title: t("guestOnboardingTitle"),
       description: t("guestOnboardingDesc"),
       cards: [
@@ -140,7 +140,10 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
             {pages.map((page) => (
               <section key={page.step} className="w-1/2 flex-none px-6 py-6" aria-hidden={step !== page.step}>
                 <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px] font-semibold" style={{ background: "#eaf3ff", color: "#007aff" }}>
+                  <div
+                    className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center font-semibold ${page.step === "intro" ? "text-[20px] tracking-[-.03em]" : "text-[28px]"}`}
+                    style={{ background: "#eaf3ff", color: "#007aff" }}
+                  >
                     {page.icon}
                   </div>
                   <h2 className="m-0 text-[24px] font-bold tracking-[-.02em]">{page.title}</h2>

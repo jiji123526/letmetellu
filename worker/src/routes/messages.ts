@@ -11,10 +11,11 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
-    // Check if this is a verified admin request (from Vercel proxy)
+    // Internal proxy authentication alone does not grant channel-owner rights.
+    // Ownership is verified against the target channel below.
     const internalToken = request.headers.get("X-Internal-Token");
     const verifiedUserId = request.headers.get("X-User-Id");
-    const isVerifiedAdmin = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+    const hasVerifiedIdentity = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
 
     // Passcode gate — check if channel requires passcode for writing
     const isLiveChannel = (channel_id as string).endsWith("_live");
@@ -26,8 +27,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       WHERE id = ?
     `).bind(channel_id, parentChannelId).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
+    const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
 
-    if ((channel as any).passcode && !isVerifiedAdmin) {
+    if ((channel as any).passcode && !isChannelOwner) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
       const decoded = await verifyRoomToken(roomToken, env);
@@ -41,7 +43,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const isTargetFrozen = isLiveChannel
       ? (channel as any).target_is_frozen
       : (channel as any).is_frozen;
-    if (isTargetFrozen && !isVerifiedAdmin) {
+    if (isTargetFrozen && !isChannelOwner) {
       return Response.json({ error: "channel frozen" }, { status: 403 });
     }
 
@@ -72,11 +74,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Insert message (+ gallery if image) in a single batch
     const id = crypto.randomUUID();
-    // Determine if sender is admin:
-    // - If verified via internal token: check X-User-Id matches channel owner
-    // - Otherwise: never mark as admin (anonymous users can't be admin)
-    const senderUid = isVerifiedAdmin ? verifiedUserId! : uid as string;
-    const isAdmin = isVerifiedAdmin && (channel as any).owner_uid === verifiedUserId ? 1 : 0;
+    // Only a verified owner is stored and broadcast as the channel admin.
+    const senderUid = isChannelOwner ? verifiedUserId! : uid as string;
+    const isAdmin = isChannelOwner ? 1 : 0;
     const stmts = [
       env.DB.prepare(`
         INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id)
@@ -86,7 +86,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (image) {
       stmts.push(
         env.DB.prepare("INSERT INTO gallery (id, image, auth_uid, channel_id) VALUES (?, ?, ?, ?)")
-          .bind(id, image, uid, channel_id)
+          .bind(id, image, senderUid, channel_id)
       );
     }
     await env.DB.batch(stmts);
@@ -98,7 +98,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       : channel_id as string;
     const created_at = new Date().toISOString();
     const newMessage = {
-      id, uid, auth_uid: uid, nick: nick || null, text: text || "", is_admin: isAdmin,
+      id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
       channel_id, image: image || null, reply_to: reply_to || null, fingerprint: fingerprint || null,
       report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
       deleted: 0, edited: 0, reactions: "{}", created_at,

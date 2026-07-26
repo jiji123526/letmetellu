@@ -335,6 +335,8 @@ export const en: Record<LocaleKeys, string> = {
   firstGuideDesc: "Review the essential controls before inviting people.",
   firstGuideInviteTitle: "Copy the link and invite",
   firstGuideInviteDesc: "Share the /ch/ link from your dashboard or address bar with the people you want.",
+  firstGuideProfileTitle: "Show the channel on your admin profile",
+  firstGuideProfileDesc: "Channels are private by default. Turn on profile visibility in Channel Settings; when you have at least two public channels, visitors can browse them from your admin profile.",
   firstGuideWelcomeTitle: "Set a welcome message",
   firstGuideWelcomeDesc: "Choose the title, guide items, and icon first-time visitors see from Channel Settings in the admin menu.",
   firstGuidePasscodeTitle: "Add a passcode and hint",

@@ -333,6 +333,8 @@ export const ko = {
   firstGuideDesc: "사람들을 초대하기 전에 핵심 관리 기능을 확인해 보세요.",
   firstGuideInviteTitle: "링크 복사하고 초대하기",
   firstGuideInviteDesc: "대시보드나 주소창의 /ch/ 링크를 원하는 사람에게 공유하세요.",
+  firstGuideProfileTitle: "관리자 프로필에 채널 공개하기",
+  firstGuideProfileDesc: "채널은 기본적으로 비공개예요. 채널 설정에서 공개를 켜고 공개 채널이 2개 이상이면, 방문자가 관리자 프로필에서 다른 공개 채널도 볼 수 있어요.",
   firstGuideWelcomeTitle: "환영 메시지 설정",
   firstGuideWelcomeDesc: "관리자 메뉴의 채널 설정에서 첫 방문자에게 보여줄 제목, 안내 항목과 아이콘을 직접 정하세요.",
   firstGuidePasscodeTitle: "비밀번호와 힌트 설정",

@@ -32,7 +32,23 @@ const featureIcons = [
   { icon: <FreezeIcon />, color: "#edf7ff" },
 ];
 
-const guideIcons = ["↗", "☺", "⌨", "✉", <FreezeIcon key="freeze" size={17} />, "◉", "!", "⊘", "⚑"];
+const guideIcons = [
+  "↗",
+  (
+    <svg key="profile" viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" />
+    </svg>
+  ),
+  "☺",
+  "⌨",
+  "✉",
+  <FreezeIcon key="freeze" size={17} />,
+  "◉",
+  "!",
+  "⊘",
+  "⚑",
+];
 
 export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboardingProps) {
   const { t } = useLocale();
@@ -57,6 +73,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   ];
   const guides = [
     [t("firstGuideInviteTitle"), t("firstGuideInviteDesc")],
+    [t("firstGuideProfileTitle"), t("firstGuideProfileDesc")],
     [t("firstGuideWelcomeTitle"), t("firstGuideWelcomeDesc")],
     [t("firstGuidePasscodeTitle"), t("firstGuidePasscodeDesc")],
     [t("firstGuideDmTitle"), t("firstGuideDmDesc")],

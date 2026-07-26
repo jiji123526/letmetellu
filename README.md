@@ -1,6 +1,6 @@
-# Let Me Tell U
+# yap.
 
-Link-based, multi-tenant anonymous chat built with Next.js and Cloudflare.
+**yap.** is a link-based, multi-tenant anonymous chat service built with Next.js and Cloudflare.
 
 Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
 

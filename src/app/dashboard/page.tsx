@@ -567,7 +567,7 @@ export default function DashboardPage() {
             >
               {editing ? t("dashboardDone") : t("dashboardEdit")}
             </button>
-            <h1 className="m-0 text-[17px] font-semibold">{t("dashboardChats")}</h1>
+            <h1 className="m-0 text-[17px] font-semibold tracking-[-.02em]">yap.</h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
                 type="button"
