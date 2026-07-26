@@ -378,9 +378,13 @@ export default function DashboardPage() {
     setSwipe({ id: null, offset: 0 });
   };
 
-  const prioritizeOwned = (channelId: string) => {
-    setPrioritizedOwnedId(channelId);
-    try { localStorage.setItem("letmetellu_prioritized_owned_channel", channelId); } catch {}
+  const toggleOwnedPinned = (channelId: string) => {
+    const nextPinnedId = prioritizedOwnedId === channelId ? null : channelId;
+    setPrioritizedOwnedId(nextPinnedId);
+    try {
+      if (nextPinnedId) localStorage.setItem("letmetellu_prioritized_owned_channel", nextPinnedId);
+      else localStorage.removeItem("letmetellu_prioritized_owned_channel");
+    } catch {}
     setSwipe({ id: null, offset: 0 });
   };
 
@@ -670,9 +674,9 @@ export default function DashboardPage() {
                     type="button"
                     className="absolute inset-y-0 right-[76px] w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
                     style={{ background: "#8e8e93" }}
-                    onClick={() => item.owned ? prioritizeOwned(item.id) : togglePinned(item.id)}
+                    onClick={() => item.owned ? toggleOwnedPinned(item.id) : togglePinned(item.id)}
                   >
-                    {item.owned ? t("dashboardPinTop") : item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
+                    {item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
                   </button>
                   <button
                     type="button"
