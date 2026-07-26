@@ -387,6 +387,207 @@ Every remediation should be deployed Worker-first when the frontend depends on
 new enforcement or token issuance. Keep backward compatibility bounded and
 remove it after clients have updated.
 
+### Operational metrics and retention policy
+
+This section defines the minimum observability and data-lifecycle policy to
+implement before public launch. Operational metrics should answer whether the
+service is healthy without recording private chat content.
+
+#### Core operational metrics
+
+Record counters, latency distributions and failures by route and deployed
+version:
+
+- request count and success, `4xx`, `429` and `5xx` rates;
+- average and p95 response latency;
+- message send success/failure and server rejection reason;
+- upload count, bytes, success/failure and pending-object count;
+- email delivery request, provider success/failure, verification completion
+  and expired-token count;
+- WebSocket open, authenticated, rejected, closed and reconnect count;
+- active authorized connections and channel live-viewer count;
+- D1 query error and slow-operation count;
+- R2 stored bytes, delivered bytes, deleted objects and cleanup failures;
+- login failure, room-token failure, blocked request, report submission and
+  rate-limit count.
+
+Start with service-wide and route-level dimensions. Channel/user dimensions
+must use an HMAC-pseudonymous identifier and should be added only when they are
+needed for abuse investigation. Do not create unbounded metric labels from raw
+channel IDs, UIDs, URLs or error messages.
+
+Average latency alone is insufficient. Track p95 latency so a smaller group of
+very slow requests remains visible. Each log or metric event should include a
+request ID, timestamp, route, status/error code, duration and deployed version
+where available.
+
+#### Log privacy rules
+
+Logs must never contain:
+
+- message, DM, petition or report description text;
+- passwords or password hashes;
+- room, email-verification, reset or admin WebSocket tokens;
+- `INTERNAL_SECRET`, Resend keys, OAuth secrets or cookies;
+- full request headers or bodies;
+- raw email addresses, IP addresses, fingerprints or user-agent-derived
+  fingerprints;
+- arbitrary link-preview response bodies.
+
+When correlation is necessary, use a purpose-specific HMAC secret and store
+only the resulting pseudonymous ID. Hashing a low-entropy value such as an
+email or IP without a secret is not sufficient protection against guessing.
+
+#### Initial alert thresholds
+
+Begin with a small set of actionable alerts:
+
+- `5xx` rate above 3% for five minutes;
+- five consecutive email-provider failures;
+- any repeated D1 migration or query failure;
+- upload bytes or object count materially above the recent baseline;
+- sudden WebSocket authentication/reconnect growth;
+- repeated owner-authorization failures;
+- cleanup backlog or R2 deletion failures older than 24 hours.
+
+Thresholds must be tuned after real traffic is observed. Avoid alerts for
+normal `403` and `404` traffic unless their rate changes sharply.
+
+#### Recommended retention matrix
+
+| Data | Recommended initial retention | Deletion behavior |
+| --- | --- | --- |
+| Normal messages | While the channel exists | User/admin deletion removes content and R2 media immediately; retain only a minimal reply placeholder when required |
+| Live messages and DMs | Until the live session ends | Delete messages, DMs, gallery rows, config and R2 objects at session end; retry partial failures |
+| Normal-channel DMs | 90 days | Delete automatically in bounded batches; allow earlier owner deletion |
+| Pending/unattached uploads | 1 hour | Delete R2 object if no message or DM attachment was committed |
+| Deleted-message media | No retention | Delete the R2 object during the same logical deletion workflow |
+| Open reports | Until resolved | Retain the minimum evidence required for review |
+| Resolved reports | 90–180 days | Remove or anonymize after the policy window; preserve only legally required audit data |
+| Email verification tokens | Expiry plus at most 7 days | Tokens are unusable immediately after use/expiry; delete hashed records in cleanup |
+| Password-reset tokens | Expiry plus at most 7 days | Invalidate immediately after use; delete expired/used hashed records |
+| Signup/login rate-limit records | 7 days initially | Delete records outside every enforcement and investigation window |
+| Channel block records | Until unblock or channel deletion | Remove with the channel; never reuse across channels |
+| Normal request logs | 30 days | Aggregate first where possible, then delete raw events |
+| Error logs | 90 days | Remove private payloads before storage |
+| Platform-admin audit logs | At least 1 year, subject to policy review | Append-only, access-controlled and excluded from ordinary application deletion |
+
+These are initial product recommendations rather than legal advice. Before
+launch in additional jurisdictions, align user-facing policy, legal
+requirements and actual deletion behavior.
+
+#### Minimal deleted-message placeholder
+
+When replies require the parent row to remain, immediately remove:
+
+- original text and image URL;
+- gallery record and R2 object;
+- nickname, fingerprint and other unnecessary sender metadata.
+
+Keep only the message ID, channel/reply relationship, deletion state and the
+minimum timestamp required to render the thread. Delete the placeholder after
+its final visible reply is removed if no other integrity rule requires it.
+
+#### Pending upload lifecycle
+
+The current direct-to-R2 model needs an explicit attachment lifecycle:
+
+```text
+upload ticket issued
+  → R2 object stored as pending
+  → message/DM transaction attaches the object
+  → object becomes active
+
+pending for more than 1 hour
+  → cleanup job deletes R2 object and pending record
+```
+
+A ticket should be short-lived and bound to the signed actor, channel, allowed
+content type and maximum size. A message may attach only a valid pending object
+for the same actor and channel.
+
+#### Scheduled cleanup
+
+Use a Cloudflare Cron Trigger, initially once per day, to process:
+
+- expired and used email-verification tokens;
+- expired and used password-reset tokens;
+- old authentication/rate-limit request records;
+- DMs beyond the retention window;
+- expired pending uploads;
+- queued R2 deletions;
+- expired operational logs and resolved-report records.
+
+Never issue an unbounded delete. Select a bounded batch of IDs (for example
+100–500), delete it, record the result and continue on the next run or within a
+strict execution budget. Before enabling deletion in production, run a
+read-only dry run that reports candidate counts and oldest/newest timestamps.
+
+#### Reliable cross-store deletion
+
+D1 and R2 cannot be modified in one atomic transaction. Use a retryable cleanup
+queue rather than assuming both operations always succeed:
+
+```text
+cleanup_jobs
+- id
+- type
+- target_key
+- status
+- attempts
+- next_attempt_at
+- created_at
+- completed_at
+```
+
+For media deletion:
+
+1. mark the application record deleted or inaccessible;
+2. enqueue the exact R2 key;
+3. attempt R2 deletion;
+4. mark the cleanup job complete;
+5. retry failures with bounded exponential backoff;
+6. alert when attempts or age exceed the operational threshold.
+
+The deletion operation must be idempotent: an already-missing D1 row or R2
+object counts as success.
+
+#### Account deletion policy
+
+Before exposing account deletion, define and test:
+
+- whether owned channels are deleted or transferred;
+- whether authored messages are deleted or anonymized;
+- removal of account recents, personal colors and font preferences;
+- removal of email, credential, verification and reset records;
+- treatment of reports and platform audit records under a documented
+  retention exception;
+- the maximum time until backups and derived logs no longer contain the data.
+
+Show the user the consequence before confirmation and require recent
+authentication for destructive account deletion.
+
+#### Rollout phases
+
+1. Add structured error codes, request IDs and deployed-version fields.
+2. Record core API, upload, email, WebSocket, D1 and R2 metrics without content.
+3. Add dashboards and the small initial alert set.
+4. Add pending-upload state and reliable cleanup jobs.
+5. Run retention dry reports and compare candidate records with product policy.
+6. Enable token/rate-record cleanup first.
+7. Enable pending-media and deleted-media cleanup with retries.
+8. Enable DM, report and log retention only after restore and audit checks.
+
+Trade-offs:
+
+- metrics and logs introduce storage and processing cost;
+- overly detailed labels or logs create a new privacy risk;
+- short retention may impede incident or report investigation;
+- long retention increases cost and breach impact;
+- cleanup bugs can delete required data, so dry runs, bounded batches,
+  idempotency and retry visibility are mandatory;
+- aggressive alert thresholds create alert fatigue.
+
 ## Current follow-up work
 
 - complete the 2026-07-26 security-audit remediation in the documented order;
@@ -394,5 +595,5 @@ remove it after clients have updated.
 - finish monitored legacy-password migration;
 - consider message-list virtualization for exceptionally long historical browsing sessions;
 - add typing indicators;
-- add operational metrics and retention policies;
+- implement the documented operational metrics, alerts, cleanup jobs and retention policy;
 - continue mobile and accessibility testing for widgets, dialogs and dashboard gestures.
