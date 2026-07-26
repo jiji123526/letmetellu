@@ -20,7 +20,6 @@ const GoogleIcon = () => (
 export function LoginDialog({ onClose }: LoginDialogProps) {
   const { t } = useLocale();
   const [tab, setTab] = useState<"login" | "signup">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -48,7 +47,7 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
       const response = await fetch("/api/email-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "signup", email, password, name }),
+        body: JSON.stringify({ action: "signup", email, password }),
       });
       const data = await response.json() as { ok?: boolean; error?: string };
       if (!response.ok || !data.ok) {
@@ -135,8 +134,6 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
               <>
                 <div className="flex items-center gap-3 my-4"><span className="h-px flex-1 bg-[#e5e5ea]" /><span className="text-[11px]" style={{ color: "#8e8e93" }}>{t("or")}</span><span className="h-px flex-1 bg-[#e5e5ea]" /></div>
                 <form onSubmit={handleSignup}>
-                  <label className="block text-[12px] font-medium mb-1.5">{t("nameOptional")}</label>
-                  <input type="text" autoComplete="name" maxLength={50} value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
                   <label className="block text-[12px] font-medium mb-1.5">{t("email")}</label>
                   <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
                   <label className="block text-[12px] font-medium mb-1.5">{t("password")}</label>
