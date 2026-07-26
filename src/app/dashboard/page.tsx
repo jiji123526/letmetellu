@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const [recentChannels, setRecentChannels] = useState<RecentChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [submittedLinkedChannelId, setSubmittedLinkedChannelId] = useState<string | null>(null);
   const [linkedChannel, setLinkedChannel] = useState<Channel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
@@ -89,7 +90,7 @@ export default function DashboardPage() {
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
-  const linkedChannelId = getChannelIdFromLink(query);
+  const linkedChannelId = submittedLinkedChannelId;
 
   const loadChannels = useCallback(async () => {
     const response = await fetch("/api/user", { cache: "no-store" });
@@ -210,7 +211,7 @@ export default function DashboardPage() {
   }, [linkedChannelId]);
 
   const activeItems = useMemo(() => {
-    const normalized = linkedChannelId || query.trim().toLowerCase();
+    const normalized = query.trim().toLowerCase();
     const ownedIds = new Set(channels.map((channel) => channel.id));
     const personalColors = new Map(recentChannels.map((channel) => [channel.id, channel.bubbleColor]));
     const previewColor = (channelId: string, fallback: string) =>
@@ -265,6 +266,7 @@ export default function DashboardPage() {
         pinned: false,
       });
     }
+    if (linkedChannelId) return items.filter((item) => item.id === linkedChannelId);
     if (!normalized) return items;
     return items.filter((item) =>
       item.name.toLowerCase().includes(normalized)
@@ -543,11 +545,29 @@ export default function DashboardPage() {
               <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" fill="none" stroke="#8e8e93" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setSubmittedLinkedChannelId(null);
+                }}
+                onPaste={(event) => {
+                  const pastedText = event.clipboardData.getData("text");
+                  const start = event.currentTarget.selectionStart ?? query.length;
+                  const end = event.currentTarget.selectionEnd ?? query.length;
+                  const nextValue = `${query.slice(0, start)}${pastedText}${query.slice(end)}`;
+                  const channelId = getChannelIdFromLink(nextValue);
+                  if (!channelId) return;
+                  event.preventDefault();
+                  setQuery(nextValue);
+                  setLinkedChannel(null);
+                  setSubmittedLinkedChannelId(channelId);
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && linkedChannelId && activeItems.some((item) => item.id === linkedChannelId)) {
-                    router.push(`/ch/${linkedChannelId}`);
-                  }
+                  if (event.key !== "Enter") return;
+                  const channelId = getChannelIdFromLink(query);
+                  if (!channelId) return;
+                  event.preventDefault();
+                  setLinkedChannel(null);
+                  setSubmittedLinkedChannelId(channelId);
                 }}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"

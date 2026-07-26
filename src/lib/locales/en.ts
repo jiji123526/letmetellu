@@ -262,7 +262,7 @@ export const en: Record<LocaleKeys, string> = {
   dashboardRecentDesc: "Channels you visit will appear on this device.",
   dashboardGuestCta: "Log in to create a channel",
   dashboardDesc: "Manage all of your anonymous chat channels in one place",
-  dashboardSearch: "Search channels or paste a link",
+  dashboardSearch: "Search channels or enter an address, then press Return",
   dashboardAccount: "Account",
   dashboardCopyLink: "Copy link",
   dashboardCopied: "Copied",
