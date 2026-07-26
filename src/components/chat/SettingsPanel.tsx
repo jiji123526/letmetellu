@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocale } from "@/hooks/useLocale";
+import { useSession } from "next-auth/react";
+import { saveFontSize } from "@/components/UserPreferencesSync";
 
 const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 
@@ -22,18 +24,27 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ channelId, currentColor, onColorChange, onClose }: SettingsPanelProps) {
   const { locale, setLocale, t } = useLocale();
+  const { status } = useSession();
   const [fontSize, setFontSize] = useState(() => {
     if (typeof window === "undefined") return 17;
-    return parseInt(localStorage.getItem("fontSize") || "17");
+    return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bubble-font-size")) || 17;
   });
   const [selectedColor, setSelectedColor] = useState(currentColor);
   const colorInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const handleFontSize = (event: Event) => {
+      const size = (event as CustomEvent<{ size: number }>).detail?.size;
+      if (size) setFontSize(size);
+    };
+    window.addEventListener("font-size-changed", handleFontSize);
+    return () => window.removeEventListener("font-size-changed", handleFontSize);
+  }, []);
+
   const changeFontSize = (dir: number) => {
     const newSize = Math.max(12, Math.min(20, fontSize + dir));
     setFontSize(newSize);
-    localStorage.setItem("fontSize", String(newSize));
-    document.documentElement.style.setProperty("--bubble-font-size", `${newSize}px`);
+    void saveFontSize(newSize, status === "authenticated");
   };
 
   const changeColor = (color: string) => {

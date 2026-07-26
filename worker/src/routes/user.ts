@@ -40,6 +40,21 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     return Response.json({ channels });
   }
 
+  if (request.method === "PATCH") {
+    if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const userId = request.headers.get("X-User-Id") || "";
+    const body = await request.json() as { font_size?: number };
+    const fontSize = Number(body.font_size);
+    if (!userId || !Number.isInteger(fontSize) || fontSize < 12 || fontSize > 20) {
+      return Response.json({ error: "invalid preference" }, { status: 400 });
+    }
+    await env.DB.prepare("UPDATE users SET font_size = ? WHERE id = ?")
+      .bind(fontSize, userId).run();
+    return Response.json({ ok: true, font_size: fontSize });
+  }
+
   if (request.method === "POST") {
     // Verify internal token (only Vercel proxy should call this)
     const token = request.headers.get("X-Internal-Token");
@@ -76,7 +91,9 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
        WHERE channels.owner_uid = ?`
     ).bind(id).all();
 
-    return Response.json({ ok: true, channels });
+    const preferences = await env.DB.prepare("SELECT font_size FROM users WHERE id = ?")
+      .bind(id).first<{ font_size: number | null }>();
+    return Response.json({ ok: true, channels, font_size: preferences?.font_size ?? null });
   }
 
   return Response.json({ error: "method not allowed" }, { status: 405 });

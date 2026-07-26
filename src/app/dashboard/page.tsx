@@ -493,14 +493,14 @@ export default function DashboardPage() {
   };
 
   if (status === "loading" || loading) {
-    return <main className="min-h-dvh flex items-center justify-center bg-white"><span className="text-[14px]" style={{ color: "#8e8e93" }}>{t("loading")}</span></main>;
+    return <main className="dashboard-font-scaled min-h-dvh flex items-center justify-center bg-white"><span className="text-[14px]" style={{ color: "#8e8e93" }}>{t("loading")}</span></main>;
   }
 
   const isLoggedIn = !!session;
   const empty = activeItems.length === 0;
 
   return (
-    <main className="min-h-dvh bg-white" style={{ color: "#111" }}>
+    <main className="dashboard-font-scaled min-h-dvh bg-white" style={{ color: "#111" }}>
       <div className={`max-w-[760px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "#ededf0" }}>
         <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl">
           <div className="h-[64px] px-4 flex items-center justify-between">

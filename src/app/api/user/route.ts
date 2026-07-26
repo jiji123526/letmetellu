@@ -28,3 +28,24 @@ export async function GET() {
   const data = await res.json();
   return NextResponse.json(data);
 }
+
+export async function PATCH(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+  const res = await fetch(`${workerUrl}/api/user`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
+      "X-User-Id": session.user.id,
+    },
+    body: await request.text(),
+    cache: "no-store",
+  });
+  const data = await res.json();
+  return NextResponse.json(data, { status: res.status });
+}
