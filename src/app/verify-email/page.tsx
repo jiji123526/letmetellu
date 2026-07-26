@@ -41,8 +41,7 @@ function VerificationResult({ verified }: { verified: boolean }) {
         </p>
         <a
           href={loginUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          target="_top"
           className="block w-full rounded-[12px] py-3 text-white text-[15px] font-semibold no-underline"
           style={{ background: "#007aff" }}
         >
