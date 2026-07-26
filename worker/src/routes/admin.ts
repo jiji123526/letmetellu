@@ -68,6 +68,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env.DB.prepare(`DELETE FROM banned_words WHERE channel_id IN (${placeholders})`).bind(...channelIds),
         env.DB.prepare(`DELETE FROM channels WHERE id IN (${placeholders})`).bind(...channelIds),
       ]);
+      const doId = env.CHAT_ROOM.idFromName(channel_id);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "channel-deleted", channel_id }),
+      })).catch(() => null);
       await Promise.all([...mediaKeys].map((key) => env.MEDIA.delete(key).catch(() => {})));
       invalidatePasscodeCache(channel_id);
       invalidateBannedWordsCache(channel_id);

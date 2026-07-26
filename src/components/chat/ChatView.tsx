@@ -30,7 +30,7 @@ import { MessageEmbeds } from "./MessageEmbeds";
 import { AdminPanel } from "../admin/AdminPanel";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MediaLoadingDots } from "./MediaLoadingDots";
-import { recordRecentChannel } from "@/lib/recent-channels";
+import { recordRecentChannel, removeRecentChannel } from "@/lib/recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 
 interface Message {
@@ -707,6 +707,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showLinks, setShowLinks] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showOwnerChannels, setShowOwnerChannels] = useState(false);
+  const [showChannelDeleted, setShowChannelDeleted] = useState(false);
   const [ownerChannelCount, setOwnerChannelCount] = useState(1);
   const { isOwner, userId: authUserId } = useAuth(channel?.owner_uid);
   const { t } = useLocale();
@@ -1172,12 +1173,15 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "rules-changed") {
         setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);
       }
+      if (event.type === "channel-deleted" && !isAdmin) {
+        setShowChannelDeleted(true);
+      }
       if (event.type === "emoji-presets-changed") {
         localStorage.setItem(`liveEmojis_${channelId}_live`, event.emojis as string);
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, uid, myFingerprint, t, channel, applyInitData]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, uid, myFingerprint, t, channel, applyInitData]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -2270,6 +2274,21 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Welcome Popup */}
       <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} customConfig={welcomeConfig} />
+
+      {showChannelDeleted && (
+        <ConfirmDialog
+          title={t("channelDeletedTitle")}
+          message={t("channelDeletedMessage")}
+          confirmLabel={t("goToDashboard")}
+          onConfirm={() => {
+            removeRecentChannel(channelId);
+            window.location.href = "/dashboard";
+          }}
+          onCancel={() => {}}
+          showCancel={false}
+          closeOnBackdrop={false}
+        />
+      )}
 
       {/* Header Menu */}
       {headerMenu && (

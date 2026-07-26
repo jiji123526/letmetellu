@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { useLocale } from "@/hooks/useLocale";
 import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
+import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
 
 interface Channel {
   id: string;
@@ -52,6 +53,8 @@ export default function DashboardPage() {
   const [editing, setEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ mode: "single" | "selected"; channelIds: string[] } | null>(null);
+  const [showDeleteError, setShowDeleteError] = useState(false);
   const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     try { return localStorage.getItem("letmetellu_prioritized_owned_channel"); } catch { return null; }
@@ -197,14 +200,12 @@ export default function DashboardPage() {
     removeRecentChannel(channelId);
   };
 
-  const deleteSelected = async () => {
-    if (!selectedIds.size || deleting) return;
-    const ownedIds = [...selectedIds].filter((id) => channels.some((channel) => channel.id === id));
-    if (ownedIds.length && !window.confirm(t("dashboardDeleteOwnedConfirm"))) return;
+  const performDeleteSelected = async (channelIds: string[]) => {
+    const ownedIds = channelIds.filter((id) => channels.some((channel) => channel.id === id));
     setDeleting(true);
     try {
       await Promise.all(ownedIds.map(deleteOwnedChannel));
-      [...selectedIds]
+      channelIds
         .filter((id) => !ownedIds.includes(id))
         .forEach(removeRecentChannel);
       await loadChannels();
@@ -212,14 +213,24 @@ export default function DashboardPage() {
       setSelectedIds(new Set());
       setEditing(false);
     } catch {
-      window.alert(t("dashboardDeleteFailed"));
+      setShowDeleteError(true);
     } finally {
       setDeleting(false);
     }
   };
 
-  const deleteSingleOwned = async (channelId: string) => {
-    if (!window.confirm(t("dashboardDeleteOwnedConfirm"))) return;
+  const deleteSelected = () => {
+    if (!selectedIds.size || deleting) return;
+    const channelIds = [...selectedIds];
+    const includesOwned = channelIds.some((id) => channels.some((channel) => channel.id === id));
+    if (includesOwned) {
+      setPendingDelete({ mode: "selected", channelIds });
+    } else {
+      void performDeleteSelected(channelIds);
+    }
+  };
+
+  const performDeleteSingleOwned = async (channelId: string) => {
     setDeleting(true);
     try {
       await deleteOwnedChannel(channelId);
@@ -227,7 +238,7 @@ export default function DashboardPage() {
       setRecentChannels(getRecentChannels());
       setSwipe({ id: null, offset: 0 });
     } catch {
-      window.alert(t("dashboardDeleteFailed"));
+      setShowDeleteError(true);
     } finally {
       setDeleting(false);
     }
@@ -412,7 +423,7 @@ export default function DashboardPage() {
                     style={{ background: "#ff3b30" }}
                     onClick={() => {
                       if (item.owned) {
-                        void deleteSingleOwned(item.id);
+                        setPendingDelete({ mode: "single", channelIds: [item.id] });
                       } else {
                         removeRecent(item.id);
                         setSwipe({ id: null, offset: 0 });
@@ -519,7 +530,7 @@ export default function DashboardPage() {
               disabled={!selectedIds.size || deleting}
               className="border-none bg-transparent text-[15px] font-medium"
               style={{ color: selectedIds.size ? "#ff3b30" : "#c7c7cc", cursor: selectedIds.size && !deleting ? "pointer" : "default" }}
-              onClick={() => void deleteSelected()}
+              onClick={deleteSelected}
             >
               {deleting ? t("loading") : t("delete")}
             </button>
@@ -555,6 +566,36 @@ export default function DashboardPage() {
         <FirstChannelOnboarding
           onCreated={async () => { await loadChannels(); }}
           onClose={() => setShowFirstOnboarding(false)}
+        />
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={t("dashboardDeleteChannel")}
+          message={t("dashboardDeleteOwnedConfirm")}
+          confirmLabel={t("delete")}
+          confirmColor="#ff3b30"
+          onConfirm={() => {
+            const request = pendingDelete;
+            setPendingDelete(null);
+            if (request.mode === "single") {
+              void performDeleteSingleOwned(request.channelIds[0]);
+            } else {
+              void performDeleteSelected(request.channelIds);
+            }
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {showDeleteError && (
+        <ConfirmDialog
+          title={t("dashboardDeleteChannel")}
+          message={t("dashboardDeleteFailed")}
+          confirmLabel={t("confirm")}
+          onConfirm={() => setShowDeleteError(false)}
+          onCancel={() => setShowDeleteError(false)}
+          showCancel={false}
         />
       )}
     </main>
