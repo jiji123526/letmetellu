@@ -1774,8 +1774,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             aria-label={t("rules")}
           >
             <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 2px)", height: "calc(var(--bubble-font-size) + 2px)" }}>
-              <path d="M5 4.5h14v15H5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <circle cx="12" cy="8" r="1.15" fill="currentColor" />
+              <path d="M12 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
         )}
