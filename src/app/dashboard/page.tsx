@@ -245,7 +245,6 @@ export default function DashboardPage() {
           meta: `/ch/${channel.id}`,
           time: formatDate(channel.created_at, locale),
           owned: true,
-          managed: true,
           pinned: channel.id === prioritizedOwnedId,
         }))
       .sort((left, right) =>
@@ -263,7 +262,6 @@ export default function DashboardPage() {
           meta: `/ch/${channel.id}`,
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
-          managed: channels.some((ownedChannel) => ownedChannel.id === channel.id),
           pinned: channel.pinned,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
@@ -279,7 +277,6 @@ export default function DashboardPage() {
         meta: `/ch/${linkedChannel.id}`,
         time: "",
         owned: false,
-        managed: false,
         pinned: false,
       });
     }
@@ -769,7 +766,6 @@ export default function DashboardPage() {
                             <path d="M14.5 3.5 20 9l-2 2-1.2-1.2-3.3 3.3.4 3.4-1.4 1.4-3.4-3.4L5 18.6 3.4 17l4.1-4.1-3.4-3.4 1.4-1.4 3.4.4 3.3-3.3L11 4l2-2 1.5 1.5Z" />
                           </svg>
                         )}
-                        {item.managed && <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "#eaf3ff", color: "#007aff" }}>{t("dashboardManaged")}</span>}
                       </div>
                       <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "#8e8e93" }}>{item.time}</span>
                       <span className="ml-2 text-[19px] font-light leading-none" style={{ color: "#c7c7cc" }}>›</span>

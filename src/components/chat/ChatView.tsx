@@ -1851,7 +1851,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             {channel?.profile_image ? (
               <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-lg" style={{ background: "var(--gray-bubble)" }}>💬</div>
+              <div
+                className="w-full h-full flex items-center justify-center text-white text-lg font-semibold"
+                style={{ background: bubbleColor }}
+              >
+                {channel?.name?.slice(0, 1).toUpperCase() || "?"}
+              </div>
             )}
           </button>
           <div className="font-normal flex items-center gap-[2px]" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--gray-text)" }}>
