@@ -36,9 +36,18 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const existing = await env.DB.prepare("SELECT id FROM channels WHERE id = ?").bind(channel_id).first();
       if (existing) return Response.json({ error: "channel already exists" }, { status: 409 });
 
-      await env.DB.prepare(
-        "INSERT INTO channels (id, owner_uid, name) VALUES (?, ?, ?)"
-      ).bind(channel_id, userId, name || "My Channel").run();
+      const result = await env.DB.prepare(`
+        INSERT INTO channels (id, owner_uid, name)
+        SELECT ?, ?, ?
+        WHERE (
+          SELECT COUNT(*)
+          FROM channels
+          WHERE owner_uid = ? AND id NOT LIKE '%_live'
+        ) < 5
+      `).bind(channel_id, userId, name || "My Channel", userId).run();
+      if (!result.meta.changes) {
+        return Response.json({ error: "channel limit reached" }, { status: 403 });
+      }
 
       return Response.json({ ok: true, channel_id });
     }

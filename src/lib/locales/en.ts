@@ -272,6 +272,7 @@ export const en: Record<LocaleKeys, string> = {
   dashboardNoSearchResults: "No channels match your search",
   dashboardCreateDesc: "Choose a channel name and a shareable URL.",
   dashboardCreateFailed: "Could not create the channel. Please try again.",
+  dashboardChannelLimit: "You can create up to 5 channels per account.",
   dashboardBack: "Dashboard",
   firstOnboardingTitle: "Start a space of your own",
   firstOnboardingDesc: "Open it with one link and stay in control when you need to.",

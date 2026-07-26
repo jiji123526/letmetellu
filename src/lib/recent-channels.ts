@@ -10,7 +10,6 @@ export interface RecentChannel {
 }
 
 const STORAGE_KEY = "letmetellu_recent_channels";
-const MAX_RECENT_CHANNELS = 20;
 
 export function getRecentChannels(): RecentChannel[] {
   if (typeof window === "undefined") return [];
@@ -31,8 +30,7 @@ export function getRecentChannels(): RecentChannel[] {
         ownerName: typeof item.ownerName === "string" ? item.ownerName : "",
         pinned: item.pinned === true,
       }))
-      .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastVisitedAt - left.lastVisitedAt)
-      .slice(0, MAX_RECENT_CHANNELS);
+      .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastVisitedAt - left.lastVisitedAt);
   } catch {
     return [];
   }
@@ -45,7 +43,7 @@ export function recordRecentChannel(channel: Omit<RecentChannel, "lastVisitedAt"
     const next = [
       { ...channel, pinned: existing?.pinned ?? false, lastVisitedAt: Date.now() },
       ...getRecentChannels().filter((item) => item.id !== channel.id),
-    ].slice(0, MAX_RECENT_CHANNELS);
+    ];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
     // Recent history is optional and must never prevent channel entry.

@@ -28,7 +28,6 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
       LEFT JOIN users u ON u.id = c.owner_uid
       WHERE r.user_id = ?
       ORDER BY r.pinned DESC, r.last_visited_at DESC
-      LIMIT 20
     `).bind(userId).all();
     return Response.json({ channels: results });
   }

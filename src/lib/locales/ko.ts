@@ -270,6 +270,7 @@ export const ko = {
   dashboardNoSearchResults: "검색 결과가 없습니다",
   dashboardCreateDesc: "채널 이름과 공유할 주소를 정해주세요.",
   dashboardCreateFailed: "채널 생성에 실패했습니다. 다시 시도해 주세요.",
+  dashboardChannelLimit: "채널은 계정당 최대 5개까지 만들 수 있습니다.",
   dashboardBack: "대시보드",
   firstOnboardingTitle: "우리만의 대화를 시작해요",
   firstOnboardingDesc: "링크 하나로 열고, 필요한 순간에는 안전하게 관리하세요.",

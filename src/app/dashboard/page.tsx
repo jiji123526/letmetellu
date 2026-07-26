@@ -103,12 +103,19 @@ export default function DashboardPage() {
     setRecentChannels(stored);
     if (stored.length === 0) return;
     try {
-      const ids = stored.map((channel) => channel.id).join(",");
-      const response = await fetch(`/api/channels/exists?ids=${encodeURIComponent(ids)}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const data = await response.json() as { existingIds?: string[] };
-      if (!Array.isArray(data.existingIds)) return;
-      const existingIds = new Set(data.existingIds);
+      const chunks: RecentChannel[][] = [];
+      for (let index = 0; index < stored.length; index += 20) {
+        chunks.push(stored.slice(index, index + 20));
+      }
+      const responses = await Promise.all(chunks.map(async (chunk) => {
+        const ids = chunk.map((channel) => channel.id).join(",");
+        const response = await fetch(`/api/channels/exists?ids=${encodeURIComponent(ids)}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("channel validation failed");
+        const data = await response.json() as { existingIds?: string[] };
+        if (!Array.isArray(data.existingIds)) throw new Error("invalid channel validation");
+        return data.existingIds;
+      }));
+      const existingIds = new Set(responses.flat());
       stored.forEach((channel) => {
         if (!existingIds.has(channel.id)) removeRecentChannel(channel.id);
       });
@@ -289,7 +296,13 @@ export default function DashboardPage() {
       });
       const data = await response.json() as { error?: string };
       if (!response.ok || data.error) {
-        setCreateError(data.error === "channel already exists" ? t("channelExists") : t("dashboardCreateFailed"));
+        setCreateError(
+          data.error === "channel already exists"
+            ? t("channelExists")
+            : data.error === "channel limit reached"
+              ? t("dashboardChannelLimit")
+              : t("dashboardCreateFailed")
+        );
         return;
       }
       await loadChannels();
@@ -774,7 +787,7 @@ export default function DashboardPage() {
         <LoginDialog onClose={closeLogin} />
       )}
 
-      {isLoggedIn && !editing && (
+      {isLoggedIn && !editing && channels.length < 5 && (
         <button
           type="button"
           className="fixed z-40 w-14 h-14 rounded-full border-none cursor-pointer flex items-center justify-center text-white"

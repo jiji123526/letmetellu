@@ -38,8 +38,11 @@ async function postAccountRecent(payload: Record<string, unknown>) {
   return response.json() as Promise<{ record?: { bubble_color?: string | null } }>;
 }
 
-export const mergeAccountRecentChannels = (channels: RecentChannel[]) =>
-  postAccountRecent({ action: "merge", channels });
+export async function mergeAccountRecentChannels(channels: RecentChannel[]) {
+  for (let index = 0; index < channels.length; index += 20) {
+    await postAccountRecent({ action: "merge", channels: channels.slice(index, index + 20) });
+  }
+}
 
 export const recordAccountRecentChannel = (channelId: string) =>
   postAccountRecent({ action: "visit", channel_id: channelId });
