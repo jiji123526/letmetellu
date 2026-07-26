@@ -2,7 +2,7 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
@@ -90,6 +90,8 @@ export default function DashboardPage() {
     if (typeof window === "undefined") return null;
     try { return localStorage.getItem("letmetellu_prioritized_owned_channel"); } catch { return null; }
   });
+  const channelItemRefs = useRef(new Map<string, HTMLDivElement>());
+  const previousItemPositionsRef = useRef(new Map<string, number>());
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
@@ -263,7 +265,8 @@ export default function DashboardPage() {
           owned: false,
           managed: channels.some((ownedChannel) => ownedChannel.id === channel.id),
           pinned: channel.pinned,
-        }));
+        }))
+      .sort((left, right) => Number(right.pinned) - Number(left.pinned));
     const items = [...ownedItems, ...recentItems];
     if (linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
       items.push({
@@ -287,6 +290,27 @@ export default function DashboardPage() {
       || item.id.toLowerCase().includes(normalized)
     );
   }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status]);
+
+  useLayoutEffect(() => {
+    const nextPositions = new Map<string, number>();
+    channelItemRefs.current.forEach((element, id) => {
+      const nextTop = element.getBoundingClientRect().top;
+      nextPositions.set(id, nextTop);
+      const previousTop = previousItemPositionsRef.current.get(id);
+      if (previousTop === undefined || previousTop === nextTop) return;
+      element.animate(
+        [
+          { transform: `translateY(${previousTop - nextTop}px)` },
+          { transform: "translateY(0)" },
+        ],
+        {
+          duration: 320,
+          easing: "cubic-bezier(.22,.8,.36,1)",
+        },
+      );
+    });
+    previousItemPositionsRef.current = nextPositions;
+  }, [activeItems]);
 
   const handleCreate = async () => {
     const slug = newSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
@@ -624,7 +648,13 @@ export default function DashboardPage() {
                 && channels.length > 0
                 && (index === 0 || previousItem?.owned !== item.owned);
               return (
-              <div key={item.id}>
+              <div
+                key={item.id}
+                ref={(element) => {
+                  if (element) channelItemRefs.current.set(item.id, element);
+                  else channelItemRefs.current.delete(item.id);
+                }}
+              >
                 {showSectionLabel && (
                   <div
                     className={`${index === 0 ? "pt-3" : "pt-5"} px-4 pb-1.5 text-[12px] font-semibold`}
@@ -666,7 +696,7 @@ export default function DashboardPage() {
                     touchAction: editing ? "auto" : "pan-y",
                     transform: `translateX(${!editing && swipe.id === item.id ? swipe.offset : 0}px)`,
                     transition: draggingId === item.id ? "none" : "transform 180ms ease-out",
-                    background: item.owned ? "#f4f8ff" : "#fff",
+                    background: "#fff",
                   }}
                   onPointerDown={!editing ? (event) => startSwipe(event, item.id) : undefined}
                   onPointerMove={!editing ? (event) => moveSwipe(event, item.id) : undefined}
