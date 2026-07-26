@@ -56,7 +56,13 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
 
     // Upsert user
     await env.DB.prepare(
-      "INSERT INTO users (id, email, name, image) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = ?, name = ?, image = ?"
+      `INSERT INTO users (id, email, name, image, email_verified_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET
+         email = ?,
+         name = ?,
+         image = ?,
+         email_verified_at = COALESCE(users.email_verified_at, datetime('now'))`
     ).bind(id, email, name || null, image || null, email, name || null, image || null).run();
 
     // Fetch user's channels

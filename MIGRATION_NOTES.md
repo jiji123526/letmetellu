@@ -88,6 +88,20 @@ The table intentionally does not store passcodes or room tokens. Channel deletio
 
 The initial implementation returned 20 records. That application-level limit has since been removed; batching remains in place for migration and guest validation so D1 bound-parameter limits are not exceeded.
 
+#### `0008_email_verification.sql`
+
+Adds `users.email_verified_at`, verification tokens and hashed signup request records.
+
+- Existing users are backfilled as verified so deployment does not lock them out.
+- New credential accounts are created with `email_verified_at = NULL`.
+- Raw email verification tokens are never stored; only their SHA-256 hashes are persisted.
+- Tokens expire after 30 minutes and are invalidated after use or resend.
+- Signup throttling stores hashed email/IP identifiers rather than raw IP addresses.
+- Failed logins are throttled independently by hashed email and IP identifiers; nonexistent accounts still perform a dummy PBKDF2 verification to reduce timing-based enumeration.
+- The Resend sandbox sends only to `EMAIL_TEST_RECIPIENT`.
+
+Apply this migration before deploying the Worker version that reads `email_verified_at`.
+
 ### Operational checks
 
 After a migration:
@@ -193,7 +207,10 @@ Media bubbles, embedded widgets and loading bubbles intentionally use their own 
 
 ### Authentication transition
 
-- Disabled new email/password signup until email verification exists.
+- Added Resend sandbox email signup for one configured test recipient.
+- Added a confirmation page that consumes tokens only after an explicit POST.
+- Added 30-minute, single-use verification tokens and signup throttling.
+- Kept all pre-migration users verified to prevent a deployment lockout.
 - Kept Google OAuth as the supported signup path.
 - Retained login support for existing credential accounts.
 - Added a salted PBKDF2 format and legacy SHA-256 verification/upgrade code.

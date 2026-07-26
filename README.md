@@ -55,12 +55,13 @@ Normal channel and live-session traffic share the parent channel's Durable Objec
 ## Authentication status
 
 - Google OAuth is the supported signup path.
-- The Credentials provider remains available for existing email/password accounts, but the production legacy-login upgrade path is currently under investigation.
-- New credential signup is intentionally disabled until email ownership verification is implemented.
+- The Credentials provider remains available for existing email/password accounts.
+- New credential signup is enabled in Resend sandbox mode for the configured test recipient.
+- New accounts remain pending until a single-use, 30-minute email link is confirmed.
 - Legacy SHA-256 password records are still recognized by the Worker; the current code attempts to upgrade a successful legacy login to salted PBKDF2.
 - There is no platform-wide administrator role. Administration is scoped to channel ownership.
 
-Before expanding credential login, finish and test email verification, password reset and the legacy-hash upgrade path in production.
+Before opening credential signup to the public, verify a sending domain, add password reset, and finish production monitoring for the legacy-hash upgrade path.
 
 ## Chat and moderation
 
@@ -101,6 +102,7 @@ Before expanding credential login, finish and test email verification, password 
 - WebSocket owner authentication uses short-lived tokens from `/api/ws-token`.
 - Passcode-protected endpoints require a signed room token tied to the current passcode hash.
 - Message length, upload type/size, rate limits, freeze state, blocked users and banned words are enforced server-side.
+- Failed credential logins are throttled independently by hashed email and IP identifiers.
 - DMs are sent only to owner-authenticated WebSocket connections.
 - SQL uses bound parameters.
 - CORS is restricted to the production origin and local development.
@@ -160,6 +162,9 @@ Configure the Worker secret:
 ```bash
 cd worker
 npx wrangler secret put INTERNAL_SECRET
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put EMAIL_TEST_RECIPIENT
+npx wrangler secret put APP_ORIGIN
 ```
 
 Never commit `.env.local`, Worker secrets, OAuth client secrets or production database exports.
@@ -191,6 +196,7 @@ Current migrations:
 | `0005_hot_path_indexes.sql` | message, block and DM indexes |
 | `0006_passcode_hint.sql` | optional channel passcode hint |
 | `0007_user_recent_channels.sql` | account-synced recents, pins and personal colors |
+| `0008_email_verification.sql` | verified-email state, single-use verification tokens and signup rate-limit records |
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for schema details and the deployment runbook.
 
@@ -242,7 +248,7 @@ worker/
 
 ## Known follow-up work
 
-- email verification and password reset;
+- verified sending domain and password reset;
 - validate and harden the legacy credential upgrade path;
 - optional profile visibility controls for owner channels;
 - typing indicators;

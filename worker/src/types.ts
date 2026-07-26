@@ -4,4 +4,7 @@ export interface Env {
   CHAT_ROOM: DurableObjectNamespace;
   ALLOWED_ORIGIN: string;
   INTERNAL_SECRET: string;
+  RESEND_API_KEY: string;
+  EMAIL_TEST_RECIPIENT: string;
+  APP_ORIGIN: string;
 }

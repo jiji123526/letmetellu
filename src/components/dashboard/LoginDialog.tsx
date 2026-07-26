@@ -20,16 +20,55 @@ const GoogleIcon = () => (
 export function LoginDialog({ onClose }: LoginDialogProps) {
   const { t } = useLocale();
   const [tab, setTab] = useState<"login" | "signup">("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
   const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
   const switchTab = (next: "login" | "signup") => {
     if (submitting) return;
     setTab(next);
     setError("");
+    setVerificationSent(false);
+  };
+
+  const handleSignup = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    if (!email || !password || !confirmPassword) return setError(t("allFieldsRequired"));
+    if (!isValidEmail(email)) return setError(t("invalidEmail"));
+    if (password.length < 12 || password.length > 128) return setError(t("passwordLengthRequirement"));
+    if (password !== confirmPassword) return setError(t("passwordMismatch"));
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/email-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "signup", email, password, name }),
+      });
+      const data = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !data.ok) {
+        setError(
+          data.error === "too_many_requests"
+            ? t("emailVerificationRateLimited")
+            : data.error === "email_delivery_failed"
+              ? t("emailDeliveryFailed")
+              : data.error === "weak_password"
+                ? t("passwordLengthRequirement")
+                : t("signupError")
+        );
+        return;
+      }
+      setVerificationSent(true);
+    } catch {
+      setError(t("signupError"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleLogin = async (event: FormEvent) => {
@@ -85,9 +124,34 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
           </form>
           </>
         ) : (
-          <div className="mt-4 rounded-[12px] px-4 py-3 text-[12px] leading-[1.5] text-center" style={{ background: "#f2f2f7", color: "#6d6d72" }}>
-            {t("emailSignupDisabled")}
-          </div>
+          <>
+            {verificationSent ? (
+              <div className="mt-4 rounded-[16px] px-5 py-6 text-center" style={{ background: "#f2f2f7" }}>
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center text-[22px]" style={{ background: "#eaf3ff", color: "#007aff" }}>✓</div>
+                <h3 className="m-0 text-[17px] font-semibold">{t("verificationEmailSentTitle")}</h3>
+                <p className="mt-2 mb-0 text-[13px] leading-[1.5]" style={{ color: "#6d6d72" }}>{t("verificationEmailSentDesc")}</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 my-4"><span className="h-px flex-1 bg-[#e5e5ea]" /><span className="text-[11px]" style={{ color: "#8e8e93" }}>{t("or")}</span><span className="h-px flex-1 bg-[#e5e5ea]" /></div>
+                <form onSubmit={handleSignup}>
+                  <label className="block text-[12px] font-medium mb-1.5">{t("nameOptional")}</label>
+                  <input type="text" autoComplete="name" maxLength={50} value={name} onChange={(event) => setName(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+                  <label className="block text-[12px] font-medium mb-1.5">{t("email")}</label>
+                  <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+                  <label className="block text-[12px] font-medium mb-1.5">{t("password")}</label>
+                  <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-1.5" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+                  <p className="mt-0 mb-4 text-[11px]" style={{ color: "#8e8e93" }}>{t("passwordLengthRequirement")}</p>
+                  <label className="block text-[12px] font-medium mb-1.5">{t("confirmPassword")}</label>
+                  <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+                  <div className="min-h-[30px] pt-2 text-[12px] text-center" style={{ color: "#ff3b30" }}>{error}</div>
+                  <button disabled={submitting} type="submit" className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold" style={{ background: submitting ? "#9ec9f5" : "#007aff", cursor: submitting ? "wait" : "pointer" }}>
+                    {submitting ? t("loading") : t("sendVerificationEmail")}
+                  </button>
+                </form>
+              </>
+            )}
+          </>
         )}
       </div>
     </div>

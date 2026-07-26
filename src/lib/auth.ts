@@ -16,13 +16,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) return null;
 
         // Verify against Worker
         const res = await fetch(`${WORKER_URL}/api/auth`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Token": process.env.INTERNAL_SECRET || "",
+            "X-Client-IP": request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown",
+          },
           body: JSON.stringify({
             action: "login",
             email: credentials.email,
