@@ -336,6 +336,7 @@ export default function DashboardPage() {
         );
         return;
       }
+      clearChannelLocalState(slug);
       await loadChannels();
       setNewSlug("");
       setNewName("");

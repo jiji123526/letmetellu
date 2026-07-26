@@ -864,7 +864,14 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [inLiveMode, send]);
 
   const applyInitData = useCallback((data: InitData) => {
-    syncChannelInstance(channelId, data.channel.instance_id);
+    const channelWasRecreated = syncChannelInstance(channelId, data.channel.instance_id);
+    if (channelWasRecreated) {
+      setLocalBubbleColor(null);
+      document.documentElement.style.setProperty(
+        "--bubble-sent",
+        data.channel.bubble_color || "#3b8df0",
+      );
+    }
     setChannel(data.channel);
     const savedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
     if (isLoggedIn) {

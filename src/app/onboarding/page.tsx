@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useLocale } from "@/hooks/useLocale";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { clearChannelLocalState } from "@/lib/channel-local-state";
 
 export default function OnboardingPage() {
   const { data: session, status } = useSession();
@@ -61,6 +62,7 @@ export default function OnboardingPage() {
       else setError(data.error);
       return;
     }
+    clearChannelLocalState(slug);
     setCreatedSlug(slug);
     setStep(2);
   };

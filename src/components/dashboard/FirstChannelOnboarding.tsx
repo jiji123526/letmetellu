@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
+import { clearChannelLocalState } from "@/lib/channel-local-state";
 
 type OnboardingStep = "features" | "create" | "guide";
 
@@ -65,6 +66,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
         setError(data.error === "channel already exists" ? t("channelExists") : t("dashboardCreateFailed"));
         return;
       }
+      clearChannelLocalState(normalizedSlug);
       setCreatedChannelId(normalizedSlug);
       await onCreated(normalizedSlug);
       setStep("guide");
