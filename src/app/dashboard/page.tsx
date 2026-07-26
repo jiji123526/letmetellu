@@ -57,6 +57,10 @@ function getChannelIdFromLink(value: string) {
   return match?.[1]?.toLowerCase() || null;
 }
 
+function looksLikeChannelAddress(value: string) {
+  return /^(?:(?:https?:\/\/[^/\s]+|letmetellu\.vercel\.app))?\/ch\//i.test(value.trim());
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -91,6 +95,8 @@ export default function DashboardPage() {
   const suppressClickRef = useRef(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const linkedChannelId = submittedLinkedChannelId;
+  const hasSearchQuery = query.trim().length > 0;
+  const isAddressQuery = looksLikeChannelAddress(query);
 
   const loadChannels = useCallback(async () => {
     const response = await fetch("/api/user", { cache: "no-store" });
@@ -587,6 +593,17 @@ export default function DashboardPage() {
                 style={{ background: "#efeff4", padding: "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
               />
             </div>
+            {hasSearchQuery && (
+              <p
+                className="mt-1.5 mb-0 px-1 text-[11px] leading-[1.35]"
+                style={{ color: "#8e8e93" }}
+                aria-live="polite"
+              >
+                {isAddressQuery
+                  ? linkedChannelId ? t("dashboardAddressMatchedHint") : t("dashboardAddressSearchHint")
+                  : t("dashboardJoinedSearchHint")}
+              </p>
+            )}
           </div>
         </header>
 
