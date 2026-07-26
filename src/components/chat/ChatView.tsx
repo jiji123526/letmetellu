@@ -1748,7 +1748,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   if (loading) {
     return (
-      <div className="h-dvh flex flex-col" style={{ background: "var(--bg)" }}>
+      <div className="h-dvh max-w-[480px] mx-auto flex flex-col md:border-x" style={{ background: "var(--bg)", borderColor: "var(--hairline)" }}>
         <header
           className="flex items-center px-4 border-b relative"
           style={{
@@ -1793,7 +1793,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   };
 
   return (
-    <div className="h-dvh flex flex-col relative" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
+    <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
       {/* Header */}
       <header
         className="flex-none flex items-center px-4 relative"

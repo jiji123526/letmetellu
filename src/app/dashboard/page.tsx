@@ -537,7 +537,7 @@ export default function DashboardPage() {
 
   return (
     <main className="dashboard-font-scaled min-h-dvh" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
-      <div className={`max-w-[760px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
+      <div className={`max-w-[480px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
         <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
           <div className="h-[64px] px-4 flex items-center justify-between">
             <button
@@ -878,7 +878,7 @@ export default function DashboardPage() {
           type="button"
           className="fixed z-40 w-14 h-14 rounded-full border-none cursor-pointer flex items-center justify-center text-white"
           style={{
-            right: "max(20px, calc((100vw - 760px) / 2 + 20px))",
+            right: "max(20px, calc((100vw - 480px) / 2 + 20px))",
             bottom: "max(20px, env(safe-area-inset-bottom))",
             background: "rgba(0,122,255,.82)",
             border: "none",
