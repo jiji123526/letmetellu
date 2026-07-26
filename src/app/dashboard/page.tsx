@@ -35,6 +35,15 @@ function formatRelativeTime(timestamp: number, locale: "ko" | "en") {
   return formatDate(new Date(timestamp).toISOString(), locale);
 }
 
+function getChannelPreviewColor(channelId: string, fallback: string) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    return localStorage.getItem(`bubbleColor_${channelId}`) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -122,7 +131,7 @@ export default function DashboardPage() {
           id: channel.id,
           name: channel.name,
           profileImage: channel.profile_image,
-          bubbleColor: channel.bubble_color,
+          bubbleColor: getChannelPreviewColor(channel.id, channel.bubble_color || "#3b8df0"),
           hasPasscode: channel.has_passcode === 1,
           ownerName: channel.owner_name || "",
           meta: `/ch/${channel.id}`,
@@ -140,7 +149,7 @@ export default function DashboardPage() {
           id: channel.id,
           name: channel.name,
           profileImage: channel.profileImage,
-          bubbleColor: channel.bubbleColor,
+          bubbleColor: getChannelPreviewColor(channel.id, channel.bubbleColor || "#3b8df0"),
           hasPasscode: channel.hasPasscode,
           ownerName: channel.ownerName,
           meta: `/ch/${channel.id}`,

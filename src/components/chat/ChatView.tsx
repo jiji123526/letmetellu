@@ -838,11 +838,12 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const applyInitData = useCallback((data: InitData) => {
     setChannel(data.channel);
+    const savedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
     recordRecentChannel({
       id: channelId,
       name: data.channel.name,
       profileImage: data.channel.profile_image,
-      bubbleColor: data.channel.bubble_color || "#3b8df0",
+      bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3b8df0",
       hasPasscode: data.hasPasscode === true,
       ownerName: data.channel.owner_name || "",
     });
@@ -1031,7 +1032,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         updateRecentChannelAppearance(channelId, {
           ...(event.name ? { name: event.name as string } : {}),
           ...(event.profile_image !== undefined ? { profileImage: event.profile_image as string | null } : {}),
-          ...(event.bubble_color ? { bubbleColor: event.bubble_color as string } : {}),
+          ...(event.bubble_color && !localBubbleColor ? { bubbleColor: event.bubble_color as string } : {}),
         });
         setChannel((prev) => {
           if (!prev) return null;
@@ -1187,7 +1188,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, uid, myFingerprint, t, channel, applyInitData]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, uid, myFingerprint, t, channel, applyInitData, localBubbleColor]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -2333,7 +2334,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         <SettingsPanel
           channelId={channelId}
           currentColor={bubbleColor}
-          onColorChange={setLocalBubbleColor}
+          onColorChange={(color) => {
+            setLocalBubbleColor(color);
+            updateRecentChannelAppearance(channelId, { bubbleColor: color });
+          }}
           onClose={() => setShowSettings(false)}
         />
       )}
