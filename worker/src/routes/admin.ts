@@ -61,7 +61,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env.DB.prepare(`SELECT image FROM messages WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
         env.DB.prepare(`SELECT image FROM gallery WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
         env.DB.prepare(`SELECT image FROM dm WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
-        env.DB.prepare(`SELECT profile_image FROM channels WHERE id IN (${placeholders}) AND profile_image IS NOT NULL`).bind(...channelIds).all(),
+        env.DB.prepare(`SELECT profile_image, background_image FROM channels WHERE id IN (${placeholders}) AND (profile_image IS NOT NULL OR background_image IS NOT NULL)`).bind(...channelIds).all(),
         env.DB.prepare(`SELECT text FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds).all(),
       ]);
 
@@ -71,6 +71,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         ...galleryMedia.results.map((row) => row.image),
         ...dmMedia.results.map((row) => row.image),
         ...channelMedia.results.map((row) => row.profile_image),
+        ...channelMedia.results.map((row) => row.background_image),
         ...configMedia.results.map((row) => row.text),
       ];
       for (const source of mediaSources) {
@@ -213,9 +214,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "update-profile": {
-      const { name, profile_image, bubble_color, show_on_profile } = payload || {};
+      const {
+        name,
+        profile_image,
+        bubble_color,
+        show_on_profile,
+        background_type,
+        background_color,
+        background_image,
+        background_overlay,
+        background_blur,
+      } = payload || {};
       const updates: string[] = [];
       const values: unknown[] = [];
+      let previousBackgroundImage: string | null = null;
 
       if (name !== undefined) { updates.push("name = ?"); values.push(name); }
       if (profile_image !== undefined) { updates.push("profile_image = ?"); values.push(profile_image); }
@@ -223,6 +235,60 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       if (show_on_profile !== undefined) {
         updates.push("show_on_profile = ?");
         values.push(show_on_profile === true ? 1 : 0);
+      }
+      if (background_type !== undefined) {
+        if (typeof background_type !== "string" || !["default", "color", "image"].includes(background_type)) {
+          return Response.json({ error: "invalid background type" }, { status: 400 });
+        }
+        updates.push("background_type = ?");
+        values.push(background_type);
+      }
+      if (background_color !== undefined) {
+        if (background_color !== null && (typeof background_color !== "string" || !/^#[0-9a-fA-F]{6}$/.test(background_color))) {
+          return Response.json({ error: "invalid background color" }, { status: 400 });
+        }
+        updates.push("background_color = ?");
+        values.push(background_color);
+      }
+      if (background_image !== undefined) {
+        const previousBackground = await env.DB.prepare(
+          "SELECT background_image FROM channels WHERE id = ?"
+        ).bind(channel_id).first<{ background_image: string | null }>();
+        previousBackgroundImage = previousBackground?.background_image || null;
+        if (background_image !== null) {
+          let validBackgroundImage = false;
+          if (typeof background_image === "string") {
+            try {
+              const imageUrl = new URL(background_image);
+              validBackgroundImage = imageUrl.pathname.startsWith("/api/media/")
+                && (
+                  imageUrl.hostname === "letsplay-api.letmetellu.workers.dev"
+                  || imageUrl.hostname === "localhost"
+                  || imageUrl.hostname === "127.0.0.1"
+                );
+            } catch {}
+          }
+          if (!validBackgroundImage) {
+            return Response.json({ error: "invalid background image" }, { status: 400 });
+          }
+        }
+        updates.push("background_image = ?");
+        values.push(background_image);
+      }
+      if (background_overlay !== undefined) {
+        const overlay = Number(background_overlay);
+        if (!Number.isInteger(overlay) || overlay < 0 || overlay > 60) {
+          return Response.json({ error: "invalid background overlay" }, { status: 400 });
+        }
+        updates.push("background_overlay = ?");
+        values.push(overlay);
+      }
+      if (background_blur !== undefined) {
+        if (background_blur !== true && background_blur !== false && background_blur !== 1 && background_blur !== 0) {
+          return Response.json({ error: "invalid background blur" }, { status: 400 });
+        }
+        updates.push("background_blur = ?");
+        values.push(background_blur === true || background_blur === 1 ? 1 : 0);
       }
 
       if (updates.length > 0) {
@@ -234,8 +300,34 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         const stub = env.CHAT_ROOM.get(doId);
         await stub.fetch(new Request("http://internal/broadcast", {
           method: "POST",
-          body: JSON.stringify({ type: "profile-change", channel_id, name, profile_image, bubble_color, show_on_profile }),
+          body: JSON.stringify({
+            type: "profile-change",
+            channel_id,
+            name,
+            profile_image,
+            bubble_color,
+            show_on_profile,
+            background_type,
+            background_color,
+            background_image,
+            background_overlay,
+            background_blur,
+          }),
         }));
+
+        if (
+          background_image !== undefined
+          && previousBackgroundImage
+          && previousBackgroundImage !== background_image
+        ) {
+          try {
+            const previousUrl = new URL(previousBackgroundImage);
+            const key = decodeURIComponent(previousUrl.pathname.replace(/^\/api\/media\//, ""));
+            if (key && previousUrl.pathname.startsWith("/api/media/")) {
+              await env.MEDIA.delete(key);
+            }
+          } catch {}
+        }
       }
 
       return Response.json({ ok: true });

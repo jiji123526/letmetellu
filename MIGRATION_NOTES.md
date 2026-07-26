@@ -129,6 +129,24 @@ Adds hashed, single-use password-reset tokens with expiry, use time and a user/t
 
 Apply `0013` before deploying the Worker routes that request or consume password-reset tokens.
 
+#### `0014_channel_background.sql`
+
+Adds channel-owned chat background settings:
+
+- `background_type`: `default`, `color` or `image`;
+- `background_color`: an optional six-digit hex color;
+- `background_image`: an optional owner-uploaded R2 media URL;
+- `background_overlay`: a `0`–`60` percent dark overlay used for readability;
+- `background_blur`: an optional light blur applied only to the background image.
+
+The background is limited to the scrollable chat field, while the header and
+composer retain their translucent surfaces. The owner UI accepts JPEG, PNG and
+WebP images up to 5 MB. It uploads only when the owner saves, and replacing or
+resetting a saved background removes the previous R2 object. With blur disabled,
+the original image is rendered unchanged apart from the independently selected
+dark overlay. Apply `0014` before deploying Worker or frontend code that saves
+these fields.
+
 ### Operational checks
 
 After a migration:

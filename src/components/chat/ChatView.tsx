@@ -66,6 +66,11 @@ interface Channel {
   owner_name?: string | null;
   instance_id?: string | null;
   show_on_profile?: number;
+  background_type?: "default" | "color" | "image";
+  background_color?: string | null;
+  background_image?: string | null;
+  background_overlay?: number;
+  background_blur?: number;
 }
 
 interface InitData {
@@ -1134,6 +1139,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           if (event.profile_image !== undefined) updated.profile_image = event.profile_image as string | null;
           if (event.bubble_color) updated.bubble_color = event.bubble_color as string;
           if (event.show_on_profile !== undefined) updated.show_on_profile = event.show_on_profile ? 1 : 0;
+          if (event.background_type !== undefined) updated.background_type = event.background_type as Channel["background_type"];
+          if (event.background_color !== undefined) updated.background_color = event.background_color as string | null;
+          if (event.background_image !== undefined) updated.background_image = event.background_image as string | null;
+          if (event.background_overlay !== undefined) updated.background_overlay = event.background_overlay as number;
+          if (event.background_blur !== undefined) updated.background_blur = event.background_blur ? 1 : 0;
           return updated;
         });
       }
@@ -2096,12 +2106,33 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Messages */}
-      <main
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        className="messages-scroll flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
-        style={{ position: "relative", padding: "12px 14px 8px", WebkitOverflowScrolling: "touch" }}
+      <div
+        className="relative flex-1 min-h-0 overflow-hidden"
+        style={{
+          backgroundColor: channel?.background_type === "color"
+            ? (channel.background_color || "var(--bg)")
+            : "var(--bg)",
+        }}
       >
+        {channel?.background_type === "image" && channel.background_image && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: `linear-gradient(rgba(0,0,0,${(channel.background_overlay ?? 14) / 100}), rgba(0,0,0,${(channel.background_overlay ?? 14) / 100})), url("${channel.background_image}")`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: channel.background_blur ? "blur(5px)" : "none",
+              transform: channel.background_blur ? "scale(1.04)" : "none",
+            }}
+          />
+        )}
+        <main
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
+          style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", background: "transparent" }}
+        >
         <MessageList
           threadedMessages={threadedMessages}
           effectiveAdmin={effectiveAdmin}
@@ -2126,7 +2157,8 @@ export function ChatView({ channelId }: { channelId: string }) {
           onEmojiPicker={handleMemoizedEmojiPicker}
         />
         <div ref={messagesEndRef} />
-      </main>
+        </main>
+      </div>
 
       {/* Long-message reader, constrained to the visible chat field. */}
       {expandedPost && (
@@ -2551,6 +2583,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           channelName={channel?.name || ""}
           profileImage={channel?.profile_image || null}
           currentColor={bubbleColor}
+          backgroundType={channel?.background_type || "default"}
+          backgroundColor={channel?.background_color || null}
+          backgroundImage={channel?.background_image || null}
+          backgroundOverlay={channel?.background_overlay ?? 14}
+          backgroundBlur={channel?.background_blur === 1}
           passcodeHint={channel?.passcode_hint || ""}
           isFrozen={!!channel?.is_frozen}
           liveActive={liveActive}
@@ -2619,6 +2656,12 @@ export function ChatView({ channelId }: { channelId: string }) {
               updateRecentChannelAppearance(channelId, { bubbleColor: color });
             }
             adminAction("update-profile", channelId, { bubble_color: color });
+          }}
+          onBackgroundChange={(background) => {
+            setChannel((prev) => prev ? { ...prev, ...background } : null);
+            void adminAction("update-profile", channelId, background);
+            setBanner({ text: t("backgroundChanged"), color: bubbleColor });
+            setTimeout(() => setBanner(null), 2500);
           }}
           onNameChange={(name) => {
             setChannel((prev) => prev ? { ...prev, name } : null);

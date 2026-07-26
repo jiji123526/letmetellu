@@ -528,6 +528,7 @@ Current migrations:
 | `0011_channel_profile_visibility.sql` | per-channel owner-profile visibility flag |
 | `0012_default_channels_private.sql` | makes existing normal channels private on owner profiles |
 | `0013_password_reset_tokens.sql` | single-use expiring credential password-reset tokens |
+| `0014_channel_background.sql` | channel chat background mode, color, image, overlay and optional blur |
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for schema details and the deployment runbook.
 
