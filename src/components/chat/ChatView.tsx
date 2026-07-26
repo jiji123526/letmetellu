@@ -2367,7 +2367,6 @@ export function ChatView({ channelId }: { channelId: string }) {
             });
           }}
           onLinks={() => setShowLinks(true)}
-          onRules={effectiveAdmin && channel?.notice && channel.notice !== "[]" ? () => setShowNotice(true) : undefined}
           onAdmin={effectiveAdmin ? () => setShowAdminPanel(true) : undefined}
           onClose={() => setHeaderMenu(null)}
         />

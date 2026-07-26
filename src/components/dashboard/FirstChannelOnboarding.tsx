@@ -13,7 +13,15 @@ interface FirstChannelOnboardingProps {
 
 const featureIcons = [
   { icon: "↗", color: "#eaf3ff" },
-  { icon: "✉", color: "#f0edff" },
+  {
+    icon: (
+      <svg viewBox="0 0 24 24" width="20" height="20" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+        <path d="m5 7 7 5 7-5" />
+      </svg>
+    ),
+    color: "#f0edff",
+  },
   { icon: "◉", color: "#fff0ea" },
   { icon: "❄", color: "#edf7ff" },
 ];
