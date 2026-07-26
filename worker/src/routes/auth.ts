@@ -125,7 +125,7 @@ async function handleSignup(
   if (!EMAIL_PATTERN.test(email) || email.length > 254) {
     return Response.json({ error: "invalid_email" }, { status: 400 });
   }
-  if (password.length < 12 || password.length > 128) {
+  if (password.length < 8 || password.length > 128) {
     return Response.json({ error: "weak_password" }, { status: 400 });
   }
 

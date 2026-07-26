@@ -235,7 +235,7 @@ export const en: Record<LocaleKeys, string> = {
   emailSignupDisabled: "Email ownership verification is being prepared. Please use Google to create a new account for now.",
   nameOptional: "Name (optional)",
   confirmPassword: "Confirm password",
-  passwordLengthRequirement: "Use 12–128 characters.",
+  passwordLengthRequirement: "Use 8–128 characters.",
   passwordMismatch: "Passwords do not match.",
   sendVerificationEmail: "Send verification email",
   verificationEmailSentTitle: "Check your email",

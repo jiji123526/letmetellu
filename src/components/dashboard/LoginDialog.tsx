@@ -41,7 +41,7 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
     setError("");
     if (!email || !password || !confirmPassword) return setError(t("allFieldsRequired"));
     if (!isValidEmail(email)) return setError(t("invalidEmail"));
-    if (password.length < 12 || password.length > 128) return setError(t("passwordLengthRequirement"));
+    if (password.length < 8 || password.length > 128) return setError(t("passwordLengthRequirement"));
     if (password !== confirmPassword) return setError(t("passwordMismatch"));
     setSubmitting(true);
     try {

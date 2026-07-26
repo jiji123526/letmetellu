@@ -233,7 +233,7 @@ export const ko = {
   emailSignupDisabled: "이메일 소유 확인 기능을 준비 중입니다. 현재 신규 가입은 Google 인증을 이용해 주세요.",
   nameOptional: "이름 (선택)",
   confirmPassword: "비밀번호 확인",
-  passwordLengthRequirement: "비밀번호는 12~128자로 입력해 주세요.",
+  passwordLengthRequirement: "비밀번호는 8~128자로 입력해 주세요.",
   passwordMismatch: "비밀번호가 일치하지 않습니다.",
   sendVerificationEmail: "인증 메일 보내기",
   verificationEmailSentTitle: "인증 메일을 확인해 주세요",
