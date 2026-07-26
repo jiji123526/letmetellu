@@ -33,6 +33,7 @@ import { MediaLoadingDots } from "./MediaLoadingDots";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { recordAccountRecentChannel, setAccountChannelColor } from "@/lib/account-recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
+import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 
 interface Message {
   id: string;
@@ -62,6 +63,7 @@ interface Channel {
   notice: string;
   passcode_hint?: string | null;
   owner_name?: string | null;
+  instance_id?: string | null;
 }
 
 interface InitData {
@@ -862,6 +864,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [inLiveMode, send]);
 
   const applyInitData = useCallback((data: InitData) => {
+    syncChannelInstance(channelId, data.channel.instance_id);
     setChannel(data.channel);
     const savedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
     if (isLoggedIn) {
@@ -1215,7 +1218,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "rules-changed") {
         setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);
       }
-      if (event.type === "channel-deleted" && !isAdmin) {
+      if (event.type === "channel-deleted") {
+        clearChannelLocalState(channelId);
         if (!isLoggedIn) removeRecentChannel(channelId);
         setShowChannelDeleted(true);
       }

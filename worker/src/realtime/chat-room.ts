@@ -178,6 +178,21 @@ export class ChatRoom {
       return new Response("ok");
     }
 
+    if (url.pathname.endsWith("/channel-deleted")) {
+      const event = JSON.stringify({ type: "channel-deleted" });
+      for (const ws of this.connections.keys()) {
+        try {
+          ws.send(event);
+          ws.close(1000, "channel deleted");
+        } catch {}
+      }
+      this.connections.clear();
+      this.liveViewers.clear();
+      this.currentPasscode = null;
+      this.passcodeLoaded = false;
+      return new Response("ok");
+    }
+
     // Internal broadcast trigger (from Worker routes after D1 write)
     if (url.pathname.endsWith("/broadcast")) {
       const event = await request.json() as Record<string, unknown>;

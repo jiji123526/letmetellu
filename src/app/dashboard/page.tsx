@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
@@ -365,6 +366,7 @@ export default function DashboardPage() {
       body: JSON.stringify({ action: "delete-channel", channel_id: channelId }),
     });
     if (!response.ok) throw new Error("delete failed");
+    clearChannelLocalState(channelId);
     if (status === "authenticated") {
       await removeAccountRecentChannel(channelId).catch(() => {});
     } else {

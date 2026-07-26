@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
+import { invalidatePasscodeAttempts } from "./passcode";
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
@@ -32,19 +33,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   switch (action) {
     case "create-channel": {
       const { name } = payload || {};
+      const instanceId = crypto.randomUUID();
       // channel_id is the slug, userId is the owner
       const existing = await env.DB.prepare("SELECT id FROM channels WHERE id = ?").bind(channel_id).first();
       if (existing) return Response.json({ error: "channel already exists" }, { status: 409 });
 
       const result = await env.DB.prepare(`
-        INSERT INTO channels (id, owner_uid, name)
-        SELECT ?, ?, ?
+        INSERT INTO channels (id, owner_uid, name, instance_id)
+        SELECT ?, ?, ?, ?
         WHERE (
           SELECT COUNT(*)
           FROM channels
           WHERE owner_uid = ? AND id NOT LIKE '%_live'
         ) < 5
-      `).bind(channel_id, userId, name || "My Channel", userId).run();
+      `).bind(channel_id, userId, name || "My Channel", instanceId, userId).run();
       if (!result.meta.changes) {
         return Response.json({ error: "channel limit reached" }, { status: 403 });
       }
@@ -55,17 +57,28 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "delete-channel": {
       const channelIds = [channel_id, `${channel_id}_live`];
       const placeholders = channelIds.map(() => "?").join(", ");
-      const [messageMedia, galleryMedia, dmMedia] = await Promise.all([
+      const [messageMedia, galleryMedia, dmMedia, channelMedia, configMedia] = await Promise.all([
         env.DB.prepare(`SELECT image FROM messages WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
         env.DB.prepare(`SELECT image FROM gallery WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
         env.DB.prepare(`SELECT image FROM dm WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
+        env.DB.prepare(`SELECT profile_image FROM channels WHERE id IN (${placeholders}) AND profile_image IS NOT NULL`).bind(...channelIds).all(),
+        env.DB.prepare(`SELECT text FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds).all(),
       ]);
 
-      const mediaKeys = new Set(
-        [...messageMedia.results, ...galleryMedia.results, ...dmMedia.results]
-          .map((row) => typeof row.image === "string" ? row.image.split("/api/media/").pop() : null)
-          .filter((key): key is string => Boolean(key))
-      );
+      const mediaKeys = new Set<string>();
+      const mediaSources = [
+        ...messageMedia.results.map((row) => row.image),
+        ...galleryMedia.results.map((row) => row.image),
+        ...dmMedia.results.map((row) => row.image),
+        ...channelMedia.results.map((row) => row.profile_image),
+        ...configMedia.results.map((row) => row.text),
+      ];
+      for (const source of mediaSources) {
+        if (typeof source !== "string") continue;
+        for (const match of source.matchAll(/\/api\/media\/([^"'\\\s)<>]+)/g)) {
+          if (match[1]) mediaKeys.add(match[1]);
+        }
+      }
 
       await env.DB.batch([
         env.DB.prepare(`DELETE FROM messages WHERE channel_id IN (${placeholders})`).bind(...channelIds),
@@ -80,13 +93,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       ]);
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
-      await stub.fetch(new Request("http://internal/broadcast", {
+      await stub.fetch(new Request("http://internal/channel-deleted", {
         method: "POST",
-        body: JSON.stringify({ type: "channel-deleted", channel_id }),
       })).catch(() => null);
       await Promise.all([...mediaKeys].map((key) => env.MEDIA.delete(key).catch(() => {})));
       invalidatePasscodeCache(channel_id);
       invalidateBannedWordsCache(channel_id);
+      invalidatePasscodeAttempts(channel_id);
       return Response.json({ ok: true });
     }
 

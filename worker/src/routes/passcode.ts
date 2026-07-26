@@ -10,6 +10,10 @@ async function hashPasscode(passcode: string): Promise<string> {
 // Rate limit: 5 attempts per 60 seconds per channel
 const passcodeAttempts = new Map<string, number[]>();
 
+export function invalidatePasscodeAttempts(channelId: string) {
+  passcodeAttempts.delete(channelId);
+}
+
 export async function handleVerifyPasscode(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
