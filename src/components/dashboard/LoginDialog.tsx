@@ -87,35 +87,35 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,.35)", backdropFilter: "blur(5px)" }} onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
-      <div className="w-full max-w-[390px] max-h-[calc(100dvh-32px)] overflow-y-auto rounded-[24px] px-6 pt-5 pb-6" style={{ background: "#fff", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
+      <div className="w-full max-w-[390px] max-h-[calc(100dvh-32px)] overflow-y-auto rounded-[24px] px-6 pt-5 pb-6" style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="m-0 text-[21px] font-semibold">{t(tab === "login" ? "loginTab" : "signupTab")}</h2>
-            <p className="mt-1 mb-0 text-[12px]" style={{ color: "#8e8e93" }}>{t("appDesc")}</p>
+            <p className="mt-1 mb-0 text-[12px]" style={{ color: "var(--meta)" }}>{t("appDesc")}</p>
           </div>
-          <button type="button" disabled={submitting} className="w-8 h-8 rounded-full border-none cursor-pointer text-[20px]" style={{ background: "#f2f2f7", color: "#8e8e93" }} onClick={onClose} aria-label={t("close")}>×</button>
+          <button type="button" disabled={submitting} className="w-8 h-8 rounded-full border-none cursor-pointer text-[20px]" style={{ background: "var(--card)", color: "var(--meta)" }} onClick={onClose} aria-label={t("close")}>×</button>
         </div>
 
-        <div className="relative flex rounded-[9px] p-[2px] mb-5" style={{ background: "#e9e9ee" }}>
-          <span className="pointer-events-none absolute top-[2px] bottom-[2px] left-[2px] rounded-[7px]" style={{ width: "calc(50% - 2px)", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.12)", transform: tab === "signup" ? "translateX(100%)" : "translateX(0)", transition: "transform 240ms cubic-bezier(.22,.8,.36,1)" }} />
+        <div className="relative flex rounded-[9px] p-[2px] mb-5" style={{ background: "var(--gray-bubble)" }}>
+          <span className="pointer-events-none absolute top-[2px] bottom-[2px] left-[2px] rounded-[7px]" style={{ width: "calc(50% - 2px)", background: "var(--input-bg)", boxShadow: "0 1px 3px rgba(0,0,0,.12)", transform: tab === "signup" ? "translateX(100%)" : "translateX(0)", transition: "transform 240ms cubic-bezier(.22,.8,.36,1)" }} />
           {(["login", "signup"] as const).map((option) => (
-            <button key={option} type="button" className="relative z-10 flex-1 border-none bg-transparent py-2 text-[13px] cursor-pointer" style={{ color: tab === option ? "#111" : "#6d6d72", transition: "color 180ms ease" }} onClick={() => switchTab(option)}>
+            <button key={option} type="button" className="relative z-10 flex-1 border-none bg-transparent py-2 text-[13px] cursor-pointer" style={{ color: tab === option ? "var(--gray-text)" : "var(--secondary-text)", transition: "color 180ms ease" }} onClick={() => switchTab(option)}>
               {t(option === "login" ? "loginTab" : "signupTab")}
             </button>
           ))}
         </div>
 
-        <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid #d1d1d6", background: "#fff", color: "#333" }} onClick={() => void signIn("google", { callbackUrl: tab === "login" ? "/dashboard" : "/onboarding" })}>
+        <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)" }} onClick={() => void signIn("google", { callbackUrl: tab === "login" ? "/dashboard" : "/onboarding" })}>
           <GoogleIcon /> {t(tab === "login" ? "googleLogin" : "googleSignup")}
         </button>
         {tab === "login" ? (
           <>
-          <div className="flex items-center gap-3 my-4"><span className="h-px flex-1 bg-[#e5e5ea]" /><span className="text-[11px]" style={{ color: "#8e8e93" }}>{t("or")}</span><span className="h-px flex-1 bg-[#e5e5ea]" /></div>
+          <div className="flex items-center gap-3 my-4"><span className="h-px flex-1" style={{ background: "var(--hairline)" }} /><span className="text-[11px]" style={{ color: "var(--meta)" }}>{t("or")}</span><span className="h-px flex-1" style={{ background: "var(--hairline)" }} /></div>
           <form onSubmit={handleLogin}>
           <label className="block text-[12px] font-medium mb-1.5">{t("email")}</label>
-          <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+          <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
           <label className="block text-[12px] font-medium mb-1.5">{t("password")}</label>
-          <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+          <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
           <div className="min-h-[30px] pt-2 text-[12px] text-center" style={{ color: "#ff3b30" }}>{error}</div>
           <button disabled={submitting} type="submit" className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold" style={{ background: submitting ? "#9ec9f5" : "#007aff", cursor: submitting ? "wait" : "pointer" }}>
             {submitting ? t("loading") : t("loginTab")}
@@ -125,22 +125,22 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
         ) : (
           <>
             {verificationSent ? (
-              <div className="mt-4 rounded-[16px] px-5 py-6 text-center" style={{ background: "#f2f2f7" }}>
+              <div className="mt-4 rounded-[16px] px-5 py-6 text-center" style={{ background: "var(--card)" }}>
                 <div className="w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center text-[22px]" style={{ background: "#eaf3ff", color: "#007aff" }}>✓</div>
                 <h3 className="m-0 text-[17px] font-semibold">{t("verificationEmailSentTitle")}</h3>
-                <p className="mt-2 mb-0 text-[13px] leading-[1.5]" style={{ color: "#6d6d72" }}>{t("verificationEmailSentDesc")}</p>
+                <p className="mt-2 mb-0 text-[13px] leading-[1.5]" style={{ color: "var(--secondary-text)" }}>{t("verificationEmailSentDesc")}</p>
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3 my-4"><span className="h-px flex-1 bg-[#e5e5ea]" /><span className="text-[11px]" style={{ color: "#8e8e93" }}>{t("or")}</span><span className="h-px flex-1 bg-[#e5e5ea]" /></div>
+                <div className="flex items-center gap-3 my-4"><span className="h-px flex-1" style={{ background: "var(--hairline)" }} /><span className="text-[11px]" style={{ color: "var(--meta)" }}>{t("or")}</span><span className="h-px flex-1" style={{ background: "var(--hairline)" }} /></div>
                 <form onSubmit={handleSignup}>
                   <label className="block text-[12px] font-medium mb-1.5">{t("email")}</label>
-                  <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+                  <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
                   <label className="block text-[12px] font-medium mb-1.5">{t("password")}</label>
-                  <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-1.5" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
-                  <p className="mt-0 mb-4 text-[11px]" style={{ color: "#8e8e93" }}>{t("passwordLengthRequirement")}</p>
+                  <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px] mb-1.5" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
+                  <p className="mt-0 mb-4 text-[11px]" style={{ color: "var(--meta)" }}>{t("passwordLengthRequirement")}</p>
                   <label className="block text-[12px] font-medium mb-1.5">{t("confirmPassword")}</label>
-                  <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box", background: "#f7f7f9" }} />
+                  <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-[11px] outline-none text-[15px]" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
                   <div className="min-h-[30px] pt-2 text-[12px] text-center" style={{ color: "#ff3b30" }}>{error}</div>
                   <button disabled={submitting} type="submit" className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold" style={{ background: submitting ? "#9ec9f5" : "#007aff", cursor: submitting ? "wait" : "pointer" }}>
                     {submitting ? t("loading") : t("sendVerificationEmail")}

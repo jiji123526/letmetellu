@@ -85,8 +85,8 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
         if (event.target === event.currentTarget && !submitting && step !== "guide") onClose();
       }}
     >
-      <div className="w-full max-w-[430px] max-h-[calc(100dvh-32px)] overflow-hidden rounded-[24px] flex flex-col" style={{ background: "#fff", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
-        <header className="px-5 pt-4 pb-3 flex items-center justify-between border-b" style={{ borderColor: "#e5e5ea" }}>
+      <div className="w-full max-w-[430px] max-h-[calc(100dvh-32px)] overflow-hidden rounded-[24px] flex flex-col" style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
+        <header className="px-5 pt-4 pb-3 flex items-center justify-between border-b" style={{ borderColor: "var(--hairline)" }}>
           <button
             type="button"
             className="min-w-[54px] border-none bg-transparent text-left text-[15px] cursor-pointer"
@@ -103,7 +103,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               <span key={index} className="w-1.5 h-1.5 rounded-full" style={{ background: index === stepIndex ? "#007aff" : "#d1d1d6" }} />
             ))}
           </div>
-          <span className="min-w-[54px] text-right text-[12px]" style={{ color: "#8e8e93" }}>{stepIndex + 1}/3</span>
+          <span className="min-w-[54px] text-right text-[12px]" style={{ color: "var(--meta)" }}>{stepIndex + 1}/3</span>
         </header>
 
         <div className="min-h-0 overflow-y-auto px-6 py-6">
@@ -112,15 +112,15 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>💬</div>
                 <h2 className="m-0 text-[24px] font-bold tracking-[-.02em]">{t("firstOnboardingTitle")}</h2>
-                <p className="mt-2 mb-0 text-[14px] leading-[1.5]" style={{ color: "#8e8e93" }}>{t("firstOnboardingDesc")}</p>
+                <p className="mt-2 mb-0 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{t("firstOnboardingDesc")}</p>
               </div>
-              <div className="rounded-[16px] overflow-hidden" style={{ background: "#f7f7f9" }}>
+              <div className="rounded-[16px] overflow-hidden" style={{ background: "var(--card)" }}>
                 {features.map(([title, description], index) => (
                   <div key={title} className="flex gap-3 px-4 py-4" style={{ borderBottom: index < features.length - 1 ? "0.5px solid #dedee3" : "none" }}>
                     <span className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[18px] font-semibold" style={{ background: featureIcons[index].color, color: "#007aff" }}>{featureIcons[index].icon}</span>
                     <div className="min-w-0">
                       <h3 className="m-0 text-[15px] font-semibold">{title}</h3>
-                      <p className="mt-1 mb-0 text-[13px] leading-[1.45]" style={{ color: "#6d6d72" }}>{description}</p>
+                      <p className="mt-1 mb-0 text-[13px] leading-[1.45]" style={{ color: "var(--secondary-text)" }}>{description}</p>
                     </div>
                   </div>
                 ))}
@@ -133,16 +133,16 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>＋</div>
                 <h2 className="m-0 text-[24px] font-bold">{t("onboardingTitle")}</h2>
-                <p className="mt-2 mb-0 text-[14px]" style={{ color: "#8e8e93" }}>{t("dashboardCreateDesc")}</p>
+                <p className="mt-2 mb-0 text-[14px]" style={{ color: "var(--meta)" }}>{t("dashboardCreateDesc")}</p>
               </div>
               <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
-              <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box" }} />
+              <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
               <label className="block text-[12px] font-medium mb-1.5">{t("channelSlug")}</label>
-              <div className="flex items-center rounded-[11px]" style={{ border: "1px solid #d1d1d6" }}>
-                <span className="pl-3 text-[13px]" style={{ color: "#8e8e93" }}>/ch/</span>
-                <input value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent" }} onKeyDown={(event) => { if (event.key === "Enter" && !submitting) void createChannel(); }} />
+              <div className="flex items-center rounded-[11px]" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)" }}>
+                <span className="pl-3 text-[13px]" style={{ color: "var(--meta)" }}>/ch/</span>
+                <input value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent", color: "var(--gray-text)" }} onKeyDown={(event) => { if (event.key === "Enter" && !submitting) void createChannel(); }} />
               </div>
-              <div className="mt-1.5 text-[11px]" style={{ color: "#8e8e93" }}>{t("onboardingSlugHint")}</div>
+              <div className="mt-1.5 text-[11px]" style={{ color: "var(--meta)" }}>{t("onboardingSlugHint")}</div>
               <div className="min-h-[20px] mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{error}</div>
             </>
           )}
@@ -152,15 +152,15 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf8ef" }}>✓</div>
                 <h2 className="m-0 text-[24px] font-bold">{t("firstGuideTitle")}</h2>
-                <p className="mt-2 mb-0 text-[14px]" style={{ color: "#8e8e93" }}>{t("firstGuideDesc")}</p>
+                <p className="mt-2 mb-0 text-[14px]" style={{ color: "var(--meta)" }}>{t("firstGuideDesc")}</p>
               </div>
-              <div className="rounded-[16px] overflow-hidden" style={{ background: "#f7f7f9" }}>
+              <div className="rounded-[16px] overflow-hidden" style={{ background: "var(--card)" }}>
                 {guides.map(([title, description], index) => (
                   <div key={title} className="flex gap-3 px-4 py-3.5" style={{ borderBottom: index < guides.length - 1 ? "0.5px solid #dedee3" : "none" }}>
                     <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[15px] font-semibold" style={{ background: "#eaf3ff", color: "#007aff" }}>{guideIcons[index]}</span>
                     <div>
                       <h3 className="m-0 text-[14px] font-semibold">{title}</h3>
-                      <p className="mt-0.5 mb-0 text-[12px] leading-[1.45]" style={{ color: "#6d6d72" }}>{description}</p>
+                      <p className="mt-0.5 mb-0 text-[12px] leading-[1.45]" style={{ color: "var(--secondary-text)" }}>{description}</p>
                     </div>
                   </div>
                 ))}
@@ -169,7 +169,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
           )}
         </div>
 
-        <footer className="px-5 py-4 border-t" style={{ borderColor: "#e5e5ea", background: "rgba(255,255,255,.96)" }}>
+        <footer className="px-5 py-4 border-t" style={{ borderColor: "var(--hairline)", background: "var(--header-bg)" }}>
           {step === "features" && (
             <button className="w-full border-none rounded-[12px] py-3 text-white text-[15px] font-semibold cursor-pointer" style={{ background: "#007aff" }} onClick={() => setStep("create")}>{t("firstOnboardingCreate")}</button>
           )}
@@ -178,7 +178,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
           )}
           {step === "guide" && (
             <div className="flex gap-2">
-              <button className="flex-1 rounded-[12px] py-3 text-[14px] cursor-pointer" style={{ border: "1px solid #d1d1d6", background: "#fff", color: "#111" }} onClick={onClose}>{t("dashboardBack")}</button>
+              <button className="flex-1 rounded-[12px] py-3 text-[14px] cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--card)", color: "var(--gray-text)" }} onClick={onClose}>{t("dashboardBack")}</button>
               <button className="flex-[1.4] border-none rounded-[12px] py-3 text-white text-[14px] font-semibold cursor-pointer" style={{ background: "#007aff" }} onClick={() => { window.location.href = `/ch/${createdChannelId}`; }}>{t("onboardingGoToChannel")}</button>
             </div>
           )}

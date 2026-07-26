@@ -493,16 +493,16 @@ export default function DashboardPage() {
   };
 
   if (status === "loading" || loading) {
-    return <main className="dashboard-font-scaled min-h-dvh flex items-center justify-center bg-white"><span className="text-[14px]" style={{ color: "#8e8e93" }}>{t("loading")}</span></main>;
+    return <main className="dashboard-font-scaled min-h-dvh flex items-center justify-center" style={{ background: "var(--bg)", color: "var(--gray-text)" }}><span className="text-[14px]" style={{ color: "var(--meta)" }}>{t("loading")}</span></main>;
   }
 
   const isLoggedIn = !!session;
   const empty = activeItems.length === 0;
 
   return (
-    <main className="dashboard-font-scaled min-h-dvh bg-white" style={{ color: "#111" }}>
-      <div className={`max-w-[760px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "#ededf0" }}>
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl">
+    <main className="dashboard-font-scaled min-h-dvh" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
+      <div className={`max-w-[760px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
+        <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
           <div className="h-[64px] px-4 flex items-center justify-between">
             <button
               type="button"
@@ -536,7 +536,7 @@ export default function DashboardPage() {
                   <div
                     className="absolute right-0 top-[42px] z-20 min-w-[180px] overflow-hidden rounded-[12px] text-left"
                     style={{
-                      background: "rgba(255,255,255,.82)",
+                      background: "var(--header-bg)",
                       boxShadow: "0 4px 20px rgba(0,0,0,.15)",
                       backdropFilter: "saturate(180%) blur(20px)",
                       WebkitBackdropFilter: "saturate(180%) blur(20px)",
@@ -544,20 +544,20 @@ export default function DashboardPage() {
                   >
                     {isLoggedIn ? (
                       <>
-                        <div className="px-4 py-3 text-[12px] truncate" style={{ color: "#8e8e93", borderBottom: "0.5px solid #e5e5ea" }}>{session.user?.email}</div>
-                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff3b30", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
+                        <div className="px-4 py-3 text-[12px] truncate" style={{ color: "var(--meta)", borderBottom: "0.5px solid var(--hairline)" }}>{session.user?.email}</div>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
                       </>
                     ) : (
-                      <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#007aff", borderBottom: "0.5px solid #e5e5ea" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setShowLogin(true); }}>{t("loginTab")}</button>
+                      <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setShowLogin(true); }}>{t("loginTab")}</button>
                     )}
                     <div className="px-3 py-3">
-                      <div className="px-1 pb-2 text-[12px]" style={{ color: "#8e8e93" }}>{t("language")}</div>
-                      <div className="relative flex rounded-[8px] p-[2px]" style={{ background: "#e9e9ee" }}>
+                      <div className="px-1 pb-2 text-[12px]" style={{ color: "var(--meta)" }}>{t("language")}</div>
+                      <div className="relative flex rounded-[8px] p-[2px]" style={{ background: "var(--gray-bubble)" }}>
                         <span
                           className="pointer-events-none absolute top-[2px] bottom-[2px] left-[2px] rounded-[6px]"
                           style={{
                             width: "calc(50% - 2px)",
-                            background: "#fff",
+                            background: "var(--input-bg)",
                             boxShadow: "0 1px 3px rgba(0,0,0,.12)",
                             transform: locale === "en" ? "translateX(100%)" : "translateX(0)",
                             transition: "transform 240ms cubic-bezier(.22,.8,.36,1)",
@@ -572,7 +572,7 @@ export default function DashboardPage() {
                             className="relative z-10 flex-1 border-none rounded-[6px] py-1.5 text-[12px] cursor-pointer"
                             style={{
                               background: "transparent",
-                              color: locale === option ? "#111" : "#6d6d72",
+                              color: locale === option ? "var(--gray-text)" : "var(--secondary-text)",
                               transition: "color 180ms ease",
                             }}
                             onClick={() => setLocale(option)}
@@ -589,7 +589,7 @@ export default function DashboardPage() {
 
           <div className="px-4 pb-3">
             <div className="relative">
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" fill="none" stroke="#8e8e93" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" fill="none" stroke="var(--icon)" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
               <input
                 value={query}
                 onChange={(event) => {
@@ -618,13 +618,13 @@ export default function DashboardPage() {
                 }}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
-                style={{ background: "#efeff4", padding: "0 14px 0 42px", boxSizing: "border-box", color: "#111" }}
+                style={{ background: "var(--input-bg)", padding: "0 14px 0 42px", boxSizing: "border-box", color: "var(--gray-text)" }}
               />
             </div>
             {hasSearchQuery && (
               <p
                 className="mt-1.5 mb-0 px-1 text-[11px] leading-[1.35]"
-                style={{ color: "#8e8e93" }}
+                style={{ color: "var(--meta)" }}
                 aria-live="polite"
               >
                 {isAddressQuery
@@ -637,9 +637,9 @@ export default function DashboardPage() {
 
         {empty ? (
           <section className="px-8 py-24 text-center">
-            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-[28px] mb-4" style={{ background: "#f2f2f7" }}>💬</div>
+            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-[28px] mb-4" style={{ background: "var(--card)" }}>💬</div>
             <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
-            {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "#8e8e93" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
+            {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
             {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={openCreateFlow}>{t("dashboardFirstChannel")}</button>}
           </section>
         ) : (
@@ -660,7 +660,7 @@ export default function DashboardPage() {
                 {showSectionLabel && (
                   <div
                     className={`${index === 0 ? "pt-3" : "pt-5"} px-4 pb-1.5 text-[12px] font-semibold`}
-                    style={{ color: "#8e8e93", background: "#fff" }}
+                    style={{ color: "var(--meta)", background: "var(--bg)" }}
                   >
                     {item.owned ? t("dashboardOwnedTab") : t("dashboardJoinedChannels")}
                   </div>
@@ -698,7 +698,7 @@ export default function DashboardPage() {
                     touchAction: editing ? "auto" : "pan-y",
                     transform: `translateX(${!editing && swipe.id === item.id ? swipe.offset : 0}px)`,
                     transition: draggingId === item.id ? "none" : "transform 180ms ease-out",
-                    background: "#fff",
+                    background: "var(--bg)",
                   }}
                   onPointerDown={!editing ? (event) => startSwipe(event, item.id) : undefined}
                   onPointerMove={!editing ? (event) => moveSwipe(event, item.id) : undefined}
@@ -730,7 +730,7 @@ export default function DashboardPage() {
                       className="mr-3 w-[22px] h-[22px] rounded-full flex-shrink-0 flex items-center justify-center"
                       style={{
                         border: selectedIds.has(item.id) ? "none" : "1.5px solid #c7c7cc",
-                        background: selectedIds.has(item.id) ? "#007aff" : "#fff",
+                        background: selectedIds.has(item.id) ? "#007aff" : "var(--bg)",
                         color: "#fff",
                       }}
                       aria-hidden="true"
@@ -741,7 +741,7 @@ export default function DashboardPage() {
                   <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
                     {!item.profileImage && item.name.slice(0, 1).toUpperCase()}
                   </div>
-                  <div className="self-stretch min-w-0 flex-1 ml-3.5 pr-4 py-2 flex flex-col justify-center border-b" style={{ borderColor: "#e5e5ea" }}>
+                  <div className="self-stretch min-w-0 flex-1 ml-3.5 pr-4 py-2 flex flex-col justify-center border-b" style={{ borderColor: "var(--hairline)" }}>
                     <div className="flex min-w-0 items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <h2 className="m-0 truncate text-[16px] font-semibold">{item.name}</h2>
@@ -767,11 +767,11 @@ export default function DashboardPage() {
                           </svg>
                         )}
                       </div>
-                      <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "#8e8e93" }}>{item.time}</span>
+                      <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "var(--meta)" }}>{item.time}</span>
                       <span className="ml-2 text-[19px] font-light leading-none" style={{ color: "#c7c7cc" }}>›</span>
                     </div>
                     <div className="mt-1 flex min-w-0 items-center">
-                      <p className="m-0 min-w-0 flex-1 truncate text-[14px]" style={{ color: "#8e8e93" }}>{item.meta}</p>
+                      <p className="m-0 min-w-0 flex-1 truncate text-[14px]" style={{ color: "var(--meta)" }}>{item.meta}</p>
                     </div>
                   </div>
                 </div>
@@ -783,8 +783,8 @@ export default function DashboardPage() {
         )}
 
         {editing && (
-          <div className="sticky bottom-0 z-30 px-4 py-3 flex items-center justify-between border-t" style={{ background: "rgba(255,255,255,.96)", borderColor: "#e5e5ea", backdropFilter: "blur(20px)" }}>
-            <span className="text-[14px]" style={{ color: "#8e8e93" }}>{t("dashboardSelected").replace("{count}", String(selectedIds.size))}</span>
+          <div className="sticky bottom-0 z-30 px-4 py-3 flex items-center justify-between border-t" style={{ background: "var(--header-bg)", borderColor: "var(--hairline)", backdropFilter: "blur(20px)" }}>
+            <span className="text-[14px]" style={{ color: "var(--meta)" }}>{t("dashboardSelected").replace("{count}", String(selectedIds.size))}</span>
             <button
               type="button"
               disabled={!selectedIds.size || deleting}
@@ -800,22 +800,22 @@ export default function DashboardPage() {
 
       {showCreate && isLoggedIn && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(0,0,0,.35)", backdropFilter: "blur(4px)" }} onMouseDown={(event) => { if (event.target === event.currentTarget && !creating) setShowCreate(false); }}>
-          <div className="w-full max-w-[390px] rounded-[20px] p-6" style={{ background: "#fff", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
+          <div className="w-full max-w-[390px] rounded-[20px] p-6" style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="m-0 text-[19px] font-semibold">{t("onboardingTitle")}</h2>
-              <button className="border-none bg-transparent cursor-pointer text-[22px]" style={{ color: "#8e8e93" }} onClick={() => setShowCreate(false)}>×</button>
+              <button className="border-none bg-transparent cursor-pointer text-[22px]" style={{ color: "var(--meta)" }} onClick={() => setShowCreate(false)}>×</button>
             </div>
             <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
-            <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid #d1d1d6", padding: "11px 12px", boxSizing: "border-box" }} />
+            <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
             <label className="block text-[12px] font-medium mb-1.5">{t("channelSlug")}</label>
-            <div className="flex items-center rounded-[11px]" style={{ border: "1px solid #d1d1d6" }}>
-              <span className="pl-3 text-[13px]" style={{ color: "#8e8e93" }}>/ch/</span>
+            <div className="flex items-center rounded-[11px]" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)" }}>
+              <span className="pl-3 text-[13px]" style={{ color: "var(--meta)" }}>/ch/</span>
               <input value={newSlug} onChange={(event) => setNewSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent" }} onKeyDown={(event) => { if (event.key === "Enter" && !creating) void handleCreate(); }} />
             </div>
-            <div className="mt-1.5 text-[11px]" style={{ color: "#8e8e93" }}>{t("onboardingSlugHint")}</div>
+            <div className="mt-1.5 text-[11px]" style={{ color: "var(--meta)" }}>{t("onboardingSlugHint")}</div>
             <div className="min-h-[20px] mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{createError}</div>
             <div className="flex gap-2 mt-3">
-              <button className="flex-1 rounded-[11px] cursor-pointer text-[14px]" style={{ border: "1px solid #d1d1d6", background: "#fff", padding: "11px" }} onClick={() => setShowCreate(false)}>{t("cancel")}</button>
+              <button className="flex-1 rounded-[11px] cursor-pointer text-[14px]" style={{ border: "1px solid var(--input-border)", background: "var(--card)", color: "var(--gray-text)", padding: "11px" }} onClick={() => setShowCreate(false)}>{t("cancel")}</button>
               <button disabled={creating} className="flex-1 border-none rounded-[11px] text-white text-[14px] font-semibold" style={{ background: creating ? "#9ec9f5" : "#007aff", padding: "12px", cursor: creating ? "wait" : "pointer" }} onClick={() => void handleCreate()}>{creating ? t("loading") : t("create")}</button>
             </div>
           </div>
