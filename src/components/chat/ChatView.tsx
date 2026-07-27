@@ -1923,6 +1923,32 @@ export function ChatView({ channelId }: { channelId: string }) {
   }
 
   const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");
+  const handleAdminFreezeToggle = () => {
+    if (channel?.is_frozen) {
+      setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
+      adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: false });
+      setBanner({ text: t("chatUnfrozen"), color: bubbleColor });
+    } else {
+      setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
+      adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: true });
+      setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+    }
+    setTimeout(() => setBanner(null), 3000);
+  };
+
+  const handleAdminLiveToggle = () => {
+    if (liveActive) {
+      setLiveActive(false);
+      setInLiveMode(false);
+      fetchInit(channelId).then((data) => { setMessages(data.messages); });
+      setBanner({ text: t("liveEnded"), color: "#c0392b" });
+      setTimeout(() => setBanner(null), 3000);
+      return;
+    }
+
+    setShowLiveTitlePrompt(true);
+  };
+
   const handleShareChannel = async () => {
     const url = `${window.location.origin}/ch/${encodeURIComponent(channelId)}`;
     try {
@@ -2616,40 +2642,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           backgroundOverlay={channel?.background_overlay ?? 14}
           backgroundBlur={channel?.background_blur === 1}
           passcodeHint={channel?.passcode_hint || ""}
-          isFrozen={!!channel?.is_frozen}
-          liveActive={liveActive}
           petitionEnabled={petitionEnabled}
           dmEnabled={dmEnabled}
           showOnProfile={channel?.show_on_profile === 1}
           notice={channel?.notice || "[]"}
           welcomeConfig={welcomeConfig}
           blockedUsers={blockedUsers}
-          onFreeze={() => {
-            setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
-            adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: true });
-            setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onUnfreeze={() => {
-            setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
-            adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: false });
-            setBanner({ text: t("chatUnfrozen"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 3000);
-          }}
           onToggleView={() => setAdminViewAsUser(true)}
-          onLive={() => {
-            if (liveActive) {
-              // End live
-              setLiveActive(false);
-              setInLiveMode(false);
-              fetchInit(channelId).then((data) => { setMessages(data.messages); });
-              setBanner({ text: t("liveEnded"), color: "#c0392b" });
-              setTimeout(() => setBanner(null), 3000);
-            } else {
-              // Show title prompt
-              setShowLiveTitlePrompt(true);
-            }
-          }}
           onPetitionToggle={() => {
             const newVal = !petitionEnabled;
             setPetitionEnabled(newVal);
@@ -2746,9 +2745,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           dmMode={dmMode}
           dmEnabled={dmEnabled}
           isAdmin={effectiveAdmin}
+          isFrozen={!!channel?.is_frozen}
+          liveActive={liveActive}
           inLiveMode={inLiveMode}
           onPhoto={() => photoInputRef.current?.click()}
           onDmToggle={() => setDmMode(!dmMode)}
+          onFreezeToggle={effectiveAdmin ? handleAdminFreezeToggle : undefined}
+          onLiveToggle={effectiveAdmin ? handleAdminLiveToggle : undefined}
           onNotice={effectiveAdmin ? () => setShowNoticeEdit(true) : undefined}
           onEmojiPreset={() => setShowEmojiPreset(true)}
           onClose={() => setPlusMenu(null)}

@@ -16,16 +16,11 @@ interface AdminPanelProps {
   backgroundOverlay: number;
   backgroundBlur: boolean;
   passcodeHint: string;
-  isFrozen: boolean;
-  liveActive: boolean;
   petitionEnabled: boolean;
   dmEnabled: boolean;
   showOnProfile: boolean;
   notice: string;
   blockedUsers: { uid: string; reason: string }[];
-  onFreeze: () => void;
-  onUnfreeze: () => void;
-  onLive: () => void;
   onToggleView: () => void;
   onPetitionToggle: () => void;
   onDmToggle: () => void;
@@ -68,7 +63,7 @@ function guideParts(value: string) {
 }
 
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, isFrozen, liveActive, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onFreeze, onUnfreeze, onLive, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
   const { t } = useLocale();
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
@@ -145,8 +140,6 @@ export function AdminPanel(props: AdminPanelProps) {
   const mainItems: MenuItem[] = [
     { key: "channel", label: t("channel"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>`, arrow: "›" },
     { key: "manage", label: t("manage"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`, arrow: "›" },
-    { key: "freeze", label: isFrozen ? t("unfreezeChat") : t("freezeChat"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 7l-10 10M2 12h20M7 7l10 10"/></svg>`, arrow: "●", arrowColor: isFrozen ? "#4a4d8f" : undefined },
-    { key: "live", label: liveActive ? t("liveStop") : t("liveStart"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>`, arrow: "●", arrowColor: liveActive ? "#c0392b" : undefined },
     { key: "guide", label: t("guide"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`, arrow: "›" },
     { key: "toggle-view", label: t("viewAsUser"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`, arrow: "›" },
   ];
@@ -180,8 +173,6 @@ export function AdminPanel(props: AdminPanelProps) {
       case "banned-words": setView("banned-words"); break;
       case "blocked": setView("blocked"); break;
       case "guide": setView("guide"); break;
-      case "freeze": onClose(); isFrozen ? onUnfreeze() : onFreeze(); break;
-      case "live": onClose(); onLive(); break;
       case "toggle-view": onClose(); onToggleView(); break;
       case "petition-toggle": onPetitionToggle(); break;
       case "dm-toggle": onDmToggle(); break;

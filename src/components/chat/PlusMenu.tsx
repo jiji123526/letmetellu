@@ -8,9 +8,13 @@ interface PlusMenuProps {
   dmMode: boolean;
   dmEnabled: boolean;
   isAdmin?: boolean;
+  isFrozen?: boolean;
+  liveActive?: boolean;
   inLiveMode?: boolean;
   onPhoto: () => void;
   onDmToggle: () => void;
+  onFreezeToggle?: () => void;
+  onLiveToggle?: () => void;
   onNotice?: () => void;
   onEmojiPreset?: () => void;
   onClose: () => void;
@@ -27,7 +31,7 @@ const ITEMS = [
   },
 ];
 
-export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, inLiveMode, onPhoto, onDmToggle, onNotice, onEmojiPreset, onClose }: PlusMenuProps) {
+export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, isFrozen, liveActive, inLiveMode, onPhoto, onDmToggle, onFreezeToggle, onLiveToggle, onNotice, onEmojiPreset, onClose }: PlusMenuProps) {
   const { t } = useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -82,6 +86,18 @@ export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, inLiveMode, o
         <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: ITEMS[1].icon }} />
         {t("photoBtn")}
       </button>
+      {isAdmin && onFreezeToggle && (
+        <button style={{ ...itemStyle, borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { onFreezeToggle(); onClose(); }}>
+          <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 7l-10 10M2 12h20M7 7l10 10"/></svg>` }} />
+          {isFrozen ? t("unfreezeChat") : t("freezeChat")}
+        </button>
+      )}
+      {isAdmin && onLiveToggle && (
+        <button style={{ ...itemStyle, borderBottom: (onNotice || (inLiveMode && onEmojiPreset)) ? "0.5px solid var(--hairline)" : "none" }} onClick={() => { onLiveToggle(); onClose(); }}>
+          <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>` }} />
+          {liveActive ? t("liveStop") : t("liveStart")}
+        </button>
+      )}
       {isAdmin && onNotice && (
         <button style={{ ...itemStyle, borderBottom: inLiveMode ? "0.5px solid var(--hairline)" : "none" }} onClick={() => { onNotice(); onClose(); }}>
           <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke-linecap="round"/></svg>` }} />
