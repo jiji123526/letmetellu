@@ -627,9 +627,8 @@ export default function DashboardPage() {
             ) : (
               <span className="min-w-[72px]" />
             )}
-            <h1 className="m-0 inline-flex items-center gap-2 text-[17px] font-semibold tracking-[-.02em]">
+            <h1 className="m-0 inline-flex items-center text-[17px] font-semibold tracking-[-.02em]">
               <Image src="/logo.svg" alt="" width={48} height={48} className="h-12 w-12" />
-              <span>yap.</span>
             </h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
