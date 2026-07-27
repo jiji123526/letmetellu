@@ -66,27 +66,12 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
         {canExpand ? (
           <button
             type="button"
-            style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "inherit", display: "flex", alignItems: expanded ? "flex-start" : "center", gap: "8px" }}
+            style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "inherit", display: "flex", alignItems: expanded ? "flex-start" : "center", gap: "6px" }}
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
           >
-            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: expanded ? "8px" : "2px" }}>
-              <span style={{ fontSize: "calc(var(--bubble-font-size, 14px) - 1px)", fontWeight: 500, color: "var(--notice-text)", lineHeight: 1.35, overflow: "hidden", textOverflow: expanded ? undefined : "ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
-                {title}
-              </span>
-              <span
-                style={{
-                  fontSize: "calc(var(--bubble-font-size, 14px) - 3px)",
-                  color: "var(--notice-meta)",
-                  lineHeight: 1.45,
-                  whiteSpace: expanded ? "pre-wrap" : "nowrap",
-                  overflow: "hidden",
-                  textOverflow: expanded ? undefined : "ellipsis",
-                  opacity: expanded ? 1 : 0.9,
-                }}
-              >
-                {expanded ? body : body.replace(/\s+/g, " ")}
-              </span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: "calc(var(--bubble-font-size, 14px) - 1px)", fontWeight: 500, color: "var(--notice-text)", lineHeight: 1.35, overflow: "hidden", textOverflow: expanded ? undefined : "ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
+              {title}
             </span>
             <span style={{ flexShrink: 0, color: "var(--notice-meta)", fontSize: "12px", lineHeight: 1, paddingTop: expanded ? "4px" : 0 }}>
               {expanded ? "▲" : "▼"}
@@ -101,6 +86,12 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
         <button type="button" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--notice-meta)", fontSize: "14px", padding: "2px 4px", lineHeight: 1, flexShrink: 0 }} onClick={handleDismiss}>
           ✕
         </button>
+
+        {canExpand && expanded && (
+          <div style={{ width: "100%", marginLeft: "36px", fontSize: "calc(var(--bubble-font-size, 14px) - 2px)", color: "var(--notice-meta)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {body}
+          </div>
+        )}
       </div>
     </div>
   );
