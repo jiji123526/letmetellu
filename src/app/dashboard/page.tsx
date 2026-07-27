@@ -57,7 +57,7 @@ function getChannelPreviewColor(channelId: string, fallback: string) {
 }
 
 function getChannelIdFromLink(value: string) {
-  const match = value.trim().match(/^(?:(?:https?:\/\/[^/\s]+|letmetellu\.vercel\.app))?\/ch\/([a-z0-9-]{3,30})(?:[/?#].*)?$/i);
+  const match = value.trim().match(/^(?:(?:https?:\/\/[^/\s]+|letmetellu\.vercel\.app))?\/ch\/([a-z0-9-]{3,30})\/?(?:[?#].*)?$/i);
   return match?.[1]?.toLowerCase() || null;
 }
 
