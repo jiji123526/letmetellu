@@ -136,7 +136,7 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
           ))}
         </div>}
 
-        {tab !== "forgot" && <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)" }} onClick={() => void signIn("google", { callbackUrl: tab === "login" ? "/dashboard" : "/onboarding" })}>
+        {tab !== "forgot" && <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)" }} onClick={() => void signIn("google", { callbackUrl: tab === "login" ? "/dashboard" : "/dashboard?onboarding=true" })}>
           <GoogleIcon /> {t(tab === "login" ? "googleLogin" : "googleSignup")}
         </button>}
         {tab === "login" ? (

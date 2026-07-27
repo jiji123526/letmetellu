@@ -239,24 +239,6 @@ export default function DashboardPage() {
   }, [loading, status, recentChannels.length]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("login") === "true" && status === "unauthenticated") {
-      setShowGuestOnboarding(false);
-      setShowLogin(true);
-    }
-  }, [status]);
-
-  const closeLogin = () => {
-    setShowLogin(false);
-    if (window.location.search) window.history.replaceState(null, "", "/dashboard");
-  };
-
-  const closeGuestOnboarding = () => {
-    try { localStorage.setItem("letmetellu_guest_onboarding_seen", "true"); } catch {}
-    setShowGuestOnboarding(false);
-  };
-
-  useEffect(() => {
     if (!showAccount) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
       if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
@@ -416,10 +398,36 @@ export default function DashboardPage() {
     }
   };
 
-  const openCreateFlow = () => {
+  const openCreateFlow = useCallback(() => {
     setCreateError("");
-    if (channels.length === 0) setShowFirstOnboarding(true);
-    else setShowCreate(true);
+    setShowCreate(channels.length > 0);
+    setShowFirstOnboarding(channels.length === 0);
+  }, [channels.length]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("login") === "true" && status === "unauthenticated") {
+      setShowGuestOnboarding(false);
+      setShowLogin(true);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (loading || status !== "authenticated") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("onboarding") !== "true") return;
+    openCreateFlow();
+    window.history.replaceState(null, "", "/dashboard");
+  }, [loading, openCreateFlow, status]);
+
+  const closeLogin = () => {
+    setShowLogin(false);
+    if (window.location.search) window.history.replaceState(null, "", "/dashboard");
+  };
+
+  const closeGuestOnboarding = () => {
+    try { localStorage.setItem("letmetellu_guest_onboarding_seen", "true"); } catch {}
+    setShowGuestOnboarding(false);
   };
 
   const removeRecent = (channelId: string) => {
