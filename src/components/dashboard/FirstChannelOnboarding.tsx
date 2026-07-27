@@ -241,7 +241,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
           onPointerCancel={handlePointerEnd}
         >
           <div
-            className="flex w-[300%]"
+            className="flex items-start w-[300%]"
             style={{
               transform: `translateX(calc(-${stepIndex * (100 / 3)}% + ${dragX}px))`,
               transition: dragging ? "none" : "transform 220ms cubic-bezier(.22,.61,.36,1)",
