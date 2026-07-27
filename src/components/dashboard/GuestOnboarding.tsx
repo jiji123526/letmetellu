@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 interface GuestOnboardingProps {
@@ -15,9 +15,11 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
   const [step, setStep] = useState<"intro" | "guide">("intro");
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const horizontalDrag = useRef(false);
   const slideRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<Array<HTMLElement | null>>([]);
   const pages = [
     {
       step: "intro" as const,
@@ -50,6 +52,21 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
     setStep(nextStep);
     setDragX(0);
   };
+
+  const activePageIndex = step === "intro" ? 0 : 1;
+
+  useLayoutEffect(() => {
+    const pageEl = pageRefs.current[activePageIndex];
+    if (!pageEl) return;
+
+    const updateHeight = () => setContentHeight(pageEl.offsetHeight);
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(pageEl);
+    return () => observer.disconnect();
+  }, [activePageIndex]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -123,22 +140,31 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
 
         <div
           ref={slideRef}
-          className="min-h-0 overflow-x-hidden overflow-y-auto"
-          style={{ touchAction: "pan-y" }}
+          className="onboarding-scroll min-h-0 overflow-x-hidden overflow-y-auto"
+          style={{
+            touchAction: "pan-y",
+            height: contentHeight ? `${contentHeight}px` : undefined,
+            transition: dragging ? "none" : "height 220ms cubic-bezier(.22,.61,.36,1)",
+          }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
         >
           <div
-            className="flex w-[200%]"
+            className="flex items-start w-[200%]"
             style={{
               transform: `translateX(calc(${step === "guide" ? "-50%" : "0%"} + ${dragX}px))`,
               transition: dragging ? "none" : "transform 220ms cubic-bezier(.22,.61,.36,1)",
             }}
           >
-            {pages.map((page) => (
-              <section key={page.step} className="w-1/2 flex-none px-6 py-6" aria-hidden={step !== page.step}>
+            {pages.map((page, index) => (
+              <section
+                key={page.step}
+                ref={(node) => { pageRefs.current[index] = node; }}
+                className="w-1/2 flex-none px-6 py-6"
+                aria-hidden={step !== page.step}
+              >
                 <div className="text-center mb-6">
                   <div
                     className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center font-semibold ${page.step === "intro" ? "text-[20px] tracking-[-.03em]" : "text-[28px]"}`}

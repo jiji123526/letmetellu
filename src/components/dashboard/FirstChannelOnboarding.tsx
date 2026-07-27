@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 
@@ -91,9 +91,11 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   const [error, setError] = useState("");
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const horizontalDrag = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<Array<HTMLElement | null>>([]);
 
   const stepIndex = step === "features" ? 0 : step === "create" ? 1 : 2;
   const createFieldsValid = Boolean(name.trim()) && /^[a-z0-9-]{3,30}$/.test(slug.trim());
@@ -121,6 +123,19 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
   }, [step]);
+
+  useLayoutEffect(() => {
+    const pageEl = pageRefs.current[stepIndex];
+    if (!pageEl) return;
+
+    const updateHeight = () => setContentHeight(pageEl.offsetHeight);
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(pageEl);
+    return () => observer.disconnect();
+  }, [stepIndex, name, slug, error]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || step === "guide") return;
@@ -234,7 +249,12 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
         <div
           ref={contentRef}
           className="onboarding-scroll min-h-0 overflow-x-hidden overflow-y-auto"
-          style={{ touchAction: "pan-y", overflowY: "auto" }}
+          style={{
+            touchAction: "pan-y",
+            overflowY: "auto",
+            height: contentHeight ? `${contentHeight}px` : undefined,
+            transition: dragging ? "none" : "height 220ms cubic-bezier(.22,.61,.36,1)",
+          }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}
@@ -247,7 +267,11 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               transition: dragging ? "none" : "transform 220ms cubic-bezier(.22,.61,.36,1)",
             }}
           >
-            <section className="w-1/3 flex-none px-6 py-6" aria-hidden={step !== "features"}>
+            <section
+              ref={(node) => { pageRefs.current[0] = node; }}
+              className="w-1/3 flex-none px-6 py-6"
+              aria-hidden={step !== "features"}
+            >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>💬</div>
                 <h2 className="m-0 text-[24px] font-bold tracking-[-.02em]">{t("firstOnboardingTitle")}</h2>
@@ -266,7 +290,11 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               </div>
             </section>
 
-            <section className="w-1/3 flex-none px-6 py-6" aria-hidden={step !== "create"}>
+            <section
+              ref={(node) => { pageRefs.current[1] = node; }}
+              className="w-1/3 flex-none px-6 py-6"
+              aria-hidden={step !== "create"}
+            >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>＋</div>
                 <h2 className="m-0 text-[24px] font-bold">{t("onboardingTitle")}</h2>
@@ -283,7 +311,11 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               <div className="min-h-[20px] mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{error}</div>
             </section>
 
-            <section className="w-1/3 flex-none px-6 py-6" aria-hidden={step !== "guide"}>
+            <section
+              ref={(node) => { pageRefs.current[2] = node; }}
+              className="w-1/3 flex-none px-6 py-6"
+              aria-hidden={step !== "guide"}
+            >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf8ef" }}>✓</div>
                 <h2 className="m-0 text-[24px] font-bold">{t("firstGuideTitle")}</h2>

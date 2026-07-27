@@ -5,6 +5,7 @@ import { adminAction } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
 const DEFAULT_EMOJIS = ["🍋", "🔥", "❤️", "😂", "👏", "🎉"];
+const EMOJI_FX_LAYER_ID = "live-emoji-fx-layer";
 
 interface EmojiBarProps {
   channelId: string;
@@ -19,6 +20,23 @@ function getPresetEmojis(channelId: string): string[] {
     if (stored) return JSON.parse(stored);
   } catch {}
   return DEFAULT_EMOJIS;
+}
+
+function getEmojiFxLayer(): HTMLDivElement | null {
+  if (typeof document === "undefined") return null;
+
+  const existing = document.getElementById(EMOJI_FX_LAYER_ID) as HTMLDivElement | null;
+  if (existing) return existing;
+
+  const layer = document.createElement("div");
+  layer.id = EMOJI_FX_LAYER_ID;
+  layer.style.position = "fixed";
+  layer.style.inset = "0";
+  layer.style.overflow = "hidden";
+  layer.style.pointerEvents = "none";
+  layer.style.zIndex = "1200";
+  document.body.appendChild(layer);
+  return layer;
 }
 
 export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
@@ -163,19 +181,29 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
 
 // Spawn a floating emoji animation — size matches font setting
 export function spawnEmoji(emoji: string, x: number, h: number) {
-  if (typeof document === "undefined") return;
+  const layer = getEmojiFxLayer();
+  if (!layer) return;
+
   const el = document.createElement("div");
   el.textContent = emoji;
-  el.style.position = "fixed";
-  el.style.bottom = "0";
+  el.style.position = "absolute";
+  el.style.bottom = "calc(68px + env(safe-area-inset-bottom))";
   el.style.left = `${x}%`;
   el.style.fontSize = "calc(var(--bubble-font-size) + 11px)";
-  el.style.zIndex = "999";
+  el.style.transform = "translate3d(-50%, 0, 0)";
+  el.style.willChange = "transform, opacity";
+  el.style.textShadow = "0 4px 14px rgba(0,0,0,.18)";
   el.style.pointerEvents = "none";
-  el.style.setProperty("--fly-h", `${h}vh`);
-  el.style.animation = "emojiFly 2s ease-out forwards";
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2000);
+  el.style.setProperty("--fly-y", `-${h}vh`);
+  el.style.setProperty("--fly-drift", `${(Math.random() - 0.5) * 22}vw`);
+  el.style.animation = "emojiFly 1.9s cubic-bezier(.18,.72,.24,1) forwards";
+  layer.appendChild(el);
+  setTimeout(() => {
+    el.remove();
+    if (!layer.childElementCount) {
+      layer.remove();
+    }
+  }, 1900);
 }
 
 // Emoji Preset Panel (admin, in live mode)
