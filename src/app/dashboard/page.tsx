@@ -27,6 +27,7 @@ interface Channel {
   last_message_at?: string;
   has_passcode: number;
   owner_name: string | null;
+  live_active: number;
 }
 
 function formatDate(value: string, locale: "ko" | "en") {
@@ -311,6 +312,7 @@ export default function DashboardPage() {
           owned: true,
           pinned: channel.id === prioritizedOwnedId,
           activityAt: channel.last_message_at || channel.created_at,
+          liveActive: channel.live_active === 1,
         }))
       .sort((left, right) =>
         Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
@@ -329,6 +331,7 @@ export default function DashboardPage() {
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
           pinned: channel.pinned,
+          liveActive: false,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
     const items = [...ownedItems, ...recentItems];
@@ -344,6 +347,7 @@ export default function DashboardPage() {
         time: "",
         owned: false,
         pinned: false,
+        liveActive: false,
       });
     }
     if (linkedChannelId) return items.filter((item) => item.id === linkedChannelId);
@@ -888,6 +892,12 @@ export default function DashboardPage() {
                           <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="#007aff" aria-label={t("dashboardPin")} role="img">
                             <path d="M14.5 3.5 20 9l-2 2-1.2-1.2-3.3 3.3.4 3.4-1.4 1.4-3.4-3.4L5 18.6 3.4 17l4.1-4.1-3.4-3.4 1.4-1.4 3.4.4 3.3-3.3L11 4l2-2 1.5 1.5Z" />
                           </svg>
+                        )}
+                        {item.liveActive && (
+                          <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full" style={{ background: "#fff0f0" }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#c0392b", animation: "livePulse 1.5s infinite" }} />
+                            <span className="text-[10px] font-semibold" style={{ color: "#c0392b" }}>LIVE</span>
+                          </span>
                         )}
                       </div>
                       <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "var(--meta)" }}>{item.time}</span>

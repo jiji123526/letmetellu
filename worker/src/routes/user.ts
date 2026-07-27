@@ -91,7 +91,9 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
                 channels.created_at
               ) AS last_message_at,
               channels.passcode IS NOT NULL AS has_passcode,
-              users.name AS owner_name
+              users.name AS owner_name,
+              (SELECT CASE WHEN config.text IS NOT NULL AND config.text != 'false' AND json_extract(config.text, '$.active') = 1 THEN 1 ELSE 0 END
+               FROM config WHERE config.id = 'live_' || channels.id) AS live_active
        FROM channels
        LEFT JOIN users ON users.id = channels.owner_uid
        WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'`
