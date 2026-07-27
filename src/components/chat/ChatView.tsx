@@ -2124,29 +2124,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         />
       )}
 
-      {/* Notice Banner */}
-      {activeNotice && (
-        <NoticeBanner
-          channelId={inLiveMode ? `${channelId}_live` : channelId}
-          notice={activeNotice}
-          onDismiss={() => setActiveNotice("")}
-        />
-      )}
-
       {/* Offline banner */}
       {!connected && !loading && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 12px", background: "#fff3e0", borderBottom: "0.5px solid #ffe0b2", flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "#e65100", lineHeight: 1 }}>
           <span>{t("connectionLost")}</span>
-        </div>
-      )}
-
-      {/* Live viewer count — overlays top-right of messages area */}
-      {inLiveMode && (
-        <div style={{ position: "absolute", top: activeNotice ? "200px" : "148px", right: "14px", zIndex: 10, display: "inline-flex", alignItems: "center", gap: "0.28em", padding: "0.28em 0.58em", borderRadius: "999px", background: "rgba(60,60,67,.10)", color: "rgba(60,60,67,.68)", fontSize: "var(--bubble-font-size, 13px)", fontWeight: 600, lineHeight: 1, pointerEvents: "none", transition: "top .2s ease" }}>
-          <svg viewBox="0 0 24 24" style={{ width: "1.05em", height: "1.05em" }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="3.25" /><path d="M5.75 19c.45-4 2.55-6 6.25-6s5.8 2 6.25 6" />
-          </svg>
-          <span>{liveCount}</span>
         </div>
       )}
 
@@ -2171,6 +2152,22 @@ export function ChatView({ channelId }: { channelId: string }) {
               transform: channel.background_blur ? "scale(1.04)" : "none",
             }}
           />
+        )}
+        {activeNotice && (
+          <NoticeBanner
+            channelId={inLiveMode ? `${channelId}_live` : channelId}
+            notice={activeNotice}
+            onDismiss={() => setActiveNotice("")}
+          />
+        )}
+        {/* Live viewer count — overlays top-right of messages area */}
+        {inLiveMode && (
+          <div style={{ position: "absolute", top: "14px", right: "14px", zIndex: 11, display: "inline-flex", alignItems: "center", gap: "0.28em", padding: "0.28em 0.58em", borderRadius: "999px", background: "rgba(60,60,67,.10)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", color: "rgba(60,60,67,.68)", fontSize: "var(--bubble-font-size, 13px)", fontWeight: 600, lineHeight: 1, pointerEvents: "none" }}>
+            <svg viewBox="0 0 24 24" style={{ width: "1.05em", height: "1.05em" }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="3.25" /><path d="M5.75 19c.45-4 2.55-6 6.25-6s5.8 2 6.25 6" />
+            </svg>
+            <span>{liveCount}</span>
+          </div>
         )}
         <main
           ref={messagesContainerRef}
