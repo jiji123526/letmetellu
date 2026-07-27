@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import { useLocale } from "@/hooks/useLocale";
 import { useRouter } from "next/navigation";
@@ -83,7 +84,7 @@ export default function OnboardingPage() {
       <div style={{ background: "#fff", borderRadius: "20px", padding: "36px 28px", maxWidth: "360px", width: "100%", boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}>
         {/* Icon */}
         <div style={{ textAlign: "center", marginBottom: "16px" }}>
-          <img src="/logo.svg" alt="" style={{ width: "52px", height: "52px" }} />
+          <Image src="/logo.svg" alt="" width={52} height={52} style={{ width: "52px", height: "52px" }} />
         </div>
 
         {/* Title */}

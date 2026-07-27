@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
@@ -276,7 +277,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
             >
               <div className="text-center mb-6">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ background: "#eaf3ff" }}>
-                  <img src="/logo.svg" alt="" className="h-9 w-9" />
+                  <Image src="/logo.svg" alt="" width={36} height={36} className="h-9 w-9" />
                 </div>
                 <h2 className="m-0 text-[24px] font-bold tracking-[-.02em]">{t("firstOnboardingTitle")}</h2>
                 <p className="mt-2 mb-0 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{t("firstOnboardingDesc")}</p>

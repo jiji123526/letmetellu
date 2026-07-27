@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
@@ -23,7 +24,7 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
   const pages = [
     {
       step: "intro" as const,
-      icon: <img src="/logo.svg" alt="" className="block h-9 w-9" />,
+      icon: <Image src="/logo.svg" alt="" width={36} height={36} className="block h-9 w-9" />,
       title: t("guestOnboardingTitle"),
       description: t("guestOnboardingDesc"),
       cards: [
