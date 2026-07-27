@@ -263,6 +263,8 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
           <div
             className="flex items-start w-[300%]"
             style={{
+              height: contentHeight ? `${contentHeight}px` : undefined,
+              overflow: "hidden",
               transform: `translateX(calc(-${stepIndex * (100 / 3)}% + ${dragX}px))`,
               transition: dragging ? "none" : "transform 220ms cubic-bezier(.22,.61,.36,1)",
             }}

@@ -154,6 +154,8 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
           <div
             className="flex items-start w-[200%]"
             style={{
+              height: contentHeight ? `${contentHeight}px` : undefined,
+              overflow: "hidden",
               transform: `translateX(calc(${step === "guide" ? "-50%" : "0%"} + ${dragX}px))`,
               transition: dragging ? "none" : "transform 220ms cubic-bezier(.22,.61,.36,1)",
             }}

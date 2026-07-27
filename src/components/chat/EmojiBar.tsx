@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { adminAction } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
@@ -53,15 +54,20 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
   return (
     <>
       <button
+        type="button"
+        className="emoji-fx-trigger"
         style={{ border: "none", background: "none", fontSize: "calc(var(--bubble-font-size) + 2px)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "calc(var(--bubble-font-size) + 9px)", height: "calc(var(--bubble-font-size) + 9px)", marginRight: "4px", lineHeight: 1 }}
         onClick={(e) => { e.stopPropagation(); setShowGrid(!showGrid); }}
       >
         {emojis[0]}
       </button>
 
-      {showGrid && (
-        <EmojiGrid emojis={emojis} onSelect={triggerEmoji} onClose={() => setShowGrid(false)} />
-      )}
+      {showGrid && typeof document !== "undefined"
+        ? createPortal(
+          <EmojiGrid emojis={emojis} onSelect={triggerEmoji} onClose={() => setShowGrid(false)} />,
+          document.body,
+        )
+        : null}
     </>
   );
 }
@@ -91,7 +97,7 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
     <>
       <div
         ref={gridRef}
-        className="emoji-fx-grid-container"
+        className="emoji-fx-grid"
         style={{
           position: "fixed",
           bottom: "70px",
@@ -107,15 +113,37 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
           zIndex: 300,
         }}
       >
-        {emojis.map((emoji) => (
+        <div className="emoji-fx-grid-inner" style={{ display: "flex", gap: "4px" }}>
+          {emojis.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              className="emoji-fx-btn hover:scale-[1.2] active:scale-[1.4] transition-transform"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "calc(var(--bubble-font-size) + 3px)",
+                width: "calc(var(--bubble-font-size) + 19px)",
+                height: "calc(var(--bubble-font-size) + 19px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "50%",
+                lineHeight: 1,
+              }}
+              onClick={(e) => { e.stopPropagation(); onSelect(emoji); }}
+            >
+              {emoji}
+            </button>
+          ))}
           <button
-            key={emoji}
-            className="hover:scale-[1.2] active:scale-[1.4] transition-transform"
+            type="button"
+            className="emoji-fx-btn emoji-fx-more hover:scale-[1.2] active:scale-[1.4] transition-transform"
             style={{
-              background: "none",
               border: "none",
               cursor: "pointer",
-              fontSize: "calc(var(--bubble-font-size) + 3px)",
+              fontSize: "calc(var(--bubble-font-size) + 1px)",
               width: "calc(var(--bubble-font-size) + 19px)",
               height: "calc(var(--bubble-font-size) + 19px)",
               display: "flex",
@@ -123,39 +151,20 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
               justifyContent: "center",
               borderRadius: "50%",
               lineHeight: 1,
+              background: "var(--hairline)",
+              color: "var(--meta)",
             }}
-            onClick={(e) => { e.stopPropagation(); onSelect(emoji); }}
+            onClick={(e) => { e.stopPropagation(); setShowFullPicker(!showFullPicker); }}
           >
-            {emoji}
+            +
           </button>
-        ))}
-        {/* + button for full picker */}
-        <button
-          className="hover:scale-[1.2] active:scale-[1.4] transition-transform"
-          style={{
-            border: "none",
-            cursor: "pointer",
-            fontSize: "calc(var(--bubble-font-size) + 1px)",
-            width: "calc(var(--bubble-font-size) + 19px)",
-            height: "calc(var(--bubble-font-size) + 19px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: "50%",
-            lineHeight: 1,
-            background: "var(--hairline)",
-            color: "var(--meta)",
-          }}
-          onClick={(e) => { e.stopPropagation(); setShowFullPicker(!showFullPicker); }}
-        >
-          +
-        </button>
+        </div>
       </div>
 
       {/* Full emoji picker */}
       {showFullPicker && (
         <div
-          className="emoji-fx-full-picker"
+          className="emoji-fx-picker-wrap"
           style={{ position: "fixed", bottom: "120px", right: "12px", zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
           ref={(el) => {
             pickerRef.current = el;
