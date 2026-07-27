@@ -1,5 +1,9 @@
 import { Env } from "../types";
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 export async function handleUser(request: Request, env: Env): Promise<Response> {
   if (request.method === "GET") {
     const url = new URL(request.url);
@@ -71,16 +75,45 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
-    // Upsert user
-    await env.DB.prepare(
-      `INSERT INTO users (id, email, name, image, email_verified_at)
-       VALUES (?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(id) DO UPDATE SET
-         email = ?,
-         name = ?,
-         image = ?,
-         email_verified_at = COALESCE(users.email_verified_at, datetime('now'))`
-    ).bind(id, email, name || null, image || null, email, name || null, image || null).run();
+    const normalizedEmail = normalizeEmail(email);
+    const existingUser = await env.DB.prepare(
+      "SELECT id FROM users WHERE lower(email) = ? LIMIT 1"
+    ).bind(normalizedEmail).first<{ id: string }>();
+    const canonicalUserId = existingUser?.id || id;
+
+    if (existingUser) {
+      await env.DB.prepare(
+        `UPDATE users
+         SET name = ?, image = ?,
+             email_verified_at = COALESCE(email_verified_at, datetime('now'))
+         WHERE id = ?`
+      ).bind(name || null, image || null, canonicalUserId).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, name, image, email_verified_at)
+         VALUES (?, ?, ?, ?, datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           email = excluded.email,
+           name = excluded.name,
+           image = excluded.image,
+           email_verified_at = COALESCE(users.email_verified_at, datetime('now'))`
+      ).bind(canonicalUserId, normalizedEmail, name || null, image || null).run();
+    }
+
+    if (canonicalUserId !== id) {
+      await env.DB.batch([
+        env.DB.prepare(`
+          INSERT OR IGNORE INTO user_recent_channels
+            (user_id, channel_id, last_visited_at, pinned, bubble_color)
+          SELECT ?, channel_id, last_visited_at, pinned, bubble_color
+          FROM user_recent_channels
+          WHERE user_id = ?
+        `).bind(canonicalUserId, id),
+        env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(id),
+        env.DB.prepare("UPDATE channels SET owner_uid = ? WHERE owner_uid = ?")
+          .bind(canonicalUserId, id),
+      ]);
+    }
 
     // Fetch user's channels
     const { results: channels } = await env.DB.prepare(
@@ -97,11 +130,16 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
        FROM channels
        LEFT JOIN users ON users.id = channels.owner_uid
        WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'`
-    ).bind(id).all();
+    ).bind(canonicalUserId).all();
 
     const preferences = await env.DB.prepare("SELECT font_size FROM users WHERE id = ?")
-      .bind(id).first<{ font_size: number | null }>();
-    return Response.json({ ok: true, channels, font_size: preferences?.font_size ?? null });
+      .bind(canonicalUserId).first<{ font_size: number | null }>();
+    return Response.json({
+      ok: true,
+      user_id: canonicalUserId,
+      channels,
+      font_size: preferences?.font_size ?? null,
+    });
   }
 
   return Response.json({ error: "method not allowed" }, { status: 405 });

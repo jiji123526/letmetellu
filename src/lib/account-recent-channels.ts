@@ -8,6 +8,7 @@ interface AccountRecentRow {
   personal_bubble_color: string | null;
   has_passcode: number;
   owner_name: string | null;
+  owner_uid: string;
   pinned: number;
   last_visited_at: number;
 }
@@ -23,6 +24,7 @@ export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
     bubbleColor: channel.personal_bubble_color || channel.bubble_color || "#3b8df0",
     hasPasscode: channel.has_passcode === 1,
     ownerName: channel.owner_name || "",
+    ownerUid: channel.owner_uid,
     pinned: channel.pinned === 1,
     lastVisitedAt: channel.last_visited_at,
   }));

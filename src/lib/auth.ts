@@ -3,6 +3,29 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+const IDENTITY_VERSION = 1;
+
+async function syncUserIdentity(user: {
+  id: string;
+  email: string;
+  name?: string | null;
+  image?: string | null;
+}) {
+  const response = await fetch(`${WORKER_URL}/api/user`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
+    },
+    body: JSON.stringify(user),
+    cache: "no-store",
+  });
+  const data = await response.json() as { user_id?: string; error?: string };
+  if (!response.ok || !data.user_id) {
+    throw new Error(data.error || "user identity sync failed");
+  }
+  return data.user_id;
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -46,9 +69,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") return true;
+      return profile?.email_verified === true && typeof profile.email === "string";
+    },
     async jwt({ token, user }) {
-      if (user?.id) {
-        token.id = user.id;
+      const sourceId = user?.id || token.id || token.sub;
+      const email = user?.email || token.email;
+      if (sourceId && email && (user || token.identityVersion !== IDENTITY_VERSION)) {
+        try {
+          token.id = await syncUserIdentity({
+            id: sourceId as string,
+            email,
+            name: user?.name || token.name,
+            image: user?.image || token.picture,
+          });
+          token.identityVersion = IDENTITY_VERSION;
+        } catch (error) {
+          // Abort a new sign-in rather than issue a session with an identity
+          // that cannot own or retrieve its channels.
+          if (user) throw error;
+        }
       }
       // Auth.js stores the provider/credentials user ID in the standard `sub`
       // claim. Keep using it as a fallback so sessions created without the

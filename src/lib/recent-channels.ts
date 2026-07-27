@@ -5,6 +5,7 @@ export interface RecentChannel {
   bubbleColor: string;
   hasPasscode: boolean;
   ownerName: string;
+  ownerUid?: string;
   pinned: boolean;
   lastVisitedAt: number;
 }

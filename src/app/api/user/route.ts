@@ -23,10 +23,11 @@ export async function GET() {
       name: session.user.name,
       image: session.user.image,
     }),
+    cache: "no-store",
   });
 
   const data = await res.json();
-  return NextResponse.json(data);
+  return NextResponse.json(data, { status: res.status });
 }
 
 export async function PATCH(request: Request) {

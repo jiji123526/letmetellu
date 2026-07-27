@@ -115,6 +115,16 @@ export default function DashboardPage() {
   const linkedChannelId = submittedLinkedChannelId;
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
+  const ownedChannelIds = useMemo(() => {
+    const ids = new Set(channels.map((channel) => channel.id));
+    const userId = session?.user?.id;
+    if (userId) {
+      recentChannels.forEach((channel) => {
+        if (channel.ownerUid === userId) ids.add(channel.id);
+      });
+    }
+    return ids;
+  }, [channels, recentChannels, session?.user?.id]);
 
   useEffect(() => () => {
     if (channelLongPressTimerRef.current) clearTimeout(channelLongPressTimerRef.current);
@@ -273,7 +283,7 @@ export default function DashboardPage() {
 
   const activeItems = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const ownedIds = new Set(channels.map((channel) => channel.id));
+    const fetchedOwnedIds = new Set(channels.map((channel) => channel.id));
     const personalColors = new Map(recentChannels.map((channel) => [channel.id, channel.bubbleColor]));
     const previewColor = (channelId: string, fallback: string) =>
       status === "authenticated"
@@ -301,8 +311,24 @@ export default function DashboardPage() {
         Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
         || (parseServerDate(right.activityAt)?.getTime() || 0) - (parseServerDate(left.activityAt)?.getTime() || 0)
       );
+    const fallbackOwnedItems = recentChannels
+      .filter((channel) => ownedChannelIds.has(channel.id) && !fetchedOwnedIds.has(channel.id))
+      .map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        profileImage: channel.profileImage,
+        bubbleColor: channel.bubbleColor || "#3b8df0",
+        hasPasscode: channel.hasPasscode,
+        ownerName: channel.ownerName,
+        meta: `/ch/${channel.id}`,
+        time: formatRelativeTime(channel.lastVisitedAt, locale),
+        owned: true,
+        pinned: channel.id === prioritizedOwnedId,
+        liveActive: false,
+      }))
+      .sort((left, right) => Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId));
     const recentItems = recentChannels
-      .filter((channel) => !ownedIds.has(channel.id))
+      .filter((channel) => !ownedChannelIds.has(channel.id))
       .map((channel) => ({
           id: channel.id,
           name: channel.name,
@@ -317,7 +343,7 @@ export default function DashboardPage() {
           liveActive: false,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
-    const items = [...ownedItems, ...recentItems];
+    const items = [...ownedItems, ...fallbackOwnedItems, ...recentItems];
     if (linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
       items.push({
         id: linkedChannel.id,
@@ -339,7 +365,7 @@ export default function DashboardPage() {
       item.name.toLowerCase().includes(normalized)
       || item.id.toLowerCase().includes(normalized)
     );
-  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds]);
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
@@ -400,9 +426,9 @@ export default function DashboardPage() {
 
   const openCreateFlow = useCallback(() => {
     setCreateError("");
-    setShowCreate(channels.length > 0);
-    setShowFirstOnboarding(channels.length === 0);
-  }, [channels.length]);
+    setShowCreate(ownedChannelIds.size > 0);
+    setShowFirstOnboarding(ownedChannelIds.size === 0);
+  }, [ownedChannelIds]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -480,7 +506,7 @@ export default function DashboardPage() {
   };
 
   const performDeleteSelected = async (channelIds: string[]) => {
-    const ownedIds = channelIds.filter((id) => channels.some((channel) => channel.id === id));
+    const ownedIds = channelIds.filter((id) => ownedChannelIds.has(id));
     setDeleting(true);
     try {
       await Promise.all(ownedIds.map(deleteOwnedChannel));
@@ -508,7 +534,7 @@ export default function DashboardPage() {
   const deleteSelected = () => {
     if (!selectedIds.size || deleting) return;
     const channelIds = [...selectedIds];
-    const includesOwned = channelIds.some((id) => channels.some((channel) => channel.id === id));
+    const includesOwned = channelIds.some((id) => ownedChannelIds.has(id));
     if (includesOwned) {
       setPendingDelete({ mode: "selected", channelIds });
     } else {
@@ -781,7 +807,7 @@ export default function DashboardPage() {
             {activeItems.map((item, index) => {
               const previousItem = activeItems[index - 1];
               const showSectionLabel = isLoggedIn
-                && channels.length > 0
+                && ownedChannelIds.size > 0
                 && (index === 0 || previousItem?.owned !== item.owned);
               return (
               <div
@@ -993,7 +1019,7 @@ export default function DashboardPage() {
         <LoginDialog onClose={closeLogin} />
       )}
 
-      {isLoggedIn && !editing && channels.length < 5 && (
+      {isLoggedIn && !editing && ownedChannelIds.size < 5 && (
         <button
           type="button"
           className="fixed z-40 w-14 h-14 rounded-full border-none cursor-pointer flex items-center justify-center text-white"

@@ -19,7 +19,7 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
 
   if (request.method === "GET") {
     const { results } = await env.DB.prepare(`
-      SELECT c.id, c.name, c.profile_image, c.bubble_color, c.created_at,
+      SELECT c.id, c.name, c.profile_image, c.bubble_color, c.created_at, c.owner_uid,
              c.passcode IS NOT NULL AS has_passcode,
              u.name AS owner_name,
              r.last_visited_at, r.pinned, r.bubble_color AS personal_bubble_color
