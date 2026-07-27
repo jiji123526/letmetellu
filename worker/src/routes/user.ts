@@ -94,7 +94,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
               users.name AS owner_name
        FROM channels
        LEFT JOIN users ON users.id = channels.owner_uid
-       WHERE channels.owner_uid = ?`
+       WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'`
     ).bind(id).all();
 
     const preferences = await env.DB.prepare("SELECT font_size FROM users WHERE id = ?")

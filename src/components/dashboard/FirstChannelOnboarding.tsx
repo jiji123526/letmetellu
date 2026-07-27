@@ -234,7 +234,7 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
         <div
           ref={contentRef}
           className="onboarding-scroll min-h-0 overflow-x-hidden overflow-y-auto"
-          style={{ touchAction: "pan-y", overflowY: step === "guide" ? "auto" : "hidden" }}
+          style={{ touchAction: "pan-y", overflowY: "auto" }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerEnd}

@@ -50,15 +50,20 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
 
 function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: (emoji: string) => void; onClose: () => void }) {
   const [showFullPicker, setShowFullPicker] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest(".emoji-fx-grid-container") && !target.closest(".emoji-fx-full-picker")) onClose();
+      if (!target.closest(".emoji-fx-grid-container") && !target.closest(".emoji-fx-full-picker")) onCloseRef.current();
     };
-    setTimeout(() => document.addEventListener("click", handler), 10);
-    return () => document.removeEventListener("click", handler);
-  }, [onClose]);
+    const timer = setTimeout(() => document.addEventListener("click", handler), 10);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("click", handler);
+    };
+  }, []);
 
   return (
     <>
@@ -96,7 +101,7 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
               borderRadius: "50%",
               lineHeight: 1,
             }}
-            onClick={() => onSelect(emoji)}
+            onClick={(e) => { e.stopPropagation(); onSelect(emoji); }}
           >
             {emoji}
           </button>
@@ -118,7 +123,7 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
             background: "var(--hairline)",
             color: "var(--meta)",
           }}
-          onClick={() => setShowFullPicker(!showFullPicker)}
+          onClick={(e) => { e.stopPropagation(); setShowFullPicker(!showFullPicker); }}
         >
           +
         </button>

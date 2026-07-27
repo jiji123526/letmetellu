@@ -528,7 +528,7 @@ export default function DashboardPage() {
   };
 
   const copyChannelLink = async (channelId: string) => {
-    const link = `${window.location.origin}/ch/${channelId}`;
+    const link = `${window.location.host}/ch/${channelId}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch {
@@ -606,18 +606,22 @@ export default function DashboardPage() {
       <div className={`max-w-[480px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
         <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
           <div className="h-[64px] px-4 flex items-center justify-between">
-            <button
-              type="button"
-              className="border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
-              style={{ color: "#007aff" }}
-              onClick={() => {
-                setEditing((value) => !value);
-                setSelectedIds(new Set());
-                setSwipe({ id: null, offset: 0 });
-              }}
-            >
-              {editing ? t("dashboardDone") : t("dashboardEdit")}
-            </button>
+            {activeItems.length > 0 ? (
+              <button
+                type="button"
+                className="border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
+                style={{ color: "#007aff" }}
+                onClick={() => {
+                  setEditing((value) => !value);
+                  setSelectedIds(new Set());
+                  setSwipe({ id: null, offset: 0 });
+                }}
+              >
+                {editing ? t("dashboardDone") : t("dashboardEdit")}
+              </button>
+            ) : (
+              <span className="min-w-[72px]" />
+            )}
             <h1 className="m-0 text-[17px] font-semibold tracking-[-.02em]">yap.</h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
@@ -720,8 +724,19 @@ export default function DashboardPage() {
                 }}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
-                style={{ background: "var(--input-bg)", padding: "0 14px 0 42px", boxSizing: "border-box", color: "var(--gray-text)" }}
+                style={{ background: "var(--input-bg)", padding: "0 36px 0 42px", boxSizing: "border-box", color: "var(--gray-text)" }}
               />
+              {hasSearchQuery && (
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }}
+                  onClick={() => { setQuery(""); setSubmittedLinkedChannelId(null); }}
+                  aria-label="Clear"
+                >
+                  ✕
+                </button>
+              )}
             </div>
             {hasSearchQuery && (
               <p
