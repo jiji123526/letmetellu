@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 interface NoticeBannerProps {
   channelId: string;
@@ -33,6 +33,16 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
   };
 
   const canExpand = Boolean(body);
+  const controlStyle: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "22px",
+    height: "22px",
+    flexShrink: 0,
+    color: "var(--notice-meta)",
+    lineHeight: 1,
+  };
 
   return (
     <div style={{ position: "absolute", top: "12px", left: "12px", right: "12px", zIndex: 12, pointerEvents: "none" }}>
@@ -40,9 +50,9 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
         style={{
           width: expanded ? "min(360px, calc(100% - 84px))" : "fit-content",
           maxWidth: "min(360px, calc(100% - 84px))",
-          padding: expanded ? "10px 12px 12px" : "8px 10px",
+          padding: "8px 10px",
           display: "flex",
-          alignItems: expanded ? "stretch" : "center",
+          alignItems: "center",
           gap: "8px",
           flexWrap: expanded ? "wrap" : "nowrap",
           background: "color-mix(in srgb, var(--notice-bg) 74%, transparent)",
@@ -66,15 +76,17 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
         {canExpand ? (
           <button
             type="button"
-            style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "inherit", display: "flex", alignItems: expanded ? "flex-start" : "center", gap: "6px" }}
+            style={{ flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "inherit", display: "flex", alignItems: "center", gap: "6px" }}
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
           >
             <span style={{ flex: 1, minWidth: 0, fontSize: "calc(var(--bubble-font-size, 14px) - 1px)", fontWeight: 500, color: "var(--notice-text)", lineHeight: 1.35, overflow: "hidden", textOverflow: expanded ? undefined : "ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
               {title}
             </span>
-            <span style={{ flexShrink: 0, color: "var(--notice-meta)", fontSize: "12px", lineHeight: 1, paddingTop: expanded ? "4px" : 0 }}>
-              {expanded ? "▲" : "▼"}
+            <span style={controlStyle}>
+              <svg viewBox="0 0 16 16" style={{ width: "14px", height: "14px", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.18s ease" }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m3.5 6 4.5 4 4.5-4" />
+              </svg>
             </span>
           </button>
         ) : (
@@ -83,12 +95,12 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
           </span>
         )}
 
-        <button type="button" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--notice-meta)", fontSize: "14px", padding: "2px 4px", lineHeight: 1, flexShrink: 0 }} onClick={handleDismiss}>
+        <button type="button" style={{ background: "none", border: "none", cursor: "pointer", ...controlStyle }} onClick={handleDismiss}>
           ✕
         </button>
 
         {canExpand && expanded && (
-          <div style={{ width: "100%", marginLeft: "36px", fontSize: "calc(var(--bubble-font-size, 14px) - 2px)", color: "var(--notice-meta)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          <div style={{ width: "100%", marginLeft: "36px", paddingTop: "4px", fontSize: "calc(var(--bubble-font-size, 14px) - 2px)", color: "var(--notice-meta)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {body}
           </div>
         )}
