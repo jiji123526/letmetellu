@@ -50,3 +50,23 @@ export async function PATCH(request: Request) {
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }
+
+export async function DELETE() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+  const res = await fetch(`${workerUrl}/api/user`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
+      "X-User-Id": session.user.id,
+    },
+    cache: "no-store",
+  });
+  const data = await res.json();
+  return NextResponse.json(data, { status: res.status });
+}

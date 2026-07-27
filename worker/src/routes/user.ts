@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { deleteChannel } from "./admin";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -59,6 +60,32 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     await env.DB.prepare("UPDATE users SET font_size = ? WHERE id = ?")
       .bind(fontSize, userId).run();
     return Response.json({ ok: true, font_size: fontSize });
+  }
+
+  if (request.method === "DELETE") {
+    if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const userId = request.headers.get("X-User-Id") || "";
+    if (!userId) return Response.json({ error: "missing user id" }, { status: 400 });
+
+    const { results: ownedChannels } = await env.DB.prepare(
+      "SELECT id FROM channels WHERE owner_uid = ? AND id NOT LIKE '%_live'"
+    ).bind(userId).all<{ id: string }>();
+    for (const channel of ownedChannels) {
+      await deleteChannel(channel.id, env);
+    }
+
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(userId),
+      env.DB.prepare("UPDATE messages SET auth_uid = '' WHERE auth_uid = ?").bind(userId),
+      env.DB.prepare("UPDATE dm SET auth_uid = NULL WHERE auth_uid = ?").bind(userId),
+      env.DB.prepare("UPDATE gallery SET auth_uid = NULL WHERE auth_uid = ?").bind(userId),
+      env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+    ]);
+    return Response.json({ ok: true, deleted_channels: ownedChannels.length });
   }
 
   if (request.method === "POST") {

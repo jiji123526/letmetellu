@@ -98,6 +98,9 @@ export default function DashboardPage() {
   const [deleting, setDeleting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ mode: "single" | "selected"; channelIds: string[] } | null>(null);
   const [showDeleteError, setShowDeleteError] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     try { return localStorage.getItem("letmetellu_prioritized_owned_channel"); } catch { return null; }
@@ -456,6 +459,29 @@ export default function DashboardPage() {
     setShowGuestOnboarding(false);
   };
 
+  const deleteAccount = async () => {
+    if (deletingAccount || !session?.user?.id) return;
+    setDeletingAccount(true);
+    try {
+      const response = await fetch("/api/user", { method: "DELETE" });
+      if (!response.ok) throw new Error("account deletion failed");
+    } catch {
+      setShowDeleteAccountConfirm(false);
+      setShowDeleteAccountError(true);
+      setDeletingAccount(false);
+      return;
+    }
+    ownedChannelIds.forEach(clearChannelLocalState);
+    clearRecentChannels();
+    try {
+      localStorage.removeItem(`letmetellu_recent_channels_migrated_${session.user.id}`);
+      localStorage.removeItem("letmetellu_prioritized_owned_channel");
+    } catch {}
+    await signOut({ callbackUrl: "/dashboard" }).catch(() => {
+      window.location.href = "/dashboard";
+    });
+  };
+
   const removeRecent = (channelId: string) => {
     setRecentChannels((current) => current.filter((channel) => channel.id !== channelId));
     if (status === "authenticated") {
@@ -692,7 +718,8 @@ export default function DashboardPage() {
                     {isLoggedIn ? (
                       <>
                         <div className="px-4 py-3 text-[12px] truncate" style={{ color: "var(--meta)", borderBottom: "0.5px solid var(--hairline)" }}>{session.user?.email}</div>
-                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowDeleteAccountConfirm(true); }}>{t("deleteAccount")}</button>
                       </>
                     ) : (
                       <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setShowLogin(true); }}>{t("loginTab")}</button>
@@ -1067,6 +1094,30 @@ export default function DashboardPage() {
           confirmLabel={t("confirm")}
           onConfirm={() => setShowDeleteError(false)}
           onCancel={() => setShowDeleteError(false)}
+          showCancel={false}
+        />
+      )}
+
+      {showDeleteAccountConfirm && (
+        <ConfirmDialog
+          title={t("deleteAccount")}
+          message={t("deleteAccountConfirm")}
+          confirmLabel={deletingAccount ? t("loading") : t("deleteAccount")}
+          confirmColor="#ff3b30"
+          onConfirm={() => void deleteAccount()}
+          onCancel={() => setShowDeleteAccountConfirm(false)}
+          closeOnBackdrop={!deletingAccount}
+          disabled={deletingAccount}
+        />
+      )}
+
+      {showDeleteAccountError && (
+        <ConfirmDialog
+          title={t("deleteAccount")}
+          message={t("deleteAccountFailed")}
+          confirmLabel={t("confirm")}
+          onConfirm={() => setShowDeleteAccountError(false)}
+          onCancel={() => setShowDeleteAccountError(false)}
           showCancel={false}
         />
       )}
