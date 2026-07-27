@@ -82,7 +82,9 @@ export default function OnboardingPage() {
     <main style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif", background: "#f7f7f7", minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
       <div style={{ background: "#fff", borderRadius: "20px", padding: "36px 28px", maxWidth: "360px", width: "100%", boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}>
         {/* Icon */}
-        <div style={{ fontSize: "48px", textAlign: "center", marginBottom: "16px" }}>🎉</div>
+        <div style={{ textAlign: "center", marginBottom: "16px" }}>
+          <img src="/logo.svg" alt="" style={{ width: "52px", height: "52px" }} />
+        </div>
 
         {/* Title */}
         <div style={{ fontSize: "22px", fontWeight: 500, textAlign: "center", marginBottom: "6px" }}>

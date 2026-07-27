@@ -626,7 +626,10 @@ export default function DashboardPage() {
             ) : (
               <span className="min-w-[72px]" />
             )}
-            <h1 className="m-0 text-[17px] font-semibold tracking-[-.02em]">yap.</h1>
+            <h1 className="m-0 inline-flex items-center gap-2 text-[17px] font-semibold tracking-[-.02em]">
+              <img src="/logo.svg" alt="" className="h-6 w-6" />
+              <span>yap.</span>
+            </h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
                 type="button"
@@ -758,7 +761,9 @@ export default function DashboardPage() {
 
         {empty ? (
           <section className="px-8 py-24 text-center">
-            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center text-[28px] mb-4" style={{ background: "var(--card)" }}>💬</div>
+            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
+              <img src="/logo.svg" alt="" className="h-9 w-9" />
+            </div>
             <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
             {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
             {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={openCreateFlow}>{t("dashboardFirstChannel")}</button>}

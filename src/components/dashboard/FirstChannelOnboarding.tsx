@@ -275,7 +275,9 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
               aria-hidden={step !== "features"}
             >
               <div className="text-center mb-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-[28px]" style={{ background: "#eaf3ff" }}>💬</div>
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ background: "#eaf3ff" }}>
+                  <img src="/logo.svg" alt="" className="h-9 w-9" />
+                </div>
                 <h2 className="m-0 text-[24px] font-bold tracking-[-.02em]">{t("firstOnboardingTitle")}</h2>
                 <p className="mt-2 mb-0 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{t("firstOnboardingDesc")}</p>
               </div>

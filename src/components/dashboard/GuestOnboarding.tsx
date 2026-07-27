@@ -23,7 +23,7 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
   const pages = [
     {
       step: "intro" as const,
-      icon: "yap.",
+      icon: <img src="/logo.svg" alt="" className="block h-9 w-9" />,
       title: t("guestOnboardingTitle"),
       description: t("guestOnboardingDesc"),
       cards: [
