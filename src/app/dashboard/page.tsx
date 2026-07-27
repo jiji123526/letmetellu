@@ -628,7 +628,7 @@ export default function DashboardPage() {
               <span className="min-w-[72px]" />
             )}
             <h1 className="m-0 inline-flex items-center gap-2 text-[17px] font-semibold tracking-[-.02em]">
-              <Image src="/logo.svg" alt="" width={24} height={24} className="h-6 w-6" />
+              <Image src="/logo.svg" alt="" width={48} height={48} className="h-12 w-12" />
               <span>yap.</span>
             </h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
@@ -763,7 +763,7 @@ export default function DashboardPage() {
         {empty ? (
           <section className="px-8 py-24 text-center">
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
-              <Image src="/logo.svg" alt="" width={36} height={36} className="h-9 w-9" />
+              <Image src="/logo.svg" alt="" width={72} height={72} className="h-[72px] w-[72px]" />
             </div>
             <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
             {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
