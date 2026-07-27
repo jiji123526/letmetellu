@@ -36,7 +36,7 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
     <>
       <button
         style={{ border: "none", background: "none", fontSize: "calc(var(--bubble-font-size) + 2px)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "calc(var(--bubble-font-size) + 9px)", height: "calc(var(--bubble-font-size) + 9px)", marginRight: "4px", lineHeight: 1 }}
-        onClick={() => setShowGrid(!showGrid)}
+        onClick={(e) => { e.stopPropagation(); setShowGrid(!showGrid); }}
       >
         {emojis[0]}
       </button>
@@ -50,24 +50,29 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
 
 function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: (emoji: string) => void; onClose: () => void }) {
   const [showFullPicker, setShowFullPicker] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest(".emoji-fx-grid-container") && !target.closest(".emoji-fx-full-picker")) onCloseRef.current();
+      const target = e.target as Node;
+      if (gridRef.current?.contains(target)) return;
+      if (pickerRef.current?.contains(target)) return;
+      onCloseRef.current();
     };
-    const timer = setTimeout(() => document.addEventListener("click", handler), 10);
+    const timer = setTimeout(() => document.addEventListener("mousedown", handler, true), 10);
     return () => {
       clearTimeout(timer);
-      document.removeEventListener("click", handler);
+      document.removeEventListener("mousedown", handler, true);
     };
   }, []);
 
   return (
     <>
       <div
+        ref={gridRef}
         className="emoji-fx-grid-container"
         style={{
           position: "fixed",
@@ -135,6 +140,7 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
           className="emoji-fx-full-picker"
           style={{ position: "fixed", bottom: "120px", right: "12px", zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
           ref={(el) => {
+            pickerRef.current = el;
             if (el && !el.querySelector("emoji-picker")) {
               import("emoji-picker-element").then(() => {
                 const picker = document.createElement("emoji-picker");
