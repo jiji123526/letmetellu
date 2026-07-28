@@ -3,10 +3,53 @@ import { Env } from "../types";
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 function authorize(request: Request, env: Env) {
   const internalToken = request.headers.get("X-Internal-Token");
   const userId = request.headers.get("X-User-Id");
-  return internalToken === env.INTERNAL_SECRET && userId ? userId : null;
+  const userEmail = normalizeEmail(request.headers.get("X-User-Email") || "");
+  if (internalToken !== env.INTERNAL_SECRET || (!userId && !userEmail)) return null;
+  return { userId: userId || "", userEmail };
+}
+
+async function resolveRecentChannelUser(
+  env: Env,
+  identity: { userId: string; userEmail: string },
+) {
+  const userById = identity.userId
+    ? await env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
+      .bind(identity.userId).first<{ id: string; email: string }>()
+    : null;
+  const userByEmail = identity.userEmail
+    ? await env.DB.prepare("SELECT id, email FROM users WHERE lower(email) = ?")
+      .bind(identity.userEmail).first<{ id: string; email: string }>()
+    : null;
+  const user = userByEmail || userById;
+
+  if (!user) {
+    return identity.userId || null;
+  }
+
+  if (identity.userId && identity.userId !== user.id) {
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO user_recent_channels (user_id, channel_id, last_visited_at, pinned, bubble_color)
+        SELECT ?, channel_id, last_visited_at, pinned, bubble_color
+        FROM user_recent_channels
+        WHERE user_id = ?
+        ON CONFLICT(user_id, channel_id) DO UPDATE SET
+          last_visited_at = MAX(user_recent_channels.last_visited_at, excluded.last_visited_at),
+          pinned = MAX(user_recent_channels.pinned, excluded.pinned),
+          bubble_color = COALESCE(user_recent_channels.bubble_color, excluded.bubble_color)
+      `).bind(user.id, identity.userId),
+      env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(identity.userId),
+    ]);
+  }
+
+  return user.id;
 }
 
 function validColor(value: unknown): string | null {
@@ -14,7 +57,9 @@ function validColor(value: unknown): string | null {
 }
 
 export async function handleRecentChannels(request: Request, env: Env): Promise<Response> {
-  const userId = authorize(request, env);
+  const identity = authorize(request, env);
+  if (!identity) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const userId = await resolveRecentChannelUser(env, identity);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   if (request.method === "GET") {
