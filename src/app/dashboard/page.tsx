@@ -104,6 +104,7 @@ export default function DashboardPage() {
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     try { return localStorage.getItem("letmetellu_prioritized_owned_channel"); } catch { return null; }
@@ -135,6 +136,15 @@ export default function DashboardPage() {
   useEffect(() => () => {
     if (channelLongPressTimerRef.current) clearTimeout(channelLongPressTimerRef.current);
     if (copiedResetTimerRef.current) clearTimeout(copiedResetTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const syncViewportHeight = () => {
+      setViewportHeight(window.innerHeight);
+    };
+    syncViewportHeight();
+    window.addEventListener("resize", syncViewportHeight);
+    return () => window.removeEventListener("resize", syncViewportHeight);
   }, []);
 
   const loadChannels = useCallback(async () => {
@@ -701,10 +711,12 @@ export default function DashboardPage() {
 
   const isLoggedIn = !!session;
   const empty = activeItems.length === 0;
+  const dashboardMinHeight = viewportHeight ? `${viewportHeight}px` : "100dvh";
+  const listBottomPadding = isLoggedIn && !editing ? "6rem" : "0px";
 
   return (
     <main className="dashboard-font-scaled min-h-dvh" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
-      <div className={`max-w-[480px] mx-auto min-h-dvh md:border-x flex flex-col ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
+      <div className="max-w-[480px] mx-auto min-h-dvh md:border-x flex flex-col" style={{ borderColor: "var(--hairline)", minHeight: dashboardMinHeight }}>
         <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
           <div className="h-[64px] px-4 flex items-center justify-between">
             {activeItems.length > 0 ? (
@@ -857,7 +869,7 @@ export default function DashboardPage() {
         </header>
 
         {empty ? (
-          <section className="px-8 py-24 text-center">
+          <section className="px-8 py-24 text-center" style={{ paddingBottom: `calc(6rem + ${listBottomPadding})` }}>
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
               <Image src="/logo.svg" alt="" width={72} height={72} className="h-[72px] w-[72px]" />
             </div>
@@ -866,7 +878,7 @@ export default function DashboardPage() {
             {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={openCreateFlow}>{t("dashboardFirstChannel")}</button>}
           </section>
         ) : (
-          <section>
+          <section style={{ paddingBottom: listBottomPadding }}>
             {activeItems.map((item, index) => {
               const previousItem = activeItems[index - 1];
               const showSectionLabel = isLoggedIn
