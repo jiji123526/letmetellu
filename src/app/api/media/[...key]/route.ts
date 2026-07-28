@@ -15,23 +15,7 @@ export async function GET(request: Request, { params }: Props) {
     const target = new URL(`/api/media/${key.map(encodeURIComponent).join("/")}`, workerUrl);
     const requestUrl = new URL(request.url);
     target.search = requestUrl.search;
-
-    const response = await fetch(target, {
-      method: "GET",
-      cache: "no-store",
-    });
-    const body = await response.arrayBuffer();
-
-    const headers = new Headers();
-    const contentType = response.headers.get("content-type");
-    const cacheControl = response.headers.get("cache-control");
-    if (contentType) headers.set("Content-Type", contentType);
-    if (cacheControl) headers.set("Cache-Control", cacheControl);
-
-    return new Response(body, {
-      status: response.status,
-      headers,
-    });
+    return NextResponse.redirect(target, { status: 307 });
   } catch {
     return NextResponse.json({ error: "media proxy failed" }, { status: 502 });
   }
