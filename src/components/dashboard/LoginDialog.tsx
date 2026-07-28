@@ -7,6 +7,7 @@ import { useLocale } from "@/hooks/useLocale";
 interface LoginDialogProps {
   onClose: () => void;
   initialError?: string;
+  initialTab?: "login" | "signup";
 }
 
 const GoogleIcon = () => (
@@ -18,9 +19,9 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export function LoginDialog({ onClose, initialError = "" }: LoginDialogProps) {
+export function LoginDialog({ onClose, initialError = "", initialTab = "login" }: LoginDialogProps) {
   const { locale, t } = useLocale();
-  const [tab, setTab] = useState<"login" | "signup" | "forgot">("login");
+  const [tab, setTab] = useState<"login" | "signup" | "forgot">(initialTab);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -130,7 +131,7 @@ export function LoginDialog({ onClose, initialError = "" }: LoginDialogProps) {
         callbackUrl: tab === "login" ? "/dashboard" : "/dashboard?onboarding=true",
       });
     } catch {
-      setError(t("oauthLoginError"));
+      setError(t(tab === "login" ? "oauthLoginError" : "signupError"));
       setSubmitting(false);
     }
   };

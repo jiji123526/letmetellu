@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const [showAccount, setShowAccount] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [loginInitialTab, setLoginInitialTab] = useState<"login" | "signup">("login");
   const [pendingLocalChannels, setPendingLocalChannels] = useState<RecentChannel[] | null>(null);
   const [migratingLocalChannels, setMigratingLocalChannels] = useState(false);
   const [localMigrationError, setLocalMigrationError] = useState(false);
@@ -437,10 +438,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authError = params.get("error");
+    const callbackUrl = params.get("callbackUrl");
+    const callbackPath = callbackUrl ? decodeURIComponent(callbackUrl) : "";
+    const signupFlow = params.get("onboarding") === "true" || callbackPath.includes("onboarding=true");
     const authEntry = params.get("login") === "true" || authError || params.has("callbackUrl");
     if (authEntry && status === "unauthenticated") {
       setShowGuestOnboarding(false);
-      setLoginError(authError ? t("oauthLoginError") : "");
+      setLoginInitialTab(signupFlow ? "signup" : "login");
+      setLoginError(authError ? t(signupFlow ? "signupError" : "oauthLoginError") : "");
       setShowLogin(true);
     }
   }, [status, t]);
@@ -456,6 +461,7 @@ export default function DashboardPage() {
   const closeLogin = () => {
     setShowLogin(false);
     setLoginError("");
+    setLoginInitialTab("login");
     if (window.location.search) window.history.replaceState(null, "", "/dashboard");
   };
 
@@ -727,7 +733,7 @@ export default function DashboardPage() {
                         <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowDeleteAccountConfirm(true); }}>{t("deleteAccount")}</button>
                       </>
                     ) : (
-                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setLoginError(""); setShowLogin(true); }}>{t("loginTab")}</button>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setLoginError(""); setLoginInitialTab("login"); setShowLogin(true); }}>{t("loginTab")}</button>
                     )}
                     <div className="px-3 py-3">
                       <div className="px-1 pb-2 text-[12px]" style={{ color: "var(--meta)" }}>{t("language")}</div>
@@ -1048,7 +1054,7 @@ export default function DashboardPage() {
       )}
 
       {showLogin && !isLoggedIn && (
-        <LoginDialog onClose={closeLogin} initialError={loginError} />
+        <LoginDialog onClose={closeLogin} initialError={loginError} initialTab={loginInitialTab} />
       )}
 
       {isLoggedIn && !editing && ownedChannelIds.size < 5 && (
