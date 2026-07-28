@@ -127,6 +127,9 @@ export function LoginDialog({ onClose, initialError = "", initialTab = "login" }
     setError("");
     setSubmitting(true);
     try {
+      sessionStorage.setItem("letmetellu_auth_flow", tab);
+    } catch {}
+    try {
       await signIn("google", {
         callbackUrl: tab === "login" ? "/dashboard" : "/dashboard?onboarding=true",
       });

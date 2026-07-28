@@ -440,13 +440,24 @@ export default function DashboardPage() {
     const authError = params.get("error");
     const callbackUrl = params.get("callbackUrl");
     const callbackPath = callbackUrl ? decodeURIComponent(callbackUrl) : "";
-    const signupFlow = params.get("onboarding") === "true" || callbackPath.includes("onboarding=true");
+    let storedAuthFlow: "login" | "signup" | null = null;
+    try {
+      const value = sessionStorage.getItem("letmetellu_auth_flow");
+      if (value === "login" || value === "signup") storedAuthFlow = value;
+    } catch {}
+    const signupFlow = storedAuthFlow === "signup"
+      || params.get("onboarding") === "true"
+      || callbackPath.includes("onboarding=true");
     const authEntry = params.get("login") === "true" || authError || params.has("callbackUrl");
-    if (authEntry && status === "unauthenticated") {
+    const shouldOpenLogin = authEntry && status === "unauthenticated";
+    if (shouldOpenLogin) {
       setShowGuestOnboarding(false);
       setLoginInitialTab(signupFlow ? "signup" : "login");
       setLoginError(authError ? t(signupFlow ? "signupError" : "oauthLoginError") : "");
       setShowLogin(true);
+    }
+    if (shouldOpenLogin || status === "authenticated") {
+      try { sessionStorage.removeItem("letmetellu_auth_flow"); } catch {}
     }
   }, [status, t]);
 
@@ -462,6 +473,7 @@ export default function DashboardPage() {
     setShowLogin(false);
     setLoginError("");
     setLoginInitialTab("login");
+    try { sessionStorage.removeItem("letmetellu_auth_flow"); } catch {}
     if (window.location.search) window.history.replaceState(null, "", "/dashboard");
   };
 
@@ -733,7 +745,7 @@ export default function DashboardPage() {
                         <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowDeleteAccountConfirm(true); }}>{t("deleteAccount")}</button>
                       </>
                     ) : (
-                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setLoginError(""); setLoginInitialTab("login"); setShowLogin(true); }}>{t("loginTab")}</button>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setLoginError(""); setLoginInitialTab("login"); try { sessionStorage.removeItem("letmetellu_auth_flow"); } catch {} setShowLogin(true); }}>{t("loginTab")}</button>
                     )}
                     <div className="px-3 py-3">
                       <div className="px-1 pb-2 text-[12px]" style={{ color: "var(--meta)" }}>{t("language")}</div>
