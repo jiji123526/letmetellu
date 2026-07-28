@@ -79,9 +79,13 @@ export function decorateMediaUrl(mediaUrl: string | null | undefined): string | 
     if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
     const channelId = getMediaChannelId(mediaUrl);
     const roomToken = channelId ? getRoomToken(channelId) : null;
-    if (!roomToken) return mediaUrl;
-    parsed.searchParams.set("token", roomToken);
-    return parsed.toString();
+    const proxy = new URL(parsed.pathname, typeof window !== "undefined" ? window.location.origin : WORKER_URL);
+    const existingToken = parsed.searchParams.get("token");
+    if (roomToken) proxy.searchParams.set("token", roomToken);
+    else if (existingToken) proxy.searchParams.set("token", existingToken);
+    return typeof window !== "undefined"
+      ? `${proxy.pathname}${proxy.search}`
+      : proxy.toString();
   } catch {
     return mediaUrl;
   }
