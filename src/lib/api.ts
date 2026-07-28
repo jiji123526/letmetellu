@@ -399,7 +399,11 @@ export async function sendDm(payload: {
     headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
     body: JSON.stringify(payload),
   });
-  return res.json();
+  const data = await res.json();
+  if (res.ok && !data?.error) {
+    return { ok: true, ...data };
+  }
+  return data;
 }
 
 export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {

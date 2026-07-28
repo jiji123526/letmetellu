@@ -125,7 +125,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       body: JSON.stringify({ type: "dm-new", dm: newDm }),
     }));
 
-    return Response.json({ id, created_at });
+    return Response.json({ ok: true, id, created_at });
   }
 
   return Response.json({ error: "method not allowed" }, { status: 405 });
