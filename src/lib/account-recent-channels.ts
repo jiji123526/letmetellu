@@ -1,3 +1,4 @@
+import { decorateMediaUrl } from "./api";
 import type { RecentChannel } from "./recent-channels";
 
 interface AccountRecentRow {
@@ -20,7 +21,7 @@ export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
   return (data.channels || []).map((channel) => ({
     id: channel.id,
     name: channel.name,
-    profileImage: channel.profile_image,
+    profileImage: decorateMediaUrl(channel.profile_image),
     bubbleColor: channel.personal_bubble_color || channel.bubble_color || "#3b8df0",
     hasPasscode: channel.has_passcode === 1,
     ownerName: channel.owner_name || "",

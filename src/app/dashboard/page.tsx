@@ -5,6 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
+import { decorateMediaUrl } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -150,7 +151,10 @@ export default function DashboardPage() {
   const loadChannels = useCallback(async () => {
     const response = await fetch("/api/user", { cache: "no-store" });
     const data = await response.json() as { channels?: Channel[] };
-    setChannels(data.channels || []);
+    setChannels((data.channels || []).map((channel) => ({
+      ...channel,
+      profile_image: decorateMediaUrl(channel.profile_image),
+    })));
   }, []);
 
   const loadLocalRecentChannels = useCallback(async () => {
@@ -287,7 +291,12 @@ export default function DashboardPage() {
         .then((response) => response.ok ? response.json() : null)
         .then((data: { channels?: Channel[] } | null) => {
           const match = data?.channels?.find((channel) => channel.id === linkedChannelId);
-          if (match) setLinkedChannel(match);
+          if (match) {
+            setLinkedChannel({
+              ...match,
+              profile_image: decorateMediaUrl(match.profile_image),
+            });
+          }
         })
         .catch(() => {});
     }, 180);

@@ -160,7 +160,14 @@ export async function fetchOwnerChannels(channelId: string): Promise<{
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Owner channels failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data?.channels)) {
+    data.channels = data.channels.map((channel: { profile_image?: string | null }) => ({
+      ...channel,
+      profile_image: decorateMediaUrl(channel.profile_image),
+    }));
+  }
+  return data;
 }
 
 export async function verifyPasscode(channelId: string, passcode: string): Promise<{ token?: string; error?: string }> {
