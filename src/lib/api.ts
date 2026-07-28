@@ -2,9 +2,15 @@ import { generateFingerprint } from "./fingerprint";
 
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+const ANONYMOUS_TOKEN_KEY = "letsplay_anonymous_token";
 
 function getParentChannelId(channelId: string): string {
   return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+}
+
+export function getStoredUid(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("letsplay_uid");
 }
 
 // Room token management
@@ -25,6 +31,24 @@ export function clearRoomToken(channelId: string) {
   window.dispatchEvent(new CustomEvent("room-token-changed", {
     detail: { channelId, token: null },
   }));
+}
+
+export function getAnonymousToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ANONYMOUS_TOKEN_KEY);
+}
+
+export function setAnonymousIdentity(uid: string, token: string) {
+  localStorage.setItem("letsplay_uid", uid);
+  localStorage.setItem(ANONYMOUS_TOKEN_KEY, token);
+  window.dispatchEvent(new CustomEvent("anonymous-identity-changed", {
+    detail: { uid, token },
+  }));
+}
+
+function anonymousIdentityHeaders(): Record<string, string> {
+  const token = getAnonymousToken();
+  return token ? { "X-Anonymous-Token": token } : {};
 }
 
 function roomTokenHeaders(channelId: string): Record<string, string> {
@@ -97,9 +121,9 @@ export async function fetchInit(channelId: string) {
   const roomToken = getRoomToken(parentChannelId);
   const headers: Record<string, string> = {};
   if (roomToken) headers["X-Room-Token"] = roomToken;
+  const anonymousToken = getAnonymousToken();
+  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (typeof window !== "undefined") {
-    const viewerUid = localStorage.getItem("letsplay_uid");
-    if (viewerUid) headers["X-Viewer-Uid"] = viewerUid;
     headers["X-Viewer-Fingerprint"] = generateFingerprint();
   }
 
@@ -110,6 +134,9 @@ export async function fetchInit(channelId: string) {
   const res = await fetch(`/api/init?channel=${channelId}`, { headers });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
   const data = await res.json();
+  if (typeof data?.anonymousUid === "string" && typeof data?.anonymousToken === "string") {
+    setAnonymousIdentity(data.anonymousUid, data.anonymousToken);
+  }
   if (data?.roomToken) setRoomToken(parentChannelId, data.roomToken);
   if (data?.channel) data.channel = decorateChannelMedia(data.channel);
   if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
@@ -254,7 +281,7 @@ export async function sendMessage(payload: {
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -314,7 +341,7 @@ export async function deleteMessage(payload: {
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -336,7 +363,7 @@ export async function editMessageApi(payload: {
     method: "PUT",
     headers: admin
       ? { "Content-Type": "application/json" }
-      : { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
+      : { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
     body: JSON.stringify(body),
   });
   return res.json();
@@ -357,7 +384,7 @@ export async function sendDm(payload: { uid: string; nick?: string; text: string
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/dm`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -368,7 +395,7 @@ export async function toggleReaction(payload: { uid: string; message_id: string;
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
+    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
     body: JSON.stringify(payload),
   });
   return res.json();

@@ -1,14 +1,22 @@
 import { Env } from "../types";
+import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
 import { verifyRoomToken } from "./passcode";
 
+async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
+  const token = request.headers.get("X-Anonymous-Token");
+  if (!token) return null;
+  const payload = await verifyAnonymousIdentityToken(token, env);
+  return payload?.uid || null;
+}
+
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, nick, text, channel_id, image, reply_to, fingerprint, report, reported_msg_id } = body;
+    const { nick, text, channel_id, image, reply_to, fingerprint, report, reported_msg_id } = body;
 
-    if (!channel_id || !uid) {
+    if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
@@ -48,8 +56,14 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "channel frozen" }, { status: 403 });
     }
 
+    const anonymousUid = isChannelOwner ? null : await getAnonymousRequesterUid(request, env);
+    if (!isChannelOwner && !anonymousUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
+
     // Rate limit check
-    if (!checkRateLimit(uid as string)) {
+    if (!checkRateLimit(requesterUid)) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
 
@@ -62,7 +76,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // passcode, freeze, rate-limit and length validation have succeeded.
     const [blocked, allowedByBannedWords] = await Promise.all([
       env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(uid, fingerprint || "", parentChannelId).first(),
+        .bind(requesterUid, fingerprint || "", parentChannelId).first(),
       text
         ? checkBannedWords(text as string, parentChannelId, env)
         : Promise.resolve(true),
@@ -80,7 +94,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // original order after reconnecting.
     const created_at = new Date().toISOString();
     // Only a verified owner is stored and broadcast as the channel admin.
-    const senderUid = isChannelOwner ? verifiedUserId! : uid as string;
+    const senderUid = requesterUid;
     const isAdmin = isChannelOwner ? 1 : 0;
     const stmts = [
       env.DB.prepare(`
@@ -120,9 +134,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
   // DELETE — hard delete (remove message) or soft delete (mark as deleted)
   if (request.method === "DELETE") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, message_id, channel_id, soft } = body;
+    const { message_id, channel_id, soft } = body;
 
-    if (!message_id || !uid || !channel_id) {
+    if (!message_id || !channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
@@ -138,11 +152,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       }
     }
 
+    const requesterUid = await getAnonymousRequesterUid(request, env);
+    if (!requesterUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+
     // Verify ownership
     const msg = await env.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ?")
       .bind(message_id, channel_id).first();
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
-    if (msg.uid !== uid) return Response.json({ error: "not owner" }, { status: 403 });
+    if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
 
     if (soft) {
       // Keep the reply placeholder, but remove its media from both collections.
@@ -180,9 +199,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
   // PUT — edit message
   if (request.method === "PUT") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, message_id, channel_id, text, fingerprint } = body;
+    const { message_id, channel_id, text, fingerprint } = body;
 
-    if (!message_id || !uid || !channel_id || typeof text !== "string") {
+    if (!message_id || !channel_id || typeof text !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
@@ -218,15 +237,19 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "channel frozen" }, { status: 403 });
     }
 
-    if (!checkRateLimit(uid as string)) {
+    const anonymousUid = isChannelOwner ? null : await getAnonymousRequesterUid(request, env);
+    if (!isChannelOwner && !anonymousUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
+
+    if (!checkRateLimit(requesterUid)) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
 
     if (!checkMessageLength(text)) {
       return Response.json({ error: "message_too_long" }, { status: 400 });
     }
-
-    const requesterUid = isChannelOwner ? verifiedUserId! : uid as string;
 
     const [blocked, allowedByBannedWords] = await Promise.all([
       env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
@@ -264,9 +287,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
   // PATCH — toggle reaction
   if (request.method === "PATCH") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, message_id, channel_id, emoji } = body;
+    const { message_id, channel_id, emoji } = body;
 
-    if (!message_id || !uid || !channel_id || !emoji) {
+    if (!message_id || !channel_id || !emoji) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
@@ -291,6 +314,10 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }
+    const anonymousUid = isVerifiedAdmin ? null : await getAnonymousRequesterUid(request, env);
+    if (!isVerifiedAdmin && !anonymousUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
 
     // Get current reactions
     const msg = await env.DB.prepare("SELECT reactions FROM messages WHERE id = ? AND channel_id = ?")
@@ -298,7 +325,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
 
     const reactions: Record<string, string> = JSON.parse(msg.reactions || "{}");
-    const reactionUid = isVerifiedAdmin ? verifiedUserId! : uid as string;
+    const reactionUid = isVerifiedAdmin ? verifiedUserId! : anonymousUid!;
     const key = `${reactionUid}_${(emoji as string).codePointAt(0)?.toString(16)}`;
 
     // Toggle: if exists remove, otherwise add

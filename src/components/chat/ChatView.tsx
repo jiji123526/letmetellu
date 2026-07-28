@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMessageMedia, fetchInit, fetchOwnerChannels, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
+import { clearRoomToken, decorateMessageMedia, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -88,6 +88,7 @@ interface InitData {
   hasPasscode?: boolean;
   passcodeHint?: string;
   adminDataStatus?: "authorized" | "unauthorized";
+  anonymousUid?: string;
 }
 
 interface ContextMenuState {
@@ -98,15 +99,9 @@ interface ContextMenuState {
   bubbleEl: HTMLElement;
 }
 
-function getOrCreateUid(): string {
+function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
-  const key = "letsplay_uid";
-  let uid = localStorage.getItem(key);
-  if (!uid) {
-    uid = crypto.randomUUID();
-    localStorage.setItem(key, uid);
-  }
-  return uid;
+  return getStoredUid() || "anon";
 }
 
 function compressImage(file: File, maxWidth: number, quality: number): Promise<{ blob: Blob; width: number; height: number }> {
@@ -741,7 +736,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; passcodeHint?: string; notice?: string } | null>(null);
-  const [uid] = useState(getOrCreateUid);
+  const [uid, setUid] = useState(getInitialUid);
   const [myFingerprint] = useState(() => typeof window !== "undefined" ? generateFingerprint() : "");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -851,6 +846,15 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   }, []);
 
+  useEffect(() => {
+    const handleIdentityChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ uid: string }>).detail;
+      if (detail?.uid) setUid(detail.uid);
+    };
+    window.addEventListener("anonymous-identity-changed", handleIdentityChanged);
+    return () => window.removeEventListener("anonymous-identity-changed", handleIdentityChanged);
+  }, []);
+
   const openExpandedPost = useCallback((text: string) => {
     const rect = messagesContainerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -897,6 +901,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [inLiveMode, send]);
 
   const applyInitData = useCallback((data: InitData) => {
+    if (typeof data.anonymousUid === "string" && data.anonymousUid) {
+      setUid(data.anonymousUid);
+    }
     const channelWasRecreated = syncChannelInstance(channelId, data.channel.instance_id);
     if (channelWasRecreated) {
       setLocalBubbleColor(null);
@@ -987,6 +994,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     fetchInit(initChannel)
       .then(async (data: InitData) => {
         if (requestId !== initRequestIdRef.current) return;
+        if (typeof data.anonymousUid === "string" && data.anonymousUid) {
+          setUid(data.anonymousUid);
+        }
         // Check if passcode-gated
         if (data.hasPasscode && !data.messages) {
           setPasscodeGate({ name: data.channel.name, profile_image: data.channel.profile_image, bubble_color: data.channel.bubble_color, passcodeHint: data.passcodeHint });

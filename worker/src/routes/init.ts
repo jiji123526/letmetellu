@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { createAnonymousIdentity, verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { createRoomToken, verifyRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
@@ -36,6 +37,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const adminDataStatus = userId === (channel as any).owner_uid
     ? (isOwner ? "authorized" : "unauthorized")
     : undefined;
+  const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
+  const verifiedAnonymous = anonymousToken
+    ? await verifyAnonymousIdentityToken(anonymousToken, env)
+    : null;
+  const anonymousIdentity = verifiedAnonymous
+    ? { uid: verifiedAnonymous.uid, token: anonymousToken }
+    : await createAnonymousIdentity(env);
 
   // Passcode gate: if channel has passcode, verify token or owner identity
   if ((channel as any).passcode) {
@@ -48,6 +56,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             hasPasscode: true,
             passcodeHint: (channel as any).passcode_hint || "",
             channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+            anonymousUid: anonymousIdentity.uid,
+            anonymousToken: anonymousIdentity.token,
           });
         }
       } else {
@@ -55,6 +65,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           hasPasscode: true,
           passcodeHint: (channel as any).passcode_hint || "",
           channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+          anonymousUid: anonymousIdentity.uid,
+          anonymousToken: anonymousIdentity.token,
         });
       }
     }
@@ -99,7 +111,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       ).bind(channelId)
     );
   } else {
-    const viewerUid = request.headers.get("X-Viewer-Uid") || "";
+    const viewerUid = anonymousIdentity.uid;
     const viewerFingerprint = request.headers.get("X-Viewer-Fingerprint") || "";
     if (viewerUid.length <= 128 && viewerFingerprint.length <= 128 && (viewerUid || viewerFingerprint)) {
       viewerBlockedIndex = statements.length;
@@ -170,5 +182,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     petitionEnabled: config.get(`petition_${parentChannelId}`) !== "false",
     dmEnabled: config.get(`dm_${parentChannelId}`) !== "false",
     roomToken: ownerRoomToken,
+    anonymousUid: anonymousIdentity.uid,
+    anonymousToken: anonymousIdentity.token,
   });
 }

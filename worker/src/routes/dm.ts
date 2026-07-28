@@ -1,15 +1,23 @@
 import { Env } from "../types";
+import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { checkBannedWords, checkMessageLength, checkRateLimit, getChannelPasscodeInfo } from "../lib/validation";
 import { verifyRoomToken } from "./passcode";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 
+async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
+  const token = request.headers.get("X-Anonymous-Token");
+  if (!token) return null;
+  const payload = await verifyAnonymousIdentityToken(token, env);
+  return payload?.uid || null;
+}
+
 export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, nick, text, channel_id, image, fingerprint } = body;
+    const { nick, text, channel_id, image, fingerprint } = body;
 
-    if (!channel_id || !uid) {
+    if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
     if (text !== undefined && typeof text !== "string") {
@@ -37,7 +45,12 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    if (!checkRateLimit(uid as string)) {
+    const requesterUid = await getAnonymousRequesterUid(request, env);
+    if (!requesterUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+
+    if (!checkRateLimit(requesterUid)) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
 
@@ -51,7 +64,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       ).bind(parentChannelId, `dm_${parentChannelId}`, `petition_${parentChannelId}`).all<{ id: string; text: string }>(),
       env.DB.prepare(
         "SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
-      ).bind(uid, fingerprint || "", parentChannelId).first(),
+      ).bind(requesterUid, fingerprint || "", parentChannelId).first(),
       rawText ? checkBannedWords(rawText, parentChannelId, env) : Promise.resolve(true),
     ]);
 
@@ -66,7 +79,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       }
       const existingPetition = await env.DB.prepare(
         "SELECT 1 FROM dm WHERE uid = ? AND channel_id = ? AND (text LIKE ? OR text LIKE ?) LIMIT 1"
-      ).bind(uid, channel_id, "[Appeal]%", "[이의 제기]%").first();
+      ).bind(requesterUid, channel_id, "[Appeal]%", "[이의 제기]%").first();
       if (existingPetition) {
         return Response.json({ error: "petition_exists" }, { status: 409 });
       }
@@ -82,12 +95,12 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     const created_at = new Date().toISOString();
     await env.DB.prepare(
       "INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, uid, uid, nick || null, rawText, image || null, channel_id).run();
+    ).bind(id, requesterUid, requesterUid, nick || null, rawText, image || null, channel_id).run();
 
     // Broadcast DM with payload — always use parent channel DO
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);
     const stub = env.CHAT_ROOM.get(doId);
-    const newDm = { id, uid, auth_uid: uid, nick: nick || null, text: rawText, image: image || null, channel_id, created_at };
+    const newDm = { id, uid: requesterUid, auth_uid: requesterUid, nick: nick || null, text: rawText, image: image || null, channel_id, created_at };
     await stub.fetch(new Request("http://internal/broadcast", {
       method: "POST",
       body: JSON.stringify({ type: "dm-new", dm: newDm }),
