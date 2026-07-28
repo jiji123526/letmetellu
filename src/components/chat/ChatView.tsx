@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMessageMedia, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -1156,21 +1156,27 @@ export function ChatView({ channelId }: { channelId: string }) {
         }
       }
       if (event.type === "profile-change") {
+        const nextProfileImage = event.profile_image !== undefined
+          ? decorateMediaUrl(event.profile_image as string | null)
+          : undefined;
+        const nextBackgroundImage = event.background_image !== undefined
+          ? decorateMediaUrl(event.background_image as string | null)
+          : undefined;
         updateRecentChannelAppearance(channelId, {
           ...(event.name ? { name: event.name as string } : {}),
-          ...(event.profile_image !== undefined ? { profileImage: event.profile_image as string | null } : {}),
+          ...(nextProfileImage !== undefined ? { profileImage: nextProfileImage } : {}),
           ...(event.bubble_color && !localBubbleColor ? { bubbleColor: event.bubble_color as string } : {}),
         });
         setChannel((prev) => {
           if (!prev) return null;
           const updated = { ...prev };
           if (event.name) updated.name = event.name as string;
-          if (event.profile_image !== undefined) updated.profile_image = event.profile_image as string | null;
+          if (nextProfileImage !== undefined) updated.profile_image = nextProfileImage;
           if (event.bubble_color) updated.bubble_color = event.bubble_color as string;
           if (event.show_on_profile !== undefined) updated.show_on_profile = event.show_on_profile ? 1 : 0;
           if (event.background_type !== undefined) updated.background_type = event.background_type as Channel["background_type"];
           if (event.background_color !== undefined) updated.background_color = event.background_color as string | null;
-          if (event.background_image !== undefined) updated.background_image = event.background_image as string | null;
+          if (nextBackgroundImage !== undefined) updated.background_image = nextBackgroundImage;
           if (event.background_overlay !== undefined) updated.background_overlay = event.background_overlay as number;
           if (event.background_blur !== undefined) updated.background_blur = event.background_blur ? 1 : 0;
           return updated;
@@ -2735,7 +2741,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             adminAction("update-profile", channelId, { bubble_color: color });
           }}
           onBackgroundChange={(background) => {
-            setChannel((prev) => prev ? { ...prev, ...background } : null);
+            const decoratedBackgroundImage = decorateMediaUrl(background.background_image) || background.background_image;
+            setChannel((prev) => prev ? {
+              ...prev,
+              ...background,
+              background_image: decoratedBackgroundImage,
+            } : null);
             void adminAction("update-profile", channelId, background);
             setBanner({ text: t("backgroundChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 2500);
@@ -2748,8 +2759,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           }}
           onProfileImageChange={(url) => {
-            setChannel((prev) => prev ? { ...prev, profile_image: url } : null);
-            updateRecentChannelAppearance(channelId, { profileImage: url });
+            const decoratedUrl = decorateMediaUrl(url) || url;
+            setChannel((prev) => prev ? { ...prev, profile_image: decoratedUrl } : null);
+            updateRecentChannelAppearance(channelId, { profileImage: decoratedUrl });
             adminAction("update-profile", channelId, { profile_image: url });
             setBanner({ text: t("profileChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
@@ -2765,8 +2777,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           }}
           onWelcomeChange={(config) => {
-            setWelcomeConfig(config);
-            localStorage.setItem(`welcomeConfig_${channelId}`, config);
+            const decoratedConfig = decorateWelcomeConfig(config) || config;
+            setWelcomeConfig(decoratedConfig);
+            localStorage.setItem(`welcomeConfig_${channelId}`, decoratedConfig);
             adminAction("set-welcome", channelId, { config });
             setBanner({ text: t("welcomeChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);

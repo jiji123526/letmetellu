@@ -100,7 +100,7 @@ function decorateChannelMedia<T extends { profile_image?: string | null; backgro
   return { ...channel, profile_image, background_image };
 }
 
-function decorateWelcomeConfig(config: string | undefined): string | undefined {
+export function decorateWelcomeConfig(config: string | undefined): string | undefined {
   if (!config) return config;
   try {
     const parsed = JSON.parse(config) as { icon?: unknown };
