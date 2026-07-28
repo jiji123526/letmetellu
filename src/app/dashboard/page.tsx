@@ -12,6 +12,7 @@ import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboa
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
+import { LegalFooter } from "@/components/legal/LegalFooter";
 import {
   fetchAccountRecentChannels,
   mergeAccountRecentChannels,
@@ -1017,6 +1018,8 @@ export default function DashboardPage() {
             })}
           </section>
         )}
+
+        <LegalFooter />
 
         {editing && (
           <div className="sticky bottom-0 z-30 px-4 py-3 flex items-center justify-between border-t" style={{ background: "var(--header-bg)", borderColor: "var(--hairline)", backdropFilter: "blur(20px)" }}>
