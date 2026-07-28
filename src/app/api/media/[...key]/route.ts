@@ -20,6 +20,7 @@ export async function GET(request: Request, { params }: Props) {
       method: "GET",
       cache: "no-store",
     });
+    const body = await response.arrayBuffer();
 
     const headers = new Headers();
     const contentType = response.headers.get("content-type");
@@ -27,7 +28,7 @@ export async function GET(request: Request, { params }: Props) {
     if (contentType) headers.set("Content-Type", contentType);
     if (cacheControl) headers.set("Cache-Control", cacheControl);
 
-    return new Response(response.body, {
+    return new Response(body, {
       status: response.status,
       headers,
     });
