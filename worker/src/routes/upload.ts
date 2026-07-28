@@ -12,9 +12,10 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     return Response.json({ error: "method not allowed" }, { status: 405 });
   }
 
-  const channelId = new URL(request.url).searchParams.get("channel");
+  const requestUrl = new URL(request.url);
+  const channelId = requestUrl.searchParams.get("channel");
   if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
-  const purpose = (new URL(request.url).searchParams.get("purpose") || "message") as UploadPurpose;
+  const purpose = (requestUrl.searchParams.get("purpose") || "message") as UploadPurpose;
   if (!["message", "dm", "channel-asset"].includes(purpose)) {
     return Response.json({ error: "invalid upload purpose" }, { status: 400 });
   }
@@ -32,37 +33,6 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   }
   if (purpose === "channel-asset" && !ownerUpload) {
     return Response.json({ error: "not owner" }, { status: 403 });
-  }
-
-  const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
-  if (!ownerUpload && passcode) {
-    const roomToken = request.headers.get("X-Room-Token");
-    if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-    const decoded = await verifyRoomToken(roomToken, env);
-    if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
-      return Response.json({ error: "invalid token" }, { status: 403 });
-    }
-  }
-
-  const anonymousPayload = ownerUpload
-    ? null
-    : await verifyAnonymousIdentityToken(request.headers.get("X-Anonymous-Token") || "", env);
-  if (!ownerUpload && !anonymousPayload) {
-    return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
-  }
-
-  await cleanupExpiredUploadTickets(env);
-
-  const ipHash = await hashUploadIp(getUploadRequestIp(request), env);
-  const quota = await enforceUploadQuota({
-    env,
-    channelId,
-    uid: ownerUpload ? null : anonymousPayload!.uid,
-    ipHash,
-    purpose,
-  });
-  if (!quota.ok) {
-    return Response.json({ error: quota.error }, { status: 429 });
   }
 
   const contentType = request.headers.get("Content-Type") || "image/jpeg";
@@ -96,6 +66,41 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     chunks.push(value);
   }
 
+  let anonymousPayload: { uid: string } | null = null;
+  let ipHash: string | null = null;
+  if (purpose !== "channel-asset") {
+    const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    if (!ownerUpload && passcode) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
+      const decoded = await verifyRoomToken(roomToken, env);
+      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
+        return Response.json({ error: "invalid token" }, { status: 403 });
+      }
+    }
+
+    anonymousPayload = ownerUpload
+      ? null
+      : await verifyAnonymousIdentityToken(request.headers.get("X-Anonymous-Token") || "", env);
+    if (!ownerUpload && !anonymousPayload) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+
+    await cleanupExpiredUploadTickets(env);
+
+    ipHash = await hashUploadIp(getUploadRequestIp(request), env);
+    const quota = await enforceUploadQuota({
+      env,
+      channelId,
+      uid: ownerUpload ? null : anonymousPayload!.uid,
+      ipHash,
+      purpose,
+    });
+    if (!quota.ok) {
+      return Response.json({ error: quota.error }, { status: 429 });
+    }
+  }
+
   const blob = new Blob(chunks, { type: contentType });
 
   await env.MEDIA.put(key, blob, {
@@ -112,7 +117,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     channelId,
     uid: ownerUpload ? internalUserId : anonymousPayload!.uid,
     authUid: ownerUpload ? internalUserId : null,
-    ipHash,
+    ipHash: ipHash!,
     purpose,
   });
 
@@ -130,12 +135,21 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
       SELECT channel_id FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
       UNION
       SELECT channel_id FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+      UNION
+      SELECT id AS channel_id FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ?
+      UNION
+      SELECT id AS channel_id FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ?
+      UNION
+      SELECT channel_id FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0
     )
     LIMIT 1
   `).bind(
     mediaSuffix, mediaSuffix,
     mediaSuffix, mediaSuffix,
     mediaSuffix, mediaSuffix,
+    mediaSuffix, mediaSuffix,
+    mediaSuffix, mediaSuffix,
+    mediaSuffix,
   ).first<{ channel_id: string }>();
   if (!mediaRow) {
     const pendingTicket = await env.DB.prepare(
