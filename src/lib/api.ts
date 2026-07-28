@@ -247,14 +247,19 @@ export async function editMessageApi(payload: {
   message_id: string;
   channel_id: string;
   text: string;
+  fingerprint?: string;
+  admin?: boolean;
 }) {
   if (IS_MOCK) return { ok: true };
 
   const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
-  const res = await fetch(`${WORKER_URL}/api/messages`, {
+  const { admin, ...body } = payload;
+  const res = await fetch(admin ? "/api/messages" : `${WORKER_URL}/api/messages`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
-    body: JSON.stringify(payload),
+    headers: admin
+      ? { "Content-Type": "application/json" }
+      : { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
+    body: JSON.stringify(body),
   });
   return res.json();
 }

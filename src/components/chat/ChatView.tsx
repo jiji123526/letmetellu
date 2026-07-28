@@ -2763,10 +2763,47 @@ export function ChatView({ channelId }: { channelId: string }) {
         <EditDialog
           currentText={editingMsg.text}
           onSave={(newText) => {
+            const previousText = editingMsg.text;
+            const previousMessage = messages.find((message) => message.id === editingMsg.id);
+            const targetMessageId = editingMsg.id;
             setMessages((prev) =>
-              prev.map((m) => (m.id === editingMsg.id ? { ...m, text: newText, edited: true } as Message : m))
+              prev.map((m) => (m.id === targetMessageId ? { ...m, text: newText, edited: true } as Message : m))
             );
-            editMessageApi({ uid: effectiveAdmin && authUserId ? authUserId : uid, message_id: editingMsg.id, channel_id: inLiveMode ? `${channelId}_live` : channelId, text: newText });
+            void editMessageApi({
+              uid: effectiveAdmin && authUserId ? authUserId : uid,
+              message_id: targetMessageId,
+              channel_id: inLiveMode ? `${channelId}_live` : channelId,
+              text: newText,
+              fingerprint: myFingerprint,
+              admin: effectiveAdmin && !!authUserId,
+            }).then((result: { ok?: boolean; error?: string }) => {
+              if (result?.ok) return;
+              setMessages((prev) =>
+                prev.map((m) => (
+                  m.id === targetMessageId
+                    ? { ...m, text: previousText, edited: previousMessage?.edited ?? false } as Message
+                    : m
+                ))
+              );
+              const editError = result?.error;
+              if (editError === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
+              else if (editError === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
+              else if (editError === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
+              else if (editError === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
+              else if (editError === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+              else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
+              setTimeout(() => setBanner(null), 3000);
+            }).catch(() => {
+              setMessages((prev) =>
+                prev.map((m) => (
+                  m.id === targetMessageId
+                    ? { ...m, text: previousText, edited: previousMessage?.edited ?? false } as Message
+                    : m
+                ))
+              );
+              setBanner({ text: t("sendFailed"), color: "#d32f2f" });
+              setTimeout(() => setBanner(null), 3000);
+            });
           }}
           onClose={() => setEditingMsg(null)}
         />

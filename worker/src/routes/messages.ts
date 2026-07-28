@@ -178,29 +178,69 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
   // PUT — edit message
   if (request.method === "PUT") {
     const body = await request.json() as Record<string, unknown>;
-    const { uid, message_id, channel_id, text } = body;
+    const { uid, message_id, channel_id, text, fingerprint } = body;
 
-    if (!message_id || !uid || !channel_id || text === undefined) {
+    if (!message_id || !uid || !channel_id || typeof text !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
 
+    const internalToken = request.headers.get("X-Internal-Token");
+    const verifiedUserId = request.headers.get("X-User-Id");
+    const hasVerifiedIdentity = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+
     // Passcode gate
-    const editParent = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
-    const { passcode: editPasscode } = await getChannelPasscodeInfo(editParent, env);
-    if (editPasscode) {
+    const isLiveChannel = (channel_id as string).endsWith("_live");
+    const editParent = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const channel = await env.DB.prepare(`
+      SELECT id, is_frozen, owner_uid, passcode,
+        (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
+      FROM channels
+      WHERE id = ?
+    `).bind(channel_id, editParent).first();
+    if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
+    const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
+
+    if ((channel as any).passcode && !isChannelOwner) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
       const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== editParent || decoded.passcode_hash !== editPasscode) {
+      if (!decoded || decoded.channel_id !== editParent || decoded.passcode_hash !== (channel as any).passcode) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
+    }
+
+    const isTargetFrozen = isLiveChannel
+      ? (channel as any).target_is_frozen
+      : (channel as any).is_frozen;
+    if (isTargetFrozen && !isChannelOwner) {
+      return Response.json({ error: "channel frozen" }, { status: 403 });
+    }
+
+    if (!checkRateLimit(uid as string)) {
+      return Response.json({ error: "rate_limited" }, { status: 429 });
+    }
+
+    if (!checkMessageLength(text)) {
+      return Response.json({ error: "message_too_long" }, { status: 400 });
+    }
+
+    const requesterUid = isChannelOwner ? verifiedUserId! : uid as string;
+
+    const [blocked, allowedByBannedWords] = await Promise.all([
+      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
+        .bind(requesterUid, fingerprint || "", editParent).first(),
+      checkBannedWords(text, editParent, env),
+    ]);
+    if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
+    if (!allowedByBannedWords) {
+      return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
     // Verify ownership
     const msg = await env.DB.prepare("SELECT uid FROM messages WHERE id = ? AND channel_id = ?")
       .bind(message_id, channel_id).first();
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
-    if (msg.uid !== uid) return Response.json({ error: "not owner" }, { status: 403 });
+    if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
 
     await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ?")
       .bind(text, message_id).run();
