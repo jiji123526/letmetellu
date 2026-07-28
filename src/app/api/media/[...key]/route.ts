@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: Props) {
     if (contentType) headers.set("Content-Type", contentType);
     if (cacheControl) headers.set("Cache-Control", cacheControl);
 
-    return new NextResponse(response.body, {
+    return new Response(response.body, {
       status: response.status,
       headers,
     });
