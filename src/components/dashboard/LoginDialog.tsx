@@ -6,6 +6,7 @@ import { useLocale } from "@/hooks/useLocale";
 
 interface LoginDialogProps {
   onClose: () => void;
+  initialError?: string;
 }
 
 const GoogleIcon = () => (
@@ -17,13 +18,13 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export function LoginDialog({ onClose }: LoginDialogProps) {
+export function LoginDialog({ onClose, initialError = "" }: LoginDialogProps) {
   const { locale, t } = useLocale();
   const [tab, setTab] = useState<"login" | "signup" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [submitting, setSubmitting] = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
   const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -107,12 +108,30 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
     if (!email || !password) return setError(t("allFieldsRequired"));
     if (!isValidEmail(email)) return setError(t("invalidEmail"));
     setSubmitting(true);
-    const result = await signIn("credentials", { email, password, redirect: false });
-    if (result?.error) {
+    try {
+      const result = await signIn("credentials", { email, password, redirect: false });
+      if (result?.error) {
+        setError(t("loginError"));
+        setSubmitting(false);
+        return;
+      }
+      window.location.href = "/dashboard";
+    } catch {
       setError(t("loginError"));
       setSubmitting(false);
-    } else {
-      window.location.href = "/dashboard";
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    setSubmitting(true);
+    try {
+      await signIn("google", {
+        callbackUrl: tab === "login" ? "/dashboard" : "/dashboard?onboarding=true",
+      });
+    } catch {
+      setError(t("oauthLoginError"));
+      setSubmitting(false);
     }
   };
 
@@ -136,7 +155,7 @@ export function LoginDialog({ onClose }: LoginDialogProps) {
           ))}
         </div>}
 
-        {tab !== "forgot" && <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)" }} onClick={() => void signIn("google", { callbackUrl: tab === "login" ? "/dashboard" : "/dashboard?onboarding=true" })}>
+        {tab !== "forgot" && <button type="button" disabled={submitting} className="w-full flex items-center justify-center gap-2.5 rounded-[12px] py-3 text-[14px] font-semibold cursor-pointer" style={{ border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)" }} onClick={() => void handleGoogleLogin()}>
           <GoogleIcon /> {t(tab === "login" ? "googleLogin" : "googleSignup")}
         </button>}
         {tab === "login" ? (

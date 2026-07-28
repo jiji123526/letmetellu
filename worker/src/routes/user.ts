@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { deletedAccountKey, isDeletedAccount } from "../lib/deleted-account";
 import { deleteChannel } from "./admin";
 
 function normalizeEmail(email: string) {
@@ -67,23 +68,39 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
     const userId = request.headers.get("X-User-Id") || "";
-    if (!userId) return Response.json({ error: "missing user id" }, { status: 400 });
+    const userEmail = normalizeEmail(request.headers.get("X-User-Email") || "");
+    if (!userId && !userEmail) {
+      return Response.json({ error: "missing user identity" }, { status: 400 });
+    }
+    const userById = userId
+      ? await env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
+        .bind(userId).first<{ id: string; email: string }>()
+      : null;
+    const user = userById || (userEmail
+      ? await env.DB.prepare("SELECT id, email FROM users WHERE lower(email) = ?")
+        .bind(userEmail).first<{ id: string; email: string }>()
+      : null);
+    if (!user) return Response.json({ error: "user not found" }, { status: 404 });
+    const emailKey = await deletedAccountKey(user.email, env.INTERNAL_SECRET);
 
     const { results: ownedChannels } = await env.DB.prepare(
       "SELECT id FROM channels WHERE owner_uid = ? AND id NOT LIKE '%_live'"
-    ).bind(userId).all<{ id: string }>();
+    ).bind(user.id).all<{ id: string }>();
     for (const channel of ownedChannels) {
       await deleteChannel(channel.id, env);
     }
 
     await env.DB.batch([
-      env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(userId),
-      env.DB.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").bind(userId),
-      env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(userId),
-      env.DB.prepare("UPDATE messages SET auth_uid = '' WHERE auth_uid = ?").bind(userId),
-      env.DB.prepare("UPDATE dm SET auth_uid = NULL WHERE auth_uid = ?").bind(userId),
-      env.DB.prepare("UPDATE gallery SET auth_uid = NULL WHERE auth_uid = ?").bind(userId),
-      env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+      env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(user.id),
+      env.DB.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").bind(user.id),
+      env.DB.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").bind(user.id),
+      env.DB.prepare("UPDATE messages SET auth_uid = '' WHERE auth_uid = ?").bind(user.id),
+      env.DB.prepare("UPDATE dm SET auth_uid = NULL WHERE auth_uid = ?").bind(user.id),
+      env.DB.prepare("UPDATE gallery SET auth_uid = NULL WHERE auth_uid = ?").bind(user.id),
+      env.DB.prepare(
+        "INSERT OR REPLACE INTO deleted_accounts (email_key, deleted_at) VALUES (?, ?)"
+      ).bind(emailKey, Date.now()),
+      env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id),
     ]);
     return Response.json({ ok: true, deleted_channels: ownedChannels.length });
   }
@@ -103,6 +120,9 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     }
 
     const normalizedEmail = normalizeEmail(email);
+    if (await isDeletedAccount(normalizedEmail, env)) {
+      return Response.json({ error: "account_deleted" }, { status: 403 });
+    }
     const existingUser = await env.DB.prepare(
       "SELECT id FROM users WHERE lower(email) = ? LIMIT 1"
     ).bind(normalizedEmail).first<{ id: string }>();

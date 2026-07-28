@@ -69,27 +69,40 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ account, profile }) {
+    async signIn({ account, profile, user }) {
       if (account?.provider !== "google") return true;
-      return profile?.email_verified === true && typeof profile.email === "string";
+      if (profile?.email_verified !== true || typeof profile.email !== "string") {
+        return "/dashboard?error=oauth";
+      }
+      try {
+        user.id = await syncUserIdentity({
+          id: user.id,
+          email: profile.email,
+          name: user.name,
+          image: user.image,
+        });
+        return true;
+      } catch {
+        return "/dashboard?error=oauth";
+      }
     },
     async jwt({ token, user }) {
-      const sourceId = user?.id || token.id || token.sub;
-      const email = user?.email || token.email;
-      if (sourceId && email && (user || token.identityVersion !== IDENTITY_VERSION)) {
+      if (user?.id) {
+        token.id = user.id;
+        token.identityVersion = IDENTITY_VERSION;
+      }
+      const sourceId = token.id || token.sub;
+      const email = token.email;
+      if (!user && sourceId && email && token.identityVersion !== IDENTITY_VERSION) {
         try {
           token.id = await syncUserIdentity({
             id: sourceId as string,
             email,
-            name: user?.name || token.name,
-            image: user?.image || token.picture,
+            name: token.name,
+            image: typeof token.picture === "string" ? token.picture : null,
           });
           token.identityVersion = IDENTITY_VERSION;
-        } catch (error) {
-          // Abort a new sign-in rather than issue a session with an identity
-          // that cannot own or retrieve its channels.
-          if (user) throw error;
-        }
+        } catch {}
       }
       // Auth.js stores the provider/credentials user ID in the standard `sub`
       // claim. Keep using it as a fallback so sessions created without the
@@ -108,6 +121,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   pages: {
-    signIn: "/dashboard?login=true",
+    signIn: "/dashboard",
+    error: "/dashboard",
   },
 });

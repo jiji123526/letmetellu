@@ -64,6 +64,7 @@ export async function DELETE() {
       "Content-Type": "application/json",
       "X-Internal-Token": process.env.INTERNAL_SECRET || "",
       "X-User-Id": session.user.id,
+      "X-User-Email": session.user.email || "",
     },
     cache: "no-store",
   });
