@@ -71,7 +71,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async signIn({ account, profile, user }) {
       if (account?.provider !== "google") return true;
-      if (profile?.email_verified !== true || typeof profile.email !== "string") {
+      if (
+        profile?.email_verified !== true
+        || typeof profile.email !== "string"
+        || typeof user.id !== "string"
+      ) {
         return "/dashboard?error=oauth";
       }
       try {
