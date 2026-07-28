@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
+import { deleteMediaByUrl } from "../lib/media";
 import { verifyRoomToken } from "./passcode";
 
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
@@ -138,7 +139,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     // Verify ownership
-    const msg = await env.DB.prepare("SELECT uid FROM messages WHERE id = ? AND channel_id = ?")
+    const msg = await env.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ?")
       .bind(message_id, channel_id).first();
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
     if (msg.uid !== uid) return Response.json({ error: "not owner" }, { status: 403 });
@@ -160,6 +161,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
           .bind(message_id, channel_id),
       ]);
     }
+    await deleteMediaByUrl(env, msg.image as string | null | undefined);
 
     // Broadcast deletion with payload
     const broadcastChannelId = (channel_id as string).endsWith("_live")

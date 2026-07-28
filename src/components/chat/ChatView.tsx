@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, fetchInit, fetchOwnerChannels, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
+import { clearRoomToken, decorateMessageMedia, fetchInit, fetchOwnerChannels, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -1037,7 +1037,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     return subscribe((event) => {
       // New message — append to local array
       if (event.type === "message-new") {
-        const msg = event.message as Message;
+        const msg = decorateMessageMedia(event.message as Message);
         // Only add if it belongs to the channel we're viewing
         const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         if (msg.channel_id === viewingChannel) {
@@ -1124,7 +1124,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         authenticateAdminSocket();
       }
       if (event.type === "dm-new") {
-        const dm = event.dm as Message;
+        const dm = decorateMessageMedia(event.dm as Message);
         const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         if (dm.channel_id === viewingChannel) {
           setDmMessages((prev) => {

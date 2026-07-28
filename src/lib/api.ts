@@ -3,6 +3,10 @@ import { generateFingerprint } from "./fingerprint";
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 
+function getParentChannelId(channelId: string): string {
+  return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+}
+
 // Room token management
 export function getRoomToken(channelId: string): string | null {
   if (typeof window === "undefined") return null;
@@ -28,13 +32,68 @@ function roomTokenHeaders(channelId: string): Record<string, string> {
   return token ? { "X-Room-Token": token } : {};
 }
 
+function getMediaChannelId(mediaUrl: string): string | null {
+  try {
+    const parsed = new URL(mediaUrl, WORKER_URL);
+    if (!parsed.pathname.startsWith("/api/media/")) return null;
+    const key = decodeURIComponent(parsed.pathname.replace(/^\/api\/media\//, ""));
+    const slashIndex = key.indexOf("/");
+    if (slashIndex < 0) return null;
+    return getParentChannelId(key.slice(0, slashIndex));
+  } catch {
+    return null;
+  }
+}
+
+export function decorateMediaUrl(mediaUrl: string | null | undefined): string | null {
+  if (!mediaUrl) return null;
+
+  try {
+    const parsed = new URL(mediaUrl, WORKER_URL);
+    if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
+    const channelId = getMediaChannelId(mediaUrl);
+    const roomToken = channelId ? getRoomToken(channelId) : null;
+    if (!roomToken) return mediaUrl;
+    parsed.searchParams.set("token", roomToken);
+    return parsed.toString();
+  } catch {
+    return mediaUrl;
+  }
+}
+
+export function decorateMessageMedia<T extends { image?: string | null }>(message: T): T {
+  if (!message.image) return message;
+  const image = decorateMediaUrl(message.image);
+  return image === message.image ? message : { ...message, image };
+}
+
+function decorateChannelMedia<T extends { profile_image?: string | null; background_image?: string | null }>(channel: T): T {
+  const profile_image = decorateMediaUrl(channel.profile_image);
+  const background_image = decorateMediaUrl(channel.background_image);
+  if (profile_image === channel.profile_image && background_image === channel.background_image) return channel;
+  return { ...channel, profile_image, background_image };
+}
+
+function decorateWelcomeConfig(config: string | undefined): string | undefined {
+  if (!config) return config;
+  try {
+    const parsed = JSON.parse(config) as { icon?: unknown };
+    if (typeof parsed.icon !== "string") return config;
+    const icon = decorateMediaUrl(parsed.icon);
+    if (!icon || icon === parsed.icon) return config;
+    return JSON.stringify({ ...parsed, icon });
+  } catch {
+    return config;
+  }
+}
+
 // Dynamic import for mock - re-export functions based on mode
 import * as mockApi from "./mock-api";
 
 export async function fetchInit(channelId: string) {
   if (IS_MOCK) return mockApi.fetchInit(channelId);
 
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const roomToken = getRoomToken(parentChannelId);
   const headers: Record<string, string> = {};
   if (roomToken) headers["X-Room-Token"] = roomToken;
@@ -50,7 +109,13 @@ export async function fetchInit(channelId: string) {
   // identity only when appropriate.
   const res = await fetch(`/api/init?channel=${channelId}`, { headers });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (data?.roomToken) setRoomToken(parentChannelId, data.roomToken);
+  if (data?.channel) data.channel = decorateChannelMedia(data.channel);
+  if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
+  if (Array.isArray(data?.dm)) data.dm = data.dm.map(decorateMessageMedia);
+  if (typeof data?.welcomeConfig === "string") data.welcomeConfig = decorateWelcomeConfig(data.welcomeConfig);
+  return data;
 }
 
 export async function fetchOwnerChannels(channelId: string): Promise<{
@@ -79,13 +144,15 @@ export async function verifyPasscode(channelId: string, passcode: string): Promi
 export async function fetchMessages(channelId: string, cursor?: string) {
   if (IS_MOCK) return mockApi.fetchMessages(channelId, cursor);
 
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "messages", channel: channelId });
   if (cursor) params.set("cursor", cursor);
   const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
+  return data;
 }
 
 export async function fetchMessagePage(
@@ -94,7 +161,7 @@ export async function fetchMessagePage(
   cursor: { createdAt: string; id: string },
 ) {
   if (IS_MOCK) return mockApi.fetchMessages(channelId, direction === "before" ? cursor.createdAt : undefined);
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({
     type: "messages",
     channel: channelId,
@@ -106,7 +173,9 @@ export async function fetchMessagePage(
     headers: roomTokenHeaders(parentChannelId),
   });
   if (!res.ok) throw new Error(`Message page failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
+  return data;
 }
 
 export async function fetchMessageContext(channelId: string, messageId: string) {
@@ -121,7 +190,7 @@ export async function fetchMessageContext(channelId: string, messageId: string) 
       has_newer: index >= 0 && index + 26 < messages.length,
     };
   }
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({
     type: "message-context",
     channel: channelId,
@@ -131,23 +200,32 @@ export async function fetchMessageContext(channelId: string, messageId: string) 
     headers: roomTokenHeaders(parentChannelId),
   });
   if (!res.ok) throw new Error(`Message context failed: ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
+  return data;
 }
 
 export async function fetchGallery(channelId: string, cursor?: string) {
   if (IS_MOCK) return { gallery: [] };
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "gallery", channel: channelId });
   if (cursor) params.set("cursor", cursor);
   const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data?.gallery)) {
+    data.gallery = data.gallery.map((item: { image?: string | null }) => ({
+      ...item,
+      image: decorateMediaUrl(item.image) || item.image,
+    }));
+  }
+  return data;
 }
 
 export async function fetchLinks(channelId: string, cursor?: string) {
   if (IS_MOCK) return { links: [] };
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "links", channel: channelId });
   if (cursor) params.set("cursor", cursor);
   const res = await fetch(`/api/data?${params}`, {
@@ -173,7 +251,7 @@ export async function sendMessage(payload: {
 }) {
   if (IS_MOCK) return mockApi.sendMessage(payload);
 
-  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
+  const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
@@ -233,7 +311,7 @@ export async function deleteMessage(payload: {
 }) {
   if (IS_MOCK) return { ok: true };
 
-  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
+  const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
@@ -252,7 +330,7 @@ export async function editMessageApi(payload: {
 }) {
   if (IS_MOCK) return { ok: true };
 
-  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
+  const parentChannelId = getParentChannelId(payload.channel_id);
   const { admin, ...body } = payload;
   const res = await fetch(admin ? "/api/messages" : `${WORKER_URL}/api/messages`, {
     method: "PUT",
@@ -266,7 +344,7 @@ export async function editMessageApi(payload: {
 
 export async function searchMessages(channelId: string, query: string) {
   if (IS_MOCK) return { results: [] };
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "search", channel: channelId, q: query });
   const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
@@ -276,7 +354,7 @@ export async function searchMessages(channelId: string, query: string) {
 
 export async function sendDm(payload: { uid: string; nick?: string; text: string; channel_id: string; image?: string }) {
   if (IS_MOCK) return { ok: true };
-  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
+  const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/dm`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
@@ -287,7 +365,7 @@ export async function sendDm(payload: { uid: string; nick?: string; text: string
 
 export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
   if (IS_MOCK) return { ok: true };
-  const parentChannelId = payload.channel_id.endsWith("_live") ? payload.channel_id.replace(/_live$/, "") : payload.channel_id;
+  const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/messages`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId) },
@@ -308,7 +386,7 @@ export async function toggleReactionAsAdmin(payload: { uid: string; message_id: 
 
 export async function uploadImage(blob: Blob, channelId: string): Promise<string | null> {
   if (IS_MOCK) return URL.createObjectURL(blob);
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   const res = await fetch(`${WORKER_URL}/api/upload?channel=${channelId}`, {
     method: "POST",
     headers: { "Content-Type": blob.type || "image/jpeg", ...roomTokenHeaders(parentChannelId) },

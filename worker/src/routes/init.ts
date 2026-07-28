@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { verifyRoomToken } from "./passcode";
+import { createRoomToken, verifyRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -149,6 +149,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const safeChannel = { ...(responseChannel as Record<string, unknown>) };
   delete safeChannel.passcode;
 
+  const ownerRoomToken = isOwner && (channel as any).passcode
+    ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
+    : undefined;
+
   return Response.json({
     channel: safeChannel,
     hasPasscode: Boolean((channel as any).passcode),
@@ -165,5 +169,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     emojiPresets: config.get(`liveEmojis_${parentChannelId}`) || null,
     petitionEnabled: config.get(`petition_${parentChannelId}`) !== "false",
     dmEnabled: config.get(`dm_${parentChannelId}`) !== "false",
+    roomToken: ownerRoomToken,
   });
 }

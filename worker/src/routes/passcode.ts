@@ -14,6 +14,32 @@ export function invalidatePasscodeAttempts(channelId: string) {
   passcodeAttempts.delete(channelId);
 }
 
+export async function createRoomToken(
+  channel_id: string,
+  passcode_hash: string,
+  env: Env,
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const payloadObj = {
+    channel_id,
+    passcode_hash,
+    type: "room-access",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  };
+  const payload = btoa(JSON.stringify(payloadObj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(env.INTERNAL_SECRET),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(`${header}.${payload}`));
+  const signature = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+
+  return `${header}.${payload}.${signature}`;
+}
+
 export async function handleVerifyPasscode(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
@@ -54,26 +80,7 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
     return Response.json({ error: "wrong_passcode" }, { status: 403 });
   }
 
-  // Generate token using Web Crypto HMAC
-  const encoder = new TextEncoder();
-  const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-  const payloadObj = {
-    channel_id,
-    passcode_hash: channel.passcode,
-    type: "room-access",
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-  };
-  const payload = btoa(JSON.stringify(payloadObj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-
-  const key = await crypto.subtle.importKey(
-    "raw", encoder.encode(env.INTERNAL_SECRET),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(`${header}.${payload}`));
-  const signature = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
-
-  const token = `${header}.${payload}.${signature}`;
+  const token = await createRoomToken(channel_id, channel.passcode, env);
 
   return Response.json({ token });
 }

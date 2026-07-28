@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { invalidatePasscodeAttempts } from "./passcode";
 
@@ -179,7 +180,15 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const { results: replies } = await env.DB.prepare(
         "SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?"
       ).bind(message_id, channel_id).all<{ id: string }>();
+      const { results: mediaRows } = await env.DB.prepare(
+        "SELECT image FROM messages WHERE channel_id = ? AND (id = ? OR reply_to = ?) AND image IS NOT NULL"
+      ).bind(channel_id, message_id, message_id).all<{ image: string }>();
       const deletedIds = [message_id, ...replies.map((reply) => reply.id)];
+      const mediaKeys = [...new Set(
+        mediaRows
+          .map((row) => extractMediaKey(row.image))
+          .filter((key): key is string => Boolean(key))
+      )];
 
       // Remove gallery rows before their source messages, including reply media.
       await env.DB.batch([
@@ -191,6 +200,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
           .bind(message_id, channel_id),
       ]);
+      await Promise.all(mediaKeys.map((key) => env.MEDIA.delete(key).catch(() => {})));
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
@@ -204,8 +214,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     case "delete-dm": {
       const { dm_id } = payload || {};
+      const dm = await env.DB.prepare("SELECT image FROM dm WHERE id = ? AND channel_id = ?")
+        .bind(dm_id, channel_id).first<{ image: string | null }>();
       await env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
         .bind(dm_id, channel_id).run();
+      await deleteMediaByUrl(env, dm?.image);
 
       const doId2 = env.CHAT_ROOM.idFromName(channel_id);
       const stub2 = env.CHAT_ROOM.get(doId2);

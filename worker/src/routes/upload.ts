@@ -77,12 +77,49 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
 // Serve uploaded media
 export async function handleMediaServe(request: Request, env: Env, key: string): Promise<Response> {
-  const object = await env.MEDIA.get(key);
+  const decodedKey = decodeURIComponent(key);
+  const mediaSuffix = `/api/media/${decodedKey}`;
+  const mediaRow = await env.DB.prepare(`
+    SELECT channel_id FROM (
+      SELECT channel_id FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+      UNION
+      SELECT channel_id FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+      UNION
+      SELECT channel_id FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+    )
+    LIMIT 1
+  `).bind(
+    mediaSuffix, mediaSuffix,
+    mediaSuffix, mediaSuffix,
+    mediaSuffix, mediaSuffix,
+  ).first<{ channel_id: string }>();
+
+  if (mediaRow?.channel_id) {
+    const parentChannelId = mediaRow.channel_id.endsWith("_live")
+      ? mediaRow.channel_id.replace(/_live$/, "")
+      : mediaRow.channel_id;
+    const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+
+    if (passcode) {
+      const isOwner = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
+        && request.headers.get("X-User-Id") === owner_uid;
+      if (!isOwner) {
+        const token = new URL(request.url).searchParams.get("token") || request.headers.get("X-Room-Token");
+        if (!token) return Response.json({ error: "passcode required" }, { status: 403 });
+        const decoded = await verifyRoomToken(token, env);
+        if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
+          return Response.json({ error: "invalid token" }, { status: 403 });
+        }
+      }
+    }
+  }
+
+  const object = await env.MEDIA.get(decodedKey);
   if (!object) return new Response("not found", { status: 404 });
 
   const headers = new Headers();
   headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Cache-Control", mediaRow?.channel_id ? "private, no-store" : "public, max-age=31536000, immutable");
 
   return new Response(object.body, { headers });
 }
