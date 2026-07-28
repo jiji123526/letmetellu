@@ -1499,6 +1499,18 @@ export function ChatView({ channelId }: { channelId: string }) {
     const text = input.trim();
     if ((!text && pendingPhotos.length === 0) || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
 
+    const showMutationError = (error?: string) => {
+      if (error === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
+      else if (error === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
+      else if (error === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
+      else if (error === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
+      else if (error === "petition_exists") setBanner({ text: t("petitionExists"), color: "#d32f2f" });
+      else if (error === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+      else if (error === "dm_disabled") setBanner({ text: t("dmDisabledMessage"), color: "#d32f2f" });
+      else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
+      setTimeout(() => setBanner(null), 3000);
+    };
+
     // Blocked user handling
     if (isUserBlocked) {
       if (hasPetitioned || !petitionEnabled) {
@@ -1511,7 +1523,18 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       const blockEntry = blockedUsers.find((b) => b.uid === uid);
       const reason = blockEntry?.reason ? `\n[${t("blockReason")}: "${blockEntry.reason}"]` : "";
-      sendDm({ uid, text: `[${t("petitionPrefix")}] ${text}${reason}`, channel_id: inLiveMode ? `${channelId}_live` : channelId });
+      const petitionText = `[${t("petitionPrefix")}] ${text}${reason}`;
+      const result = await sendDm({
+        uid,
+        text: petitionText,
+        channel_id: inLiveMode ? `${channelId}_live` : channelId,
+        fingerprint: myFingerprint,
+      });
+      if (!result?.ok) {
+        setInput(text);
+        showMutationError(result?.error);
+        return;
+      }
       localStorage.setItem("petitionSent", uid);
       setBanner({ text: t("petitionSent"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
@@ -1529,11 +1552,18 @@ export function ChatView({ channelId }: { channelId: string }) {
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       setDmMode(false);
-      setBanner({ text: t("sentToAdmin"), color: "#7b3fa0" });
-      setTimeout(() => setBanner(null), 3000);
       const dmChannelId = inLiveMode ? `${channelId}_live` : channelId;
       const dmImage = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId) || undefined : undefined;
-      sendDm({ uid, text, channel_id: dmChannelId, image: dmImage });
+      const result = await sendDm({ uid, text, channel_id: dmChannelId, image: dmImage, fingerprint: myFingerprint });
+      if (!result?.ok) {
+        setInput(text);
+        setDmMode(true);
+        setPendingPhotos(photos);
+        showMutationError(result?.error);
+        return;
+      }
+      setBanner({ text: t("sentToAdmin"), color: "#7b3fa0" });
+      setTimeout(() => setBanner(null), 3000);
       return;
     }
 
@@ -1598,13 +1628,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
     if (sendError) {
       if (unsentPhotos.length > 0) setPendingPhotos(unsentPhotos);
-      if (sendError === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
-      else if (sendError === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
-      else if (sendError === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
-      else if (sendError === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
-      else if (sendError === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
-      else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
-      setTimeout(() => setBanner(null), 3000);
+      showMutationError(sendError);
     } else {
       // DO broadcasts message-changed → refetch shows each sent message.
       setInput("");
@@ -2763,12 +2787,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <EditDialog
           currentText={editingMsg.text}
           onSave={(newText) => {
-            const previousText = editingMsg.text;
-            const previousMessage = messages.find((message) => message.id === editingMsg.id);
             const targetMessageId = editingMsg.id;
-            setMessages((prev) =>
-              prev.map((m) => (m.id === targetMessageId ? { ...m, text: newText, edited: true } as Message : m))
-            );
             void editMessageApi({
               uid: effectiveAdmin && authUserId ? authUserId : uid,
               message_id: targetMessageId,
@@ -2777,14 +2796,16 @@ export function ChatView({ channelId }: { channelId: string }) {
               fingerprint: myFingerprint,
               admin: effectiveAdmin && !!authUserId,
             }).then((result: { ok?: boolean; error?: string }) => {
-              if (result?.ok) return;
-              setMessages((prev) =>
-                prev.map((m) => (
-                  m.id === targetMessageId
-                    ? { ...m, text: previousText, edited: previousMessage?.edited ?? false } as Message
-                    : m
-                ))
-              );
+              if (result?.ok) {
+                setMessages((prev) =>
+                  prev.map((m) => (
+                    m.id === targetMessageId
+                      ? { ...m, text: newText, edited: true } as Message
+                      : m
+                  ))
+                );
+                return;
+              }
               const editError = result?.error;
               if (editError === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
               else if (editError === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
@@ -2794,13 +2815,6 @@ export function ChatView({ channelId }: { channelId: string }) {
               else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
               setTimeout(() => setBanner(null), 3000);
             }).catch(() => {
-              setMessages((prev) =>
-                prev.map((m) => (
-                  m.id === targetMessageId
-                    ? { ...m, text: previousText, edited: previousMessage?.edited ?? false } as Message
-                    : m
-                ))
-              );
               setBanner({ text: t("sendFailed"), color: "#d32f2f" });
               setTimeout(() => setBanner(null), 3000);
             });

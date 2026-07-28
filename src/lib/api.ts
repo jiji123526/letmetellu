@@ -352,7 +352,7 @@ export async function searchMessages(channelId: string, query: string) {
   return res.json();
 }
 
-export async function sendDm(payload: { uid: string; nick?: string; text: string; channel_id: string; image?: string }) {
+export async function sendDm(payload: { uid: string; nick?: string; text: string; channel_id: string; image?: string; fingerprint?: string }) {
   if (IS_MOCK) return { ok: true };
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/dm`, {

@@ -26,6 +26,7 @@ export const ko = {
   // Banners
   sentToAdmin: "관리자에게 전송됨",
   petitionSent: "이의 제기가 전송되었습니다",
+  petitionExists: "이미 이의 제기를 보냈습니다",
   messageTooLong: "메시지가 너무 깁니다 (최대 5000자)",
   bannedWord: "금지어가 포함되어 전송할 수 없습니다",
   rateLimited: "너무 빠르게 보내고 있습니다",
@@ -163,6 +164,7 @@ export const ko = {
   petitionOff: "이의 제기 차단 중",
   dmOn: "비밀 메시지 허용 중",
   dmOff: "비밀 메시지 차단 중",
+  dmDisabledMessage: "비밀 메시지가 비활성화되어 있습니다",
   welcomeIcon: "아이콘 (이모지 또는 이미지)",
   welcomeIconPlaceholder: "이모지 입력",
   welcomeUpload: "사진 업로드",

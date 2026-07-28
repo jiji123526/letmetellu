@@ -28,6 +28,7 @@ export const en: Record<LocaleKeys, string> = {
   // Banners
   sentToAdmin: "Sent to admin",
   petitionSent: "Appeal has been sent",
+  petitionExists: "Appeal already sent",
   messageTooLong: "Message too long (max 5000 chars)",
   bannedWord: "Message contains a banned word",
   rateLimited: "Sending too fast",
@@ -165,6 +166,7 @@ export const en: Record<LocaleKeys, string> = {
   petitionOff: "Appeals disabled",
   dmOn: "DMs enabled",
   dmOff: "DMs disabled",
+  dmDisabledMessage: "Private messages are disabled",
   welcomeIcon: "Icon (emoji or image)",
   welcomeIconPlaceholder: "Enter emoji",
   welcomeUpload: "Upload Image",
