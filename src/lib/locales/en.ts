@@ -245,6 +245,7 @@ export const en: Record<LocaleKeys, string> = {
   passwordHint: "8+ characters including a number",
   loginError: "This account does not exist.",
   oauthLoginError: "This account does not exist.",
+  oauthSignupExistsError: "This account already exists. Log in instead.",
   forgotPassword: "Forgot password?",
   forgotPasswordDesc: "Enter your account email and we'll send you a password reset link.",
   sendPasswordResetEmail: "Send reset email",

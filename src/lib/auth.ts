@@ -4,12 +4,14 @@ import Credentials from "next-auth/providers/credentials";
 
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 const IDENTITY_VERSION = 1;
+type UserSyncFlow = "login" | "signup" | "sync";
 
 async function syncUserIdentity(user: {
   id: string;
   email: string;
   name?: string | null;
   image?: string | null;
+  flow: UserSyncFlow;
 }) {
   const response = await fetch(`${WORKER_URL}/api/user`, {
     method: "POST",
@@ -27,9 +29,26 @@ async function syncUserIdentity(user: {
   return data.user_id;
 }
 
+function oauthErrorRedirect(flow: UserSyncFlow, error?: string) {
+  if (flow === "signup") {
+    return error === "account_exists"
+      ? "/dashboard?error=oauth_signup_exists"
+      : "/dashboard?error=oauth_signup";
+  }
+  return "/dashboard?error=oauth_login";
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Google({
+      id: "google-login",
+      name: "Google",
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+    Google({
+      id: "google-signup",
+      name: "Google",
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
@@ -70,13 +89,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ account, profile, user }) {
-      if (account?.provider !== "google") return true;
+      const googleFlow = account?.provider === "google-signup"
+        ? "signup"
+        : account?.provider === "google-login"
+          ? "login"
+          : null;
+      if (!googleFlow) return true;
       if (
         profile?.email_verified !== true
         || typeof profile.email !== "string"
         || typeof user.id !== "string"
       ) {
-        return "/dashboard?error=oauth";
+        return oauthErrorRedirect(googleFlow);
       }
       try {
         user.id = await syncUserIdentity({
@@ -84,10 +108,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: profile.email,
           name: user.name,
           image: user.image,
+          flow: googleFlow,
         });
         return true;
-      } catch {
-        return "/dashboard?error=oauth";
+      } catch (error) {
+        return oauthErrorRedirect(googleFlow, error instanceof Error ? error.message : undefined);
       }
     },
     async jwt({ token, user }) {
@@ -104,6 +129,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             email,
             name: token.name,
             image: typeof token.picture === "string" ? token.picture : null,
+            flow: "sync",
           });
           token.identityVersion = IDENTITY_VERSION;
         } catch {}

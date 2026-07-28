@@ -243,6 +243,7 @@ export const ko = {
   passwordHint: "8자 이상, 숫자 포함",
   loginError: "존재하지 않는 계정입니다.",
   oauthLoginError: "존재하지 않는 계정입니다.",
+  oauthSignupExistsError: "이미 존재하는 계정입니다. 로그인해 주세요.",
   forgotPassword: "비밀번호를 잊으셨나요?",
   forgotPasswordDesc: "가입한 이메일을 입력하면 비밀번호 재설정 링크를 보내드려요.",
   sendPasswordResetEmail: "재설정 메일 보내기",

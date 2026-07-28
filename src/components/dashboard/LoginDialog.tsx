@@ -130,7 +130,7 @@ export function LoginDialog({ onClose, initialError = "", initialTab = "login" }
       sessionStorage.setItem("letmetellu_auth_flow", tab);
     } catch {}
     try {
-      await signIn("google", {
+      await signIn(tab === "login" ? "google-login" : "google-signup", {
         callbackUrl: tab === "login" ? "/dashboard" : "/dashboard?onboarding=true",
       });
     } catch {

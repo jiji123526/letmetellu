@@ -446,6 +446,8 @@ export default function DashboardPage() {
       if (value === "login" || value === "signup") storedAuthFlow = value;
     } catch {}
     const signupFlow = storedAuthFlow === "signup"
+      || authError === "oauth_signup"
+      || authError === "oauth_signup_exists"
       || params.get("onboarding") === "true"
       || callbackPath.includes("onboarding=true");
     const authEntry = params.get("login") === "true" || authError || params.has("callbackUrl");
@@ -453,7 +455,17 @@ export default function DashboardPage() {
     if (shouldOpenLogin) {
       setShowGuestOnboarding(false);
       setLoginInitialTab(signupFlow ? "signup" : "login");
-      setLoginError(authError ? t(signupFlow ? "signupError" : "oauthLoginError") : "");
+      setLoginError(
+        authError
+          ? t(
+            authError === "oauth_signup_exists"
+              ? "oauthSignupExistsError"
+              : signupFlow
+                ? "signupError"
+                : "oauthLoginError"
+          )
+          : ""
+      );
       setShowLogin(true);
     }
     if (shouldOpenLogin || status === "authenticated") {

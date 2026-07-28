@@ -106,8 +106,11 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json() as { id: string; email: string; name?: string; image?: string };
+    const body = await request.json() as { id: string; email: string; name?: string; image?: string; flow?: "login" | "signup" | "sync" };
     const { id, email, name, image } = body;
+    const flow = body.flow === "login" || body.flow === "signup" || body.flow === "sync"
+      ? body.flow
+      : "sync";
 
     if (!id || !email) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -117,6 +120,17 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     const existingUser = await env.DB.prepare(
       "SELECT id FROM users WHERE lower(email) = ? LIMIT 1"
     ).bind(normalizedEmail).first<{ id: string }>();
+
+    if (flow === "login" && !existingUser) {
+      return Response.json({ error: "user_not_found" }, { status: 404 });
+    }
+    if (flow === "signup" && existingUser) {
+      return Response.json({ error: "account_exists" }, { status: 409 });
+    }
+    if (flow === "sync" && !existingUser) {
+      return Response.json({ error: "user_not_found" }, { status: 404 });
+    }
+
     const canonicalUserId = existingUser?.id || id;
 
     if (existingUser) {
