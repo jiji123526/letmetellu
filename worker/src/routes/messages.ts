@@ -2,6 +2,7 @@ import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
+import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { verifyRoomToken } from "./passcode";
 
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
@@ -14,7 +15,7 @@ async function getAnonymousRequesterUid(request: Request, env: Env): Promise<str
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { nick, text, channel_id, image, reply_to, fingerprint, report, reported_msg_id } = body;
+    const { nick, text, channel_id, image, upload_id, reply_to, fingerprint, report, reported_msg_id } = body;
 
     if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -89,6 +90,24 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Insert message (+ gallery if image) in a single batch
     const id = crypto.randomUUID();
+    if (image) {
+      if (typeof upload_id !== "string" || !upload_id) {
+        return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
+      }
+      const attachment = await attachUploadTicket({
+        env,
+        ticketId: upload_id,
+        imageUrl: image as string,
+        channelId: channel_id as string,
+        purpose: "message",
+        uid: isChannelOwner ? null : requesterUid,
+        authUid: isChannelOwner ? requesterUid : null,
+        attachedRecordId: id,
+      });
+      if (!attachment.ok) {
+        return Response.json({ error: attachment.error }, { status: 400 });
+      }
+    }
     // D1's datetime('now') default has only second precision. Persist an
     // explicit millisecond timestamp so consecutive photo messages keep their
     // original order after reconnecting.
@@ -181,6 +200,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       ]);
     }
     await deleteMediaByUrl(env, msg.image as string | null | undefined);
+    await deleteUploadTicketByAttachment(env, "message", message_id as string);
 
     // Broadcast deletion with payload
     const broadcastChannelId = (channel_id as string).endsWith("_live")

@@ -112,6 +112,7 @@ Before opening credential signup to the public, verify a sending domain and fini
 - New-message and DM length, DM toggles, upload type/size, freeze state, blocked users and banned words are enforced server-side.
 - Message edits reuse the same validation boundary as message creation, including freeze, block, banned-word and rate-limit checks.
 - Message-attached and DM-attached media are deleted from R2 with their source records; passcode-protected media now requires a current room token.
+- Public chat and DM uploads now require a signed anonymous or owner identity, use durable per-channel upload quotas and must present a matching upload ticket before media can be attached.
 - Failed credential logins are throttled independently by hashed email and IP identifiers.
 - DMs are sent only to owner-authenticated WebSocket connections.
 - SQL uses bound parameters.
@@ -123,16 +124,16 @@ Before opening credential signup to the public, verify a sending domain and fini
 - Attached message and DM media is removed from R2 when the source content is deleted, and passcode-protected media now checks room access on read.
 - DM creation now enforces the channel DM toggle, petition-only behavior for blocked users, rate limits, message length and banned-word checks in the Worker.
 - Anonymous message, reaction, report and DM mutations now derive identity from a Worker-signed token instead of a raw client-provided `uid`.
+- Public-channel uploads now use durable upload tickets, per-channel quotas and pending-object cleanup instead of allowing unattached anonymous R2 writes.
 
 ### Open security findings — 2026-07-26
 
 > **Release warning:** The items below were confirmed by code review and are
-> not fixed yet. Storage-abuse prevention and server-side report hardening
-> should be completed before a public launch.
+> not fixed yet. Server-side report hardening should be completed before a
+> public launch.
 
 | Priority | Finding | Current risk | Required direction |
 | --- | --- | --- | --- |
-| High | Public-channel uploads have no durable rate limit or upload ticket | Automated callers can create unreferenced R2 objects and increase storage/request cost | Require signed identity, enforce user/IP/channel quotas and delete uploads not attached to a message |
 | High | Link preview fetch accepts an arbitrary URL | The Worker can be abused for SSRF-like requests, redirects and large downloads | Allow only HTTP(S), reject private/local destinations before and after redirects, and add timeout, response-size and rate limits |
 | Medium | Reports rely on browser-local deduplication | A caller can submit duplicate or fabricated report messages directly | Validate the target, enforce one active report per signed reporter/target and add durable throttling |
 | Medium | Message rate limiting is isolate-local and keyed by mutable UID | Limits reset across isolates/restarts and can be bypassed by changing UID | Move enforcement to a channel Durable Object, D1 or Cloudflare Rate Limiting and key it with signed identity plus IP HMAC |
@@ -148,19 +149,16 @@ build and audit.
 
 Recommended remediation order:
 
-1. upload quotas and durable attachment enforcement;
-2. server-side report policy;
-3. preview-fetch SSRF controls;
-4. durable rate limits;
-5. dependency upgrades and response security headers.
+1. server-side report policy;
+2. preview-fetch SSRF controls;
+3. durable rate limits;
+4. dependency upgrades and response security headers.
 
 ### 미해결 보안 점검 결과 — 2026-07-26
 
 아래 항목은 코드 검토로 확인했으며 아직 수정되지 않았습니다. 공개 출시
-전에는 업로드 남용 방지와 신고 정책 강화를 먼저 적용해야 합니다.
+전에는 신고 정책 강화가 먼저 필요합니다.
 
-- **높음:** 공개 채널 업로드에는 지속적인 rate limit과 업로드 티켓이 없어
-  메시지에 연결되지 않은 R2 파일을 대량으로 만들 수 있습니다.
 - **높음:** 링크 미리보기 Worker가 임의 URL을 가져오므로 프로토콜·사설
   주소·리디렉션·응답 크기·timeout·rate limit 검사가 필요합니다.
 - **중간:** 신고 중복 제한은 브라우저 저장값에 의존하고, 메시지 rate
@@ -168,8 +166,8 @@ Recommended remediation order:
 - **중간:** CSP, `nosniff`, Referrer Policy, Permissions Policy, 프레임
   제한과 HSTS를 명시적으로 설정하지 않았습니다.
 
-수정 순서는 업로드 쿼터와 지속형 첨부 관리 → 신고 정책 →
-미리보기 SSRF 방어 → 지속형 rate limit → 의존성·보안 헤더
+수정 순서는 신고 정책 → 미리보기 SSRF 방어 →
+지속형 rate limit → 의존성·보안 헤더
 순서를 권장합니다. 강제 `npm audit fix`는 Next.js 9로 잘못
 다운그레이드하므로 사용하지 않습니다.
 

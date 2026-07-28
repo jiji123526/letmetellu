@@ -120,7 +120,7 @@ export function AdminPanel(props: AdminPanelProps) {
     let uploadedImage: string | null = null;
     if (profileImageFile) {
       try {
-        uploadedImage = await uploadAdminImage(profileImageFile, channelId);
+        uploadedImage = (await uploadAdminImage(profileImageFile, channelId, "channel-asset"))?.url || null;
       } catch {
         uploadedImage = null;
       }
@@ -491,7 +491,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 let imageUrl = selectedBackgroundType === "image" ? selectedBackgroundImage : null;
                 if (selectedBackgroundType === "image" && backgroundImageFile) {
                   try {
-                    imageUrl = await uploadAdminImage(backgroundImageFile, channelId);
+                    imageUrl = (await uploadAdminImage(backgroundImageFile, channelId, "channel-asset"))?.url || null;
                   } catch {
                     imageUrl = null;
                   }
@@ -650,8 +650,8 @@ export function AdminPanel(props: AdminPanelProps) {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     e.target.value = "";
-                    const url = await uploadAdminImage(file, channelId);
-                    if (url) setWelcomeIcon(url);
+                    const upload = await uploadAdminImage(file, channelId, "channel-asset");
+                    if (upload?.url) setWelcomeIcon(upload.url);
                   }} />
                 </div>
               </div>

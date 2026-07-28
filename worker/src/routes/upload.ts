@@ -1,4 +1,6 @@
 import { Env } from "../types";
+import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { verifyRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -12,6 +14,10 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   const channelId = new URL(request.url).searchParams.get("channel");
   if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
+  const purpose = (new URL(request.url).searchParams.get("purpose") || "message") as UploadPurpose;
+  if (!["message", "dm", "channel-asset"].includes(purpose)) {
+    return Response.json({ error: "invalid upload purpose" }, { status: 400 });
+  }
 
   // Passcode gate
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
@@ -24,6 +30,9 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     ownerUpload = channel?.owner_uid === internalUserId;
     if (!ownerUpload) return Response.json({ error: "not owner" }, { status: 403 });
   }
+  if (purpose === "channel-asset" && !ownerUpload) {
+    return Response.json({ error: "not owner" }, { status: 403 });
+  }
 
   const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
   if (!ownerUpload && passcode) {
@@ -33,6 +42,27 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
       return Response.json({ error: "invalid token" }, { status: 403 });
     }
+  }
+
+  const anonymousPayload = ownerUpload
+    ? null
+    : await verifyAnonymousIdentityToken(request.headers.get("X-Anonymous-Token") || "", env);
+  if (!ownerUpload && !anonymousPayload) {
+    return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+  }
+
+  await cleanupExpiredUploadTickets(env);
+
+  const ipHash = await hashUploadIp(getUploadRequestIp(request), env);
+  const quota = await enforceUploadQuota({
+    env,
+    channelId,
+    uid: ownerUpload ? null : anonymousPayload!.uid,
+    ipHash,
+    purpose,
+  });
+  if (!quota.ok) {
+    return Response.json({ error: quota.error }, { status: 429 });
   }
 
   const contentType = request.headers.get("Content-Type") || "image/jpeg";
@@ -72,7 +102,21 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     httpMetadata: { contentType },
   });
 
-  return Response.json({ ok: true, key, url: `/api/media/${key}` });
+  if (purpose === "channel-asset") {
+    return Response.json({ ok: true, key, url: `/api/media/${key}` });
+  }
+
+  const ticket = await createUploadTicket({
+    env,
+    key,
+    channelId,
+    uid: ownerUpload ? internalUserId : anonymousPayload!.uid,
+    authUid: ownerUpload ? internalUserId : null,
+    ipHash,
+    purpose,
+  });
+
+  return Response.json({ ok: true, key, upload_id: ticket.id, url: `/api/media/${key}` });
 }
 
 // Serve uploaded media
@@ -93,6 +137,18 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
     mediaSuffix, mediaSuffix,
     mediaSuffix, mediaSuffix,
   ).first<{ channel_id: string }>();
+  if (!mediaRow) {
+    const pendingTicket = await env.DB.prepare(
+      "SELECT purpose, status, expires_at FROM upload_tickets WHERE key = ? LIMIT 1"
+    ).bind(decodedKey).first<{ purpose: UploadPurpose; status: string; expires_at: string }>();
+    if (pendingTicket?.status === "pending" && pendingTicket.purpose !== "channel-asset") {
+      if (pendingTicket.expires_at <= new Date().toISOString()) {
+        await env.MEDIA.delete(decodedKey).catch(() => {});
+        await env.DB.prepare("DELETE FROM upload_tickets WHERE key = ?").bind(decodedKey).run();
+      }
+      return new Response("not found", { status: 404 });
+    }
+  }
 
   if (mediaRow?.channel_id) {
     const parentChannelId = mediaRow.channel_id.endsWith("_live")

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMessageMedia, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
+import { clearRoomToken, decorateMessageMedia, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
@@ -1563,8 +1563,22 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       setDmMode(false);
       const dmChannelId = inLiveMode ? `${channelId}_live` : channelId;
-      const dmImage = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId) || undefined : undefined;
-      const result = await sendDm({ uid, text, channel_id: dmChannelId, image: dmImage, fingerprint: myFingerprint });
+      const dmUpload = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId, "dm") : null;
+      if (photos.length > 0 && !dmUpload) {
+        setInput(text);
+        setDmMode(true);
+        setPendingPhotos(photos);
+        showMutationError("upload_failed");
+        return;
+      }
+      const result = await sendDm({
+        uid,
+        text,
+        channel_id: dmChannelId,
+        image: dmUpload?.url,
+        upload_id: dmUpload?.uploadId,
+        fingerprint: myFingerprint,
+      });
       if (!result?.ok) {
         setInput(text);
         setDmMode(true);
@@ -1601,8 +1615,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         // Caption stays on the first image, while every image in a reply batch
         // remains attached to the same parent message.
         for (let index = 0; index < photos.length; index += 1) {
-          const image = await uploadImage(photos[index].blob, activeChannelId);
-          if (!image) {
+          const upload = effectiveAdmin && authUserId
+            ? await uploadAdminImage(photos[index].blob, activeChannelId, "message")
+            : await uploadImage(photos[index].blob, activeChannelId, "message");
+          if (!upload) {
             sendError = "upload_failed";
             unsentPhotos = photos.slice(index);
             break;
@@ -1612,7 +1628,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             uid: senderUid,
             text: index === 0 ? text : "",
             channel_id: activeChannelId,
-            image,
+            image: upload.url,
+            upload_id: upload.uploadId,
             reply_to: savedReplyTo,
             fingerprint: myFingerprint,
           });

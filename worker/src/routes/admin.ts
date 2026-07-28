@@ -1,17 +1,19 @@
 import { Env } from "../types";
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
+import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { invalidatePasscodeAttempts } from "./passcode";
 
 export async function deleteChannel(channelId: string, env: Env) {
   const channelIds = [channelId, `${channelId}_live`];
   const placeholders = channelIds.map(() => "?").join(", ");
-  const [messageMedia, galleryMedia, dmMedia, channelMedia, configMedia] = await Promise.all([
+  const [messageMedia, galleryMedia, dmMedia, channelMedia, configMedia, uploadTickets] = await Promise.all([
     env.DB.prepare(`SELECT image FROM messages WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
     env.DB.prepare(`SELECT image FROM gallery WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
     env.DB.prepare(`SELECT image FROM dm WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
     env.DB.prepare(`SELECT profile_image, background_image FROM channels WHERE id IN (${placeholders}) AND (profile_image IS NOT NULL OR background_image IS NOT NULL)`).bind(...channelIds).all(),
     env.DB.prepare(`SELECT text FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds).all(),
+    env.DB.prepare(`SELECT key FROM upload_tickets WHERE channel_id IN (${placeholders})`).bind(...channelIds).all(),
   ]);
 
   const mediaKeys = new Set<string>();
@@ -29,6 +31,9 @@ export async function deleteChannel(channelId: string, env: Env) {
       if (match[1]) mediaKeys.add(match[1]);
     }
   }
+  for (const row of uploadTickets.results || []) {
+    if (typeof row.key === "string" && row.key) mediaKeys.add(row.key);
+  }
 
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM messages WHERE channel_id IN (${placeholders})`).bind(...channelIds),
@@ -38,6 +43,7 @@ export async function deleteChannel(channelId: string, env: Env) {
     env.DB.prepare(`DELETE FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM moderators WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM banned_words WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+    env.DB.prepare(`DELETE FROM upload_tickets WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM user_recent_channels WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM channels WHERE id IN (${placeholders})`).bind(...channelIds),
   ]);
@@ -183,7 +189,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const { results: mediaRows } = await env.DB.prepare(
         "SELECT image FROM messages WHERE channel_id = ? AND (id = ? OR reply_to = ?) AND image IS NOT NULL"
       ).bind(channel_id, message_id, message_id).all<{ image: string }>();
-      const deletedIds = [message_id, ...replies.map((reply) => reply.id)];
+      const deletedIds = [message_id as string, ...replies.map((reply) => reply.id)];
       const mediaKeys = [...new Set(
         mediaRows
           .map((row) => extractMediaKey(row.image))
@@ -200,7 +206,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
           .bind(message_id, channel_id),
       ]);
-      await Promise.all(mediaKeys.map((key) => env.MEDIA.delete(key).catch(() => {})));
+      await Promise.all([
+        ...deletedIds.map((id) => deleteUploadTicketByAttachment(env, "message", id)),
+        ...mediaKeys.map((key) => env.MEDIA.delete(key).catch(() => {})),
+      ]);
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
@@ -219,6 +228,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
         .bind(dm_id, channel_id).run();
       await deleteMediaByUrl(env, dm?.image);
+      await deleteUploadTicketByAttachment(env, "dm", dm_id as string);
 
       const doId2 = env.CHAT_ROOM.idFromName(channel_id);
       const stub2 = env.CHAT_ROOM.get(doId2);
@@ -571,6 +581,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const { results: liveDmMedia } = await env.DB.prepare(
         "SELECT image FROM dm WHERE channel_id = ? AND image IS NOT NULL"
       ).bind(liveChannelId).all();
+      const { results: liveUploadTickets } = await env.DB.prepare(
+        "SELECT key FROM upload_tickets WHERE channel_id = ?"
+      ).bind(liveChannelId).all<{ key: string }>();
 
       // Delete R2 objects for live media
       const allMedia = [...(liveMedia || []), ...(liveGalleryMedia || []), ...(liveDmMedia || [])];
@@ -583,6 +596,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           }
         }
       }
+      for (const row of liveUploadTickets || []) {
+        if (row.key) {
+          try { await env.MEDIA.delete(row.key); } catch {}
+        }
+      }
 
       // Delete all live channel data
       await env.DB.prepare("DELETE FROM messages WHERE channel_id = ?").bind(liveChannelId).run();
@@ -590,6 +608,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("DELETE FROM dm WHERE channel_id = ?").bind(liveChannelId).run();
       await env.DB.prepare("DELETE FROM blocked WHERE channel_id = ?").bind(liveChannelId).run();
       await env.DB.prepare("DELETE FROM config WHERE channel_id = ?").bind(liveChannelId).run();
+      await env.DB.prepare("DELETE FROM upload_tickets WHERE channel_id = ?").bind(liveChannelId).run();
       // Remove the temporary live channel entry
       await env.DB.prepare("DELETE FROM channels WHERE id = ?").bind(liveChannelId).run();
 

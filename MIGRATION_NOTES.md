@@ -159,6 +159,21 @@ email address.
 - Do not rename or delete the migration file after production use; existing
   environments may already have it recorded in Wrangler's migration history.
 
+#### `0016_upload_tickets.sql`
+
+Adds durable upload tracking for chat and DM media:
+
+- `upload_tickets` records the uploaded R2 key, target channel, uploader
+  identity, IP hash, purpose and expiry.
+- Pending message and DM uploads expire automatically and are deleted from R2
+  on the next upload cleanup pass if they were never attached.
+- Worker routes now use the table for per-channel durable upload quotas and to
+  prove that a message or DM image was created by the same anonymous or owner
+  identity that is attaching it.
+
+Apply `0016` before deploying the Worker version that enforces upload tickets
+for message or DM image attachments.
+
 ### Operational checks
 
 After a migration:

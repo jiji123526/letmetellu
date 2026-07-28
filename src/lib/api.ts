@@ -3,6 +3,8 @@ import { generateFingerprint } from "./fingerprint";
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 const ANONYMOUS_TOKEN_KEY = "letsplay_anonymous_token";
+type UploadPurpose = "message" | "dm" | "channel-asset";
+type UploadResult = { url: string; uploadId?: string };
 
 function getParentChannelId(channelId: string): string {
   return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
@@ -273,6 +275,7 @@ export async function sendMessage(payload: {
   text: string;
   channel_id: string;
   image?: string;
+  upload_id?: string;
   reply_to?: string;
   fingerprint?: string;
 }) {
@@ -294,6 +297,7 @@ export async function sendMessageAsAdmin(payload: {
   text: string;
   channel_id: string;
   image?: string;
+  upload_id?: string;
   reply_to?: string;
   fingerprint?: string;
   report?: boolean;
@@ -379,7 +383,15 @@ export async function searchMessages(channelId: string, query: string) {
   return res.json();
 }
 
-export async function sendDm(payload: { uid: string; nick?: string; text: string; channel_id: string; image?: string; fingerprint?: string }) {
+export async function sendDm(payload: {
+  uid: string;
+  nick?: string;
+  text: string;
+  channel_id: string;
+  image?: string;
+  upload_id?: string;
+  fingerprint?: string;
+}) {
   if (IS_MOCK) return { ok: true };
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch(`${WORKER_URL}/api/dm`, {
@@ -411,30 +423,50 @@ export async function toggleReactionAsAdmin(payload: { uid: string; message_id: 
   return res.json();
 }
 
-export async function uploadImage(blob: Blob, channelId: string): Promise<string | null> {
-  if (IS_MOCK) return URL.createObjectURL(blob);
+export async function uploadImage(
+  blob: Blob,
+  channelId: string,
+  purpose: Exclude<UploadPurpose, "channel-asset"> = "message",
+): Promise<UploadResult | null> {
+  if (IS_MOCK) return { url: URL.createObjectURL(blob) };
   const parentChannelId = getParentChannelId(channelId);
-  const res = await fetch(`${WORKER_URL}/api/upload?channel=${channelId}`, {
+  const params = new URLSearchParams({ channel: channelId, purpose });
+  const res = await fetch(`${WORKER_URL}/api/upload?${params.toString()}`, {
     method: "POST",
-    headers: { "Content-Type": blob.type || "image/jpeg", ...roomTokenHeaders(parentChannelId) },
+    headers: {
+      "Content-Type": blob.type || "image/jpeg",
+      ...roomTokenHeaders(parentChannelId),
+      ...anonymousIdentityHeaders(),
+    },
     body: blob,
   });
-  const result = await res.json() as { ok?: boolean; key?: string };
+  const result = await res.json() as { ok?: boolean; key?: string; upload_id?: string; url?: string };
   if (result.ok && result.key) {
-    return `${WORKER_URL}/api/media/${result.key}`;
+    return {
+      url: result.url ? `${WORKER_URL}${result.url}` : `${WORKER_URL}/api/media/${result.key}`,
+      uploadId: result.upload_id,
+    };
   }
   return null;
 }
 
-export async function uploadAdminImage(blob: Blob, channelId: string): Promise<string | null> {
-  const res = await fetch(`/api/upload?channel=${encodeURIComponent(channelId)}`, {
+export async function uploadAdminImage(
+  blob: Blob,
+  channelId: string,
+  purpose: UploadPurpose = "channel-asset",
+): Promise<UploadResult | null> {
+  const params = new URLSearchParams({ channel: channelId, purpose });
+  const res = await fetch(`/api/upload?${params.toString()}`, {
     method: "POST",
     headers: { "Content-Type": blob.type || "image/jpeg" },
     body: blob,
   });
-  const result = await res.json() as { ok?: boolean; key?: string };
+  const result = await res.json() as { ok?: boolean; key?: string; upload_id?: string; url?: string };
   if (result.ok && result.key) {
-    return `${WORKER_URL}/api/media/${result.key}`;
+    return {
+      url: result.url ? `${WORKER_URL}${result.url}` : `${WORKER_URL}/api/media/${result.key}`,
+      uploadId: result.upload_id,
+    };
   }
   return null;
 }

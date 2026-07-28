@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, checkRateLimit, getChannelPasscodeInfo } from "../lib/validation";
 import { verifyRoomToken } from "./passcode";
 
@@ -15,7 +16,7 @@ async function getAnonymousRequesterUid(request: Request, env: Env): Promise<str
 export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { nick, text, channel_id, image, fingerprint } = body;
+    const { nick, text, channel_id, image, upload_id, fingerprint } = body;
 
     if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -92,6 +93,24 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
 
     const id = crypto.randomUUID();
+    if (image) {
+      if (typeof upload_id !== "string" || !upload_id) {
+        return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
+      }
+      const attachment = await attachUploadTicket({
+        env,
+        ticketId: upload_id,
+        imageUrl: image as string,
+        channelId: channel_id as string,
+        purpose: "dm",
+        uid: requesterUid,
+        authUid: null,
+        attachedRecordId: id,
+      });
+      if (!attachment.ok) {
+        return Response.json({ error: attachment.error }, { status: 400 });
+      }
+    }
     const created_at = new Date().toISOString();
     await env.DB.prepare(
       "INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?)"

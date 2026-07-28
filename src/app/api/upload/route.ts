@@ -7,9 +7,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const channelId = new URL(request.url).searchParams.get("channel");
+  const requestUrl = new URL(request.url);
+  const channelId = requestUrl.searchParams.get("channel");
+  const purpose = requestUrl.searchParams.get("purpose") || "channel-asset";
   if (!channelId) {
     return NextResponse.json({ error: "missing channel" }, { status: 400 });
+  }
+  if (!["message", "dm", "channel-asset"].includes(purpose)) {
+    return NextResponse.json({ error: "invalid purpose" }, { status: 400 });
   }
   const contentType = request.headers.get("Content-Type") || "";
   const contentLength = Number(request.headers.get("Content-Length") || "0");
@@ -21,12 +26,15 @@ export async function POST(request: Request) {
   }
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
-  const response = await fetch(`${workerUrl}/api/upload?channel=${encodeURIComponent(channelId)}`, {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const clientIp = forwardedFor?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "";
+  const response = await fetch(`${workerUrl}/api/upload?channel=${encodeURIComponent(channelId)}&purpose=${encodeURIComponent(purpose)}`, {
     method: "POST",
     headers: {
       "Content-Type": contentType,
       "X-Internal-Token": process.env.INTERNAL_SECRET || "",
       "X-User-Id": session.user.id,
+      ...(clientIp ? { "X-Client-IP": clientIp } : {}),
     },
     body: await request.arrayBuffer(),
     cache: "no-store",
