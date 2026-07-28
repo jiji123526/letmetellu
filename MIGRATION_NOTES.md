@@ -147,6 +147,18 @@ the original image is rendered unchanged apart from the independently selected
 dark overlay. Apply `0014` before deploying Worker or frontend code that saves
 these fields.
 
+#### `0015_deleted_accounts.sql`
+
+Adds a `deleted_accounts` tombstone table keyed by an HMAC of the normalized
+email address.
+
+- The table was introduced for a temporary "deleted accounts cannot be reused"
+  policy.
+- Current application code no longer enforces that policy, so the table is now
+  legacy state and may remain empty or unused in new deployments.
+- Do not rename or delete the migration file after production use; existing
+  environments may already have it recorded in Wrangler's migration history.
+
 ### Operational checks
 
 After a migration:

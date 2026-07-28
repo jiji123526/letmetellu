@@ -31,7 +31,7 @@ Cloudflare Worker ── realtime room state ───────> Durable Obje
 | Layer | Technology |
 | --- | --- |
 | Frontend | Next.js 16 App Router, React 19, Tailwind CSS |
-| Authentication | Auth.js / NextAuth v5, Google OAuth, existing credential accounts |
+| Authentication | Auth.js / NextAuth v5, split Google OAuth login/signup, existing credential accounts |
 | API | Cloudflare Workers |
 | Database | Cloudflare D1 |
 | Realtime | one `ChatRoom` Durable Object per channel |
@@ -56,7 +56,7 @@ Normal channel and live-session traffic share the parent channel's Durable Objec
 
 ## Authentication status
 
-- Google OAuth is the supported signup path.
+- Google OAuth login and signup use separate Auth.js providers. Google login requires an existing account; Google signup creates a new account or returns an account-exists error.
 - The Credentials provider remains available for existing email/password accounts.
 - New credential signup and password-reset email are enabled in Resend sandbox mode for the configured test recipient.
 - New accounts remain pending until a single-use, 30-minute email link is confirmed.
@@ -546,7 +546,16 @@ INTERNAL_SECRET=<same-value-as-worker-secret>
 APP_VERSION=<optional-local-version-label>
 ```
 
+Set `AUTH_URL` to the deployed frontend origin in production, for example `https://letmetellu.vercel.app`.
+
 Configure the same frontend variables in Vercel. `VERCEL_GIT_COMMIT_SHA` is supplied by Vercel and is used as the deployed version identifier.
+
+The Google OAuth client must authorize both current callback URIs:
+
+- `https://<your-domain>/api/auth/callback/google-login`
+- `https://<your-domain>/api/auth/callback/google-signup`
+
+Keep the legacy `https://<your-domain>/api/auth/callback/google` redirect URI only while older deployments still depend on it.
 
 Configure the Worker secret:
 
@@ -594,6 +603,7 @@ Current migrations:
 | `0012_default_channels_private.sql` | makes existing normal channels private on owner profiles |
 | `0013_password_reset_tokens.sql` | single-use expiring credential password-reset tokens |
 | `0014_channel_background.sql` | channel chat background mode, color, image, overlay and optional blur |
+| `0015_deleted_accounts.sql` | legacy deleted-account tombstone table retained for already migrated environments |
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for schema details and the deployment runbook.
 
