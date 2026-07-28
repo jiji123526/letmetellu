@@ -704,7 +704,7 @@ export default function DashboardPage() {
 
   return (
     <main className="dashboard-font-scaled min-h-dvh" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
-      <div className={`max-w-[480px] mx-auto min-h-dvh md:border-x ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
+      <div className={`max-w-[480px] mx-auto min-h-dvh md:border-x flex flex-col ${isLoggedIn ? "pb-24" : ""}`} style={{ borderColor: "var(--hairline)" }}>
         <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
           <div className="h-[64px] px-4 flex items-center justify-between">
             {activeItems.length > 0 ? (
