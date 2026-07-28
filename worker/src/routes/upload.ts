@@ -129,18 +129,18 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
   const decodedKey = decodeURIComponent(key);
   const mediaSuffix = `/api/media/${decodedKey}`;
   const mediaRow = await env.DB.prepare(`
-    SELECT channel_id FROM (
-      SELECT channel_id FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+    SELECT channel_id, source_type FROM (
+      SELECT channel_id, 'message' AS source_type FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
       UNION
-      SELECT channel_id FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+      SELECT channel_id, 'gallery' AS source_type FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
       UNION
-      SELECT channel_id FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
+      SELECT channel_id, 'dm' AS source_type FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
       UNION
-      SELECT id AS channel_id FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ?
+      SELECT id AS channel_id, 'channel-profile' AS source_type FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ?
       UNION
-      SELECT id AS channel_id FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ?
+      SELECT id AS channel_id, 'channel-background' AS source_type FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ?
       UNION
-      SELECT channel_id FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0
+      SELECT channel_id, 'channel-config' AS source_type FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0
     )
     LIMIT 1
   `).bind(
@@ -150,7 +150,7 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
     mediaSuffix, mediaSuffix,
     mediaSuffix, mediaSuffix,
     mediaSuffix,
-  ).first<{ channel_id: string }>();
+  ).first<{ channel_id: string; source_type: string }>();
   if (!mediaRow) {
     const pendingTicket = await env.DB.prepare(
       "SELECT purpose, status, expires_at FROM upload_tickets WHERE key = ? LIMIT 1"
@@ -164,7 +164,8 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
     }
   }
 
-  if (mediaRow?.channel_id) {
+  const requiresRoomAccess = mediaRow?.source_type !== "channel-profile";
+  if (mediaRow?.channel_id && requiresRoomAccess) {
     const parentChannelId = mediaRow.channel_id.endsWith("_live")
       ? mediaRow.channel_id.replace(/_live$/, "")
       : mediaRow.channel_id;
@@ -189,7 +190,14 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
 
   const headers = new Headers();
   headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
-  headers.set("Cache-Control", mediaRow?.channel_id ? "private, no-store" : "public, max-age=31536000, immutable");
+  headers.set(
+    "Cache-Control",
+    mediaRow?.source_type === "channel-profile"
+      ? "public, max-age=31536000, immutable"
+      : mediaRow?.channel_id
+        ? "private, no-store"
+        : "public, max-age=31536000, immutable",
+  );
 
   return new Response(object.body, { headers });
 }
