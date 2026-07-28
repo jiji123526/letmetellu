@@ -35,6 +35,7 @@ interface AdminPanelProps {
   }) => void;
   onNameChange: (name: string) => void;
   onProfileImageChange: (url: string) => void;
+  onPasscodeChange: (hasPasscode: boolean, hint: string) => void;
   onNoticeChange: (notice: string) => void;
   onWelcomeChange: (config: string) => void;
   welcomeConfig: string;
@@ -63,7 +64,7 @@ function guideParts(value: string) {
 }
 
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onPasscodeChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
   const { t } = useLocale();
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
@@ -76,6 +77,8 @@ export function AdminPanel(props: AdminPanelProps) {
   const [selectedBackgroundBlur, setSelectedBackgroundBlur] = useState(backgroundBlur);
   const [savingBackground, setSavingBackground] = useState(false);
   const [backgroundError, setBackgroundError] = useState("");
+  const [savingPasscode, setSavingPasscode] = useState(false);
+  const [passcodeError, setPasscodeError] = useState("");
   const [visibleOnProfile, setVisibleOnProfile] = useState(showOnProfile);
   const [profileImagePreview, setProfileImagePreview] = useState(profileImage);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
@@ -525,14 +528,34 @@ export function AdminPanel(props: AdminPanelProps) {
             <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>{t("passcodeHint")}</div>
             <input id="passcode-hint-input" style={inputStyle} type="text" defaultValue={passcodeHint} placeholder={t("passcodeHintPlaceholder")} maxLength={200} autoComplete="off" />
             <div style={{ fontSize: "11px", color: "var(--meta)", marginBottom: "12px" }}>{t("passcodeHintPublic")}</div>
-            <button style={saveBtnStyle} onClick={() => {
-              const input = document.getElementById("passcode-input") as HTMLInputElement;
-              const hintInput = document.getElementById("passcode-hint-input") as HTMLInputElement;
-              const value = input?.value?.trim() || "";
-              const hint = hintInput?.value?.trim() || "";
-              adminAction("set-passcode", channelId, { passcode: value || null, hint });
-              goBack();
-            }}>{ t("save")}</button>
+            {passcodeError && <div style={{ color: "#ff3b30", textAlign: "center", fontSize: "12px", marginBottom: "10px" }}>{passcodeError}</div>}
+            <button
+              type="button"
+              disabled={savingPasscode}
+              style={{ ...saveBtnStyle, opacity: savingPasscode ? 0.55 : 1 }}
+              onClick={async () => {
+                if (savingPasscode) return;
+                setSavingPasscode(true);
+                setPasscodeError("");
+                try {
+                  const input = document.getElementById("passcode-input") as HTMLInputElement;
+                  const hintInput = document.getElementById("passcode-hint-input") as HTMLInputElement;
+                  const value = input?.value?.trim() || "";
+                  const hint = hintInput?.value?.trim() || "";
+                  const result = await adminAction("set-passcode", channelId, { passcode: value || null, hint });
+                  if (!result?.ok) {
+                    setPasscodeError(t("sendFailed"));
+                    return;
+                  }
+                  onPasscodeChange(Boolean(value), hint);
+                  goBack();
+                } catch {
+                  setPasscodeError(t("sendFailed"));
+                } finally {
+                  setSavingPasscode(false);
+                }
+              }}
+            >{savingPasscode ? t("loading") : t("save")}</button>
           </div>
         )}
 

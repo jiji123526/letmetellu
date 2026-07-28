@@ -2754,6 +2754,10 @@ export function ChatView({ channelId }: { channelId: string }) {
             setBanner({ text: t("profileChanged"), color: bubbleColor });
             setTimeout(() => setBanner(null), 3000);
           }}
+          onPasscodeChange={(hasPasscode, hint) => {
+            setChannel((prev) => prev ? { ...prev, passcode_hint: hasPasscode ? hint || null : null } : null);
+            updateRecentChannelAppearance(channelId, { hasPasscode });
+          }}
           onNoticeChange={(noticeStr) => {
             setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
             adminAction("set-rules", channelId, { rules: noticeStr });

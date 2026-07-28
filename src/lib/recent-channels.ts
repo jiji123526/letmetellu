@@ -53,7 +53,7 @@ export function recordRecentChannel(channel: Omit<RecentChannel, "lastVisitedAt"
 
 export function updateRecentChannelAppearance(
   channelId: string,
-  changes: Partial<Pick<RecentChannel, "name" | "profileImage" | "bubbleColor">>,
+  changes: Partial<Pick<RecentChannel, "name" | "profileImage" | "bubbleColor" | "hasPasscode">>,
 ) {
   if (typeof window === "undefined") return;
   try {

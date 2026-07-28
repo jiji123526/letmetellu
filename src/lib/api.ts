@@ -156,7 +156,9 @@ export async function fetchOwnerChannels(channelId: string): Promise<{
     has_passcode: number;
   }>;
 }> {
-  const res = await fetch(`${WORKER_URL}/api/user?channel=${encodeURIComponent(channelId)}`);
+  const res = await fetch(`${WORKER_URL}/api/user?channel=${encodeURIComponent(channelId)}`, {
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(`Owner channels failed: ${res.status}`);
   return res.json();
 }
