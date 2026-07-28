@@ -1,5 +1,4 @@
 import { Env } from "../types";
-import { isDeletedAccount } from "../lib/deleted-account";
 
 // Cloudflare Workers Web Crypto currently caps PBKDF2 at 100,000 iterations.
 const PBKDF2_ITERATIONS = 100_000;
@@ -305,10 +304,6 @@ async function handleSignup(
   if (password.length < 8 || password.length > 128) {
     return Response.json({ error: "weak_password" }, { status: 400 });
   }
-  if (await isDeletedAccount(email, env)) {
-    return Response.json({ error: "account_deleted" }, { status: 403 });
-  }
-
   // Resend sandbox can deliver only to the address that owns the Resend account.
   if (email !== normalizeEmail(env.EMAIL_TEST_RECIPIENT || "")) {
     return Response.json({ ok: true, pending: true });
@@ -473,8 +468,7 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "too_many_requests" }, { status: 429 });
     }
 
-    const deletedAccount = await isDeletedAccount(email, env);
-    const user = deletedAccount ? null : await env.DB.prepare(
+    const user = await env.DB.prepare(
       "SELECT id, email, name, password_hash, email_verified_at FROM users WHERE lower(email) = ?"
     ).bind(email).first<{
       id: string;

@@ -319,7 +319,7 @@ export const en: Record<LocaleKeys, string> = {
   dashboardAddressMatchedHint: "Showing the channel that exactly matches this address.",
   dashboardAccount: "Account",
   deleteAccount: "Delete Account",
-  deleteAccountConfirm: "Deleting your account permanently removes every channel you own, including all messages and media. Your account history will also be erased, and you will not be able to sign in again with this account. This cannot be undone.",
+  deleteAccountConfirm: "Deleting your account permanently removes every channel you own, including all messages and media. Your account history will also be erased. You can create a new account later with the same login. This cannot be undone.",
   deleteAccountFailed: "Could not delete your account. Please try again.",
   dashboardCopyLink: "Copy link",
   dashboardCopied: "Copied",

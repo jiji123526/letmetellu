@@ -1,5 +1,4 @@
 import { Env } from "../types";
-import { deletedAccountKey, isDeletedAccount } from "../lib/deleted-account";
 import { deleteChannel } from "./admin";
 
 function normalizeEmail(email: string) {
@@ -81,8 +80,6 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
         .bind(userEmail).first<{ id: string; email: string }>()
       : null);
     if (!user) return Response.json({ error: "user not found" }, { status: 404 });
-    const emailKey = await deletedAccountKey(user.email, env.INTERNAL_SECRET);
-
     const { results: ownedChannels } = await env.DB.prepare(
       "SELECT id FROM channels WHERE owner_uid = ? AND id NOT LIKE '%_live'"
     ).bind(user.id).all<{ id: string }>();
@@ -97,9 +94,6 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       env.DB.prepare("UPDATE messages SET auth_uid = '' WHERE auth_uid = ?").bind(user.id),
       env.DB.prepare("UPDATE dm SET auth_uid = NULL WHERE auth_uid = ?").bind(user.id),
       env.DB.prepare("UPDATE gallery SET auth_uid = NULL WHERE auth_uid = ?").bind(user.id),
-      env.DB.prepare(
-        "INSERT OR REPLACE INTO deleted_accounts (email_key, deleted_at) VALUES (?, ?)"
-      ).bind(emailKey, Date.now()),
       env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id),
     ]);
     return Response.json({ ok: true, deleted_channels: ownedChannels.length });
@@ -120,9 +114,6 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     }
 
     const normalizedEmail = normalizeEmail(email);
-    if (await isDeletedAccount(normalizedEmail, env)) {
-      return Response.json({ error: "account_deleted" }, { status: 403 });
-    }
     const existingUser = await env.DB.prepare(
       "SELECT id FROM users WHERE lower(email) = ? LIMIT 1"
     ).bind(normalizedEmail).first<{ id: string }>();

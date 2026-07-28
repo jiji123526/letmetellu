@@ -317,7 +317,7 @@ export const ko = {
   dashboardAddressMatchedHint: "입력한 주소와 정확히 일치하는 채널을 표시합니다.",
   dashboardAccount: "계정",
   deleteAccount: "계정 삭제",
-  deleteAccountConfirm: "계정을 삭제하면 소유한 모든 채널과 메시지, 미디어 및 계정 기록이 영구 삭제되며 이 계정으로 다시 로그인할 수 없습니다. 이 작업은 되돌릴 수 없습니다.",
+  deleteAccountConfirm: "계정을 삭제하면 소유한 모든 채널과 메시지, 미디어 및 계정 기록이 영구 삭제됩니다. 같은 로그인으로 나중에 새 계정을 다시 만들 수 있습니다. 이 작업은 되돌릴 수 없습니다.",
   deleteAccountFailed: "계정을 삭제하지 못했습니다. 다시 시도해 주세요.",
   dashboardCopyLink: "링크 복사",
   dashboardCopied: "복사됨",
