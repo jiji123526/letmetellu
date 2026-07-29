@@ -2167,12 +2167,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         channel_id: channelId,
         reason,
         details,
-      }) as { ok?: boolean; error?: string };
+      }) as { ok?: boolean; error?: string; _status?: number };
 
       if (result?.ok) {
         setShowChannelReportDialog(false);
         setBanner({ text: t("channelReported"), color: "#d32f2f" });
-      } else if (result?.error === "report_exists") {
+      } else if (result?.error === "report_exists" || result?._status === 409) {
         setShowChannelReportDialog(false);
         setBanner({ text: t("reportAlreadySubmitted"), color: "var(--meta)" });
       } else if (result?.error === "channel_owner_cannot_report") {

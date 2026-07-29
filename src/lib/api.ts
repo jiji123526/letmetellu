@@ -272,7 +272,11 @@ export async function submitChannelReport(payload: {
       details: payload.details || "",
     }),
   });
-  return res.json();
+  const data = await res.json();
+  return {
+    ...data,
+    _status: res.status,
+  };
 }
 
 export async function actOnChannelReport(payload: {
