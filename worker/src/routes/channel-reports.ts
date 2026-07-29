@@ -1,5 +1,6 @@
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import {
+  broadcastModerationStateChange,
   broadcastFreezeChange,
   countOpenChannelReports,
   editReportsInboxMessage,
@@ -620,6 +621,11 @@ async function handleModerationAction(input: {
       warning_sent_at: warnedAt,
       warned_report_count: Math.max(moderation.warned_report_count, await countOpenChannelReports(existing.channel_id, input.env)),
     }, input.env);
+    await broadcastModerationStateChange(
+      existing.channel_id,
+      moderation.status === "active" ? "warned" : moderation.status,
+      input.env,
+    );
   }
 
   if (input.action === "send_suspend_notice") {
@@ -647,6 +653,11 @@ async function handleModerationAction(input: {
       suspension_notice_sent_at: suspensionSentAt,
       suspension_reason: input.resolutionNote || reportReasonLabel(existing.reason, ownerLocale),
     }, input.env);
+    await broadcastModerationStateChange(
+      existing.channel_id,
+      isOwnerModerationBlocked(moderation) ? moderation.status : "suspended",
+      input.env,
+    );
   }
 
   if (input.action === "freeze_channel") {
@@ -685,6 +696,7 @@ async function handleModerationAction(input: {
           ].join("\n"),
     });
     await broadcastFreezeChange(existing.channel_id, true, input.env);
+    await broadcastModerationStateChange(existing.channel_id, "frozen", input.env);
   }
 
   if (input.action === "unfreeze_channel") {
@@ -718,6 +730,7 @@ async function handleModerationAction(input: {
           ].join("\n"),
     });
     await broadcastFreezeChange(existing.channel_id, false, input.env);
+    await broadcastModerationStateChange(existing.channel_id, "active", input.env);
   }
 
   if (input.action === "delete_channel") {
@@ -816,6 +829,7 @@ async function handleChannelPetitionAction(input: {
           ].join("\n"),
     });
     await broadcastFreezeChange(petition.channel_id, false, input.env);
+    await broadcastModerationStateChange(petition.channel_id, "active", input.env);
     await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
 
     const updated = await fetchChannelPetitionById(petition.id, input.env);
@@ -883,6 +897,7 @@ async function handleChannelPetitionAction(input: {
           ].join("\n"),
     });
     await broadcastFreezeChange(petition.channel_id, false, input.env);
+    await broadcastModerationStateChange(petition.channel_id, "active", input.env);
   } else {
     await setChannelModeration(petition.channel_id, {
       status: "frozen",
@@ -905,6 +920,7 @@ async function handleChannelPetitionAction(input: {
             input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 검토 전까지 동결 상태가 유지됩니다.",
           ].join("\n"),
     });
+    await broadcastModerationStateChange(petition.channel_id, "frozen", input.env);
   }
 
   await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);

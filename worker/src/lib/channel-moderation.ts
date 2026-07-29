@@ -184,6 +184,20 @@ export async function broadcastFreezeChange(channelId: string, frozen: boolean, 
   }));
 }
 
+export async function broadcastModerationStateChange(
+  channelId: string,
+  status: ModerationStatus,
+  env: Env,
+): Promise<void> {
+  const parentChannelId = getParentChannelId(channelId);
+  const doId = env.CHAT_ROOM.idFromName(parentChannelId);
+  const stub = env.CHAT_ROOM.get(doId);
+  await stub.fetch(new Request("http://internal/broadcast", {
+    method: "POST",
+    body: JSON.stringify({ type: "moderation-state-change", status, live: false }),
+  }));
+}
+
 export async function sendOwnerModerationNotice(input: {
   channelId: string;
   ownerUid: string;

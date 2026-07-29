@@ -173,11 +173,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   if (isLiveChannel && liveRow) {
     responseChannel = { ...channel, is_frozen: liveRow.is_frozen ?? 0 };
   }
-  const viewerFreezeReason = !isOwner
+  const viewerModerationStatus = !isOwner
     && !isReportsOwnerViewer
-    && Number((responseChannel as { is_frozen?: number }).is_frozen || 0) === 1
-    && moderationRow?.status === "frozen"
-      ? "moderation"
+    && (moderationRow?.status === "suspended" || moderationRow?.status === "frozen")
+      ? moderationRow.status
       : null;
 
   // The passcode column contains the stored credential hash. Clients only
@@ -205,7 +204,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     messages,
     blocked,
     viewerBlocked,
-    viewerFreezeReason,
+    viewerModerationStatus,
     dm: dmMessages || [],
     adminDataStatus,
     viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",

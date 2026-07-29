@@ -71,6 +71,7 @@ export const en: Record<LocaleKeys, string> = {
   petitionRejected: "Appeal rejected",
   petitionAlreadyProcessed: "This appeal was already processed",
   petitionActionFailed: "Could not process the appeal",
+  moderationSuspendedBanner: "This channel is under super admin suspension review.",
   moderationFrozenBanner: "This channel is temporarily frozen under super admin review.",
   ownerSuspendedBanner: "This channel is frozen under super admin review. You cannot send messages right now.",
   ownerSuspendedInput: "Channel under review",

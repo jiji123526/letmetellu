@@ -69,6 +69,7 @@ export const ko = {
   petitionRejected: "이의 제기 기각",
   petitionAlreadyProcessed: "이미 처리된 이의 제기입니다",
   petitionActionFailed: "이의 제기를 처리하지 못했습니다",
+  moderationSuspendedBanner: "슈퍼 관리자 정지 검토가 진행 중인 채널입니다.",
   moderationFrozenBanner: "슈퍼 관리자 검토로 채널이 일시 중지되었습니다.",
   ownerSuspendedBanner: "슈퍼 관리자 검토로 채널이 동결되었습니다. 현재 메시지를 보낼 수 없습니다.",
   ownerSuspendedInput: "채널이 검토 중이라 입력할 수 없습니다",

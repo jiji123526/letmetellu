@@ -112,7 +112,7 @@ interface InitData {
   messages?: Message[];
   blocked?: { uid: string; reason: string }[];
   viewerBlocked?: boolean;
-  viewerFreezeReason?: "moderation" | null;
+  viewerModerationStatus?: "suspended" | "frozen" | null;
   dm?: Message[];
   bannerNotice?: string;
   welcomeConfig?: string;
@@ -925,7 +925,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
-  const [viewerFreezeReason, setViewerFreezeReason] = useState<InitData["viewerFreezeReason"]>(null);
+  const [viewerModerationStatus, setViewerModerationStatus] = useState<InitData["viewerModerationStatus"]>(null);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
@@ -1064,7 +1064,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setNewerMessageCount(0);
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
-    setViewerFreezeReason(data.viewerFreezeReason ?? null);
+    setViewerModerationStatus(data.viewerModerationStatus ?? null);
     setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     setActiveNotice(data.bannerNotice || "");
     setWelcomeConfig(data.welcomeConfig || "");
@@ -1312,7 +1312,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
           if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
           setOwnerModeration(data.ownerModeration);
-          setViewerFreezeReason(data.viewerFreezeReason ?? null);
+          setViewerModerationStatus(data.viewerModerationStatus ?? null);
         }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
@@ -1344,9 +1344,19 @@ export function ChatView({ channelId }: { channelId: string }) {
           setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
         } else if (!isLiveFreeze && !inLiveModeRef.current) {
           setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
-          setViewerFreezeReason(event.frozen ? (event.moderation ? "moderation" : null) : null);
+          if (event.moderation && event.frozen) {
+            setViewerModerationStatus("frozen");
+          } else if (event.moderation && !event.frozen) {
+            setViewerModerationStatus((previous) => previous === "frozen" ? null : previous);
+          }
         }
         if (isOwner) refreshOwnerModeration();
+      }
+      if (event.type === "moderation-state-change" && !event.live) {
+        const nextStatus = event.status === "suspended" || event.status === "frozen"
+          ? event.status
+          : null;
+        setViewerModerationStatus(nextStatus);
       }
       if (event.type === "profile-change") {
         const nextProfileImage = event.profile_image !== undefined
@@ -1473,7 +1483,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages(data.messages);
             setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
             setActiveNotice(data.bannerNotice || "");
-            setViewerFreezeReason(data.viewerFreezeReason ?? null);
+            setViewerModerationStatus(data.viewerModerationStatus ?? null);
           }).catch(() => {});
         }
       }
@@ -1710,7 +1720,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         refreshOwnerModeration();
         setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
       }
-      else if (error === "channel frozen") setBanner({ text: viewerFreezeReason === "moderation" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
+      else if (error === "channel frozen") setBanner({ text: viewerModerationStatus === "frozen" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
       else if (error === "dm_disabled") setBanner({ text: t("dmDisabledMessage"), color: "#d32f2f" });
       else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
@@ -1948,11 +1958,14 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
   const ownerModerationBlocked = isOwner && ownerModeration?.status === "frozen";
+  const viewerSuspended = !isOwner
+    && !effectiveAdmin
+    && viewerModerationStatus === "suspended";
   const viewerModerationBlocked = !isOwner
     && !effectiveAdmin
     && !dmMode
     && !!channel?.is_frozen
-    && viewerFreezeReason === "moderation";
+    && viewerModerationStatus === "frozen";
   const canUseAdminMutations = effectiveAdmin && !ownerModerationBlocked;
   const ownerPetitionStatus = ownerModeration?.petitionStatus || "none";
   const ownerCanSubmitPetition = ownerModerationBlocked && ownerPetitionStatus === "none";
@@ -2568,7 +2581,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); localStorage.removeItem(`noticeDismissed_${channelId}_live`); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); localStorage.removeItem(`noticeDismissed_${channelId}_live`); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -2587,6 +2600,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 setChannel(data.channel);
                 setMessages(data.messages);
                 setActiveNotice(data.bannerNotice || "");
+                setViewerModerationStatus(data.viewerModerationStatus ?? null);
               });
             }
           }}
@@ -2817,6 +2831,22 @@ export function ChatView({ channelId }: { channelId: string }) {
         >
           <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
             {t("moderationFrozenBanner")}
+          </div>
+        </div>
+      )}
+
+      {viewerSuspended && (
+        <div
+          className="flex-none flex items-center gap-3"
+          style={{
+            padding: "10px 14px",
+            background: "rgba(246,173,85,.12)",
+            borderTop: "0.5px solid rgba(180,83,9,.18)",
+            color: "#9a3412",
+          }}
+        >
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
+            {t("moderationSuspendedBanner")}
           </div>
         </div>
       )}
@@ -3341,7 +3371,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 refreshOwnerModeration();
                 setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
               }
-              else if (editError === "channel frozen") setBanner({ text: viewerFreezeReason === "moderation" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
+              else if (editError === "channel frozen") setBanner({ text: viewerModerationStatus === "frozen" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
               else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
               setTimeout(() => setBanner(null), 3000);
             }).catch(() => {
@@ -3430,7 +3460,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages([]);
             setDmMessages([]);
             setActiveNotice("");
-            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); }).catch(() => {});
+            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); }).catch(() => {});
           }}
           onDismiss={() => {
             setShowLivePopup(false);
