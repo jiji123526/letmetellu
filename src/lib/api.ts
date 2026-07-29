@@ -271,6 +271,7 @@ export async function submitChannelReport(payload: {
       channel_id: parentChannelId,
       reason: payload.reason,
       details: payload.details || "",
+      room_token: getRoomToken(parentChannelId) || undefined,
     }),
   });
   return res.json();

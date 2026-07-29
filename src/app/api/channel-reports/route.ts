@@ -17,7 +17,7 @@ export async function PATCH(request: Request) {
 
 async function forwardChannelReportRequest(request: Request, method: "POST" | "PATCH") {
   const session = await auth();
-  const body = await request.json();
+  const body = await request.json() as Record<string, unknown>;
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -31,6 +31,7 @@ async function forwardChannelReportRequest(request: Request, method: "POST" | "P
     ? getParentChannelId((body as Record<string, string>).channel_id)
     : null;
   const roomToken = request.headers.get("X-Room-Token")
+    || (typeof body.room_token === "string" ? body.room_token : null)
     || (requestedChannelId ? readRoomTokenCookie(request.headers.get("cookie"), requestedChannelId) : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
@@ -44,10 +45,14 @@ async function forwardChannelReportRequest(request: Request, method: "POST" | "P
     headers["X-User-Id"] = session.user.id;
   }
 
+  const forwardedBody = body && typeof body === "object"
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "room_token"))
+    : body;
+
   const res = await fetch(`${workerUrl}/api/channel-reports`, {
     method,
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(forwardedBody),
   });
 
   const data = await res.json();
