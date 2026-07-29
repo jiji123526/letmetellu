@@ -268,7 +268,7 @@ export const ko = {
   userGuideReply: "답장 — 메시지를 길게 눌러 특정 메시지에 답장할 수 있어요.",
   userGuideReactions: "리액션 — 메시지를 길게 눌러 기본 리액션이나 이모지를 남길 수 있어요.",
   userGuideOwnMessages: "내 메시지 수정·삭제 — 내가 보낸 메시지는 길게 눌러 수정하거나 삭제할 수 있어요.",
-  userGuideSafetyTitle: "신고와 상태",
+  userGuideSafetyTitle: "기타",
   userGuideMessageReport: "메시지 신고 — 문제가 되는 특정 메시지는 길게 눌러 방장에게 신고할 수 있어요. 길게 눌러 신고 취소도 가능합니다.",
   userGuideChannelReport: "채널 신고 — 채널 전체를 신고하려면 상단 메뉴의 채널 신고를 이용하세요.",
   userGuideBlocked: "차단 상태 — 차단되면 바로 전송이 막히고, 방장이 허용한 경우 1회 이의 제기를 보낼 수 있어요.",
