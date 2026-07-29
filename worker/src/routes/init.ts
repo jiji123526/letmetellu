@@ -175,8 +175,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   }
   const viewerModerationStatus = !isOwner
     && !isReportsOwnerViewer
-    && (moderationRow?.status === "suspended" || moderationRow?.status === "frozen")
-      ? moderationRow.status
+    && moderationRow?.status === "frozen"
+      ? "frozen"
       : null;
 
   // The passcode column contains the stored credential hash. Clients only

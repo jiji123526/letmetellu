@@ -112,7 +112,7 @@ interface InitData {
   messages?: Message[];
   blocked?: { uid: string; reason: string }[];
   viewerBlocked?: boolean;
-  viewerModerationStatus?: "suspended" | "frozen" | null;
+  viewerModerationStatus?: "frozen" | null;
   dm?: Message[];
   bannerNotice?: string;
   welcomeConfig?: string;
@@ -1353,10 +1353,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         if (isOwner) refreshOwnerModeration();
       }
       if (event.type === "moderation-state-change" && !event.live) {
-        const nextStatus = event.status === "suspended" || event.status === "frozen"
-          ? event.status
-          : null;
-        setViewerModerationStatus(nextStatus);
+        setViewerModerationStatus(event.status === "frozen" ? "frozen" : null);
       }
       if (event.type === "profile-change") {
         const nextProfileImage = event.profile_image !== undefined
@@ -1958,9 +1955,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
   const ownerModerationBlocked = isOwner && ownerModeration?.status === "frozen";
-  const viewerSuspended = !isOwner
-    && !effectiveAdmin
-    && viewerModerationStatus === "suspended";
   const viewerModerationBlocked = !isOwner
     && !effectiveAdmin
     && !dmMode
@@ -2831,22 +2825,6 @@ export function ChatView({ channelId }: { channelId: string }) {
         >
           <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
             {t("moderationFrozenBanner")}
-          </div>
-        </div>
-      )}
-
-      {viewerSuspended && (
-        <div
-          className="flex-none flex items-center gap-3"
-          style={{
-            padding: "10px 14px",
-            background: "rgba(246,173,85,.12)",
-            borderTop: "0.5px solid rgba(180,83,9,.18)",
-            color: "#9a3412",
-          }}
-        >
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
-            {t("moderationSuspendedBanner")}
           </div>
         </div>
       )}
