@@ -6,12 +6,13 @@ import { useLocale } from "@/hooks/useLocale";
 
 interface GuestOnboardingProps {
   onClose: () => void;
+  onGuide?: () => void;
 }
 
 const introIcons = ["↗", "lock", "◉"];
 const guideIcons = ["1", "2", "3"];
 
-export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
+export function GuestOnboarding({ onClose, onGuide }: GuestOnboardingProps) {
   const { t } = useLocale();
   const [step, setStep] = useState<"intro" | "guide">("intro");
   const [dragX, setDragX] = useState(0);
@@ -197,6 +198,17 @@ export function GuestOnboarding({ onClose }: GuestOnboardingProps) {
                     </div>
                   ))}
                 </div>
+
+                {page.step === "guide" && onGuide && (
+                  <button
+                    type="button"
+                    className="mt-4 w-full border-none rounded-[14px] px-4 py-3 text-[14px] font-medium cursor-pointer"
+                    style={{ background: "#eaf3ff", color: "#007aff", lineHeight: 1 }}
+                    onClick={onGuide}
+                  >
+                    {t("needHelp")}
+                  </button>
+                )}
               </section>
             ))}
           </div>

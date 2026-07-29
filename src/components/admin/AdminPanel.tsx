@@ -723,6 +723,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 entries: [
                   { ...guideParts(t("guideDmPrivacy")), icon: "✉" },
                   { ...guideParts(t("guideReport")), icon: "⚑" },
+                  { ...guideParts(t("guideChannelReport")), icon: "⚐" },
                   { ...guideParts(t("guideBlock")), icon: "⊘" },
                   { ...guideParts(t("guideUnblock")), icon: "↺" },
                   { ...guideParts(t("guidePetition")), icon: "!" },

@@ -12,6 +12,7 @@ import { parseServerDate } from "@/lib/chat-date";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
 import { GuestOnboarding } from "@/components/dashboard/GuestOnboarding";
 import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
+import { UserGuidePanel } from "@/components/chat/UserGuidePanel";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
 import { LegalFooter } from "@/components/legal/LegalFooter";
 import {
@@ -87,6 +88,7 @@ export default function DashboardPage() {
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showUserGuide, setShowUserGuide] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginInitialTab, setLoginInitialTab] = useState<"login" | "signup">("login");
   const [pendingLocalChannels, setPendingLocalChannels] = useState<RecentChannel[] | null>(null);
@@ -775,11 +777,15 @@ export default function DashboardPage() {
                     {isLoggedIn ? (
                       <>
                         <div className="px-4 py-3 text-[12px] truncate" style={{ color: "var(--meta)", borderBottom: "0.5px solid var(--hairline)" }}>{session.user?.email}</div>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowUserGuide(true); }}>{t("userGuide")}</button>
                         <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
                         <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowDeleteAccountConfirm(true); }}>{t("deleteAccount")}</button>
                       </>
                     ) : (
+                      <>
+                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowUserGuide(true); }}>{t("userGuide")}</button>
                         <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowGuestOnboarding(false); setLoginError(""); setLoginInitialTab("login"); try { sessionStorage.removeItem("letmetellu_auth_flow"); } catch {} setShowLogin(true); }}>{t("loginTab")}</button>
+                      </>
                     )}
                     <div className="px-3 py-3">
                       <div className="px-1 pb-2 text-[12px]" style={{ color: "var(--meta)" }}>{t("language")}</div>
@@ -1098,7 +1104,17 @@ export default function DashboardPage() {
       )}
 
       {showGuestOnboarding && !isLoggedIn && (
-        <GuestOnboarding onClose={closeGuestOnboarding} />
+        <GuestOnboarding
+          onClose={closeGuestOnboarding}
+          onGuide={() => {
+            setShowGuestOnboarding(false);
+            setShowUserGuide(true);
+          }}
+        />
+      )}
+
+      {showUserGuide && (
+        <UserGuidePanel onClose={() => setShowUserGuide(false)} />
       )}
 
       {showLogin && !isLoggedIn && (

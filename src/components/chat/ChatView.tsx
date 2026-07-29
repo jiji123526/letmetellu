@@ -25,6 +25,7 @@ import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePro
 import { ConfirmDialog } from "./ConfirmDialog";
 import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
+import { UserGuidePanel } from "./UserGuidePanel";
 import { SearchBar, highlightText } from "./SearchBar";
 import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { MessageEmbeds } from "./MessageEmbeds";
@@ -937,6 +938,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
   const [showChannelReportDialog, setShowChannelReportDialog] = useState(false);
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
+  const [showUserGuide, setShowUserGuide] = useState(false);
   const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
   const [submittingModerationPetition, setSubmittingModerationPetition] = useState(false);
   const [reportActionPendingId, setReportActionPendingId] = useState<string | null>(null);
@@ -3063,7 +3065,12 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Welcome Popup */}
-      <WelcomePopup channelId={channelId} bubbleColor={bubbleColor} profileImage={channel?.profile_image} customConfig={welcomeConfig} />
+      <WelcomePopup
+        channelId={channelId}
+        bubbleColor={bubbleColor}
+        profileImage={channel?.profile_image}
+        customConfig={welcomeConfig}
+      />
 
       {/* Header Menu */}
       {headerMenu && (
@@ -3086,6 +3093,10 @@ export function ChatView({ channelId }: { channelId: string }) {
           onReportChannel={!isAdmin ? () => setShowChannelReportDialog(true) : undefined}
           onClose={() => setHeaderMenu(null)}
         />
+      )}
+
+      {showUserGuide && (
+        <UserGuidePanel onClose={() => setShowUserGuide(false)} />
       )}
 
       {showChannelReportDialog && (
