@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { isReportsChannel } from "../lib/special-channels";
 import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
@@ -30,6 +31,9 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
       .bind(parentChannelId).first<{ owner_uid: string }>();
     ownerUpload = channel?.owner_uid === internalUserId;
     if (!ownerUpload) return Response.json({ error: "not owner" }, { status: 403 });
+  }
+  if (isReportsChannel(parentChannelId, env) && !ownerUpload) {
+    return Response.json({ error: "owner access required" }, { status: 403 });
   }
   if (purpose === "channel-asset" && !ownerUpload) {
     return Response.json({ error: "not owner" }, { status: 403 });

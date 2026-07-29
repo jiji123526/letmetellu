@@ -7,4 +7,5 @@ export interface Env {
   RESEND_API_KEY: string;
   EMAIL_TEST_RECIPIENT: string;
   APP_ORIGIN: string;
+  REPORTS_CHANNEL_ID?: string;
 }

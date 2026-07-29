@@ -25,5 +25,6 @@ remote = true
 
 [vars]
 ALLOWED_ORIGIN = "https://letmetellu.vercel.app,http://localhost:3000"
+REPORTS_CHANNEL_ID = ""
 # For development, temporarily use "*" if needed:
 # ALLOWED_ORIGIN = "*"

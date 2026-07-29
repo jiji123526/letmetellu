@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -12,6 +12,7 @@ import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { WelcomePopup } from "./WelcomePopup";
 import { HeaderMenu } from "./HeaderMenu";
+import { ChannelReportDialog } from "./ChannelReportDialog";
 import { SettingsPanel } from "./SettingsPanel";
 import { NoticePanel } from "./NoticePanel";
 import { EmojiPicker } from "./EmojiPicker";
@@ -818,6 +819,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
+  const [showChannelReportDialog, setShowChannelReportDialog] = useState(false);
+  const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
   const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
   const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -2042,6 +2045,32 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   };
 
+  const handleChannelReportSubmit = async (reason: string, details: string) => {
+    if (submittingChannelReport) return;
+    setSubmittingChannelReport(true);
+    try {
+      const result = await submitChannelReport({
+        channel_id: channelId,
+        reason,
+        details,
+      }) as { ok?: boolean; error?: string };
+
+      if (result?.ok) {
+        setShowChannelReportDialog(false);
+        setBanner({ text: t("channelReported"), color: "#d32f2f" });
+      } else if (result?.error === "report_exists") {
+        setBanner({ text: t("reportAlreadySubmitted"), color: "var(--meta)" });
+      } else if (result?.error === "channel_owner_cannot_report") {
+        setBanner({ text: t("reportOwnerCannot"), color: "#d32f2f" });
+      } else {
+        setBanner({ text: t("reportChannelFailed"), color: "#d32f2f" });
+      }
+      setTimeout(() => setBanner(null), 3000);
+    } finally {
+      setSubmittingChannelReport(false);
+    }
+  };
+
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
       {/* Header */}
@@ -2632,7 +2661,19 @@ export function ChatView({ channelId }: { channelId: string }) {
             });
           }}
           onLinks={() => setShowLinks(true)}
+          onReportChannel={!isAdmin ? () => setShowChannelReportDialog(true) : undefined}
           onClose={() => setHeaderMenu(null)}
+        />
+      )}
+
+      {showChannelReportDialog && (
+        <ChannelReportDialog
+          channelName={channel?.name || channelId}
+          submitting={submittingChannelReport}
+          onSubmit={handleChannelReportSubmit}
+          onClose={() => {
+            if (!submittingChannelReport) setShowChannelReportDialog(false);
+          }}
         />
       )}
 

@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { isReportsChannel } from "../lib/special-channels";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
@@ -37,6 +38,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const adminDataStatus = userId === (channel as any).owner_uid
     ? (isOwner ? "authorized" : "unauthorized")
     : undefined;
+  if (isReportsChannel(parentChannelId, env) && !isOwner) {
+    return Response.json({ error: "owner access required" }, { status: 403 });
+  }
   const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
   const deviceToken = request.headers.get("X-Device-Token") || "";
   const verifiedAnonymous = anonymousToken

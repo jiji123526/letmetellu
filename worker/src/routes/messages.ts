@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { isReportsChannel } from "../lib/special-channels";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
@@ -45,6 +46,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     `).bind(channel_id, parentChannelId).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
     const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
+    if (isReportsChannel(parentChannelId, env) && !isChannelOwner) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
 
     if ((channel as any).passcode && !isChannelOwner) {
       const roomToken = request.headers.get("X-Room-Token");
@@ -172,6 +176,17 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     // Passcode gate
     const delParent = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    if (isReportsChannel(delParent, env)) {
+      const internalToken = request.headers.get("X-Internal-Token");
+      const verifiedUserId = request.headers.get("X-User-Id");
+      const reportChannel = internalToken === env.INTERNAL_SECRET && verifiedUserId
+        ? await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+          .bind(delParent).first<{ owner_uid: string }>()
+        : null;
+      if (!reportChannel || reportChannel.owner_uid !== verifiedUserId) {
+        return Response.json({ error: "owner access required" }, { status: 403 });
+      }
+    }
     const { passcode: delPasscode } = await getChannelPasscodeInfo(delParent, env);
     if (delPasscode) {
       const roomToken = request.headers.get("X-Room-Token");
@@ -251,6 +266,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     `).bind(channel_id, editParent).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
     const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
+    if (isReportsChannel(editParent, env) && !isChannelOwner) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
 
     if ((channel as any).passcode && !isChannelOwner) {
       const roomToken = request.headers.get("X-Room-Token");
@@ -333,6 +351,15 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const internalToken = request.headers.get("X-Internal-Token");
     const verifiedUserId = request.headers.get("X-User-Id");
     const isVerifiedAdmin = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+    if (isReportsChannel(patchParent, env)) {
+      const reportChannel = isVerifiedAdmin
+        ? await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+          .bind(patchParent).first<{ owner_uid: string }>()
+        : null;
+      if (!reportChannel || reportChannel.owner_uid !== verifiedUserId) {
+        return Response.json({ error: "owner access required" }, { status: 403 });
+      }
+    }
     if (isVerifiedAdmin) {
       const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
         .bind(patchParent).first();

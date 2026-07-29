@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { isReportsChannel } from "../lib/special-channels";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -17,6 +18,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   const internalToken = request.headers.get("X-Internal-Token");
   const userId = request.headers.get("X-User-Id");
   const isOwner = internalToken === env.INTERNAL_SECRET && userId === owner_uid;
+  if (isReportsChannel(parentChannelId, env) && !isOwner) {
+    return Response.json({ error: "owner access required" }, { status: 403 });
+  }
 
   if (passcode) {
     if (!isOwner) {

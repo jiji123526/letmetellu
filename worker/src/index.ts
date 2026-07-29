@@ -11,6 +11,7 @@ import { handleUpload, handleMediaServe } from "./routes/upload";
 import { handlePreview } from "./routes/preview";
 import { handleVerifyPasscode } from "./routes/passcode";
 import { handleRecentChannels } from "./routes/recent-channels";
+import { handleChannelReports } from "./routes/channel-reports";
 
 export { ChatRoom };
 
@@ -77,6 +78,8 @@ export default {
         response = await handlePreview(request, env);
       } else if (url.pathname.startsWith("/api/verify-passcode")) {
         response = await handleVerifyPasscode(request, env);
+      } else if (url.pathname.startsWith("/api/channel-reports")) {
+        response = await handleChannelReports(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key);

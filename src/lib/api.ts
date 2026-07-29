@@ -252,6 +252,29 @@ export async function fetchPreview(url: string) {
   return res.json();
 }
 
+export async function submitChannelReport(payload: {
+  channel_id: string;
+  reason: string;
+  details?: string;
+}) {
+  if (IS_MOCK) return { ok: true };
+
+  const parentChannelId = getParentChannelId(payload.channel_id);
+  const res = await fetch("/api/channel-reports", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...roomTokenHeaders(parentChannelId),
+    },
+    body: JSON.stringify({
+      channel_id: parentChannelId,
+      reason: payload.reason,
+      details: payload.details || "",
+    }),
+  });
+  return res.json();
+}
+
 export async function sendMessage(payload: {
   uid: string;
   nick?: string;

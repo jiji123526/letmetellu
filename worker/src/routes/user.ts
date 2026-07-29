@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { getReportsChannelId } from "../lib/special-channels";
 import { deleteChannel } from "./admin";
 
 function normalizeEmail(email: string) {
@@ -6,6 +7,7 @@ function normalizeEmail(email: string) {
 }
 
 export async function handleUser(request: Request, env: Env): Promise<Response> {
+  const reportsChannelId = getReportsChannelId(env);
   if (request.method === "GET") {
     const url = new URL(request.url);
     const existenceQuery = url.searchParams.get("exists");
@@ -22,8 +24,9 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
                 users.name AS owner_name
          FROM channels
          LEFT JOIN users ON users.id = channels.owner_uid
-         WHERE channels.id IN (${placeholders}) AND channels.id NOT LIKE '%_live'`
-      ).bind(...ids).all<{ id: string }>();
+         WHERE channels.id IN (${placeholders}) AND channels.id NOT LIKE '%_live'
+           ${reportsChannelId ? "AND channels.id != ?" : ""}`
+      ).bind(...ids, ...(reportsChannelId ? [reportsChannelId] : [])).all<{ id: string }>();
       return Response.json({ existingIds: results.map((row) => row.id), channels: results });
     }
 
@@ -40,10 +43,11 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
        FROM channels
        WHERE owner_uid = ?
          AND id NOT LIKE '%_live'
+         ${reportsChannelId ? "AND id != ?" : ""}
          AND show_on_profile = 1
        ORDER BY created_at ASC
        LIMIT 50`
-    ).bind(channel.owner_uid).all();
+    ).bind(channel.owner_uid, ...(reportsChannelId ? [reportsChannelId] : [])).all();
     return Response.json({ channels });
   }
 

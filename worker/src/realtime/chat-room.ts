@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAdminWsToken } from "../lib/admin-ws-token";
+import { isReportsChannel } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 
 interface Connection {
@@ -51,7 +52,7 @@ export class ChatRoom {
         channelId,
         joinedAt: Date.now(),
         isAdmin: false,
-        authorized: !this.currentPasscode,
+        authorized: isReportsChannel(channelId, this.env) ? false : !this.currentPasscode,
         authAttempt: 0,
       });
 
@@ -69,7 +70,10 @@ export class ChatRoom {
               type,
               requestId: typeof data.requestId === "string" ? data.requestId : undefined,
             });
-            if (conn.isAdmin) {
+            if (isReportsChannel(conn.channelId, this.env)) {
+              conn.authorized = conn.isAdmin;
+              server.send(authResponse(conn.isAdmin ? "room-authenticated" : "room-auth-required"));
+            } else if (conn.isAdmin) {
               conn.authorized = true;
               server.send(authResponse("room-authenticated"));
             } else if (!this.currentPasscode) {

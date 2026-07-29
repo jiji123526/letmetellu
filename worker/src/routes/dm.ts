@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { isReportsChannel } from "../lib/special-channels";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, checkRateLimit, getChannelPasscodeInfo } from "../lib/validation";
 import { authorizeRoomToken } from "./passcode";
@@ -39,6 +40,9 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
 
     // Passcode gate
     const parentChannelId = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    if (isReportsChannel(parentChannelId, env)) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
     const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
     if (passcode) {
       const roomToken = request.headers.get("X-Room-Token");
