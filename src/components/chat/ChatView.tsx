@@ -1042,6 +1042,38 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   // Debounce not needed — local patching handles most events, reconnect does full refetch
 
+  const showPasscodeGate = useCallback((notice?: string, bannerText?: string) => {
+    const fallbackGate = {
+      name: channel?.name || "",
+      profile_image: channel?.profile_image || null,
+      bubble_color: channel?.bubble_color || "#3b8df0",
+      passcodeHint: channel?.passcode_hint || "",
+      notice,
+    };
+
+    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+    fetchInit(fetchChannel).then((data: InitData) => {
+      if (data.hasPasscode && !data.messages) {
+        setPasscodeGate({
+          name: data.channel.name,
+          profile_image: data.channel.profile_image,
+          bubble_color: data.channel.bubble_color,
+          passcodeHint: data.passcodeHint,
+          notice,
+        });
+        return;
+      }
+      setPasscodeGate(null);
+      applyInitData(data);
+    }).catch(() => {
+      setPasscodeGate(fallbackGate);
+    });
+
+    if (bannerText) {
+      setBanner({ text: bannerText, color: "#d32f2f" });
+    }
+  }, [applyInitData, channel, channelId]);
+
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
@@ -1210,13 +1242,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "room-auth-failed") {
         clearRoomToken(channelId);
         if (!isOwner) {
-          setPasscodeGate({
-            name: channel?.name || "",
-            profile_image: channel?.profile_image || null,
-            bubble_color: channel?.bubble_color || "#3b8df0",
-            notice: t("roomAuthExpired"),
-          });
-          setBanner({ text: t("roomAuthExpired"), color: "#d32f2f" });
+          showPasscodeGate(t("roomAuthExpired"), t("roomAuthExpired"));
         }
       }
       if (event.type === "admin-authenticated") {
@@ -1238,12 +1264,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "room-access-revoked") {
         clearRoomToken(channelId);
         if (!isOwner) {
-          setPasscodeGate({
-            name: channel?.name || "",
-            profile_image: channel?.profile_image || null,
-            bubble_color: channel?.bubble_color || "#3b8df0",
-            notice: t("passcodeChanged"),
-          });
+          showPasscodeGate(t("passcodeChanged"));
         }
       }
       if (event.type === "user-blocked") {
@@ -1332,7 +1353,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, myFingerprint, t, channel, applyInitData, localBubbleColor]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, myFingerprint, t, channel, applyInitData, localBubbleColor, showPasscodeGate]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
