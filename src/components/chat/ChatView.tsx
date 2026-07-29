@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery } from "@/lib/api";
-import { generateFingerprint } from "@/lib/fingerprint";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -52,6 +51,7 @@ interface Message {
   edited?: boolean;
   report?: number;
   reported_msg_id?: string;
+  fingerprint?: string | null;
 }
 
 interface Channel {
@@ -737,7 +737,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(true);
   const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; passcodeHint?: string; notice?: string } | null>(null);
   const [uid, setUid] = useState(getInitialUid);
-  const [myFingerprint] = useState(() => typeof window !== "undefined" ? generateFingerprint() : "");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -1269,8 +1268,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "user-blocked") {
         const blockedUid = event.uid as string;
-        const blockedFp = event.fingerprint as string | null;
-        if (blockedUid === uid || (!!blockedFp && blockedFp === myFingerprint)) {
+        if (blockedUid === uid) {
           setViewerBlocked(true);
         }
         if (isOwner) {
@@ -1282,8 +1280,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       }
       if (event.type === "user-unblocked") {
         const unblockedUid = event.uid as string;
-        const unblockedFp = event.fingerprint as string | null;
-        if (unblockedUid === uid || (!!unblockedFp && unblockedFp === myFingerprint)) {
+        if (unblockedUid === uid) {
           setViewerBlocked(false);
         }
         setBlockedUsers((prev) => prev.filter((b) => b.uid !== unblockedUid));
@@ -1353,7 +1350,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, myFingerprint, t, channel, applyInitData, localBubbleColor, showPasscodeGate]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1565,7 +1562,6 @@ export function ChatView({ channelId }: { channelId: string }) {
         uid,
         text: petitionText,
         channel_id: inLiveMode ? `${channelId}_live` : channelId,
-        fingerprint: myFingerprint,
       });
       if (!result?.ok) {
         setInput(text);
@@ -1604,7 +1600,6 @@ export function ChatView({ channelId }: { channelId: string }) {
         channel_id: dmChannelId,
         image: dmUpload?.url,
         upload_id: dmUpload?.uploadId,
-        fingerprint: myFingerprint,
       });
       if (!result?.ok) {
         setInput(text);
@@ -1635,7 +1630,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           text,
           channel_id: activeChannelId,
           reply_to: savedReplyTo,
-          fingerprint: myFingerprint,
         });
         sendError = result.error;
       } else {
@@ -1658,7 +1652,6 @@ export function ChatView({ channelId }: { channelId: string }) {
             image: upload.url,
             upload_id: upload.uploadId,
             reply_to: savedReplyTo,
-            fingerprint: myFingerprint,
           });
 
           if (result.error) {
@@ -1820,7 +1813,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Check if current user is blocked
   const isUserBlocked = !effectiveAdmin && (
     viewerBlocked
-    || blockedUsers.some((b) => b.uid === uid || (myFingerprint && (b as any).fingerprint === myFingerprint))
+    || blockedUsers.some((b) => b.uid === uid)
   );
   const hasPetitioned = typeof window !== "undefined" && localStorage.getItem("petitionSent") === uid;
   // Reset petition status when unblocked (gives another chance on re-block)
@@ -2601,7 +2594,11 @@ export function ChatView({ channelId }: { channelId: string }) {
               setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonUnblocked")}`, color: "#2a9d4e" });
             } else {
               const msg = contextMenu.msg;
-              adminAction("block", channelId, { uid: blockUid, reason: msg.text?.slice(0, 50) || "", fingerprint: "" });
+              adminAction("block", channelId, {
+                uid: blockUid,
+                reason: msg.text?.slice(0, 50) || "",
+                fingerprint: msg.fingerprint || "",
+              });
               setBlockedUsers((prev) => [...prev, { uid: blockUid, reason: msg.text?.slice(0, 50) || "" }]);
               setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonBlocked")}`, color: "#d32f2f" });
             }
@@ -2858,7 +2855,6 @@ export function ChatView({ channelId }: { channelId: string }) {
               message_id: targetMessageId,
               channel_id: inLiveMode ? `${channelId}_live` : channelId,
               text: newText,
-              fingerprint: myFingerprint,
               admin: effectiveAdmin && !!authUserId,
             }).then((result: { ok?: boolean; error?: string }) => {
               if (result?.ok) {

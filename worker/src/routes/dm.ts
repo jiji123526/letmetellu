@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, checkRateLimit, getChannelPasscodeInfo } from "../lib/validation";
 import { authorizeRoomToken } from "./passcode";
@@ -13,10 +13,17 @@ async function getAnonymousRequesterUid(request: Request, env: Env): Promise<str
   return payload?.uid || null;
 }
 
+async function getRequesterDeviceId(request: Request, env: Env): Promise<string | null> {
+  const token = request.headers.get("X-Device-Token");
+  if (!token) return null;
+  const payload = await verifyDeviceIdentityToken(token, env);
+  return payload?.device_id || null;
+}
+
 export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { nick, text, channel_id, image, upload_id, fingerprint } = body;
+    const { nick, text, channel_id, image, upload_id } = body;
 
     if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -24,10 +31,6 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     if (text !== undefined && typeof text !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
-    if (fingerprint !== undefined && typeof fingerprint !== "string") {
-      return Response.json({ error: "missing required fields" }, { status: 400 });
-    }
-
     const rawText = typeof text === "string" ? text : "";
     const trimmedText = rawText.trim();
     if (!trimmedText && !image) {
@@ -47,7 +50,11 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
 
     const requesterUid = await getAnonymousRequesterUid(request, env);
+    const requesterDeviceId = await getRequesterDeviceId(request, env);
     if (!requesterUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    if (!requesterDeviceId) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
 
@@ -65,7 +72,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       ).bind(parentChannelId, `dm_${parentChannelId}`, `petition_${parentChannelId}`).all<{ id: string; text: string }>(),
       env.DB.prepare(
         "SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
-      ).bind(requesterUid, fingerprint || "", parentChannelId).first(),
+      ).bind(requesterUid, requesterDeviceId || "", parentChannelId).first(),
       rawText ? checkBannedWords(rawText, parentChannelId, env) : Promise.resolve(true),
     ]);
 

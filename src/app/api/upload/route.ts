@@ -1,11 +1,10 @@
 import { auth } from "@/lib/auth";
+import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const anonymousMode = request.headers.get("X-Auth-Mode") === "anonymous";
 
   const requestUrl = new URL(request.url);
   const channelId = requestUrl.searchParams.get("channel");
@@ -28,14 +27,26 @@ export async function POST(request: Request) {
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
   const forwardedFor = request.headers.get("x-forwarded-for");
   const clientIp = forwardedFor?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "";
+  const headers: Record<string, string> = {
+    "Content-Type": contentType,
+    ...(clientIp ? { "X-Client-IP": clientIp } : {}),
+  };
+
+  const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
+  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  if (deviceToken) headers["X-Device-Token"] = deviceToken;
+
+  const roomToken = request.headers.get("X-Room-Token");
+  if (roomToken) headers["X-Room-Token"] = roomToken;
+
+  if (session?.user?.id && !anonymousMode) {
+    headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
+    headers["X-User-Id"] = session.user.id;
+  }
+
   const response = await fetch(`${workerUrl}/api/upload?channel=${encodeURIComponent(channelId)}&purpose=${encodeURIComponent(purpose)}`, {
     method: "POST",
-    headers: {
-      "Content-Type": contentType,
-      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
-      "X-User-Id": session.user.id,
-      ...(clientIp ? { "X-Client-IP": clientIp } : {}),
-    },
+    headers,
     body: await request.arrayBuffer(),
     cache: "no-store",
   });

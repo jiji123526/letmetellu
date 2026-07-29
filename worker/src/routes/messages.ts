@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
@@ -12,10 +12,17 @@ async function getAnonymousRequesterUid(request: Request, env: Env): Promise<str
   return payload?.uid || null;
 }
 
+async function getRequesterDeviceId(request: Request, env: Env): Promise<string | null> {
+  const token = request.headers.get("X-Device-Token");
+  if (!token) return null;
+  const payload = await verifyDeviceIdentityToken(token, env);
+  return payload?.device_id || null;
+}
+
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { nick, text, channel_id, image, upload_id, reply_to, fingerprint, report, reported_msg_id } = body;
+    const { nick, text, channel_id, image, upload_id, reply_to, report, reported_msg_id } = body;
 
     if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -58,7 +65,11 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     const anonymousUid = isChannelOwner ? null : await getAnonymousRequesterUid(request, env);
+    const requesterDeviceId = isChannelOwner ? null : await getRequesterDeviceId(request, env);
     if (!isChannelOwner && !anonymousUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    if (!isChannelOwner && !requesterDeviceId) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
@@ -77,7 +88,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // passcode, freeze, rate-limit and length validation have succeeded.
     const [blocked, allowedByBannedWords] = await Promise.all([
       env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(requesterUid, fingerprint || "", parentChannelId).first(),
+        .bind(requesterUid, requesterDeviceId || "", parentChannelId).first(),
       text
         ? checkBannedWords(text as string, parentChannelId, env)
         : Promise.resolve(true),
@@ -119,7 +130,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       env.DB.prepare(`
         INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, fingerprint || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
+      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, requesterDeviceId || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
     ];
     if (image) {
       stmts.push(
@@ -136,7 +147,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       : channel_id as string;
     const newMessage = {
       id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
-      channel_id, image: image || null, reply_to: reply_to || null, fingerprint: fingerprint || null,
+      channel_id, image: image || null, reply_to: reply_to || null, fingerprint: requesterDeviceId || null,
       report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
       deleted: 0, edited: 0, reactions: "{}", created_at,
     };
@@ -219,7 +230,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
   // PUT — edit message
   if (request.method === "PUT") {
     const body = await request.json() as Record<string, unknown>;
-    const { message_id, channel_id, text, fingerprint } = body;
+    const { message_id, channel_id, text } = body;
 
     if (!message_id || !channel_id || typeof text !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -258,7 +269,11 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     const anonymousUid = isChannelOwner ? null : await getAnonymousRequesterUid(request, env);
+    const requesterDeviceId = isChannelOwner ? null : await getRequesterDeviceId(request, env);
     if (!isChannelOwner && !anonymousUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    if (!isChannelOwner && !requesterDeviceId) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
@@ -273,7 +288,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     const [blocked, allowedByBannedWords] = await Promise.all([
       env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(requesterUid, fingerprint || "", editParent).first(),
+        .bind(requesterUid, requesterDeviceId || "", editParent).first(),
       checkBannedWords(text, editParent, env),
     ]);
     if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
@@ -335,8 +350,19 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       }
     }
     const anonymousUid = isVerifiedAdmin ? null : await getAnonymousRequesterUid(request, env);
+    const requesterDeviceId = isVerifiedAdmin ? null : await getRequesterDeviceId(request, env);
     if (!isVerifiedAdmin && !anonymousUid) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    if (!isVerifiedAdmin && !requesterDeviceId) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    const reactionUid = isVerifiedAdmin ? verifiedUserId! : anonymousUid!;
+    if (!isVerifiedAdmin) {
+      const blocked = await env.DB.prepare(
+        "SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
+      ).bind(reactionUid, requesterDeviceId || "", patchParent).first();
+      if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
     }
 
     // Get current reactions
@@ -345,7 +371,6 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
 
     const reactions: Record<string, string> = JSON.parse(msg.reactions || "{}");
-    const reactionUid = isVerifiedAdmin ? verifiedUserId! : anonymousUid!;
     const key = `${reactionUid}_${(emoji as string).codePointAt(0)?.toString(16)}`;
 
     // Toggle: if exists remove, otherwise add

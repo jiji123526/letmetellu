@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity-cookie";
 import { NextResponse } from "next/server";
 
 // Init proxy for authenticated users — forwards session identity to Worker
@@ -27,13 +28,23 @@ export async function GET(request: Request) {
     headers["X-Room-Token"] = roomToken;
   }
 
-  const anonymousToken = request.headers.get("X-Anonymous-Token");
-  const viewerFingerprint = request.headers.get("X-Viewer-Fingerprint");
+  const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
-  if (viewerFingerprint) headers["X-Viewer-Fingerprint"] = viewerFingerprint;
+  if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
   const res = await fetch(`${workerUrl}/api/init?channel=${channel}`, { headers });
-  const data = await res.json();
+  const data = await res.json() as Record<string, unknown>;
+  const nextAnonymousToken = typeof data.anonymousToken === "string" ? data.anonymousToken : null;
+  const nextDeviceToken = typeof data.deviceToken === "string" ? data.deviceToken : null;
 
-  return NextResponse.json(data, { status: res.status });
+  delete data.anonymousToken;
+  delete data.deviceToken;
+
+  const response = NextResponse.json(data, { status: res.status });
+  setIdentityCookies(response, request, {
+    anonymousToken: nextAnonymousToken,
+    deviceToken: nextDeviceToken,
+  });
+
+  return response;
 }

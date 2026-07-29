@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { createAnonymousIdentity, verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
@@ -38,12 +38,19 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     ? (isOwner ? "authorized" : "unauthorized")
     : undefined;
   const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
+  const deviceToken = request.headers.get("X-Device-Token") || "";
   const verifiedAnonymous = anonymousToken
     ? await verifyAnonymousIdentityToken(anonymousToken, env)
+    : null;
+  const verifiedDevice = deviceToken
+    ? await verifyDeviceIdentityToken(deviceToken, env)
     : null;
   const anonymousIdentity = verifiedAnonymous
     ? { uid: verifiedAnonymous.uid, token: anonymousToken }
     : await createAnonymousIdentity(env);
+  const deviceIdentity = verifiedDevice
+    ? { deviceId: verifiedDevice.device_id, token: deviceToken }
+    : await createDeviceIdentity(env);
 
   // Passcode gate: if channel has passcode, verify token or owner identity
   if ((channel as any).passcode) {
@@ -58,6 +65,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
             anonymousUid: anonymousIdentity.uid,
             anonymousToken: anonymousIdentity.token,
+            deviceToken: deviceIdentity.token,
           });
         }
       } else {
@@ -67,6 +75,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
           anonymousUid: anonymousIdentity.uid,
           anonymousToken: anonymousIdentity.token,
+          deviceToken: deviceIdentity.token,
         });
       }
     }
@@ -112,13 +121,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     );
   } else {
     const viewerUid = anonymousIdentity.uid;
-    const viewerFingerprint = request.headers.get("X-Viewer-Fingerprint") || "";
-    if (viewerUid.length <= 128 && viewerFingerprint.length <= 128 && (viewerUid || viewerFingerprint)) {
+    const viewerDeviceId = deviceIdentity.deviceId;
+    if (viewerUid.length <= 128 && viewerDeviceId.length <= 128 && (viewerUid || viewerDeviceId)) {
       viewerBlockedIndex = statements.length;
       statements.push(
         env.DB.prepare(
           "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR fingerprint = ?) LIMIT 1"
-        ).bind(parentChannelId, viewerUid, viewerFingerprint)
+        ).bind(parentChannelId, viewerUid, viewerDeviceId)
       );
     }
   }
@@ -184,5 +193,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     roomToken: ownerRoomToken,
     anonymousUid: anonymousIdentity.uid,
     anonymousToken: anonymousIdentity.token,
+    deviceToken: deviceIdentity.token,
   });
 }

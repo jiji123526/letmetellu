@@ -1,9 +1,7 @@
-import { generateFingerprint } from "./fingerprint";
 import { clearRoomTokenCookie, setRoomTokenCookie } from "./room-token-cookie";
 
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
-const ANONYMOUS_TOKEN_KEY = "letsplay_anonymous_token";
 type UploadPurpose = "message" | "dm" | "channel-asset";
 type UploadResult = { url: string; uploadId?: string };
 
@@ -38,22 +36,11 @@ export function clearRoomToken(channelId: string) {
   }));
 }
 
-export function getAnonymousToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(ANONYMOUS_TOKEN_KEY);
-}
-
-export function setAnonymousIdentity(uid: string, token: string) {
+export function setAnonymousIdentity(uid: string) {
   localStorage.setItem("letsplay_uid", uid);
-  localStorage.setItem(ANONYMOUS_TOKEN_KEY, token);
   window.dispatchEvent(new CustomEvent("anonymous-identity-changed", {
-    detail: { uid, token },
+    detail: { uid },
   }));
-}
-
-function anonymousIdentityHeaders(): Record<string, string> {
-  const token = getAnonymousToken();
-  return token ? { "X-Anonymous-Token": token } : {};
 }
 
 function roomTokenHeaders(channelId: string): Record<string, string> {
@@ -115,11 +102,6 @@ export async function fetchInit(channelId: string) {
   const roomToken = getRoomToken(parentChannelId);
   const headers: Record<string, string> = {};
   if (roomToken) headers["X-Room-Token"] = roomToken;
-  const anonymousToken = getAnonymousToken();
-  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
-  if (typeof window !== "undefined") {
-    headers["X-Viewer-Fingerprint"] = generateFingerprint();
-  }
 
   // Always use the same-origin proxy. Auth.js session cookies are HttpOnly, so
   // client-side cookie inspection cannot reliably decide whether the user is
@@ -128,8 +110,8 @@ export async function fetchInit(channelId: string) {
   const res = await fetch(`/api/init?channel=${channelId}`, { headers });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
   const data = await res.json();
-  if (typeof data?.anonymousUid === "string" && typeof data?.anonymousToken === "string") {
-    setAnonymousIdentity(data.anonymousUid, data.anonymousToken);
+  if (typeof data?.anonymousUid === "string") {
+    setAnonymousIdentity(data.anonymousUid);
   }
   if (data?.roomToken) setRoomToken(parentChannelId, data.roomToken);
   if (data?.channel) data.channel = decorateChannelMedia(data.channel);
@@ -283,9 +265,13 @@ export async function sendMessage(payload: {
   if (IS_MOCK) return mockApi.sendMessage(payload);
 
   const parentChannelId = getParentChannelId(payload.channel_id);
-  const res = await fetch(`${WORKER_URL}/api/messages`, {
+  const res = await fetch("/api/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Auth-Mode": "anonymous",
+      ...roomTokenHeaders(parentChannelId),
+    },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -344,9 +330,13 @@ export async function deleteMessage(payload: {
   if (IS_MOCK) return { ok: true };
 
   const parentChannelId = getParentChannelId(payload.channel_id);
-  const res = await fetch(`${WORKER_URL}/api/messages`, {
+  const res = await fetch("/api/messages", {
     method: "DELETE",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Auth-Mode": "anonymous",
+      ...roomTokenHeaders(parentChannelId),
+    },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -364,11 +354,15 @@ export async function editMessageApi(payload: {
 
   const parentChannelId = getParentChannelId(payload.channel_id);
   const { admin, ...body } = payload;
-  const res = await fetch(admin ? "/api/messages" : `${WORKER_URL}/api/messages`, {
+  const res = await fetch("/api/messages", {
     method: "PUT",
     headers: admin
       ? { "Content-Type": "application/json" }
-      : { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
+      : {
+          "Content-Type": "application/json",
+          "X-Auth-Mode": "anonymous",
+          ...roomTokenHeaders(parentChannelId),
+        },
     body: JSON.stringify(body),
   });
   return res.json();
@@ -395,9 +389,14 @@ export async function sendDm(payload: {
 }) {
   if (IS_MOCK) return { ok: true };
   const parentChannelId = getParentChannelId(payload.channel_id);
-  const res = await fetch(`${WORKER_URL}/api/dm`, {
+  const res = await fetch("/api/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Auth-Mode": "anonymous",
+      "X-Proxy-Target": "dm",
+      ...roomTokenHeaders(parentChannelId),
+    },
     body: JSON.stringify(payload),
   });
   const data = await res.json();
@@ -410,9 +409,13 @@ export async function sendDm(payload: {
 export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
   if (IS_MOCK) return { ok: true };
   const parentChannelId = getParentChannelId(payload.channel_id);
-  const res = await fetch(`${WORKER_URL}/api/messages`, {
+  const res = await fetch("/api/messages", {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...roomTokenHeaders(parentChannelId), ...anonymousIdentityHeaders() },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Auth-Mode": "anonymous",
+      ...roomTokenHeaders(parentChannelId),
+    },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -436,12 +439,12 @@ export async function uploadImage(
   if (IS_MOCK) return { url: URL.createObjectURL(blob) };
   const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ channel: channelId, purpose });
-  const res = await fetch(`${WORKER_URL}/api/upload?${params.toString()}`, {
+  const res = await fetch(`/api/upload?${params.toString()}`, {
     method: "POST",
     headers: {
       "Content-Type": blob.type || "image/jpeg",
+      "X-Auth-Mode": "anonymous",
       ...roomTokenHeaders(parentChannelId),
-      ...anonymousIdentityHeaders(),
     },
     body: blob,
   });

@@ -1,41 +1,52 @@
 import { auth } from "@/lib/auth";
+import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { NextResponse } from "next/server";
 
-// Admin message proxy — verifies session, forwards with trusted identity
 export async function POST(request: Request) {
-  return forwardAdminMessageRequest(request, "POST");
+  return forwardMessageRequest(request, "POST");
 }
 
 export async function PATCH(request: Request) {
-  return forwardAdminMessageRequest(request, "PATCH");
+  return forwardMessageRequest(request, "PATCH");
 }
 
 export async function PUT(request: Request) {
-  return forwardAdminMessageRequest(request, "PUT");
+  return forwardMessageRequest(request, "PUT");
 }
 
-async function forwardAdminMessageRequest(request: Request, method: "POST" | "PATCH" | "PUT") {
-  const session = await auth();
+export async function DELETE(request: Request) {
+  return forwardMessageRequest(request, "DELETE");
+}
 
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-  const userId = session.user.id;
+async function forwardMessageRequest(request: Request, method: "POST" | "PATCH" | "PUT" | "DELETE") {
+  const session = await auth();
+  const anonymousMode = request.headers.get("X-Auth-Mode") === "anonymous";
+  const proxyTarget = request.headers.get("X-Proxy-Target") === "dm" ? "dm" : "messages";
 
   const rawBody = await request.json();
-  const body = rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
-    ? { ...rawBody, uid: userId }
+  const body = rawBody && typeof rawBody === "object" && !Array.isArray(rawBody) && session?.user?.id && !anonymousMode
+    ? { ...rawBody, uid: session.user.id }
     : rawBody;
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
 
-  // Override uid with the verified session user ID and mark as admin-verified.
-  const res = await fetch(`${workerUrl}/api/messages`, {
+  const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
+  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  if (deviceToken) headers["X-Device-Token"] = deviceToken;
+
+  const roomToken = request.headers.get("X-Room-Token");
+  if (roomToken) headers["X-Room-Token"] = roomToken;
+
+  if (session?.user?.id && !anonymousMode) {
+    headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
+    headers["X-User-Id"] = session.user.id;
+  }
+
+  const res = await fetch(`${workerUrl}/api/${proxyTarget}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
-      "X-User-Id": userId,
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
