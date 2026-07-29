@@ -2060,6 +2060,47 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!message.image) return;
     setFullViewImage({ src: message.image, caption: message.text || undefined, date: message.created_at, msgId: message.id });
   }, []);
+  const patchReportMessage = useCallback((reportId: string, update: (message: Message) => Message) => {
+    setMessages((previous) => previous.map((message) => {
+      if (message.report_meta?.report_id !== reportId) return message;
+      return update(message);
+    }));
+  }, []);
+  const handleReportAction = useCallback(async (report: ReportMeta, action: "resolve" | "dismiss") => {
+    if (reportActionPendingId) return;
+    setReportActionPendingId(report.report_id);
+    try {
+      const result = await actOnChannelReport({
+        report_id: report.report_id,
+        action,
+      }) as {
+        ok?: boolean;
+        error?: string;
+        report?: ReportMeta;
+        message_text?: string;
+      };
+
+      if (result?.ok && result.report) {
+        patchReportMessage(report.report_id, (message) => ({
+          ...message,
+          text: result.message_text || message.text,
+          edited: true,
+          report_meta: result.report,
+        }));
+        setBanner({
+          text: action === "resolve" ? t("reportResolvedBanner") : t("reportDismissedBanner"),
+          color: action === "resolve" ? "#2a9d4e" : "var(--meta)",
+        });
+      } else if (result?.error === "report_already_processed") {
+        setBanner({ text: t("reportAlreadyProcessed"), color: "var(--meta)" });
+      } else {
+        setBanner({ text: t("reportActionFailed"), color: "#d32f2f" });
+      }
+      setTimeout(() => setBanner(null), 3000);
+    } finally {
+      setReportActionPendingId(null);
+    }
+  }, [patchReportMessage, reportActionPendingId, t]);
 
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
@@ -2220,49 +2261,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       setSubmittingChannelReport(false);
     }
   };
-
-  const patchReportMessage = useCallback((reportId: string, update: (message: Message) => Message) => {
-    setMessages((previous) => previous.map((message) => {
-      if (message.report_meta?.report_id !== reportId) return message;
-      return update(message);
-    }));
-  }, []);
-
-  const handleReportAction = useCallback(async (report: ReportMeta, action: "resolve" | "dismiss") => {
-    if (reportActionPendingId) return;
-    setReportActionPendingId(report.report_id);
-    try {
-      const result = await actOnChannelReport({
-        report_id: report.report_id,
-        action,
-      }) as {
-        ok?: boolean;
-        error?: string;
-        report?: ReportMeta;
-        message_text?: string;
-      };
-
-      if (result?.ok && result.report) {
-        patchReportMessage(report.report_id, (message) => ({
-          ...message,
-          text: result.message_text || message.text,
-          edited: true,
-          report_meta: result.report,
-        }));
-        setBanner({
-          text: action === "resolve" ? t("reportResolvedBanner") : t("reportDismissedBanner"),
-          color: action === "resolve" ? "#2a9d4e" : "var(--meta)",
-        });
-      } else if (result?.error === "report_already_processed") {
-        setBanner({ text: t("reportAlreadyProcessed"), color: "var(--meta)" });
-      } else {
-        setBanner({ text: t("reportActionFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 3000);
-    } finally {
-      setReportActionPendingId(null);
-    }
-  }, [patchReportMessage, reportActionPendingId, t]);
 
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
