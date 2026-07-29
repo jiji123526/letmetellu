@@ -503,6 +503,14 @@ const MessageRow = React.memo(function MessageRow({
       : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const isMine = isReportInboxMessage ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
+  const reportMeta = msg.report_meta;
+  const reportBubbleStyle = reportMeta?.status === "resolved"
+    ? { background: "#dff6e8", color: "#14532d", borderColor: "#71c08d" }
+    : reportMeta?.status === "dismissed"
+      ? { background: "#f7ead7", color: "#7a4d12", borderColor: "#d6a15c" }
+      : reportMeta
+        ? { background: "#eef2ff", color: "#243b6b", borderColor: "#aab8eb" }
+        : null;
 
   const bubble = (
     <div
@@ -519,20 +527,21 @@ const MessageRow = React.memo(function MessageRow({
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
           : "20px",
-        background: msg.report
+        background: reportBubbleStyle?.background || (msg.report
           ? "#ffeaea"
           : isReported || (effectiveAdmin && !msg.report && isReportedTarget)
             ? "#ffe0e0"
             : msg.dm
               ? (isMine ? "#7b3fa0" : "#ddc8ed")
-              : isMine ? bubbleColor : "var(--gray-bubble)",
-        color: msg.report
+              : isMine ? bubbleColor : "var(--gray-bubble)"),
+        color: reportBubbleStyle?.color || (msg.report
           ? "#c00"
           : isReported || isReportedTarget
             ? "#a00"
             : msg.dm
               ? (isMine ? "#fff" : "#5a1580")
-              : isMine ? "#fff" : "var(--gray-text)",
+              : isMine ? "#fff" : "var(--gray-text)"),
+        border: reportBubbleStyle ? `1px solid ${reportBubbleStyle.borderColor}` : "none",
         cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
         opacity: isReported ? 0.6 : (effectiveAdmin && isBlockedSender) ? 0.4 : undefined,
       }}
