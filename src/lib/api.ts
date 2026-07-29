@@ -395,7 +395,7 @@ export async function searchMessages(channelId: string, query: string) {
   if (IS_MOCK) return { results: [] };
   const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "search", channel: channelId, q: query });
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+  const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
   return res.json();

@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { isReportsChannel } from "../lib/special-channels";
+import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
@@ -33,8 +33,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   // owner-only data protection as private channels.
   const internalToken = request.headers.get("X-Internal-Token");
   const userId = request.headers.get("X-User-Id");
-  const isOwner = internalToken === env.INTERNAL_SECRET
-    && userId === (channel as any).owner_uid;
+  const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
+  const isOwner = trustedUserId === (channel as any).owner_uid;
+  const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
   const adminDataStatus = userId === (channel as any).owner_uid
     ? (isOwner ? "authorized" : "unauthorized")
     : undefined;
@@ -58,7 +59,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   // Passcode gate: if channel has passcode, verify token or owner identity
   if ((channel as any).passcode) {
-    if (!isOwner) {
+    if (!isOwner && !isReportsOwnerViewer) {
       const token = request.headers.get("X-Room-Token");
       if (token) {
         const decoded = await authorizeRoomToken(token, parentChannelId, (channel as any).passcode, env);
@@ -187,6 +188,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     viewerBlocked,
     dm: dmMessages || [],
     adminDataStatus,
+    viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
     presence: presence.count,
     bannerNotice: config.get(`notice_${channelId}`) || "",
     welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",

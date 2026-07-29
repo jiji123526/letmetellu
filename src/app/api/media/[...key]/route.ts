@@ -1,3 +1,4 @@
+import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 
@@ -10,6 +11,7 @@ function getParentChannelId(channelId: string): string {
 }
 
 export async function GET(request: Request, { params }: Props) {
+  const session = await auth();
   const { key } = await params;
   if (!Array.isArray(key) || key.length === 0) {
     return NextResponse.json({ error: "missing media key" }, { status: 400 });
@@ -25,8 +27,14 @@ export async function GET(request: Request, { params }: Props) {
 
     const parentChannelId = getParentChannelId(key[0]);
     const roomToken = readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
+    const forwardHeaders: Record<string, string> = {};
+    if (roomToken) forwardHeaders["X-Room-Token"] = roomToken;
+    if (session?.user?.id) {
+      forwardHeaders["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
+      forwardHeaders["X-User-Id"] = session.user.id;
+    }
     const response = await fetch(target, {
-      headers: roomToken ? { "X-Room-Token": roomToken } : undefined,
+      headers: Object.keys(forwardHeaders).length > 0 ? forwardHeaders : undefined,
       cache: "no-store",
     });
     const body = await response.arrayBuffer();

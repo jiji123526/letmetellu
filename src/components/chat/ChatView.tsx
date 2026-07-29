@@ -871,20 +871,25 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
-  // Authenticate admin on WebSocket for DM privacy
+  // Logged-in owners receive admin auth; the reports-channel owner may receive
+  // a separate viewer token for read-only moderation access to locked rooms.
   const authenticateAdminSocket = useCallback(async () => {
-    if (!isOwner || !channelId) return;
+    if (!isLoggedIn || !channelId) return;
     try {
       const response = await fetch(`/api/ws-token?channel=${encodeURIComponent(channelId)}`, {
         cache: "no-store",
       });
       if (!response.ok) return;
-      const data = await response.json() as { token?: string };
-      if (data.token) send({ type: "auth-admin", token: data.token });
+      const data = await response.json() as { token?: string; mode?: "admin" | "viewer" };
+      if (data.token && data.mode === "admin") {
+        send({ type: "auth-admin", token: data.token });
+      } else if (data.token && data.mode === "viewer") {
+        send({ type: "auth-viewer", token: data.token });
+      }
     } catch {
       // The next reconnect will request a fresh token again.
     }
-  }, [isOwner, channelId, send]);
+  }, [isLoggedIn, channelId, send]);
 
   useEffect(() => {
     authenticateAdminSocket();

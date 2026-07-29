@@ -1,6 +1,6 @@
 import { Env } from "../types";
-import { verifyAdminWsToken } from "../lib/admin-ws-token";
-import { isReportsChannel } from "../lib/special-channels";
+import { verifyAdminWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
+import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 
 interface Connection {
@@ -8,6 +8,7 @@ interface Connection {
   channelId: string;
   joinedAt: number;
   isAdmin: boolean;
+  viewerOverride: boolean;
   authorized: boolean;
   authAttempt: number;
 }
@@ -52,6 +53,7 @@ export class ChatRoom {
         channelId,
         joinedAt: Date.now(),
         isAdmin: false,
+        viewerOverride: false,
         authorized: isReportsChannel(channelId, this.env) ? false : !this.currentPasscode,
         authAttempt: 0,
       });
@@ -101,6 +103,26 @@ export class ChatRoom {
             }
           }
 
+          if (data.type === "auth-viewer" && typeof data.token === "string") {
+            const payload = await verifyViewerWsToken(data.token, this.env);
+            const authResponse = JSON.stringify({
+              type: payload?.channel_id === conn.channelId && payload?.user_id ? "room-authenticated" : "room-auth-failed",
+              requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+            });
+            if (payload?.channel_id === conn.channelId && await isReportsChannelOwner(payload.user_id, this.env)) {
+              conn.authAttempt++;
+              conn.uid = payload.user_id;
+              conn.viewerOverride = true;
+              conn.authorized = true;
+              server.send(authResponse);
+              this.broadcastPresence();
+            } else {
+              conn.viewerOverride = false;
+              conn.authorized = false;
+              server.send(authResponse);
+            }
+          }
+
           if (data.type === "emoji-fx" || data.type === "typing") {
             if (conn.authorized) this.broadcast(event.data);
           }
@@ -123,6 +145,7 @@ export class ChatRoom {
               conn.authAttempt++;
               conn.uid = payload.user_id;
               conn.isAdmin = true;
+              conn.viewerOverride = false;
               conn.authorized = true;
               server.send(JSON.stringify({ type: "admin-authenticated" }));
               this.broadcastPresence();
@@ -164,7 +187,7 @@ export class ChatRoom {
       this.passcodeLoaded = true;
       for (const [ws, connection] of this.connections) {
         connection.authAttempt++;
-        if (connection.isAdmin) continue;
+        if (connection.isAdmin || connection.viewerOverride) continue;
         if (this.currentPasscode) {
           if (connection.authorized) {
             try {

@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
-import { isReportsChannel } from "../lib/special-channels";
+import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
@@ -178,9 +178,12 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
     const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
 
     if (passcode) {
-      const isOwner = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
-        && request.headers.get("X-User-Id") === owner_uid;
-      if (!isOwner) {
+      const trustedUserId = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
+        ? request.headers.get("X-User-Id") || ""
+        : "";
+      const isOwner = trustedUserId === owner_uid;
+      const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
+      if (!isOwner && !isReportsOwnerViewer) {
         const token = new URL(request.url).searchParams.get("token") || request.headers.get("X-Room-Token");
         if (!token) return Response.json({ error: "passcode required" }, { status: 403 });
         const decoded = await authorizeRoomToken(token, parentChannelId, passcode, env);

@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { isReportsChannel } from "../lib/special-channels";
+import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -17,13 +17,15 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
   const internalToken = request.headers.get("X-Internal-Token");
   const userId = request.headers.get("X-User-Id");
-  const isOwner = internalToken === env.INTERNAL_SECRET && userId === owner_uid;
+  const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
+  const isOwner = trustedUserId === owner_uid;
+  const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
 
   if (passcode) {
-    if (!isOwner) {
+    if (!isOwner && !isReportsOwnerViewer) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
       const decoded = await authorizeRoomToken(roomToken, parentChannelId, passcode, env);
