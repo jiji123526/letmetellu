@@ -262,6 +262,7 @@ export async function submitChannelReport(payload: {
   const parentChannelId = getParentChannelId(payload.channel_id);
   const res = await fetch("/api/channel-reports", {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...roomTokenHeaders(parentChannelId),
@@ -284,6 +285,7 @@ export async function actOnChannelReport(payload: {
 
   const res = await fetch("/api/channel-reports", {
     method: "PATCH",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },

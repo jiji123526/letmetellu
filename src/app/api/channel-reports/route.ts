@@ -1,6 +1,11 @@
 import { auth } from "@/lib/auth";
 import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
+import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
+
+function getParentChannelId(channelId: string): string {
+  return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+}
 
 export async function POST(request: Request) {
   return forwardChannelReportRequest(request, "POST");
@@ -22,7 +27,11 @@ async function forwardChannelReportRequest(request: Request, method: "POST" | "P
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
-  const roomToken = request.headers.get("X-Room-Token");
+  const requestedChannelId = body && typeof body === "object" && typeof (body as Record<string, unknown>).channel_id === "string"
+    ? getParentChannelId((body as Record<string, string>).channel_id)
+    : null;
+  const roomToken = request.headers.get("X-Room-Token")
+    || (requestedChannelId ? readRoomTokenCookie(request.headers.get("cookie"), requestedChannelId) : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
   const forwardedFor = request.headers.get("x-forwarded-for");
