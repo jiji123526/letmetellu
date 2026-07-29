@@ -123,6 +123,9 @@ Before opening credential signup to the public, verify a sending domain and fini
 - Message edits now reuse server-side create-message validation instead of trusting the previous relaxed edit path.
 - Attached message and DM media is removed from R2 when the source content is deleted, and passcode-protected media now checks room access on read.
 - Media reads now resolve source metadata through ordered batched D1 lookups instead of a compound `UNION` query, avoiding `D1_ERROR: too many terms in compound SELECT` on `/api/media/*` without relaxing room-token or upload-ticket checks.
+- Passcode-protected media now stays on the same-origin `/api/media/*` proxy path and forwards room access in headers, so locked media URLs no longer expose `?token=...` to the browser address bar or shared links.
+- Link previews now require absolute `http:`/`https:` URLs, block obvious local/private/internal hostnames, re-check every redirect hop manually, require HTML content, cap response size, use a short timeout and apply a best-effort per-IP rate limit in the Worker.
+- When room access is revoked or expires, the passcode overlay now re-fetches gated channel state so the latest passcode hint appears immediately without a full refresh.
 - DM creation now enforces the channel DM toggle, petition-only behavior for blocked users, rate limits, message length and banned-word checks in the Worker.
 - Anonymous message, reaction, report and DM mutations now derive identity from a Worker-signed token instead of a raw client-provided `uid`.
 - Public-channel uploads now use durable upload tickets, per-channel quotas and pending-object cleanup instead of allowing unattached anonymous R2 writes.
@@ -135,7 +138,7 @@ Before opening credential signup to the public, verify a sending domain and fini
 
 | Priority | Finding | Current risk | Required direction |
 | --- | --- | --- | --- |
-| High | Link preview fetch accepts an arbitrary URL | The Worker can be abused for SSRF-like requests, redirects and large downloads | Allow only HTTP(S), reject private/local destinations before and after redirects, and add timeout, response-size and rate limits |
+| Medium | Preview-fetch hardening is still hostname-based and isolate-local | Best-effort checks can still be bypassed by hostile DNS or distributed callers, and limits reset across isolates/restarts | Add durable caller/IP limits and stronger destination validation if the platform later exposes safe DNS/IP verification primitives |
 | Medium | Reports rely on browser-local deduplication | A caller can submit duplicate or fabricated report messages directly | Validate the target, enforce one active report per signed reporter/target and add durable throttling |
 | Medium | Message rate limiting is isolate-local and keyed by mutable UID | Limits reset across isolates/restarts and can be bypassed by changing UID | Move enforcement to a channel Durable Object, D1 or Cloudflare Rate Limiting and key it with signed identity plus IP HMAC |
 | Medium | No explicit application security-header policy | XSS and content-sniffing defenses depend on framework/platform defaults | Add CSP, `nosniff`, Referrer Policy, Permissions Policy, frame restrictions and HSTS with widget domains tested |
@@ -151,24 +154,25 @@ build and audit.
 Recommended remediation order:
 
 1. server-side report policy;
-2. preview-fetch SSRF controls;
-3. durable rate limits;
-4. dependency upgrades and response security headers.
+2. durable rate limits, including preview-fetch callers;
+3. dependency upgrades and response security headers.
 
 ### 미해결 보안 점검 결과 — 2026-07-26
 
-아래 항목은 코드 검토로 확인했으며 아직 수정되지 않았습니다. 공개 출시
-전에는 신고 정책 강화가 먼저 필요합니다.
+아래 항목은 코드 검토로 확인한 현재 잔여 이슈입니다. 링크 미리보기
+격리는 2026-07-29에 1차 강화되었지만, 공개 출시 전에는 신고 정책
+강화가 먼저 필요합니다.
 
-- **높음:** 링크 미리보기 Worker가 임의 URL을 가져오므로 프로토콜·사설
-  주소·리디렉션·응답 크기·timeout·rate limit 검사가 필요합니다.
+- **중간:** 링크 미리보기 Worker는 이제 프로토콜·리디렉션·응답 크기·
+  timeout·호스트 차단을 적용하지만, rate limit은 isolate-local이고
+  목적지 검사는 호스트명 기반입니다.
 - **중간:** 신고 중복 제한은 브라우저 저장값에 의존하고, 메시지 rate
   limit은 Worker 인스턴스 메모리와 변경 가능한 UID에 의존합니다.
 - **중간:** CSP, `nosniff`, Referrer Policy, Permissions Policy, 프레임
   제한과 HSTS를 명시적으로 설정하지 않았습니다.
 
-수정 순서는 신고 정책 → 미리보기 SSRF 방어 →
-지속형 rate limit → 의존성·보안 헤더
+수정 순서는 신고 정책 → 지속형 rate limit →
+의존성·보안 헤더
 순서를 권장합니다. 강제 `npm audit fix`는 Next.js 9로 잘못
 다운그레이드하므로 사용하지 않습니다.
 
@@ -625,6 +629,8 @@ For changes involving D1, use this order:
 
 Worker-only fixes that do not change the Next.js app or D1 schema, such as the
 2026-07-29 `/api/media/*` D1 lookup fix, do not require a frontend deploy.
+Frontend-only fixes such as the tokenless same-origin media proxy and the
+passcode-overlay hint refresh do not require a Worker deploy.
 
 ## Project structure
 

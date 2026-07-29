@@ -218,6 +218,33 @@ Fix:
 If `/api/media/*` starts returning `500` again, confirm the cause with
 `npx wrangler tail` before assuming the database is missing a migration.
 
+### Media auth, preview isolation and passcode refresh — 2026-07-29
+
+Follow-up hardening on the same deployment line changed three user-visible
+paths without adding a new migration:
+
+- Passcode-protected media now remains on the same-origin Next.js
+  `/api/media/*` route. The browser no longer receives a room-access token in
+  the media URL query string; the proxy forwards room access to the Worker in
+  the `X-Room-Token` header instead.
+- The preview Worker route now accepts only absolute `http:`/`https:` URLs,
+  blocks obvious local/private/internal hostnames, follows redirects manually
+  with per-hop validation, enforces a short timeout, requires HTML-compatible
+  content and caps the body size before OG parsing. The current caller rate
+  limit is still isolate-local memory, so it is best-effort rather than
+  durable.
+- When room access is revoked or expires, the chat view now re-fetches the
+  gated `init` payload before showing the passcode overlay. This ensures the
+  latest `passcodeHint` appears immediately instead of only after a full page
+  refresh.
+
+Deployment notes:
+
+- the preview-route hardening and media-read D1 fix are Worker deploys;
+- the tokenless same-origin media proxy and passcode-hint refresh are frontend
+  deploys;
+- no new D1 migration is required for any of these changes.
+
 ---
 
 # CSS → TSX Style Migration Notes
@@ -404,7 +431,13 @@ The preview endpoint must:
 - require an HTML-compatible content type;
 - apply durable caller/IP rate limits and cache successful results.
 
-An allowlist for supported native providers is safer than unrestricted
+The first six controls above were implemented on 2026-07-29. Remaining gaps:
+
+- caller rate limiting is still isolate-local rather than durable;
+- destination blocking is hostname-based and does not perform independent DNS
+  or post-resolution private-IP validation.
+
+An allowlist for supported native providers is still safer than unrestricted
 arbitrary-site previewing.
 
 #### P2 — headers and dependencies
@@ -432,10 +465,10 @@ repeat `npm audit --omit=dev`.
 1. Signed anonymous identity; add cross-user edit/delete regression tests.
 2. Upload quotas and pending-object cleanup; verify R2 deletion on every path.
 3. DM/report server policy and direct-API tests with the UI bypassed.
-4. Preview SSRF controls with loopback, private IP, redirect and oversized-body
-   fixtures.
-5. Edit validation and durable rate limiting.
-6. Security headers and dependency upgrades, followed by widget tests.
+4. Durable rate limiting, including preview callers, plus redirect and
+   oversized-body fixtures.
+5. Edit validation and security headers.
+6. Dependency upgrades, followed by widget tests.
 
 Every remediation should be deployed Worker-first when the frontend depends on
 new enforcement or token issuance. Keep backward compatibility bounded and
