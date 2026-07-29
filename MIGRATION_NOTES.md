@@ -281,6 +281,33 @@ Deployment notes:
   anonymous write paths now proxy through Next.js;
 - no new D1 migration is required for either change.
 
+### Reporting, moderation, and guide UX updates — 2026-07-29
+
+This deployment line extended the earlier moderation work without adding a new
+D1 migration.
+
+- Channel reports now submit through the same-origin frontend proxy, enforce
+  server-side reporter identity and reject duplicate submissions for the same
+  reporter/channel during a 24-hour cooldown.
+- The private reports inbox now carries structured report messages with direct
+  channel links and inline resolve, dismiss, freeze, unfreeze, delete and
+  petition-review actions for the inbox owner.
+- Frozen channel owners can submit one petition from chat, and rejected
+  petitions now support an explicit unfreeze flow instead of leaving the
+  channel stuck in moderation state.
+- Viewer-facing moderation UI now only exposes a generic frozen-channel state;
+  non-owners do not receive the moderation reason.
+- The general user guide moved to the dashboard menu, guest onboarding's final
+  page can open the same guide, and the in-channel owner guide now documents
+  report-handling and moderation states from the owner's perspective.
+
+Deployment notes:
+
+- channel-report enforcement and moderation actions are Worker deploys;
+- report dialog, reports-channel rendering and guide entry-point changes are
+  frontend deploys;
+- no new D1 migration is required for these UX and policy updates.
+
 ---
 
 # CSS → TSX Style Migration Notes
@@ -459,9 +486,10 @@ Most of this item is now implemented:
 
 Remaining gap:
 
-- Reports still need a dedicated model or stricter server validation:
-  existing-target checks, reporter/target uniqueness, cooldowns, daily quota
-  and authoritative server-side status.
+- Channel reports now enforce server-side reporter identity, same-channel
+  duplicate prevention and a 24-hour cooldown.
+- Remaining work is durable daily per-reporter quotas, broader cross-channel
+  abuse throttling and direct-API regression coverage around report policy.
 
 #### P1 — preview fetch isolation
 
@@ -507,8 +535,8 @@ repeat `npm audit --omit=dev`.
 
 #### Remediation order and verification
 
-1. Report policy and durable deduplication; add direct-API tests with the UI
-   bypassed.
+1. Durable report quotas and abuse throttling; add direct-API tests with the
+   UI bypassed.
 2. Durable rate limiting, including preview callers, plus redirect and
    oversized-body fixtures.
 3. Response security headers.

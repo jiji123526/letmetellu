@@ -11,10 +11,12 @@ The project is a deployed MVP with:
 - anonymous, link-only channel access with optional passcodes and hints;
 - real-time chat over WebSockets;
 - replies, reactions, editing, deletion, reporting, blocking and banned words;
+- non-owner channel reports routed to a private moderation inbox with owner warning, freeze and petition handling;
 - multiple-image messages, R2 media storage, gallery and link panels;
 - private DMs visible only to the channel owner;
 - temporary live sessions with configurable emoji presets and automatic session cleanup;
 - channel notices, rules, welcome messages and chat freezing;
+- a dashboard guide for guests and regular users plus an in-channel owner guide;
 - Korean and English UI;
 - an iMessage-style dashboard for owned and recently joined channels.
 
@@ -43,6 +45,7 @@ Normal channel and live-session traffic share the parent channel's Durable Objec
 ## Dashboard behavior
 
 - The dashboard is the main entry point for logged-in and guest users.
+- The dashboard menu exposes the full general user guide, and the last page of guest onboarding can open the same guide.
 - Logged-in users can own up to **5 channels**. The Worker enforces this limit.
 - Logged-in users' recent channels, pinned state and personal channel colors are stored in `user_recent_channels` and follow the account across devices.
 - Logged-in users' font-size preference follows the account; guest preferences remain browser-local.
@@ -62,7 +65,7 @@ Normal channel and live-session traffic share the parent channel's Durable Objec
 - New accounts remain pending until a single-use, 30-minute email link is confirmed.
 - Password-reset links are single-use, expire after 30 minutes and do not reveal whether an address exists.
 - Legacy SHA-256 password records are still recognized by the Worker; the current code attempts to upgrade a successful legacy login to salted PBKDF2.
-- There is no platform-wide administrator role. Administration is scoped to channel ownership.
+- There is still no full platform RBAC system. Production moderation currently uses one manually bootstrapped reports-inbox owner rather than delegated operator roles.
 
 Before opening credential signup to the public, verify a sending domain and finish production monitoring for email delivery, rate limits and the legacy-hash upgrade path.
 
@@ -88,7 +91,9 @@ Before opening credential signup to the public, verify a sending domain and fini
 - freeze/unfreeze
 - banned words with expiry
 - block/unblock by anonymous identity and server-issued device token
+- non-owner channel reports routed to the private reports inbox
 - optional petitions from blocked users
+- owner petitions after a moderation freeze
 - optional private DM to the owner
 - profile image, channel name and channel color
 - optional owner-profile visibility, private by default
@@ -131,17 +136,18 @@ Before opening credential signup to the public, verify a sending domain and fini
 - Anonymous message, reaction, report and DM mutations now derive identity from HttpOnly anonymous/device cookies instead of raw client-provided `uid` or client-generated fingerprints, so clearing localStorage alone no longer bypasses blocks.
 - Blocked users can no longer react after a block is applied, and owner-side blocks now persist against the server-issued device token instead of an empty or spoofable client fingerprint.
 - Public-channel uploads now use durable upload tickets, per-channel quotas and pending-object cleanup instead of allowing unattached anonymous R2 writes.
+- Channel reports now enforce server-side reporter identity checks and a 24-hour duplicate cooldown per reporter/channel instead of relying only on browser-local state.
 
 ### Open security findings — 2026-07-26
 
 > **Release warning:** The items below were confirmed by code review and are
-> not fixed yet. Server-side report hardening should be completed before a
-> public launch.
+> not fixed yet. Report abuse controls and durable rate limits should still be
+> tightened before a public launch.
 
 | Priority | Finding | Current risk | Required direction |
 | --- | --- | --- | --- |
 | Medium | Preview-fetch hardening is still hostname-based and isolate-local | Best-effort checks can still be bypassed by hostile DNS or distributed callers, and limits reset across isolates/restarts | Add durable caller/IP limits and stronger destination validation if the platform later exposes safe DNS/IP verification primitives |
-| Medium | Reports rely on browser-local deduplication | A caller can submit duplicate or fabricated report messages directly | Validate the target, enforce one active report per signed reporter/target and add durable throttling |
+| Medium | Report abuse controls are still incomplete | Duplicate channel reports are now blocked server-side for 24 hours, but there is still no durable daily quota or broader per-reporter/per-IP abuse throttling across channels | Add daily quotas, broader durable throttling and stronger target/evidence validation for direct API callers |
 | Medium | Message rate limiting is isolate-local and keyed by resettable anonymous identity | Limits reset across isolates/restarts and can still be bypassed by clearing cookies or moving to a new browser/profile | Move enforcement to a channel Durable Object, D1 or Cloudflare Rate Limiting and key it with signed identity plus IP HMAC |
 | Medium | No explicit application security-header policy | XSS and content-sniffing defenses depend on framework/platform defaults | Add CSP, `nosniff`, Referrer Policy, Permissions Policy, frame restrictions and HSTS with widget domains tested |
 
@@ -155,40 +161,45 @@ build and audit.
 
 Recommended remediation order:
 
-1. server-side report policy;
+1. durable report quotas and abuse throttling;
 2. durable rate limits, including preview-fetch callers;
 3. dependency upgrades and response security headers.
 
 ### 미해결 보안 점검 결과 — 2026-07-26
 
 아래 항목은 코드 검토로 확인한 현재 잔여 이슈입니다. 링크 미리보기
-격리는 2026-07-29에 1차 강화되었지만, 공개 출시 전에는 신고 정책
-강화가 먼저 필요합니다.
+격리는 2026-07-29에 1차 강화되었고, 채널 신고도 같은 날 서버 측 중복
+차단과 재신고 cooldown을 추가했지만 공개 출시 전에는 남은 abuse 제어를
+더 강화해야 합니다.
 
 - **중간:** 링크 미리보기 Worker는 이제 프로토콜·리디렉션·응답 크기·
   timeout·호스트 차단을 적용하지만, rate limit은 isolate-local이고
   목적지 검사는 호스트명 기반입니다.
-- **중간:** 신고 중복 제한은 브라우저 저장값에 의존하고, 메시지 rate
-  limit은 Worker 인스턴스 메모리와 초기화 가능한 익명 식별자에 의존합니다.
+- **중간:** 채널 신고는 이제 서버 측에서 24시간 중복 제출을 차단하지만,
+  사용자별 일일 quota와 채널 간 abuse throttling은 아직 부족합니다.
+  메시지 rate limit도 여전히 Worker 인스턴스 메모리와 초기화 가능한
+  익명 식별자에 의존합니다.
 - **중간:** CSP, `nosniff`, Referrer Policy, Permissions Policy, 프레임
   제한과 HSTS를 명시적으로 설정하지 않았습니다.
 
-수정 순서는 신고 정책 → 지속형 rate limit →
+수정 순서는 신고 abuse 제어 → 지속형 rate limit →
 의존성·보안 헤더
 순서를 권장합니다. 강제 `npm audit fix`는 Next.js 9로 잘못
 다운그레이드하므로 사용하지 않습니다.
 
 ## Platform moderation roadmap
 
-> **Status:** This section describes a planned platform-wide moderation system.
-> It is not implemented yet. Channel-owner administration remains the only
-> administrative role in the current production application.
+> **Status:** Current production already has a narrower moderation flow: one
+> manually bootstrapped reports-inbox owner can review channel reports, send
+> owner-only warnings, freeze or delete channels, and resolve owner petitions.
+> This section describes the larger RBAC-backed platform moderation system
+> that does not exist yet.
 
 Platform moderation must remain separate from channel ownership. A channel
-owner may manage only channels they own, while a platform operator may review
-reports and apply explicitly authorized service-level actions. Platform access
-must never be implemented as a client-provided `is_admin` flag or as a blanket
-bypass in the existing channel-admin API.
+owner may manage only channels they own. The current reports-inbox owner model
+is intentionally narrow and should not be expanded through client-provided
+flags or blanket bypasses in the existing channel-admin API. Future delegated
+operators should use a dedicated platform role system.
 
 ### Proposed roles
 
@@ -383,22 +394,25 @@ affected content and allowed appeal path, but not the reporter's identity.
 8. Add MFA, recent re-authentication, monitoring, export controls and role
    administration.
 
-The recommended MVP is one manually bootstrapped `super_admin`, channel-report
-submission, a private report queue, no-violation/suspend/restore actions,
-mandatory reasons and audit logs. Automatic deletion, multiple operator roles,
-appeals and permanent deletion should follow only after the core review flow is
-stable.
+The current simplified deployment is one manually bootstrapped reports-inbox
+owner with channel-report submission, a private report queue, warning/freeze/
+delete actions and owner petitions. The recommended next step is to replace
+that ad-hoc model with real `platform_admins` roles, audit logs and a
+dedicated `/platform/*` console before moderation is delegated to additional
+operators.
 
 ## 플랫폼 운영 및 신고 시스템 로드맵
 
-> **현재 상태:** 이 절은 앞으로 구현할 플랫폼 전체 운영 시스템의
-> 설계안입니다. 아직 프로덕션에 구현되지 않았으며, 현재 서비스에는 자신이
-> 소유한 채널만 관리하는 채널 관리자 권한만 존재합니다.
+> **현재 상태:** 현재 프로덕션에는 더 좁은 운영 흐름이 이미 있습니다.
+> 직접 지정한 신고함 소유자 1명이 채널 신고를 검토하고, 방장 전용 경고를
+> 보내고, 채널 동결·삭제와 이의 제기 처리를 할 수 있습니다. 이 절은 아직
+> 구현되지 않은 전체 RBAC 기반 운영 시스템 설계안을 설명합니다.
 
-플랫폼 운영자 권한은 채널 소유권과 완전히 분리합니다. 채널 관리자는 자신이
-소유한 채널만 관리하고, 플랫폼 운영자는 신고를 검토한 뒤 허용된 서비스
-차원의 조치만 실행합니다. 클라이언트가 보내는 `is_admin` 값이나 기존 채널
-관리 API의 무조건적인 우회 플래그로 구현하면 안 됩니다.
+플랫폼 운영자 권한은 채널 소유권과 완전히 분리합니다. 방장은 자신이 소유한
+채널만 관리합니다. 현재 신고함 소유자 방식도 기존 채널 관리 API에
+클라이언트가 보내는 `is_admin` 값이나 무조건적인 우회 플래그를 붙여
+확장하면 안 됩니다. 나중에 운영자를 늘릴 때는 전용 역할 체계를 써야
+합니다.
 
 ### 제안 역할
 
@@ -526,10 +540,10 @@ active → restricted → suspended → removed
 7. 채널 관리자 통보와 운영 조치별 이의 제기 1회를 구현합니다.
 8. MFA, 최근 재인증, 모니터링, 내보내기 통제와 운영자 관리를 추가합니다.
 
-권장 MVP는 직접 등록한 `super_admin` 한 명, 채널 신고 접수, 비공개 신고
-대기열, 문제없음·정지·복구 처리, 필수 처리 사유와 감사 로그입니다. 자동
-삭제, 여러 운영자 역할, 이의 제기와 영구 삭제는 핵심 검토 흐름이 안정된
-뒤 추가합니다.
+현재 단순 배포 형태는 직접 등록한 신고함 소유자 1명, 채널 신고 접수,
+비공개 신고 대기열, 경고·동결·삭제 처리와 방장 이의 제기입니다. 다음 단계는
+이 임시 모델을 `platform_admins`, 감사 로그와 전용 `/platform/*` 화면으로
+치환하는 것입니다. 여러 운영자 역할 위임은 그 뒤에 진행하는 편이 안전합니다.
 
 ## Local development
 
