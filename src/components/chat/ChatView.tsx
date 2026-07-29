@@ -2250,8 +2250,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         setShowChannelReportDialog(false);
         setBanner({ text: t("channelReported"), color: "#d32f2f" });
       } else if (result?.error === "report_exists") {
+        setShowChannelReportDialog(false);
         setBanner({ text: t("reportAlreadySubmitted"), color: "var(--meta)" });
       } else if (result?.error === "channel_owner_cannot_report") {
+        setShowChannelReportDialog(false);
         setBanner({ text: t("reportOwnerCannot"), color: "#d32f2f" });
       } else {
         setBanner({ text: t("reportChannelFailed"), color: "#d32f2f" });
@@ -2563,7 +2565,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {/* Toast banner */}
       {banner && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-[60] text-white font-normal px-4 py-[10px] rounded-[12px] text-center max-w-[90%]"
+          className="fixed left-1/2 -translate-x-1/2 z-[550] text-white font-normal px-4 py-[10px] rounded-[12px] text-center max-w-[90%]"
           style={{
             bottom: "80px",
             background: banner.color.startsWith("var(") ? banner.color : `${banner.color}dd`,
