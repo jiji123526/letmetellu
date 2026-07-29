@@ -466,6 +466,20 @@ function stripInboxChannelLine(text: string): string {
     .join("\n");
 }
 
+function looksLikeInboxModerationMessage(message: Message): boolean {
+  if (message.report_meta || message.petition_meta) return true;
+  if (!message.is_admin || message.image) return false;
+  const nick = message.nick || "";
+  if (nick === "신고함" || nick === "Reports" || nick === "이의 제기" || nick === "Appeal") {
+    return true;
+  }
+  const text = message.text || "";
+  return text.startsWith("🚨 채널 신고")
+    || text.startsWith("🚨 Channel report")
+    || text.startsWith("📝 채널 이의 제기")
+    || text.startsWith("📝 Channel appeal");
+}
+
 interface MessageRowProps {
   msg: Message;
   isReply: boolean;
@@ -519,13 +533,14 @@ const MessageRow = React.memo(function MessageRow({
     : false;
   const isReportInboxMessage = !!msg.report_meta;
   const isPetitionInboxMessage = !!msg.petition_meta;
+  const isFallbackInboxMessage = looksLikeInboxModerationMessage(msg);
   const isInboxMessage = isReportInboxMessage || isPetitionInboxMessage;
   const isSent = isReply
     ? parentIsSent
-    : isInboxMessage
+    : (isInboxMessage || isFallbackInboxMessage)
       ? false
       : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-  const isMine = isInboxMessage ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
   const reportMeta = msg.report_meta;
   const petitionMeta = msg.petition_meta;
