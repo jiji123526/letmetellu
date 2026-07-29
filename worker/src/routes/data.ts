@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -75,7 +76,10 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
       const stmt = env.DB.prepare(query);
       const { results } = await stmt.bind(...params).all();
-      return Response.json({ messages: results });
+      const messages = isReportsChannel(parentChannelId, env) && isOwner
+        ? await hydrateReportInboxMessages((results || []) as Array<{ id: string }>, env)
+        : results;
+      return Response.json({ messages });
     }
 
     case "message-context": {
@@ -150,8 +154,11 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const messages = [...byId.values()].sort((left, right) =>
         String(left.created_at || "").localeCompare(String(right.created_at || ""))
       );
+      const responseMessages = isReportsChannel(parentChannelId, env) && isOwner
+        ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, env)
+        : messages;
       return Response.json({
-        messages,
+        messages: responseMessages,
         target_id: target.id,
         has_older: hasOlder,
         has_newer: hasNewer,

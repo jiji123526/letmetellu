@@ -275,6 +275,23 @@ export async function submitChannelReport(payload: {
   return res.json();
 }
 
+export async function actOnChannelReport(payload: {
+  report_id: string;
+  action: "resolve" | "dismiss";
+  resolution_note?: string;
+}) {
+  if (IS_MOCK) return { ok: true };
+
+  const res = await fetch("/api/channel-reports", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 export async function sendMessage(payload: {
   uid: string;
   nick?: string;

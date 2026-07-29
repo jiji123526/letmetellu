@@ -3,6 +3,14 @@ import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
+  return forwardChannelReportRequest(request, "POST");
+}
+
+export async function PATCH(request: Request) {
+  return forwardChannelReportRequest(request, "PATCH");
+}
+
+async function forwardChannelReportRequest(request: Request, method: "POST" | "PATCH") {
   const session = await auth();
   const body = await request.json();
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
@@ -28,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   const res = await fetch(`${workerUrl}/api/channel-reports`, {
-    method: "POST",
+    method,
     headers,
     body: JSON.stringify(body),
   });

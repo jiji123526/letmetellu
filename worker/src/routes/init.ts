@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
@@ -147,7 +148,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   ]);
   const presence = await presenceRes.json() as { count: number };
 
-  const messages = batchResults[0].results || [];
+  const rawMessages = batchResults[0].results || [];
   const configRows = (batchResults[1].results || []) as { id: string; text: string }[];
   const config = new Map(configRows.map((row) => [row.id, row.text]));
   const liveRow = batchResults[2].results?.[0] as { is_frozen?: number } | undefined;
@@ -178,6 +179,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const ownerRoomToken = isOwner && (channel as any).passcode
     ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
     : undefined;
+  const messages = isReportsChannel(parentChannelId, env) && isOwner
+    ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env)
+    : rawMessages;
 
   return Response.json({
     channel: safeChannel,

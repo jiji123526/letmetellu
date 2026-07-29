@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport, actOnChannelReport } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -53,6 +53,22 @@ interface Message {
   report?: number;
   reported_msg_id?: string;
   fingerprint?: string | null;
+  report_meta?: ReportMeta;
+}
+
+interface ReportMeta {
+  report_id: string;
+  channel_id: string;
+  channel_name: string;
+  channel_url: string;
+  reason: string;
+  reason_label: string;
+  status: "open" | "resolved" | "dismissed";
+  details?: string | null;
+  reporter_label: string;
+  created_at: string;
+  resolved_at?: string | null;
+  resolution_note?: string | null;
 }
 
 interface Channel {
@@ -90,6 +106,7 @@ interface InitData {
   passcodeHint?: string;
   adminDataStatus?: "authorized" | "unauthorized";
   anonymousUid?: string;
+  viewerAccess?: "owner" | "reports_owner" | "standard";
 }
 
 interface ContextMenuState {
@@ -158,7 +175,8 @@ function messagesEqual(left: Message, right: Message): boolean {
     && left.deleted === right.deleted
     && left.edited === right.edited
     && left.report === right.report
-    && left.reported_msg_id === right.reported_msg_id;
+    && left.reported_msg_id === right.reported_msg_id
+    && JSON.stringify(left.report_meta || null) === JSON.stringify(right.report_meta || null);
 }
 
 function mergeServerMessageSnapshot(previous: Message[], incoming: Message[]): Message[] {
@@ -441,6 +459,10 @@ interface MessageRowProps {
   onExpand: (text: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onEmojiPicker: (messageId: string, rect: DOMRect) => void;
+  reportActionPendingId: string | null;
+  onViewReportedChannel: (report: ReportMeta) => void;
+  onResolveReport: (report: ReportMeta) => void;
+  onDismissReport: (report: ReportMeta) => void;
 }
 
 const MessageRow = React.memo(function MessageRow({
@@ -465,6 +487,10 @@ const MessageRow = React.memo(function MessageRow({
   onExpand,
   onReaction,
   onEmojiPicker,
+  reportActionPendingId,
+  onViewReportedChannel,
+  onResolveReport,
+  onDismissReport,
 }: MessageRowProps) {
   const { t } = useLocale();
   const parentIsSent = parentIsAdmin !== null
@@ -575,6 +601,13 @@ const MessageRow = React.memo(function MessageRow({
       </svg>
     </span>
   ) : null;
+  const reportMeta = msg.report_meta;
+  const reportActionPending = reportMeta ? reportActionPendingId === reportMeta.report_id : false;
+  const reportStatusLabel = reportMeta?.status === "resolved"
+    ? t("reportStatusResolved")
+    : reportMeta?.status === "dismissed"
+      ? t("reportStatusDismissed")
+      : t("reportStatusOpen");
 
   return (
     <div
@@ -599,6 +632,90 @@ const MessageRow = React.memo(function MessageRow({
             {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
           </div>
         ) : bubble}
+        {reportMeta && !isReply && effectiveAdmin && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px", alignItems: "center" }}>
+            <span
+              style={{
+                fontSize: "calc(var(--bubble-font-size) - 6px)",
+                color: reportMeta.status === "open" ? "#b26a00" : reportMeta.status === "resolved" ? "#2a9d4e" : "#7a7a7a",
+                background: reportMeta.status === "open" ? "#fff2cf" : reportMeta.status === "resolved" ? "#e4f6ea" : "#efefef",
+                borderRadius: "999px",
+                padding: "4px 8px",
+                lineHeight: 1,
+              }}
+            >
+              {reportStatusLabel}
+            </span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onViewReportedChannel(reportMeta);
+              }}
+              style={{
+                border: "none",
+                borderRadius: "999px",
+                padding: "7px 10px",
+                background: "var(--card, #f2f2f7)",
+                color: "var(--gray-text, #111)",
+                fontSize: "calc(var(--bubble-font-size) - 5px)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                lineHeight: 1,
+              }}
+            >
+              {t("viewReportedChannel")}
+            </button>
+            {reportMeta.status === "open" && (
+              <>
+                <button
+                  type="button"
+                  disabled={reportActionPending}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onResolveReport(reportMeta);
+                  }}
+                  style={{
+                    border: "none",
+                    borderRadius: "999px",
+                    padding: "7px 10px",
+                    background: "#2a9d4e",
+                    color: "#fff",
+                    fontSize: "calc(var(--bubble-font-size) - 5px)",
+                    cursor: reportActionPending ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                    lineHeight: 1,
+                    opacity: reportActionPending ? 0.65 : 1,
+                  }}
+                >
+                  {t("resolveReport")}
+                </button>
+                <button
+                  type="button"
+                  disabled={reportActionPending}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDismissReport(reportMeta);
+                  }}
+                  style={{
+                    border: "none",
+                    borderRadius: "999px",
+                    padding: "7px 10px",
+                    background: "#8e8e93",
+                    color: "#fff",
+                    fontSize: "calc(var(--bubble-font-size) - 5px)",
+                    cursor: reportActionPending ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                    lineHeight: 1,
+                    opacity: reportActionPending ? 0.65 : 1,
+                  }}
+                >
+                  {t("dismissReport")}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <ReactionBadge
           messageId={msg.id}
           reactions={msg.reactions}
@@ -635,6 +752,10 @@ interface MessageListProps {
   onExpand: MessageRowProps["onExpand"];
   onReaction: MessageRowProps["onReaction"];
   onEmojiPicker: MessageRowProps["onEmojiPicker"];
+  reportActionPendingId: string | null;
+  onViewReportedChannel: MessageRowProps["onViewReportedChannel"];
+  onResolveReport: MessageRowProps["onResolveReport"];
+  onDismissReport: MessageRowProps["onDismissReport"];
 }
 
 const MessageList = React.memo(function MessageList({
@@ -659,6 +780,10 @@ const MessageList = React.memo(function MessageList({
   onExpand,
   onReaction,
   onEmojiPicker,
+  reportActionPendingId,
+  onViewReportedChannel,
+  onResolveReport,
+  onDismissReport,
 }: MessageListProps) {
   const commonProps = {
     effectiveAdmin,
@@ -673,6 +798,10 @@ const MessageList = React.memo(function MessageList({
     onExpand,
     onReaction,
     onEmojiPicker,
+    reportActionPendingId,
+    onViewReportedChannel,
+    onResolveReport,
+    onDismissReport,
   };
 
   return threadedMessages.topLevel.flatMap((message, messageIndex) => {
@@ -821,6 +950,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
   const [showChannelReportDialog, setShowChannelReportDialog] = useState(false);
   const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
+  const [reportActionPendingId, setReportActionPendingId] = useState<string | null>(null);
   const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
   const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -1123,7 +1253,14 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "message-edited") {
         const id = event.message_id as string;
         setMessages((prev) => prev.map((m) =>
-          m.id === id ? { ...m, text: event.text as string, edited: true } : m
+          m.id === id
+            ? {
+                ...m,
+                text: event.text as string,
+                edited: true,
+                report_meta: event.report_meta ? event.report_meta as ReportMeta : m.report_meta,
+              }
+            : m
         ));
       }
       // Message deleted — remove or mark as deleted
@@ -2091,6 +2228,53 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   };
 
+  const patchReportMessage = useCallback((reportId: string, update: (message: Message) => Message) => {
+    setMessages((previous) => previous.map((message) => {
+      if (message.report_meta?.report_id !== reportId) return message;
+      return update(message);
+    }));
+  }, []);
+
+  const handleViewReportedChannel = useCallback((report: ReportMeta) => {
+    window.open(`/ch/${encodeURIComponent(report.channel_id)}`, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const handleReportAction = useCallback(async (report: ReportMeta, action: "resolve" | "dismiss") => {
+    if (reportActionPendingId) return;
+    setReportActionPendingId(report.report_id);
+    try {
+      const result = await actOnChannelReport({
+        report_id: report.report_id,
+        action,
+      }) as {
+        ok?: boolean;
+        error?: string;
+        report?: ReportMeta;
+        message_text?: string;
+      };
+
+      if (result?.ok && result.report) {
+        patchReportMessage(report.report_id, (message) => ({
+          ...message,
+          text: result.message_text || message.text,
+          edited: true,
+          report_meta: result.report,
+        }));
+        setBanner({
+          text: action === "resolve" ? t("reportResolvedBanner") : t("reportDismissedBanner"),
+          color: action === "resolve" ? "#2a9d4e" : "var(--meta)",
+        });
+      } else if (result?.error === "report_already_processed") {
+        setBanner({ text: t("reportAlreadyProcessed"), color: "var(--meta)" });
+      } else {
+        setBanner({ text: t("reportActionFailed"), color: "#d32f2f" });
+      }
+      setTimeout(() => setBanner(null), 3000);
+    } finally {
+      setReportActionPendingId(null);
+    }
+  }, [patchReportMessage, reportActionPendingId, t]);
+
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
       {/* Header */}
@@ -2343,6 +2527,10 @@ export function ChatView({ channelId }: { channelId: string }) {
           onExpand={openExpandedPost}
           onReaction={handleMemoizedReaction}
           onEmojiPicker={handleMemoizedEmojiPicker}
+          reportActionPendingId={reportActionPendingId}
+          onViewReportedChannel={handleViewReportedChannel}
+          onResolveReport={(report) => { void handleReportAction(report, "resolve"); }}
+          onDismissReport={(report) => { void handleReportAction(report, "dismiss"); }}
         />
         <div ref={messagesEndRef} />
         </main>

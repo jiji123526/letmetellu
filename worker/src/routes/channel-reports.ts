@@ -1,5 +1,5 @@
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getParentChannelId, getReportsChannelId, isReportsChannel } from "../lib/special-channels";
+import { getParentChannelId, getReportsChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { Env } from "../types";
 import { authorizeRoomToken } from "./passcode";
 
@@ -14,17 +14,49 @@ const REPORT_REASONS = new Set([
 ]);
 
 const REPORT_REASON_LABELS: Record<string, string> = {
-  spam: "Spam",
-  harassment: "Harassment or hate",
-  sexual_content: "Sexual content",
-  privacy: "Privacy exposure",
-  impersonation: "Impersonation or fraud",
-  illegal_content: "Illegal or dangerous content",
-  other: "Other",
+  spam: "스팸",
+  harassment: "괴롭힘 또는 혐오",
+  sexual_content: "성적 콘텐츠",
+  privacy: "개인정보 노출",
+  impersonation: "사칭 또는 사기",
+  illegal_content: "불법 또는 위험 콘텐츠",
+  other: "기타",
 };
 
 const MAX_DETAILS_LENGTH = 500;
 const REPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const REPORT_STATUSES = new Set(["open", "resolved", "dismissed"]);
+
+export interface ReportMeta {
+  report_id: string;
+  channel_id: string;
+  channel_name: string;
+  channel_url: string;
+  reason: string;
+  reason_label: string;
+  status: "open" | "resolved" | "dismissed";
+  details: string | null;
+  reporter_label: string;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+}
+
+interface ChannelReportRow {
+  id: string;
+  channel_id: string;
+  channel_name: string;
+  reporter_uid: string;
+  reporter_auth_uid: string | null;
+  reporter_device_id: string | null;
+  reason: string;
+  details: string | null;
+  created_at: string;
+  status: "open" | "resolved" | "dismissed";
+  resolution_note: string | null;
+  resolved_at: string | null;
+  inbox_message_id: string | null;
+}
 
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
@@ -42,10 +74,201 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
 
 function formatReporterLabel(input: { authUid: string | null; uid: string; deviceId: string | null }): string {
   if (input.authUid) {
-    return `Account #${input.authUid.slice(-6)}`;
+    return `계정 #${input.authUid.slice(-6)}`;
   }
-  const deviceSuffix = input.deviceId ? ` / device#${input.deviceId.slice(-6)}` : "";
-  return `Anon #${input.uid.slice(-6)}${deviceSuffix}`;
+  const deviceSuffix = input.deviceId ? ` / 기기#${input.deviceId.slice(-6)}` : "";
+  return `익명 #${input.uid.slice(-6)}${deviceSuffix}`;
+}
+
+function channelReportUrl(channelId: string, env: Env): string {
+  return `${env.APP_ORIGIN.replace(/\/$/, "")}/ch/${encodeURIComponent(channelId)}`;
+}
+
+function reportStatusLabel(status: "open" | "resolved" | "dismissed"): string {
+  if (status === "resolved") return "해결됨";
+  if (status === "dismissed") return "기각됨";
+  return "접수됨";
+}
+
+function buildReportMeta(row: ChannelReportRow, env: Env): ReportMeta {
+  return {
+    report_id: row.id,
+    channel_id: row.channel_id,
+    channel_name: row.channel_name,
+    channel_url: channelReportUrl(row.channel_id, env),
+    reason: row.reason,
+    reason_label: REPORT_REASON_LABELS[row.reason] || row.reason,
+    status: REPORT_STATUSES.has(row.status) ? row.status : "open",
+    details: row.details || null,
+    reporter_label: formatReporterLabel({
+      authUid: row.reporter_auth_uid,
+      uid: row.reporter_uid,
+      deviceId: row.reporter_device_id,
+    }),
+    created_at: row.created_at,
+    resolved_at: row.resolved_at || null,
+    resolution_note: row.resolution_note || null,
+  };
+}
+
+function formatReportMessageFromMeta(meta: ReportMeta): string {
+  const lines = [
+    "🚨 채널 신고",
+    `신고 ID: ${meta.report_id}`,
+    `채널: ${meta.channel_name} (/ch/${meta.channel_id})`,
+    `채널 보기: ${meta.channel_url}`,
+    `사유: ${meta.reason_label}`,
+    `신고자: ${meta.reporter_label}`,
+    `접수 시각: ${meta.created_at}`,
+    `상세 내용: ${meta.details || "-"}`,
+    `상태: ${reportStatusLabel(meta.status)}`,
+  ];
+
+  if (meta.resolved_at) {
+    lines.push(`처리 시각: ${meta.resolved_at}`);
+  }
+  if (meta.resolution_note) {
+    lines.push(`처리 메모: ${meta.resolution_note}`);
+  }
+  return lines.join("\n");
+}
+
+async function fetchChannelReportById(reportId: string, env: Env): Promise<ChannelReportRow | null> {
+  return env.DB.prepare(`
+    SELECT
+      cr.id,
+      cr.channel_id,
+      ch.name AS channel_name,
+      cr.reporter_uid,
+      cr.reporter_auth_uid,
+      cr.reporter_device_id,
+      cr.reason,
+      cr.details,
+      cr.created_at,
+      cr.status,
+      cr.resolution_note,
+      cr.resolved_at,
+      cr.inbox_message_id
+    FROM channel_reports cr
+    INNER JOIN channels ch ON ch.id = cr.channel_id
+    WHERE cr.id = ?
+    LIMIT 1
+  `).bind(reportId).first<ChannelReportRow>();
+}
+
+export async function hydrateReportInboxMessages<T extends { id: string }>(
+  messages: T[],
+  env: Env,
+): Promise<Array<T & { report_meta?: ReportMeta }>> {
+  if (messages.length === 0) return messages as Array<T & { report_meta?: ReportMeta }>;
+  const ids = messages.map((message) => message.id).filter(Boolean);
+  if (ids.length === 0) return messages as Array<T & { report_meta?: ReportMeta }>;
+
+  const placeholders = ids.map(() => "?").join(", ");
+  const { results } = await env.DB.prepare(`
+    SELECT
+      cr.id,
+      cr.channel_id,
+      ch.name AS channel_name,
+      cr.reporter_uid,
+      cr.reporter_auth_uid,
+      cr.reporter_device_id,
+      cr.reason,
+      cr.details,
+      cr.created_at,
+      cr.status,
+      cr.resolution_note,
+      cr.resolved_at,
+      cr.inbox_message_id
+    FROM channel_reports cr
+    INNER JOIN channels ch ON ch.id = cr.channel_id
+    WHERE cr.inbox_message_id IN (${placeholders})
+  `).bind(...ids).all<ChannelReportRow>();
+
+  const reportByMessageId = new Map<string, ReportMeta>();
+  for (const row of results || []) {
+    if (!row.inbox_message_id) continue;
+    reportByMessageId.set(row.inbox_message_id, buildReportMeta(row, env));
+  }
+
+  return messages.map((message) => {
+    const reportMeta = reportByMessageId.get(message.id);
+    return reportMeta ? { ...message, report_meta: reportMeta } : message;
+  });
+}
+
+async function requireReportsChannelOwner(request: Request, env: Env): Promise<string | null> {
+  if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) return null;
+  const userId = request.headers.get("X-User-Id") || "";
+  if (!userId) return null;
+  return await isReportsChannelOwner(userId, env) ? userId : null;
+}
+
+async function handleChannelReportAction(request: Request, env: Env): Promise<Response> {
+  const actorUserId = await requireReportsChannelOwner(request, env);
+  if (!actorUserId) {
+    return Response.json({ error: "owner access required" }, { status: 403 });
+  }
+
+  const body = await request.json() as Record<string, unknown>;
+  const reportId = typeof body.report_id === "string" ? body.report_id : "";
+  const action = typeof body.action === "string" ? body.action : "";
+  const resolutionNote = typeof body.resolution_note === "string" ? body.resolution_note.trim().slice(0, MAX_DETAILS_LENGTH) : "";
+  const nextStatus = action === "resolve" ? "resolved" : action === "dismiss" ? "dismissed" : null;
+  if (!reportId || !nextStatus) {
+    return Response.json({ error: "invalid_action" }, { status: 400 });
+  }
+
+  const existing = await fetchChannelReportById(reportId, env);
+  if (!existing) {
+    return Response.json({ error: "report_not_found" }, { status: 404 });
+  }
+  if (existing.status !== "open") {
+    return Response.json({ error: "report_already_processed" }, { status: 409 });
+  }
+
+  const resolvedAt = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE channel_reports
+    SET status = ?, resolution_note = ?, resolved_at = ?
+    WHERE id = ? AND status = 'open'
+  `).bind(nextStatus, resolutionNote || null, resolvedAt, reportId).run();
+
+  const updated = await fetchChannelReportById(reportId, env);
+  if (!updated) {
+    return Response.json({ error: "report_not_found" }, { status: 404 });
+  }
+  const reportMeta = buildReportMeta(updated, env);
+  const reportText = formatReportMessageFromMeta(reportMeta);
+
+  if (updated.inbox_message_id) {
+    await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ?")
+      .bind(reportText, updated.inbox_message_id)
+      .run();
+
+    const reportsChannelId = getReportsChannelId(env);
+    if (reportsChannelId) {
+      const doId = env.CHAT_ROOM.idFromName(reportsChannelId);
+      const stub = env.CHAT_ROOM.get(doId);
+      await stub.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "message-edited",
+          message_id: updated.inbox_message_id,
+          text: reportText,
+          edited: true,
+          report_meta: reportMeta,
+        }),
+      }));
+    }
+  }
+
+  return Response.json({
+    ok: true,
+    report: reportMeta,
+    message_text: reportText,
+    acted_by: actorUserId,
+  });
 }
 
 function formatReportMessage(input: {
@@ -56,19 +279,31 @@ function formatReportMessage(input: {
   details: string;
   reporterLabel: string;
   createdAt: string;
-}): string {
-  return [
-    "🚨 Channel report",
-    `Report ID: ${input.reportId}`,
-    `Channel: ${input.channelName} (/ch/${input.channelId})`,
-    `Reason: ${REPORT_REASON_LABELS[input.reason] || input.reason}`,
-    `Reporter: ${input.reporterLabel}`,
-    `Submitted: ${input.createdAt}`,
-    `Details: ${input.details || "-"}`,
-  ].join("\n");
+  resolutionNote?: string | null;
+  status?: "open" | "resolved" | "dismissed";
+  resolvedAt?: string | null;
+}, env: Env): string {
+  return formatReportMessageFromMeta({
+    report_id: input.reportId,
+    channel_id: input.channelId,
+    channel_name: input.channelName,
+    channel_url: channelReportUrl(input.channelId, env),
+    reason: input.reason,
+    reason_label: REPORT_REASON_LABELS[input.reason] || input.reason,
+    status: input.status || "open",
+    details: input.details || null,
+    reporter_label: input.reporterLabel,
+    created_at: input.createdAt,
+    resolved_at: input.resolvedAt || null,
+    resolution_note: input.resolutionNote || null,
+  });
 }
 
 export async function handleChannelReports(request: Request, env: Env): Promise<Response> {
+  if (request.method === "PATCH") {
+    return handleChannelReportAction(request, env);
+  }
+
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
   }
@@ -172,13 +407,28 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     details,
     reporterLabel,
     createdAt,
-  });
+  }, env);
+  const reportMeta = buildReportMeta({
+    id: reportId,
+    channel_id: channelId,
+    channel_name: sourceChannel.name,
+    reporter_uid: anonymousUid,
+    reporter_auth_uid: isVerifiedUser ? verifiedUserId : null,
+    reporter_device_id: requesterDeviceId || null,
+    reason,
+    details: details || null,
+    created_at: createdAt,
+    status: "open",
+    resolution_note: null,
+    resolved_at: null,
+    inbox_message_id: reportMessageId,
+  }, env);
 
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO channel_reports (
-        id, channel_id, reporter_uid, reporter_auth_uid, reporter_device_id, reason, details, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        id, channel_id, reporter_uid, reporter_auth_uid, reporter_device_id, reason, details, created_at, status, inbox_message_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`
     ).bind(
       reportId,
       channelId,
@@ -188,6 +438,7 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
       reason,
       details || null,
       createdAt,
+      reportMessageId,
     ),
     env.DB.prepare(
       `INSERT INTO messages (
@@ -197,7 +448,7 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
       reportMessageId,
       reportsChannel.owner_uid,
       reportsChannel.owner_uid,
-      "Report inbox",
+      "신고함",
       reportText,
       reportsChannel.id,
       createdAt,
@@ -210,7 +461,7 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     id: reportMessageId,
     uid: reportsChannel.owner_uid,
     auth_uid: reportsChannel.owner_uid,
-    nick: "Report inbox",
+    nick: "신고함",
     text: reportText,
     is_admin: 1,
     channel_id: reportsChannel.id,
@@ -221,6 +472,7 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     reported_msg_id: null,
     gallery_id: null,
     created_at: createdAt,
+    report_meta: reportMeta,
   };
   await stub.fetch(new Request("http://internal/broadcast", {
     method: "POST",
