@@ -52,8 +52,8 @@ export function ChannelReportDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,.4)", padding: "20px" }}
+      className="absolute inset-0 z-[300] flex items-end justify-center"
+      style={{ background: "rgba(0,0,0,.28)", padding: "64px 10px 10px" }}
       onClick={(event) => {
         if (!submitting && event.target === event.currentTarget) onClose();
       }}
@@ -61,79 +61,106 @@ export function ChannelReportDialog({
       <div
         style={{
           width: "100%",
-          maxWidth: "360px",
+          maxWidth: "460px",
+          maxHeight: "100%",
           background: "var(--bg, #fff)",
-          borderRadius: "18px",
-          padding: "20px",
+          borderRadius: "22px",
           boxShadow: "0 18px 50px rgba(0,0,0,.22)",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <div style={{ fontSize: "calc(var(--bubble-font-size, 17px) + 1px)", fontWeight: 600, color: "var(--gray-text, #111)", marginBottom: "8px" }}>
-          {t("reportChannelTitle")}
-        </div>
-        <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", color: "var(--meta, #8e8e93)", lineHeight: 1.5, marginBottom: "16px" }}>
-          {t("reportChannelDescription").replace("{channel}", channelName)}
-        </div>
-
-        <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", fontWeight: 600, color: "var(--gray-text, #111)", marginBottom: "10px" }}>
-          {t("reportReasonLabel")}
-        </div>
-        <div style={{ display: "grid", gap: "8px", marginBottom: "16px" }}>
-          {REPORT_REASONS.map((option) => {
-            const selected = reason === option;
-            return (
-              <button
-                key={option}
-                type="button"
-                disabled={submitting}
-                onClick={() => setReason(option)}
-                style={{
-                  borderRadius: "12px",
-                  padding: "11px 12px",
-                  textAlign: "left",
-                  border: selected ? "1px solid var(--bubble-sent, #3b8df0)" : "1px solid var(--hairline, #d1d1d6)",
-                  background: selected ? "color-mix(in srgb, var(--bubble-sent, #3b8df0) 12%, transparent)" : "transparent",
-                  color: "var(--gray-text, #111)",
-                  fontFamily: "inherit",
-                  fontSize: "calc(var(--bubble-font-size, 16px) - 2px)",
-                  cursor: submitting ? "wait" : "pointer",
-                  lineHeight: 1.3,
-                }}
-              >
-                {reasonLabels[option]}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", fontWeight: 600, color: "var(--gray-text, #111)", marginBottom: "10px" }}>
-          {t("reportDetailsLabel")}
-        </div>
-        <textarea
-          value={details}
-          maxLength={500}
-          disabled={submitting}
-          onChange={(event) => setDetails(event.target.value)}
-          placeholder={t("reportDetailsPlaceholder")}
+        <div
           style={{
-            width: "100%",
-            minHeight: "112px",
-            resize: "none",
-            borderRadius: "14px",
-            border: "1px solid var(--hairline, #d1d1d6)",
-            padding: "12px 13px",
-            fontFamily: "inherit",
-            fontSize: "calc(var(--bubble-font-size, 16px) - 2px)",
-            color: "var(--gray-text, #111)",
-            background: "var(--card, #f2f2f7)",
-            outline: "none",
+            alignSelf: "center",
+            width: "42px",
+            height: "4px",
+            borderRadius: "999px",
+            background: "var(--hairline, #d1d1d6)",
+            marginTop: "10px",
+            marginBottom: "8px",
           }}
         />
-        <div style={{ marginTop: "8px", marginBottom: "18px", textAlign: "right", fontSize: "12px", color: "var(--meta, #8e8e93)" }}>
-          {details.length}/500
+
+        <div style={{ padding: "8px 16px 0", overflowY: "auto" }}>
+          <div style={{ fontSize: "calc(var(--bubble-font-size, 17px) + 1px)", fontWeight: 600, color: "var(--gray-text, #111)", marginBottom: "8px" }}>
+            {t("reportChannelTitle")}
+          </div>
+          <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", color: "var(--meta, #8e8e93)", lineHeight: 1.5, marginBottom: "16px" }}>
+            {t("reportChannelDescription").replace("{channel}", channelName)}
+          </div>
+
+          <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", fontWeight: 600, color: "var(--gray-text, #111)", marginBottom: "10px" }}>
+            {t("reportReasonLabel")}
+          </div>
+          <div style={{ display: "grid", gap: "8px", marginBottom: "16px" }}>
+            {REPORT_REASONS.map((option) => {
+              const selected = reason === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setReason(option)}
+                  style={{
+                    borderRadius: "12px",
+                    padding: "11px 12px",
+                    textAlign: "left",
+                    border: selected ? "1px solid var(--bubble-sent, #3b8df0)" : "1px solid var(--hairline, #d1d1d6)",
+                    background: selected ? "color-mix(in srgb, var(--bubble-sent, #3b8df0) 12%, transparent)" : "transparent",
+                    color: "var(--gray-text, #111)",
+                    fontFamily: "inherit",
+                    fontSize: "calc(var(--bubble-font-size, 16px) - 2px)",
+                    cursor: submitting ? "wait" : "pointer",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {reasonLabels[option]}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", fontWeight: 600, color: "var(--gray-text, #111)", marginBottom: "10px" }}>
+            {t("reportDetailsLabel")}
+          </div>
+          <textarea
+            value={details}
+            maxLength={500}
+            disabled={submitting}
+            onChange={(event) => setDetails(event.target.value)}
+            placeholder={t("reportDetailsPlaceholder")}
+            style={{
+              width: "100%",
+              minHeight: "96px",
+              resize: "vertical",
+              borderRadius: "14px",
+              border: "1px solid var(--hairline, #d1d1d6)",
+              padding: "12px 13px",
+              fontFamily: "inherit",
+              fontSize: "calc(var(--bubble-font-size, 16px) - 2px)",
+              color: "var(--gray-text, #111)",
+              background: "var(--card, #f2f2f7)",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ marginTop: "8px", marginBottom: "16px", textAlign: "right", fontSize: "12px", color: "var(--meta, #8e8e93)" }}>
+            {details.length}/500
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            padding: "12px 16px 16px",
+            borderTop: "0.5px solid var(--hairline, #d1d1d6)",
+            background: "var(--bg, #fff)",
+            flexShrink: 0,
+          }}
+        >
           <button
             type="button"
             disabled={submitting}
