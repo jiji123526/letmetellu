@@ -159,7 +159,7 @@ export async function fetchMessages(channelId: string, cursor?: string) {
   const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "messages", channel: channelId });
   if (cursor) params.set("cursor", cursor);
-  const res = await fetch(`${WORKER_URL}/api/data?${params}`, {
+  const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
   const data = await res.json();
