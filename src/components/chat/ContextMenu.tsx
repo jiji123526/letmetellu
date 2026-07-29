@@ -158,6 +158,7 @@ export function ContextMenu({
   const isPetitionInboxMessage = isAdmin && !!msg.petition_meta;
   const isOpenReport = msg.report_meta?.status === "open";
   const isOpenPetition = msg.petition_meta?.status === "open";
+  const useScrollableActionList = isReportInboxMessage || isPetitionInboxMessage;
 
   const ActionButton = ({
     label,
@@ -259,9 +260,13 @@ export function ContextMenu({
           backdropFilter: "saturate(180%) blur(20px)",
           WebkitBackdropFilter: "saturate(180%) blur(20px)",
           boxShadow: "0 4px 20px rgba(0,0,0,.15)",
-          maxHeight: `${maxActionHeight}px`,
-          overflowY: "auto",
-          overscrollBehavior: "contain",
+          ...(useScrollableActionList
+            ? {
+                maxHeight: `${maxActionHeight}px`,
+                overflowY: "auto" as const,
+                overscrollBehavior: "contain" as const,
+              }
+            : null),
         }}
         onClick={(e) => e.stopPropagation()}
       >
