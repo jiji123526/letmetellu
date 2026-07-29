@@ -1076,6 +1076,16 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   }, [applyInitData, channel, channelId]);
 
+  const clearRoomAccessBanner = useCallback(() => {
+    setBanner((current) => {
+      if (!current) return current;
+      if (current.text === t("roomAuthExpired") || current.text === t("passcodeChanged")) {
+        return null;
+      }
+      return current;
+    });
+  }, [t]);
+
   // Listen for realtime updates
   useEffect(() => {
     return subscribe((event) => {
@@ -1247,6 +1257,9 @@ export function ChatView({ channelId }: { channelId: string }) {
           showPasscodeGate(t("roomAuthExpired"), t("roomAuthExpired"));
         }
       }
+      if (event.type === "room-authenticated") {
+        clearRoomAccessBanner();
+      }
       if (event.type === "admin-authenticated") {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchInit(fetchChannel).then((data: InitData) => {
@@ -1257,6 +1270,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
       }
       if (event.type === "room-access-opened") {
+        clearRoomAccessBanner();
         setPasscodeGate(null);
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchInit(fetchChannel).then((data: InitData) => {
@@ -1353,7 +1367,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1933,6 +1947,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           const requestId = ++initRequestIdRef.current;
           fetchInit(channelId).then((data: InitData) => {
             if (requestId !== initRequestIdRef.current) return;
+            clearRoomAccessBanner();
             applyInitData(data);
             setLoading(false);
           }).catch((error) => {
