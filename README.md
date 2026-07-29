@@ -122,6 +122,7 @@ Before opening credential signup to the public, verify a sending domain and fini
 
 - Message edits now reuse server-side create-message validation instead of trusting the previous relaxed edit path.
 - Attached message and DM media is removed from R2 when the source content is deleted, and passcode-protected media now checks room access on read.
+- Media reads now resolve source metadata through ordered batched D1 lookups instead of a compound `UNION` query, avoiding `D1_ERROR: too many terms in compound SELECT` on `/api/media/*` without relaxing room-token or upload-ticket checks.
 - DM creation now enforces the channel DM toggle, petition-only behavior for blocked users, rate limits, message length and banned-word checks in the Worker.
 - Anonymous message, reaction, report and DM mutations now derive identity from a Worker-signed token instead of a raw client-provided `uid`.
 - Public-channel uploads now use durable upload tickets, per-channel quotas and pending-object cleanup instead of allowing unattached anonymous R2 writes.
@@ -596,6 +597,7 @@ Current migrations:
 | `0013_password_reset_tokens.sql` | single-use expiring credential password-reset tokens |
 | `0014_channel_background.sql` | channel chat background mode, color, image, overlay and optional blur |
 | `0015_deleted_accounts.sql` | legacy deleted-account tombstone table retained for already migrated environments |
+| `0016_upload_tickets.sql` | durable upload tickets, quotas and pending-media cleanup for chat and DM media |
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for schema details and the deployment runbook.
 
@@ -620,6 +622,9 @@ For changes involving D1, use this order:
 2. `npm run deploy`
 3. run `npm run build` at the repository root
 4. push the frontend commit
+
+Worker-only fixes that do not change the Next.js app or D1 schema, such as the
+2026-07-29 `/api/media/*` D1 lookup fix, do not require a frontend deploy.
 
 ## Project structure
 

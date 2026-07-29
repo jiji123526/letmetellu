@@ -191,6 +191,33 @@ Then verify:
 - channel deletion cleans up rows introduced by newer migrations;
 - no secrets or database exports are staged in Git.
 
+### Media serve incident — 2026-07-29
+
+Uploaded media reads briefly failed with Worker `500` responses even though the
+required schema (`0014_channel_background.sql` and `0016_upload_tickets.sql`)
+was already present in production.
+
+Root cause:
+
+- `handleMediaServe()` used one compound `UNION` query to resolve a media key
+  against `messages`, `gallery`, `dm`, `channels.profile_image`,
+  `channels.background_image` and `config`.
+- Production D1 rejected that query shape with
+  `D1_ERROR: too many terms in compound SELECT: SQLITE_ERROR`.
+- The Worker fetch handler caught that exception and returned the generic
+  `{"error":"internal_error"}` `500`.
+
+Fix:
+
+- Replace the compound lookup with ordered per-source lookups executed via one
+  `env.DB.batch()` call in `worker/src/routes/upload.ts`.
+- Keep the existing room-token, owner and upload-ticket checks unchanged.
+- Deploy the Worker only; this fix does not require a new D1 migration or a
+  frontend deployment.
+
+If `/api/media/*` starts returning `500` again, confirm the cause with
+`npx wrangler tail` before assuming the database is missing a migration.
+
 ---
 
 # CSS → TSX Style Migration Notes

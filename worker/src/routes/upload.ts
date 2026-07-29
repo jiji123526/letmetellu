@@ -128,29 +128,31 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 export async function handleMediaServe(request: Request, env: Env, key: string): Promise<Response> {
   const decodedKey = decodeURIComponent(key);
   const mediaSuffix = `/api/media/${decodedKey}`;
-  const mediaRow = await env.DB.prepare(`
-    SELECT channel_id, source_type FROM (
-      SELECT channel_id, 'message' AS source_type FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
-      UNION
-      SELECT channel_id, 'gallery' AS source_type FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
-      UNION
-      SELECT channel_id, 'dm' AS source_type FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ?
-      UNION
-      SELECT id AS channel_id, 'channel-profile' AS source_type FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ?
-      UNION
-      SELECT id AS channel_id, 'channel-background' AS source_type FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ?
-      UNION
-      SELECT channel_id, 'channel-config' AS source_type FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0
-    )
-    LIMIT 1
-  `).bind(
-    mediaSuffix, mediaSuffix,
-    mediaSuffix, mediaSuffix,
-    mediaSuffix, mediaSuffix,
-    mediaSuffix, mediaSuffix,
-    mediaSuffix, mediaSuffix,
-    mediaSuffix,
-  ).first<{ channel_id: string; source_type: string }>();
+  // D1 can reject larger compound SELECTs here, so keep the lookup ordered but
+  // execute each source query independently in a single batch round trip.
+  const mediaLookupResults = await env.DB.batch([
+    env.DB.prepare(
+      "SELECT channel_id, 'message' AS source_type FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
+    ).bind(mediaSuffix, mediaSuffix),
+    env.DB.prepare(
+      "SELECT channel_id, 'gallery' AS source_type FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
+    ).bind(mediaSuffix, mediaSuffix),
+    env.DB.prepare(
+      "SELECT channel_id, 'dm' AS source_type FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
+    ).bind(mediaSuffix, mediaSuffix),
+    env.DB.prepare(
+      "SELECT id AS channel_id, 'channel-profile' AS source_type FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ? LIMIT 1"
+    ).bind(mediaSuffix, mediaSuffix),
+    env.DB.prepare(
+      "SELECT id AS channel_id, 'channel-background' AS source_type FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ? LIMIT 1"
+    ).bind(mediaSuffix, mediaSuffix),
+    env.DB.prepare(
+      "SELECT channel_id, 'channel-config' AS source_type FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0 LIMIT 1"
+    ).bind(mediaSuffix),
+  ]);
+  const mediaRow = mediaLookupResults
+    .map((result) => result.results?.[0] as { channel_id: string; source_type: string } | undefined)
+    .find((row): row is { channel_id: string; source_type: string } => Boolean(row));
   if (!mediaRow) {
     const pendingTicket = await env.DB.prepare(
       "SELECT purpose, status, expires_at FROM upload_tickets WHERE key = ? LIMIT 1"

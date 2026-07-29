@@ -1,4 +1,5 @@
 import { generateFingerprint } from "./fingerprint";
+import { clearRoomTokenCookie, setRoomTokenCookie } from "./room-token-cookie";
 
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
@@ -23,6 +24,7 @@ export function getRoomToken(channelId: string): string | null {
 
 export function setRoomToken(channelId: string, token: string) {
   localStorage.setItem(`roomToken_${channelId}`, token);
+  setRoomTokenCookie(channelId, token);
   window.dispatchEvent(new CustomEvent("room-token-changed", {
     detail: { channelId, token },
   }));
@@ -30,6 +32,7 @@ export function setRoomToken(channelId: string, token: string) {
 
 export function clearRoomToken(channelId: string) {
   localStorage.removeItem(`roomToken_${channelId}`);
+  clearRoomTokenCookie(channelId);
   window.dispatchEvent(new CustomEvent("room-token-changed", {
     detail: { channelId, token: null },
   }));
@@ -58,31 +61,16 @@ function roomTokenHeaders(channelId: string): Record<string, string> {
   return token ? { "X-Room-Token": token } : {};
 }
 
-function getMediaChannelId(mediaUrl: string): string | null {
-  try {
-    const parsed = new URL(mediaUrl, WORKER_URL);
-    if (!parsed.pathname.startsWith("/api/media/")) return null;
-    const key = decodeURIComponent(parsed.pathname.replace(/^\/api\/media\//, ""));
-    const slashIndex = key.indexOf("/");
-    if (slashIndex < 0) return null;
-    return getParentChannelId(key.slice(0, slashIndex));
-  } catch {
-    return null;
-  }
-}
-
 export function decorateMediaUrl(mediaUrl: string | null | undefined): string | null {
   if (!mediaUrl) return null;
 
   try {
     const parsed = new URL(mediaUrl, WORKER_URL);
     if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
-    const channelId = getMediaChannelId(mediaUrl);
-    const roomToken = channelId ? getRoomToken(channelId) : null;
     const proxy = new URL(parsed.pathname, typeof window !== "undefined" ? window.location.origin : WORKER_URL);
-    const existingToken = parsed.searchParams.get("token");
-    if (roomToken) proxy.searchParams.set("token", roomToken);
-    else if (existingToken) proxy.searchParams.set("token", existingToken);
+    parsed.searchParams.forEach((value, key) => {
+      if (key !== "token") proxy.searchParams.append(key, value);
+    });
     return typeof window !== "undefined"
       ? `${proxy.pathname}${proxy.search}`
       : proxy.toString();
