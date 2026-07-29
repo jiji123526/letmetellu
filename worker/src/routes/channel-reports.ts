@@ -115,7 +115,7 @@ function formatReportMessageFromMeta(meta: ReportMeta): string {
   const lines = [
     "🚨 채널 신고",
     `신고 ID: ${meta.report_id}`,
-    `채널: ${meta.channel_name} (/ch/${meta.channel_id})`,
+    `채널: ${meta.channel_name} (${meta.channel_url})`,
     `사유: ${meta.reason_label}`,
     `신고자: ${meta.reporter_label}`,
     `접수 시각: ${meta.created_at}`,

@@ -6,7 +6,13 @@ import { useLocale } from "@/hooks/useLocale";
 const REACTIONS = ["👍", "👎", "🫪", "❓"];
 
 interface ContextMenuProps {
-  msg: { id: string; uid: string; text: string; is_admin: number };
+  msg: {
+    id: string;
+    uid: string;
+    text: string;
+    is_admin: number;
+    report_meta?: { status: "open" | "resolved" | "dismissed" };
+  };
   isSent: boolean;
   anchorRect: DOMRect;
   bubbleEl: HTMLElement;
@@ -21,6 +27,9 @@ interface ContextMenuProps {
   onEdit?: (msgId: string) => void;
   onBlock?: (uid: string) => void;
   isBlockedUser?: boolean;
+  onResolveReport?: (msgId: string) => void;
+  onDismissReport?: (msgId: string) => void;
+  reportActionPending?: boolean;
   onEmojiPicker: (msgId: string, rect: DOMRect) => void;
   onClose: () => void;
   isMyMessage: boolean;
@@ -42,6 +51,9 @@ export function ContextMenu({
   onEdit,
   onBlock,
   isBlockedUser,
+  onResolveReport,
+  onDismissReport,
+  reportActionPending,
   onEmojiPicker,
   onClose,
   isMyMessage,
@@ -130,6 +142,8 @@ export function ContextMenu({
     textAlign: "left" as const,
     lineHeight: 1,
   };
+  const isReportInboxMessage = isAdmin && !!msg.report_meta;
+  const isOpenReport = msg.report_meta?.status === "open";
 
   return (
     <div
@@ -204,93 +218,121 @@ export function ContextMenu({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Reply — always shown */}
-        <button style={actionItemStyle} onClick={() => { onReply(msg.id); onClose(); }}>
-          <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 4l-7 7 7 7" />
-            <path d="M2 11h14a4 4 0 0 1 4 4v4" />
-          </svg>
-          <span>{t("reply")}</span>
-        </button>
+        {isReportInboxMessage ? (
+          <>
+            {isOpenReport && onResolveReport && (
+              <button style={actionItemStyle} disabled={reportActionPending} onClick={() => { onResolveReport(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <span style={{ color: "#2a9d4e", opacity: reportActionPending ? 0.65 : 1 }}>{t("resolveReport")}</span>
+              </button>
+            )}
+            {isOpenReport && onDismissReport && (
+              <button style={{ ...actionItemStyle, borderBottom: "none" }} disabled={reportActionPending} onClick={() => { onDismissReport(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+                <span style={{ color: "#8e8e93", opacity: reportActionPending ? 0.65 : 1 }}>{t("dismissReport")}</span>
+              </button>
+            )}
+            {!isOpenReport && (
+              <div style={{ ...actionItemStyle, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
+                <span>{msg.report_meta?.status === "resolved" ? t("reportStatusResolved") : t("reportStatusDismissed")}</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Reply — always shown */}
+            <button style={actionItemStyle} onClick={() => { onReply(msg.id); onClose(); }}>
+              <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 4l-7 7 7 7" />
+                <path d="M2 11h14a4 4 0 0 1 4 4v4" />
+              </svg>
+              <span>{t("reply")}</span>
+            </button>
 
-        {/* Admin viewing own: Edit + Delete */}
-        {isAdmin && isMyMessage && onEdit && msg.text && (
-          <button style={actionItemStyle} onClick={() => { onEdit(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            <span>{t("edit")}</span>
-          </button>
-        )}
+            {/* Admin viewing own: Edit + Delete */}
+            {isAdmin && isMyMessage && onEdit && msg.text && (
+              <button style={actionItemStyle} onClick={() => { onEdit(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>{t("edit")}</span>
+              </button>
+            )}
 
-        {isAdmin && isMyMessage && onDelete && (
-          <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
-              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            </svg>
-            <span>{t("delete")}</span>
-          </button>
-        )}
+            {isAdmin && isMyMessage && onDelete && (
+              <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                </svg>
+                <span>{t("delete")}</span>
+              </button>
+            )}
 
-        {/* Admin viewing others: Delete (with replies) + Block */}
-        {isAdmin && !isMyMessage && onDeleteWithReplies && (
-          <button style={{ ...actionItemStyle, color: "#d32f2f" }} onClick={() => { onDeleteWithReplies(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
-              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            </svg>
-            <span>{t("delete")}</span>
-          </button>
-        )}
+            {/* Admin viewing others: Delete (with replies) + Block */}
+            {isAdmin && !isMyMessage && onDeleteWithReplies && (
+              <button style={{ ...actionItemStyle, color: "#d32f2f" }} onClick={() => { onDeleteWithReplies(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                </svg>
+                <span>{t("delete")}</span>
+              </button>
+            )}
 
-        {isAdmin && !isMyMessage && onBlock && (
-          <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg.uid); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M4.93 4.93l14.14 14.14" />
-            </svg>
-            <span>{isBlockedUser ? t("unblock") : t("block")}</span>
-          </button>
-        )}
+            {isAdmin && !isMyMessage && onBlock && (
+              <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg.uid); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M4.93 4.93l14.14 14.14" />
+                </svg>
+                <span>{isBlockedUser ? t("unblock") : t("block")}</span>
+              </button>
+            )}
 
-        {/* Non-admin viewing own: Edit + Delete */}
-        {!isAdmin && isMyMessage && onEdit && msg.text && (
-          <button style={actionItemStyle} onClick={() => { onEdit(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            <span>{t("edit")}</span>
-          </button>
-        )}
+            {/* Non-admin viewing own: Edit + Delete */}
+            {!isAdmin && isMyMessage && onEdit && msg.text && (
+              <button style={actionItemStyle} onClick={() => { onEdit(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                <span>{t("edit")}</span>
+              </button>
+            )}
 
-        {!isAdmin && isMyMessage && onDelete && (
-          <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
-              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            </svg>
-            <span>{t("delete")}</span>
-          </button>
-        )}
+            {!isAdmin && isMyMessage && onDelete && (
+              <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                </svg>
+                <span>{t("delete")}</span>
+              </button>
+            )}
 
-        {/* Non-admin viewing others: Report / Unreport */}
-        {!isAdmin && !isMyMessage && !msg.is_admin && isReported && onUnreport && (
-          <button style={{ ...actionItemStyle, borderBottom: "none" }} onClick={() => { onUnreport(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 4l-7 7 7 7" />
-              <path d="M2 11h20" />
-            </svg>
-            <span>{t("unreport")}</span>
-          </button>
-        )}
-        {!isAdmin && !isMyMessage && !msg.is_admin && !isReported && onReport && (
-          <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onReport(msg.id); onClose(); }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2">
-              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-              <path d="M4 22V15" strokeLinecap="round" />
-            </svg>
-            <span>{t("report")}</span>
-          </button>
+            {/* Non-admin viewing others: Report / Unreport */}
+            {!isAdmin && !isMyMessage && !msg.is_admin && isReported && onUnreport && (
+              <button style={{ ...actionItemStyle, borderBottom: "none" }} onClick={() => { onUnreport(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 4l-7 7 7 7" />
+                  <path d="M2 11h20" />
+                </svg>
+                <span>{t("unreport")}</span>
+              </button>
+            )}
+            {!isAdmin && !isMyMessage && !msg.is_admin && !isReported && onReport && (
+              <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onReport(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2">
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                  <path d="M4 22V15" strokeLinecap="round" />
+                </svg>
+                <span>{t("report")}</span>
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

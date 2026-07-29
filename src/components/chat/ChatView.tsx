@@ -437,6 +437,13 @@ function MessageTextWithEmbeds({
 
 const MemoizedMessageTextWithEmbeds = React.memo(MessageTextWithEmbeds);
 
+function stripReportChannelLine(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !line.startsWith("채널: "))
+    .join("\n");
+}
+
 interface MessageRowProps {
   msg: Message;
   isReply: boolean;
@@ -459,9 +466,6 @@ interface MessageRowProps {
   onExpand: (text: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onEmojiPicker: (messageId: string, rect: DOMRect) => void;
-  reportActionPendingId: string | null;
-  onResolveReport: (report: ReportMeta) => void;
-  onDismissReport: (report: ReportMeta) => void;
 }
 
 const MessageRow = React.memo(function MessageRow({
@@ -486,9 +490,6 @@ const MessageRow = React.memo(function MessageRow({
   onExpand,
   onReaction,
   onEmojiPicker,
-  reportActionPendingId,
-  onResolveReport,
-  onDismissReport,
 }: MessageRowProps) {
   const { t } = useLocale();
   const parentIsSent = parentIsAdmin !== null
@@ -559,11 +560,29 @@ const MessageRow = React.memo(function MessageRow({
         <span style={{ fontStyle: "italic", opacity: 0.5 }}>{deletedMessageLabel}</span>
       ) : (
         <>
+          {msg.report_meta && (
+            <div style={{ marginBottom: msg.image || msg.text ? "6px" : 0 }}>
+              <span>채널: </span>
+              <a
+                href={`/ch/${encodeURIComponent(msg.report_meta.channel_id)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  color: "var(--bubble-sent, #3b8df0)",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "2px",
+                }}
+              >
+                {msg.report_meta.channel_name} (/ch/{msg.report_meta.channel_id})
+              </a>
+            </div>
+          )}
           {msg.image && <MessageImage src={msg.image} onOpen={() => onOpenImage(msg)} />}
           {msg.text && (
             <MemoizedMessageTextWithEmbeds
-              key={`${msg.id}:${msg.text}`}
-              text={msg.text}
+              key={`${msg.id}:${msg.text}:${msg.report_meta?.channel_id || ""}`}
+              text={msg.report_meta ? stripReportChannelLine(msg.text) : msg.text}
               image={!!msg.image}
               isMine={isMine}
               searchQuery={searchQuery}
@@ -602,14 +621,6 @@ const MessageRow = React.memo(function MessageRow({
       </svg>
     </span>
   ) : null;
-  const reportMeta = msg.report_meta;
-  const reportActionPending = reportMeta ? reportActionPendingId === reportMeta.report_id : false;
-  const reportStatusLabel = reportMeta?.status === "resolved"
-    ? t("reportStatusResolved")
-    : reportMeta?.status === "dismissed"
-      ? t("reportStatusDismissed")
-      : t("reportStatusOpen");
-
   return (
     <div
       id={`msg-${msg.id}`}
@@ -633,85 +644,6 @@ const MessageRow = React.memo(function MessageRow({
             {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
           </div>
         ) : bubble}
-        {reportMeta && !isReply && effectiveAdmin && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px", alignItems: "center" }}>
-            <a
-              href={`/ch/${encodeURIComponent(reportMeta.channel_id)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => event.stopPropagation()}
-              style={{
-                color: "var(--bubble-sent, #3b8df0)",
-                textDecoration: "underline",
-                textUnderlineOffset: "2px",
-                fontSize: "calc(var(--bubble-font-size) - 4px)",
-                lineHeight: 1.25,
-              }}
-            >
-              {reportMeta.channel_name} (/ch/{reportMeta.channel_id})
-            </a>
-            <span
-              style={{
-                fontSize: "calc(var(--bubble-font-size) - 6px)",
-                color: reportMeta.status === "open" ? "#b26a00" : reportMeta.status === "resolved" ? "#2a9d4e" : "#7a7a7a",
-                background: reportMeta.status === "open" ? "#fff2cf" : reportMeta.status === "resolved" ? "#e4f6ea" : "#efefef",
-                borderRadius: "999px",
-                padding: "4px 8px",
-                lineHeight: 1,
-              }}
-            >
-              {reportStatusLabel}
-            </span>
-            {reportMeta.status === "open" && (
-              <>
-                <button
-                  type="button"
-                  disabled={reportActionPending}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onResolveReport(reportMeta);
-                  }}
-                  style={{
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "7px 10px",
-                    background: "#2a9d4e",
-                    color: "#fff",
-                    fontSize: "calc(var(--bubble-font-size) - 5px)",
-                    cursor: reportActionPending ? "wait" : "pointer",
-                    fontFamily: "inherit",
-                    lineHeight: 1,
-                    opacity: reportActionPending ? 0.65 : 1,
-                  }}
-                >
-                  {t("resolveReport")}
-                </button>
-                <button
-                  type="button"
-                  disabled={reportActionPending}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDismissReport(reportMeta);
-                  }}
-                  style={{
-                    border: "none",
-                    borderRadius: "999px",
-                    padding: "7px 10px",
-                    background: "#8e8e93",
-                    color: "#fff",
-                    fontSize: "calc(var(--bubble-font-size) - 5px)",
-                    cursor: reportActionPending ? "wait" : "pointer",
-                    fontFamily: "inherit",
-                    lineHeight: 1,
-                    opacity: reportActionPending ? 0.65 : 1,
-                  }}
-                >
-                  {t("dismissReport")}
-                </button>
-              </>
-            )}
-          </div>
-        )}
         <ReactionBadge
           messageId={msg.id}
           reactions={msg.reactions}
@@ -748,9 +680,6 @@ interface MessageListProps {
   onExpand: MessageRowProps["onExpand"];
   onReaction: MessageRowProps["onReaction"];
   onEmojiPicker: MessageRowProps["onEmojiPicker"];
-  reportActionPendingId: string | null;
-  onResolveReport: MessageRowProps["onResolveReport"];
-  onDismissReport: MessageRowProps["onDismissReport"];
 }
 
 const MessageList = React.memo(function MessageList({
@@ -775,9 +704,6 @@ const MessageList = React.memo(function MessageList({
   onExpand,
   onReaction,
   onEmojiPicker,
-  reportActionPendingId,
-  onResolveReport,
-  onDismissReport,
 }: MessageListProps) {
   const commonProps = {
     effectiveAdmin,
@@ -792,9 +718,6 @@ const MessageList = React.memo(function MessageList({
     onExpand,
     onReaction,
     onEmojiPicker,
-    reportActionPendingId,
-    onResolveReport,
-    onDismissReport,
   };
 
   return threadedMessages.topLevel.flatMap((message, messageIndex) => {
@@ -2516,9 +2439,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           onExpand={openExpandedPost}
           onReaction={handleMemoizedReaction}
           onEmojiPicker={handleMemoizedEmojiPicker}
-          reportActionPendingId={reportActionPendingId}
-          onResolveReport={(report) => { void handleReportAction(report, "resolve"); }}
-          onDismissReport={(report) => { void handleReportAction(report, "dismiss"); }}
         />
         <div ref={messagesEndRef} />
         </main>
@@ -2830,6 +2750,17 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           isBlockedUser={blockedUsers.some((b) => b.uid === contextMenu.msg.uid)}
+          onResolveReport={effectiveAdmin && contextMenu.msg.report_meta?.status === "open" ? () => {
+            void handleReportAction(contextMenu.msg.report_meta!, "resolve");
+          } : undefined}
+          onDismissReport={effectiveAdmin && contextMenu.msg.report_meta?.status === "open" ? () => {
+            void handleReportAction(contextMenu.msg.report_meta!, "dismiss");
+          } : undefined}
+          reportActionPending={Boolean(
+            effectiveAdmin
+            && contextMenu.msg.report_meta
+            && reportActionPendingId === contextMenu.msg.report_meta.report_id
+          )}
           onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
           onClose={() => setContextMenu(null)}
           isMyMessage={contextMenu.isOwn}
