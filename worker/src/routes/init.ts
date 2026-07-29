@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { getChannelModeration } from "../lib/channel-moderation";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
@@ -179,6 +180,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const ownerRoomToken = isOwner && (channel as any).passcode
     ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
     : undefined;
+  const ownerModeration = isOwner
+    ? await getChannelModeration(parentChannelId, env)
+    : null;
   const messages = isReportsChannel(parentChannelId, env) && isOwner
     ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env)
     : rawMessages;
@@ -200,6 +204,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     emojiPresets: config.get(`liveEmojis_${parentChannelId}`) || null,
     petitionEnabled: config.get(`petition_${parentChannelId}`) !== "false",
     dmEnabled: config.get(`dm_${parentChannelId}`) !== "false",
+    ownerModeration: ownerModeration
+      ? {
+          status: ownerModeration.status,
+          petitionStatus: ownerModeration.petition_status,
+        }
+      : undefined,
     roomToken: ownerRoomToken,
     anonymousUid: anonymousIdentity.uid,
     anonymousToken: anonymousIdentity.token,

@@ -1,6 +1,18 @@
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getParentChannelId, getReportsChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import {
+  broadcastFreezeChange,
+  countOpenChannelReports,
+  editReportsInboxMessage,
+  getChannelModeration,
+  getOpenChannelPetition,
+  isOwnerModerationBlocked,
+  postReportsInboxMessage,
+  sendOwnerModerationNotice,
+  setChannelModeration,
+} from "../lib/channel-moderation";
+import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { Env } from "../types";
+import { deleteChannel } from "./admin";
 import { authorizeRoomToken } from "./passcode";
 
 const REPORT_REASONS = new Set([
@@ -26,6 +38,8 @@ const REPORT_REASON_LABELS: Record<string, string> = {
 const MAX_DETAILS_LENGTH = 500;
 const REPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const REPORT_STATUSES = new Set(["open", "resolved", "dismissed"]);
+const PETITION_STATUSES = new Set(["open", "accepted", "rejected"]);
+const MODERATION_STATUSES = new Set(["active", "warned", "suspended", "frozen"]);
 
 export interface ReportMeta {
   report_id: string;
@@ -40,12 +54,28 @@ export interface ReportMeta {
   created_at: string;
   resolved_at: string | null;
   resolution_note: string | null;
+  moderation_status: "active" | "warned" | "suspended" | "frozen";
+  petition_status: "none" | "open" | "accepted" | "rejected";
+}
+
+export interface PetitionMeta {
+  petition_id: string;
+  channel_id: string;
+  channel_name: string;
+  channel_url: string;
+  owner_label: string;
+  text: string;
+  status: "open" | "accepted" | "rejected";
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
 }
 
 interface ChannelReportRow {
   id: string;
   channel_id: string;
   channel_name: string;
+  channel_owner_uid: string;
   reporter_uid: string;
   reporter_auth_uid: string | null;
   reporter_device_id: string | null;
@@ -55,6 +85,23 @@ interface ChannelReportRow {
   status: "open" | "resolved" | "dismissed";
   resolution_note: string | null;
   resolved_at: string | null;
+  inbox_message_id: string | null;
+  moderation_status: string | null;
+  petition_status: string | null;
+}
+
+interface ChannelPetitionInboxRow {
+  id: string;
+  channel_id: string;
+  channel_name: string;
+  owner_uid: string;
+  owner_name: string | null;
+  text: string;
+  status: "open" | "accepted" | "rejected";
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
   inbox_message_id: string | null;
 }
 
@@ -80,6 +127,11 @@ function formatReporterLabel(input: { authUid: string | null; uid: string; devic
   return `익명 #${input.uid.slice(-6)}${deviceSuffix}`;
 }
 
+function formatOwnerLabel(ownerUid: string, ownerName: string | null): string {
+  if (ownerName?.trim()) return `${ownerName.trim()} 관리자`;
+  return `채널 관리자 #${ownerUid.slice(-6)}`;
+}
+
 function channelReportUrl(channelId: string, env: Env): string {
   return `${env.APP_ORIGIN.replace(/\/$/, "")}/ch/${encodeURIComponent(channelId)}`;
 }
@@ -88,6 +140,20 @@ function reportStatusLabel(status: "open" | "resolved" | "dismissed"): string {
   if (status === "resolved") return "해결됨";
   if (status === "dismissed") return "기각됨";
   return "접수됨";
+}
+
+function moderationStatusLabel(status: "active" | "warned" | "suspended" | "frozen"): string {
+  if (status === "warned") return "경고 발송";
+  if (status === "suspended") return "정지 안내 발송";
+  if (status === "frozen") return "동결됨";
+  return "정상";
+}
+
+function petitionStatusLabel(status: "none" | "open" | "accepted" | "rejected"): string {
+  if (status === "open") return "접수됨";
+  if (status === "accepted") return "승인됨";
+  if (status === "rejected") return "기각됨";
+  return "없음";
 }
 
 function buildReportMeta(row: ChannelReportRow, env: Env): ReportMeta {
@@ -108,6 +174,25 @@ function buildReportMeta(row: ChannelReportRow, env: Env): ReportMeta {
     created_at: row.created_at,
     resolved_at: row.resolved_at || null,
     resolution_note: row.resolution_note || null,
+    moderation_status: MODERATION_STATUSES.has(row.moderation_status || "") ? row.moderation_status as ReportMeta["moderation_status"] : "active",
+    petition_status: (["none", ...PETITION_STATUSES] as string[]).includes(row.petition_status || "")
+      ? (row.petition_status as ReportMeta["petition_status"] || "none")
+      : "none",
+  };
+}
+
+function buildPetitionMeta(row: ChannelPetitionInboxRow, env: Env): PetitionMeta {
+  return {
+    petition_id: row.id,
+    channel_id: row.channel_id,
+    channel_name: row.channel_name,
+    channel_url: channelReportUrl(row.channel_id, env),
+    owner_label: formatOwnerLabel(row.owner_uid, row.owner_name),
+    text: row.text,
+    status: PETITION_STATUSES.has(row.status) ? row.status : "open",
+    created_at: row.created_at,
+    resolved_at: row.resolved_at || null,
+    resolution_note: row.resolution_note || null,
   };
 }
 
@@ -120,7 +205,31 @@ function formatReportMessageFromMeta(meta: ReportMeta): string {
     `신고자: ${meta.reporter_label}`,
     `접수 시각: ${meta.created_at}`,
     `상세 내용: ${meta.details || "-"}`,
-    `상태: ${reportStatusLabel(meta.status)}`,
+    `신고 상태: ${reportStatusLabel(meta.status)}`,
+    `제재 상태: ${moderationStatusLabel(meta.moderation_status)}`,
+  ];
+
+  if (meta.petition_status !== "none") {
+    lines.push(`이의 제기: ${petitionStatusLabel(meta.petition_status)}`);
+  }
+  if (meta.resolved_at) {
+    lines.push(`처리 시각: ${meta.resolved_at}`);
+  }
+  if (meta.resolution_note) {
+    lines.push(`처리 메모: ${meta.resolution_note}`);
+  }
+  return lines.join("\n");
+}
+
+function formatPetitionMessageFromMeta(meta: PetitionMeta): string {
+  const lines = [
+    "📝 채널 이의 제기",
+    `이의 제기 ID: ${meta.petition_id}`,
+    `채널: ${meta.channel_name} (${meta.channel_url})`,
+    `제출자: ${meta.owner_label}`,
+    `접수 시각: ${meta.created_at}`,
+    `내용: ${meta.text}`,
+    `상태: ${petitionStatusLabel(meta.status)}`,
   ];
 
   if (meta.resolved_at) {
@@ -138,6 +247,7 @@ async function fetchChannelReportById(reportId: string, env: Env): Promise<Chann
       cr.id,
       cr.channel_id,
       ch.name AS channel_name,
+      ch.owner_uid AS channel_owner_uid,
       cr.reporter_uid,
       cr.reporter_auth_uid,
       cr.reporter_device_id,
@@ -147,52 +257,112 @@ async function fetchChannelReportById(reportId: string, env: Env): Promise<Chann
       cr.status,
       cr.resolution_note,
       cr.resolved_at,
-      cr.inbox_message_id
+      cr.inbox_message_id,
+      cm.status AS moderation_status,
+      cm.petition_status
     FROM channel_reports cr
     INNER JOIN channels ch ON ch.id = cr.channel_id
+    LEFT JOIN channel_moderation cm ON cm.channel_id = cr.channel_id
     WHERE cr.id = ?
     LIMIT 1
   `).bind(reportId).first<ChannelReportRow>();
 }
 
+async function fetchChannelPetitionById(petitionId: string, env: Env): Promise<ChannelPetitionInboxRow | null> {
+  return env.DB.prepare(`
+    SELECT
+      cp.id,
+      cp.channel_id,
+      ch.name AS channel_name,
+      cp.owner_uid,
+      u.name AS owner_name,
+      cp.text,
+      cp.status,
+      cp.created_at,
+      cp.resolved_at,
+      cp.resolved_by,
+      cp.resolution_note,
+      cp.inbox_message_id
+    FROM channel_petitions cp
+    INNER JOIN channels ch ON ch.id = cp.channel_id
+    LEFT JOIN users u ON u.id = cp.owner_uid
+    WHERE cp.id = ?
+    LIMIT 1
+  `).bind(petitionId).first<ChannelPetitionInboxRow>();
+}
+
 export async function hydrateReportInboxMessages<T extends { id: string }>(
   messages: T[],
   env: Env,
-): Promise<Array<T & { report_meta?: ReportMeta }>> {
-  if (messages.length === 0) return messages as Array<T & { report_meta?: ReportMeta }>;
+): Promise<Array<T & { report_meta?: ReportMeta; petition_meta?: PetitionMeta }>> {
+  if (messages.length === 0) return messages as Array<T & { report_meta?: ReportMeta; petition_meta?: PetitionMeta }>;
   const ids = messages.map((message) => message.id).filter(Boolean);
-  if (ids.length === 0) return messages as Array<T & { report_meta?: ReportMeta }>;
+  if (ids.length === 0) return messages as Array<T & { report_meta?: ReportMeta; petition_meta?: PetitionMeta }>;
 
   const placeholders = ids.map(() => "?").join(", ");
-  const { results } = await env.DB.prepare(`
-    SELECT
-      cr.id,
-      cr.channel_id,
-      ch.name AS channel_name,
-      cr.reporter_uid,
-      cr.reporter_auth_uid,
-      cr.reporter_device_id,
-      cr.reason,
-      cr.details,
-      cr.created_at,
-      cr.status,
-      cr.resolution_note,
-      cr.resolved_at,
-      cr.inbox_message_id
-    FROM channel_reports cr
-    INNER JOIN channels ch ON ch.id = cr.channel_id
-    WHERE cr.inbox_message_id IN (${placeholders})
-  `).bind(...ids).all<ChannelReportRow>();
+  const [reportRows, petitionRows] = await Promise.all([
+    env.DB.prepare(`
+      SELECT
+        cr.id,
+        cr.channel_id,
+        ch.name AS channel_name,
+        ch.owner_uid AS channel_owner_uid,
+        cr.reporter_uid,
+        cr.reporter_auth_uid,
+        cr.reporter_device_id,
+        cr.reason,
+        cr.details,
+        cr.created_at,
+        cr.status,
+        cr.resolution_note,
+        cr.resolved_at,
+        cr.inbox_message_id,
+        cm.status AS moderation_status,
+        cm.petition_status
+      FROM channel_reports cr
+      INNER JOIN channels ch ON ch.id = cr.channel_id
+      LEFT JOIN channel_moderation cm ON cm.channel_id = cr.channel_id
+      WHERE cr.inbox_message_id IN (${placeholders})
+    `).bind(...ids).all<ChannelReportRow>(),
+    env.DB.prepare(`
+      SELECT
+        cp.id,
+        cp.channel_id,
+        ch.name AS channel_name,
+        cp.owner_uid,
+        u.name AS owner_name,
+        cp.text,
+        cp.status,
+        cp.created_at,
+        cp.resolved_at,
+        cp.resolved_by,
+        cp.resolution_note,
+        cp.inbox_message_id
+      FROM channel_petitions cp
+      INNER JOIN channels ch ON ch.id = cp.channel_id
+      LEFT JOIN users u ON u.id = cp.owner_uid
+      WHERE cp.inbox_message_id IN (${placeholders})
+    `).bind(...ids).all<ChannelPetitionInboxRow>(),
+  ]);
 
   const reportByMessageId = new Map<string, ReportMeta>();
-  for (const row of results || []) {
+  for (const row of reportRows.results || []) {
     if (!row.inbox_message_id) continue;
     reportByMessageId.set(row.inbox_message_id, buildReportMeta(row, env));
   }
 
+  const petitionByMessageId = new Map<string, PetitionMeta>();
+  for (const row of petitionRows.results || []) {
+    if (!row.inbox_message_id) continue;
+    petitionByMessageId.set(row.inbox_message_id, buildPetitionMeta(row, env));
+  }
+
   return messages.map((message) => {
     const reportMeta = reportByMessageId.get(message.id);
-    return reportMeta ? { ...message, report_meta: reportMeta } : message;
+    const petitionMeta = petitionByMessageId.get(message.id);
+    return reportMeta || petitionMeta
+      ? { ...message, ...(reportMeta ? { report_meta: reportMeta } : {}), ...(petitionMeta ? { petition_meta: petitionMeta } : {}) }
+      : message;
   });
 }
 
@@ -203,22 +373,60 @@ async function requireReportsChannelOwner(request: Request, env: Env): Promise<s
   return await isReportsChannelOwner(userId, env) ? userId : null;
 }
 
-async function handleChannelReportAction(request: Request, env: Env): Promise<Response> {
-  const actorUserId = await requireReportsChannelOwner(request, env);
-  if (!actorUserId) {
-    return Response.json({ error: "owner access required" }, { status: 403 });
+async function syncReportInboxMessage(reportId: string, env: Env): Promise<{ report: ReportMeta; message_text: string } | null> {
+  const updated = await fetchChannelReportById(reportId, env);
+  if (!updated) return null;
+  const reportMeta = buildReportMeta(updated, env);
+  const reportText = formatReportMessageFromMeta(reportMeta);
+  if (updated.inbox_message_id) {
+    await editReportsInboxMessage({
+      env,
+      messageId: updated.inbox_message_id,
+      text: reportText,
+      extra: { report_meta: reportMeta },
+    });
   }
+  return { report: reportMeta, message_text: reportText };
+}
 
-  const body = await request.json() as Record<string, unknown>;
-  const reportId = typeof body.report_id === "string" ? body.report_id : "";
-  const action = typeof body.action === "string" ? body.action : "";
-  const resolutionNote = typeof body.resolution_note === "string" ? body.resolution_note.trim().slice(0, MAX_DETAILS_LENGTH) : "";
-  const nextStatus = action === "resolve" ? "resolved" : action === "dismiss" ? "dismissed" : null;
-  if (!reportId || !nextStatus) {
-    return Response.json({ error: "invalid_action" }, { status: 400 });
-  }
+async function maybeSendAutomaticOwnerWarning(input: {
+  env: Env;
+  channelId: string;
+  channelName: string;
+  ownerUid: string;
+}): Promise<void> {
+  const reportCount = await countOpenChannelReports(input.channelId, input.env);
+  if (reportCount <= 5) return;
 
-  const existing = await fetchChannelReportById(reportId, env);
+  const moderation = await getChannelModeration(input.channelId, input.env);
+  if (moderation.warned_report_count > 5) return;
+
+  const now = new Date().toISOString();
+  await sendOwnerModerationNotice({
+    env: input.env,
+    channelId: input.channelId,
+    ownerUid: input.ownerUid,
+    text: [
+      "[운영 알림]",
+      `${input.channelName} 채널에 신고가 6건 이상 누적되었습니다.`,
+      "운영 기준을 다시 확인해 주세요. 반복될 경우 채널 동결 또는 삭제가 진행될 수 있습니다.",
+    ].join("\n"),
+  });
+  await setChannelModeration(input.channelId, {
+    status: moderation.status === "active" ? "warned" : moderation.status,
+    warning_sent_at: now,
+    warned_report_count: reportCount,
+  }, input.env);
+}
+
+async function handleReportResolutionAction(input: {
+  reportId: string;
+  action: "resolve" | "dismiss";
+  resolutionNote: string;
+  actorUserId: string;
+  env: Env;
+}): Promise<Response> {
+  const existing = await fetchChannelReportById(input.reportId, input.env);
   if (!existing) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
@@ -227,47 +435,295 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
   }
 
   const resolvedAt = new Date().toISOString();
-  await env.DB.prepare(`
+  const nextStatus = input.action === "resolve" ? "resolved" : "dismissed";
+  await input.env.DB.prepare(`
     UPDATE channel_reports
     SET status = ?, resolution_note = ?, resolved_at = ?
     WHERE id = ? AND status = 'open'
-  `).bind(nextStatus, resolutionNote || null, resolvedAt, reportId).run();
+  `).bind(nextStatus, input.resolutionNote || null, resolvedAt, input.reportId).run();
 
-  const updated = await fetchChannelReportById(reportId, env);
-  if (!updated) {
+  const synced = await syncReportInboxMessage(input.reportId, input.env);
+  if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
-  }
-  const reportMeta = buildReportMeta(updated, env);
-  const reportText = formatReportMessageFromMeta(reportMeta);
-
-  if (updated.inbox_message_id) {
-    await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ?")
-      .bind(reportText, updated.inbox_message_id)
-      .run();
-
-    const reportsChannelId = getReportsChannelId(env);
-    if (reportsChannelId) {
-      const doId = env.CHAT_ROOM.idFromName(reportsChannelId);
-      const stub = env.CHAT_ROOM.get(doId);
-      await stub.fetch(new Request("http://internal/broadcast", {
-        method: "POST",
-        body: JSON.stringify({
-          type: "message-edited",
-          message_id: updated.inbox_message_id,
-          text: reportText,
-          edited: true,
-          report_meta: reportMeta,
-        }),
-      }));
-    }
   }
 
   return Response.json({
     ok: true,
-    report: reportMeta,
-    message_text: reportText,
-    acted_by: actorUserId,
+    report: synced.report,
+    message_text: synced.message_text,
+    acted_by: input.actorUserId,
   });
+}
+
+async function handleModerationAction(input: {
+  reportId: string;
+  action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel";
+  resolutionNote: string;
+  actorUserId: string;
+  env: Env;
+}): Promise<Response> {
+  const existing = await fetchChannelReportById(input.reportId, input.env);
+  if (!existing) {
+    return Response.json({ error: "report_not_found" }, { status: 404 });
+  }
+
+  const moderation = await getChannelModeration(existing.channel_id, input.env);
+
+  if (input.action === "warn_owner") {
+    const warnedAt = new Date().toISOString();
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: existing.channel_id,
+      ownerUid: existing.channel_owner_uid,
+      text: [
+        "[운영 경고]",
+        `${existing.channel_name} 채널이 신고로 검토 중입니다.`,
+        `최근 신고 사유: ${REPORT_REASON_LABELS[existing.reason] || existing.reason}`,
+        input.resolutionNote ? `메모: ${input.resolutionNote}` : "운영 기준을 다시 확인해 주세요.",
+      ].join("\n"),
+    });
+    await setChannelModeration(existing.channel_id, {
+      status: moderation.status === "active" ? "warned" : moderation.status,
+      warning_sent_at: warnedAt,
+      warned_report_count: Math.max(moderation.warned_report_count, await countOpenChannelReports(existing.channel_id, input.env)),
+    }, input.env);
+  }
+
+  if (input.action === "send_suspend_notice") {
+    const suspensionSentAt = new Date().toISOString();
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: existing.channel_id,
+      ownerUid: existing.channel_owner_uid,
+      text: [
+        "[운영 정지 안내]",
+        `${existing.channel_name} 채널이 정지 검토 단계에 들어갔습니다.`,
+        `사유: ${REPORT_REASON_LABELS[existing.reason] || existing.reason}`,
+        input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 위반이 확인되면 채널이 동결될 수 있습니다.",
+      ].join("\n"),
+    });
+    await setChannelModeration(existing.channel_id, {
+      status: isOwnerModerationBlocked(moderation) ? moderation.status : "suspended",
+      suspension_notice_sent_at: suspensionSentAt,
+      suspension_reason: input.resolutionNote || (REPORT_REASON_LABELS[existing.reason] || existing.reason),
+    }, input.env);
+  }
+
+  if (input.action === "freeze_channel") {
+    if (moderation.status === "frozen") {
+      return Response.json({ error: "channel_already_frozen" }, { status: 409 });
+    }
+    const frozenAt = new Date().toISOString();
+    await input.env.DB.prepare("UPDATE channels SET is_frozen = 1 WHERE id = ?")
+      .bind(existing.channel_id)
+      .run();
+    await setChannelModeration(existing.channel_id, {
+      status: "frozen",
+      frozen_at: frozenAt,
+      frozen_by: input.actorUserId,
+      petition_status: "none",
+      current_petition_id: null,
+      suspension_reason: input.resolutionNote || moderation.suspension_reason,
+    }, input.env);
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: existing.channel_id,
+      ownerUid: existing.channel_owner_uid,
+      text: [
+        "[채널 동결]",
+        `${existing.channel_name} 채널이 운영 검토를 위해 동결되었습니다.`,
+        "동결 중에는 채널 관리자가 메시지를 보낼 수 없습니다.",
+        "삭제 전에 이의가 있으면 이의 제기를 제출해 주세요.",
+      ].join("\n"),
+    });
+    await broadcastFreezeChange(existing.channel_id, true, input.env);
+  }
+
+  if (input.action === "delete_channel") {
+    if (moderation.status !== "frozen") {
+      return Response.json({ error: "freeze_required_before_delete" }, { status: 409 });
+    }
+    const openPetition = await getOpenChannelPetition(existing.channel_id, input.env);
+    if (openPetition) {
+      return Response.json({ error: "petition_pending" }, { status: 409 });
+    }
+
+    const deletedText = [
+      formatReportMessageFromMeta(buildReportMeta(existing, input.env)),
+      `조치 결과: 채널 삭제 완료`,
+      `처리 시각: ${new Date().toISOString()}`,
+    ].join("\n");
+    if (existing.inbox_message_id) {
+      await editReportsInboxMessage({
+        env: input.env,
+        messageId: existing.inbox_message_id,
+        text: deletedText,
+      });
+    }
+    await deleteChannel(existing.channel_id, input.env);
+    return Response.json({
+      ok: true,
+      report_id: existing.id,
+      message_text: deletedText,
+      deleted_channel_id: existing.channel_id,
+      acted_by: input.actorUserId,
+    });
+  }
+
+  const synced = await syncReportInboxMessage(existing.id, input.env);
+  if (!synced) {
+    return Response.json({ error: "report_not_found" }, { status: 404 });
+  }
+
+  return Response.json({
+    ok: true,
+    report: synced.report,
+    message_text: synced.message_text,
+    acted_by: input.actorUserId,
+  });
+}
+
+async function handleChannelPetitionAction(input: {
+  petitionId: string;
+  action: "accept_petition" | "reject_petition";
+  resolutionNote: string;
+  actorUserId: string;
+  env: Env;
+}): Promise<Response> {
+  const petition = await fetchChannelPetitionById(input.petitionId, input.env);
+  if (!petition) {
+    return Response.json({ error: "petition_not_found" }, { status: 404 });
+  }
+  if (petition.status !== "open") {
+    return Response.json({ error: "petition_already_processed" }, { status: 409 });
+  }
+
+  const resolvedAt = new Date().toISOString();
+  const nextStatus = input.action === "accept_petition" ? "accepted" : "rejected";
+  await input.env.DB.prepare(`
+    UPDATE channel_petitions
+    SET status = ?, resolved_at = ?, resolved_by = ?, resolution_note = ?
+    WHERE id = ? AND status = 'open'
+  `).bind(nextStatus, resolvedAt, input.actorUserId, input.resolutionNote || null, petition.id).run();
+
+  if (nextStatus === "accepted") {
+    await input.env.DB.prepare("UPDATE channels SET is_frozen = 0 WHERE id = ?")
+      .bind(petition.channel_id)
+      .run();
+    await setChannelModeration(petition.channel_id, {
+      status: "active",
+      frozen_at: null,
+      frozen_by: null,
+      petition_status: "accepted",
+      current_petition_id: petition.id,
+    }, input.env);
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: petition.channel_id,
+      ownerUid: petition.owner_uid,
+      text: [
+        "[이의 제기 승인]",
+        `${petition.channel_name} 채널의 동결이 해제되었습니다.`,
+        input.resolutionNote ? `메모: ${input.resolutionNote}` : "운영 기준을 준수해 주세요.",
+      ].join("\n"),
+    });
+    await broadcastFreezeChange(petition.channel_id, false, input.env);
+  } else {
+    await setChannelModeration(petition.channel_id, {
+      status: "frozen",
+      petition_status: "rejected",
+      current_petition_id: petition.id,
+    }, input.env);
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: petition.channel_id,
+      ownerUid: petition.owner_uid,
+      text: [
+        "[이의 제기 기각]",
+        `${petition.channel_name} 채널의 이의 제기가 기각되었습니다.`,
+        input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 검토 전까지 동결 상태가 유지됩니다.",
+      ].join("\n"),
+    });
+  }
+
+  const updated = await fetchChannelPetitionById(petition.id, input.env);
+  if (!updated) {
+    return Response.json({ error: "petition_not_found" }, { status: 404 });
+  }
+  const petitionMeta = buildPetitionMeta(updated, input.env);
+  const petitionText = formatPetitionMessageFromMeta(petitionMeta);
+  if (updated.inbox_message_id) {
+    await editReportsInboxMessage({
+      env: input.env,
+      messageId: updated.inbox_message_id,
+      text: petitionText,
+      extra: { petition_meta: petitionMeta },
+    });
+  }
+
+  return Response.json({
+    ok: true,
+    petition: petitionMeta,
+    message_text: petitionText,
+    acted_by: input.actorUserId,
+  });
+}
+
+async function handleChannelReportAction(request: Request, env: Env): Promise<Response> {
+  const actorUserId = await requireReportsChannelOwner(request, env);
+  if (!actorUserId) {
+    return Response.json({ error: "owner access required" }, { status: 403 });
+  }
+
+  const body = await request.json() as Record<string, unknown>;
+  const reportId = typeof body.report_id === "string" ? body.report_id : "";
+  const petitionId = typeof body.petition_id === "string" ? body.petition_id : "";
+  const action = typeof body.action === "string" ? body.action : "";
+  const resolutionNote = typeof body.resolution_note === "string" ? body.resolution_note.trim().slice(0, MAX_DETAILS_LENGTH) : "";
+
+  if (petitionId) {
+    if (action !== "accept_petition" && action !== "reject_petition") {
+      return Response.json({ error: "invalid_action" }, { status: 400 });
+    }
+    return handleChannelPetitionAction({
+      petitionId,
+      action,
+      resolutionNote,
+      actorUserId,
+      env,
+    });
+  }
+
+  if (!reportId) {
+    return Response.json({ error: "invalid_action" }, { status: 400 });
+  }
+
+  if (action === "resolve" || action === "dismiss") {
+    return handleReportResolutionAction({
+      reportId,
+      action,
+      resolutionNote,
+      actorUserId,
+      env,
+    });
+  }
+
+  if (
+    action === "warn_owner"
+    || action === "send_suspend_notice"
+    || action === "freeze_channel"
+    || action === "delete_channel"
+  ) {
+    return handleModerationAction({
+      reportId,
+      action,
+      resolutionNote,
+      actorUserId,
+      env,
+    });
+  }
+
+  return Response.json({ error: "invalid_action" }, { status: 400 });
 }
 
 function formatReportMessage(input: {
@@ -278,6 +734,8 @@ function formatReportMessage(input: {
   details: string;
   reporterLabel: string;
   createdAt: string;
+  moderationStatus?: ReportMeta["moderation_status"];
+  petitionStatus?: ReportMeta["petition_status"];
   resolutionNote?: string | null;
   status?: "open" | "resolved" | "dismissed";
   resolvedAt?: string | null;
@@ -295,6 +753,8 @@ function formatReportMessage(input: {
     created_at: input.createdAt,
     resolved_at: input.resolvedAt || null,
     resolution_note: input.resolutionNote || null,
+    moderation_status: input.moderationStatus || "active",
+    petition_status: input.petitionStatus || "none",
   });
 }
 
@@ -305,11 +765,6 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
 
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
-  }
-
-  const reportsChannelId = getReportsChannelId(env);
-  if (!reportsChannelId) {
-    return Response.json({ error: "reports_channel_not_configured" }, { status: 503 });
   }
 
   const body = await request.json() as Record<string, unknown>;
@@ -383,100 +838,63 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     return Response.json({ error: "report_exists" }, { status: 409 });
   }
 
-  const reportsChannel = await env.DB.prepare(
-    "SELECT id, owner_uid FROM channels WHERE id = ?"
-  ).bind(reportsChannelId).first<{ id: string; owner_uid: string }>();
-  if (!reportsChannel) {
-    return Response.json({ error: "reports_channel_not_found" }, { status: 503 });
-  }
-
   const reportId = crypto.randomUUID();
   const reportMessageId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  const reporterLabel = formatReporterLabel({
-    authUid: isVerifiedUser ? verifiedUserId : null,
-    uid: anonymousUid,
-    deviceId: requesterDeviceId,
+
+  await env.DB.prepare(`
+    INSERT INTO channel_reports (
+      id, channel_id, reporter_uid, reporter_auth_uid, reporter_device_id, reason, details, created_at, status, inbox_message_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
+  `).bind(
+    reportId,
+    channelId,
+    anonymousUid,
+    isVerifiedUser ? verifiedUserId : null,
+    requesterDeviceId || null,
+    reason,
+    details || null,
+    createdAt,
+    reportMessageId,
+  ).run();
+
+  await maybeSendAutomaticOwnerWarning({
+    env,
+    channelId,
+    channelName: sourceChannel.name,
+    ownerUid: sourceChannel.owner_uid,
   });
+
+  const reportRow = await fetchChannelReportById(reportId, env);
+  if (!reportRow) {
+    return Response.json({ error: "report_not_found" }, { status: 404 });
+  }
+
+  const reportMeta = buildReportMeta(reportRow, env);
   const reportText = formatReportMessage({
     reportId,
     channelId,
     channelName: sourceChannel.name,
     reason,
     details,
-    reporterLabel,
+    reporterLabel: formatReporterLabel({
+      authUid: isVerifiedUser ? verifiedUserId : null,
+      uid: anonymousUid,
+      deviceId: requesterDeviceId,
+    }),
     createdAt,
-  }, env);
-  const reportMeta = buildReportMeta({
-    id: reportId,
-    channel_id: channelId,
-    channel_name: sourceChannel.name,
-    reporter_uid: anonymousUid,
-    reporter_auth_uid: isVerifiedUser ? verifiedUserId : null,
-    reporter_device_id: requesterDeviceId || null,
-    reason,
-    details: details || null,
-    created_at: createdAt,
-    status: "open",
-    resolution_note: null,
-    resolved_at: null,
-    inbox_message_id: reportMessageId,
+    moderationStatus: reportMeta.moderation_status,
+    petitionStatus: reportMeta.petition_status,
   }, env);
 
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO channel_reports (
-        id, channel_id, reporter_uid, reporter_auth_uid, reporter_device_id, reason, details, created_at, status, inbox_message_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`
-    ).bind(
-      reportId,
-      channelId,
-      anonymousUid,
-      isVerifiedUser ? verifiedUserId : null,
-      requesterDeviceId || null,
-      reason,
-      details || null,
-      createdAt,
-      reportMessageId,
-    ),
-    env.DB.prepare(
-      `INSERT INTO messages (
-        id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, 1, ?, NULL, NULL, NULL, 0, NULL, NULL, ?)`
-    ).bind(
-      reportMessageId,
-      reportsChannel.owner_uid,
-      reportsChannel.owner_uid,
-      "신고함",
-      reportText,
-      reportsChannel.id,
-      createdAt,
-    ),
-  ]);
-
-  const doId = env.CHAT_ROOM.idFromName(reportsChannel.id);
-  const stub = env.CHAT_ROOM.get(doId);
-  const inboxMessage = {
+  await postReportsInboxMessage({
+    env,
     id: reportMessageId,
-    uid: reportsChannel.owner_uid,
-    auth_uid: reportsChannel.owner_uid,
-    nick: "신고함",
+    createdAt,
     text: reportText,
-    is_admin: 1,
-    channel_id: reportsChannel.id,
-    image: null,
-    reply_to: null,
-    fingerprint: null,
-    report: 0,
-    reported_msg_id: null,
-    gallery_id: null,
-    created_at: createdAt,
-    report_meta: reportMeta,
-  };
-  await stub.fetch(new Request("http://internal/broadcast", {
-    method: "POST",
-    body: JSON.stringify({ type: "message-new", message: inboxMessage }),
-  }));
+    nick: "신고함",
+    extra: { report_meta: reportMeta },
+  });
 
-  return Response.json({ ok: true, id: reportId, created_at: createdAt });
+  return Response.json({ ok: true, id: reportId, created_at: createdAt, report: reportMeta });
 }

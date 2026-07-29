@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport, actOnChannelReport } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport, actOnChannelReport, submitModerationPetition } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -13,6 +13,7 @@ import { ScrollToBottom } from "./ScrollToBottom";
 import { WelcomePopup } from "./WelcomePopup";
 import { HeaderMenu } from "./HeaderMenu";
 import { ChannelReportDialog } from "./ChannelReportDialog";
+import { ModerationPetitionDialog } from "./ModerationPetitionDialog";
 import { SettingsPanel } from "./SettingsPanel";
 import { NoticePanel } from "./NoticePanel";
 import { EmojiPicker } from "./EmojiPicker";
@@ -54,6 +55,7 @@ interface Message {
   reported_msg_id?: string;
   fingerprint?: string | null;
   report_meta?: ReportMeta;
+  petition_meta?: PetitionMeta;
 }
 
 interface ReportMeta {
@@ -66,6 +68,21 @@ interface ReportMeta {
   status: "open" | "resolved" | "dismissed";
   details?: string | null;
   reporter_label: string;
+  created_at: string;
+  resolved_at?: string | null;
+  resolution_note?: string | null;
+  moderation_status: "active" | "warned" | "suspended" | "frozen";
+  petition_status: "none" | "open" | "accepted" | "rejected";
+}
+
+interface PetitionMeta {
+  petition_id: string;
+  channel_id: string;
+  channel_name: string;
+  channel_url: string;
+  owner_label: string;
+  text: string;
+  status: "open" | "accepted" | "rejected";
   created_at: string;
   resolved_at?: string | null;
   resolution_note?: string | null;
@@ -107,6 +124,10 @@ interface InitData {
   adminDataStatus?: "authorized" | "unauthorized";
   anonymousUid?: string;
   viewerAccess?: "owner" | "reports_owner" | "standard";
+  ownerModeration?: {
+    status: "active" | "warned" | "suspended" | "frozen";
+    petitionStatus: "none" | "open" | "accepted" | "rejected";
+  };
 }
 
 interface ContextMenuState {
@@ -176,7 +197,8 @@ function messagesEqual(left: Message, right: Message): boolean {
     && left.edited === right.edited
     && left.report === right.report
     && left.reported_msg_id === right.reported_msg_id
-    && JSON.stringify(left.report_meta || null) === JSON.stringify(right.report_meta || null);
+    && JSON.stringify(left.report_meta || null) === JSON.stringify(right.report_meta || null)
+    && JSON.stringify(left.petition_meta || null) === JSON.stringify(right.petition_meta || null);
 }
 
 function mergeServerMessageSnapshot(previous: Message[], incoming: Message[]): Message[] {
@@ -437,7 +459,7 @@ function MessageTextWithEmbeds({
 
 const MemoizedMessageTextWithEmbeds = React.memo(MessageTextWithEmbeds);
 
-function stripReportChannelLine(text: string): string {
+function stripInboxChannelLine(text: string): string {
   return text
     .split("\n")
     .filter((line) => !line.startsWith("채널: "))
@@ -496,14 +518,28 @@ const MessageRow = React.memo(function MessageRow({
     ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
     : false;
   const isReportInboxMessage = !!msg.report_meta;
+  const isPetitionInboxMessage = !!msg.petition_meta;
+  const isInboxMessage = isReportInboxMessage || isPetitionInboxMessage;
   const isSent = isReply
     ? parentIsSent
-    : isReportInboxMessage
+    : isInboxMessage
       ? false
       : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-  const isMine = isReportInboxMessage ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const isMine = isInboxMessage ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
   const reportMeta = msg.report_meta;
+  const petitionMeta = msg.petition_meta;
+  const inboxChannel = reportMeta
+    ? {
+        channelId: reportMeta.channel_id,
+        channelName: reportMeta.channel_name,
+      }
+    : petitionMeta
+      ? {
+          channelId: petitionMeta.channel_id,
+          channelName: petitionMeta.channel_name,
+        }
+      : null;
   const reportBubbleStyle = reportMeta?.status === "resolved"
     ? { background: "#dff6e8", color: "#14532d", borderColor: "#71c08d" }
     : reportMeta?.status === "dismissed"
@@ -511,6 +547,14 @@ const MessageRow = React.memo(function MessageRow({
       : reportMeta
         ? { background: "#eef2ff", color: "#243b6b", borderColor: "#aab8eb" }
         : null;
+  const petitionBubbleStyle = petitionMeta?.status === "accepted"
+    ? { background: "#dff6e8", color: "#14532d", borderColor: "#71c08d" }
+    : petitionMeta?.status === "rejected"
+      ? { background: "#f9e2e2", color: "#7f1d1d", borderColor: "#df8f8f" }
+      : petitionMeta
+        ? { background: "#eef6ff", color: "#1d4f77", borderColor: "#9cc4ea" }
+        : null;
+  const inboxBubbleStyle = reportBubbleStyle || petitionBubbleStyle;
 
   const bubble = (
     <div
@@ -527,21 +571,21 @@ const MessageRow = React.memo(function MessageRow({
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
           : "20px",
-        background: reportBubbleStyle?.background || (msg.report
+        background: inboxBubbleStyle?.background || (msg.report
           ? "#ffeaea"
           : isReported || (effectiveAdmin && !msg.report && isReportedTarget)
             ? "#ffe0e0"
             : msg.dm
               ? (isMine ? "#7b3fa0" : "#ddc8ed")
               : isMine ? bubbleColor : "var(--gray-bubble)"),
-        color: reportBubbleStyle?.color || (msg.report
+        color: inboxBubbleStyle?.color || (msg.report
           ? "#c00"
           : isReported || isReportedTarget
             ? "#a00"
             : msg.dm
               ? (isMine ? "#fff" : "#5a1580")
               : isMine ? "#fff" : "var(--gray-text)"),
-        border: reportBubbleStyle ? `1px solid ${reportBubbleStyle.borderColor}` : "none",
+        border: inboxBubbleStyle ? `1px solid ${inboxBubbleStyle.borderColor}` : "none",
         cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
         opacity: isReported ? 0.6 : (effectiveAdmin && isBlockedSender) ? 0.4 : undefined,
       }}
@@ -569,11 +613,11 @@ const MessageRow = React.memo(function MessageRow({
         <span style={{ fontStyle: "italic", opacity: 0.5 }}>{deletedMessageLabel}</span>
       ) : (
         <>
-          {msg.report_meta && (
+          {inboxChannel && (
             <div style={{ marginBottom: msg.image || msg.text ? "6px" : 0 }}>
               <span>채널: </span>
               <a
-                href={`/ch/${encodeURIComponent(msg.report_meta.channel_id)}`}
+                href={`/ch/${encodeURIComponent(inboxChannel.channelId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(event) => event.stopPropagation()}
@@ -583,21 +627,21 @@ const MessageRow = React.memo(function MessageRow({
                   textUnderlineOffset: "2px",
                 }}
               >
-                {msg.report_meta.channel_name} (/ch/{msg.report_meta.channel_id})
+                {inboxChannel.channelName} (/ch/{inboxChannel.channelId})
               </a>
             </div>
           )}
           {msg.image && <MessageImage src={msg.image} onOpen={() => onOpenImage(msg)} />}
           {msg.text && (
             <MemoizedMessageTextWithEmbeds
-              key={`${msg.id}:${msg.text}:${msg.report_meta?.channel_id || ""}`}
-              text={msg.report_meta ? stripReportChannelLine(msg.text) : msg.text}
+              key={`${msg.id}:${msg.text}:${msg.report_meta?.channel_id || msg.petition_meta?.channel_id || ""}`}
+              text={isInboxMessage ? stripInboxChannelLine(msg.text) : msg.text}
               image={!!msg.image}
               isMine={isMine}
               searchQuery={searchQuery}
               isSearchMatch={isSearchMatch}
               isActiveMatch={isActiveMatch}
-              showEmbeds={!msg.report && !msg.image}
+              showEmbeds={!msg.report && !msg.image && !isInboxMessage}
               editedLabel={msg.image && msg.edited ? t("edited") : undefined}
               onExpand={onExpand}
             />
@@ -864,6 +908,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [welcomeConfig, setWelcomeConfig] = useState("");
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
+  const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
@@ -874,7 +919,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
   const [showChannelReportDialog, setShowChannelReportDialog] = useState(false);
+  const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
   const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
+  const [submittingModerationPetition, setSubmittingModerationPetition] = useState(false);
   const [reportActionPendingId, setReportActionPendingId] = useState<string | null>(null);
   const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
   const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(() => {
@@ -1005,6 +1052,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setWelcomeConfig(data.welcomeConfig || "");
     setPetitionEnabled(data.petitionEnabled ?? true);
     setDmEnabled(data.dmEnabled ?? true);
+    setOwnerModeration(data.ownerModeration);
     if (data.adminDataStatus === "unauthorized") {
       setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
     }
@@ -1045,6 +1093,17 @@ export function ChatView({ channelId }: { channelId: string }) {
       localStorage.removeItem(`liveSession_${channelId}`);
     }
   }, [channelId, isLoggedIn, t]);
+
+  const refreshOwnerModeration = useCallback(() => {
+    if (!isOwner) return;
+    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+    fetchInit(fetchChannel).then((data: InitData) => {
+      if (data.channel) {
+        setChannel((previous) => previous ? { ...previous, is_frozen: data.channel.is_frozen } : data.channel);
+      }
+      setOwnerModeration(data.ownerModeration);
+    }).catch(() => {});
+  }, [channelId, isOwner]);
 
   // Load initial data
   useEffect(() => {
@@ -1184,6 +1243,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 text: event.text as string,
                 edited: true,
                 report_meta: event.report_meta ? event.report_meta as ReportMeta : m.report_meta,
+                petition_meta: event.petition_meta ? event.petition_meta as PetitionMeta : m.petition_meta,
               }
             : m
         ));
@@ -1233,6 +1293,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
           if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
           if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
+          setOwnerModeration(data.ownerModeration);
         }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
@@ -1265,6 +1326,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         } else if (!isLiveFreeze && !inLiveModeRef.current) {
           setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
         }
+        if (isOwner) refreshOwnerModeration();
       }
       if (event.type === "profile-change") {
         const nextProfileImage = event.profile_image !== undefined
@@ -1434,7 +1496,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner]);
+  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner, refreshOwnerModeration]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1615,7 +1677,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const handleSend = async () => {
     const text = input.trim();
-    if ((!text && pendingPhotos.length === 0) || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
+    if ((!text && pendingPhotos.length === 0) || ownerModerationBlocked || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
 
     const showMutationError = (error?: string) => {
       if (error === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
@@ -1623,6 +1685,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       else if (error === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
       else if (error === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
       else if (error === "petition_exists") setBanner({ text: t("petitionExists"), color: "#d32f2f" });
+      else if (error === "owner_suspended") {
+        refreshOwnerModeration();
+        setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
+      }
       else if (error === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
       else if (error === "dm_disabled") setBanner({ text: t("dmDisabledMessage"), color: "#d32f2f" });
       else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
@@ -1841,20 +1907,34 @@ export function ChatView({ channelId }: { channelId: string }) {
             : message
         ));
       }
-    } catch {
+    } catch (error) {
       // A failed optimistic update must not remain visible only to this client.
       fetchMessages(activeChannelId).then((data) => {
         if (data.messages) {
           setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
         }
       }).catch(() => {});
-      setBanner({ text: t("sendFailed"), color: "#d32f2f" });
+      if (error instanceof Error && error.message === "owner_suspended") {
+        refreshOwnerModeration();
+        setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
+      } else {
+        setBanner({ text: t("sendFailed"), color: "#d32f2f" });
+      }
       setTimeout(() => setBanner(null), 3000);
     }
   };
 
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
+  const ownerModerationBlocked = isOwner && ownerModeration?.status === "frozen";
+  const canUseAdminMutations = effectiveAdmin && !ownerModerationBlocked;
+  const ownerPetitionStatus = ownerModeration?.petitionStatus || "none";
+  const ownerCanSubmitPetition = ownerModerationBlocked && ownerPetitionStatus === "none";
+  const ownerModerationBannerText = ownerPetitionStatus === "open"
+    ? t("ownerSuspendedPetitionOpen")
+    : ownerPetitionStatus === "rejected"
+      ? t("ownerSuspendedPetitionRejected")
+      : t("ownerSuspendedBanner");
 
   const displayMessages = useMemo(
     () => effectiveAdmin
@@ -1906,6 +1986,11 @@ export function ChatView({ channelId }: { channelId: string }) {
   }
 
   const handleDelete = (msgId: string) => {
+    if (ownerModerationBlocked) {
+      setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
+      setTimeout(() => setBanner(null), 3000);
+      return;
+    }
     // Check if this message has replies (if so, soft delete; otherwise hard delete)
     const replyIds = messages.filter((m) => m.reply_to === msgId).map((m) => m.id);
     const hasReplies = replyIds.length > 0;
@@ -1998,7 +2083,16 @@ export function ChatView({ channelId }: { channelId: string }) {
       return update(message);
     }));
   }, []);
-  const handleReportAction = useCallback(async (report: ReportMeta, action: "resolve" | "dismiss") => {
+  const patchPetitionMessage = useCallback((petitionId: string, update: (message: Message) => Message) => {
+    setMessages((previous) => previous.map((message) => {
+      if (message.petition_meta?.petition_id !== petitionId) return message;
+      return update(message);
+    }));
+  }, []);
+  const handleReportAction = useCallback(async (
+    report: ReportMeta,
+    action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss",
+  ) => {
     if (reportActionPendingId) return;
     setReportActionPendingId(report.report_id);
     try {
@@ -2010,6 +2104,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         error?: string;
         report?: ReportMeta;
         message_text?: string;
+        deleted_channel_id?: string;
       };
 
       if (result?.ok && result.report) {
@@ -2019,12 +2114,33 @@ export function ChatView({ channelId }: { channelId: string }) {
           edited: true,
           report_meta: result.report,
         }));
-        setBanner({
-          text: action === "resolve" ? t("reportResolvedBanner") : t("reportDismissedBanner"),
-          color: action === "resolve" ? "#2a9d4e" : "var(--meta)",
-        });
+        const reportActionBanner = {
+          resolve: { text: t("reportResolvedBanner"), color: "#2a9d4e" },
+          dismiss: { text: t("reportDismissedBanner"), color: "var(--meta)" },
+          warn_owner: { text: t("warnOwnerSentBanner"), color: "#b26a00" },
+          send_suspend_notice: { text: t("suspendNoticeSentBanner"), color: "#9b2226" },
+          freeze_channel: { text: t("channelFrozenByModerationBanner"), color: "#8b5cf6" },
+          delete_channel: { text: t("channelDeletedByModerationBanner"), color: "#d32f2f" },
+        } as const;
+        setBanner(reportActionBanner[action]);
+      } else if (result?.ok && action === "delete_channel") {
+        patchReportMessage(report.report_id, (message) => ({
+          ...message,
+          text: result.message_text || message.text,
+          edited: true,
+          report_meta: message.report_meta
+            ? { ...message.report_meta, status: "resolved", moderation_status: "frozen" }
+            : message.report_meta,
+        }));
+        setBanner({ text: t("channelDeletedByModerationBanner"), color: "#d32f2f" });
       } else if (result?.error === "report_already_processed") {
         setBanner({ text: t("reportAlreadyProcessed"), color: "var(--meta)" });
+      } else if (result?.error === "channel_already_frozen") {
+        setBanner({ text: t("channelAlreadyFrozen"), color: "var(--meta)" });
+      } else if (result?.error === "freeze_required_before_delete") {
+        setBanner({ text: t("freezeBeforeDelete"), color: "var(--meta)" });
+      } else if (result?.error === "petition_pending") {
+        setBanner({ text: t("petitionPendingReview"), color: "var(--meta)" });
       } else {
         setBanner({ text: t("reportActionFailed"), color: "#d32f2f" });
       }
@@ -2033,6 +2149,74 @@ export function ChatView({ channelId }: { channelId: string }) {
       setReportActionPendingId(null);
     }
   }, [patchReportMessage, reportActionPendingId, t]);
+  const handlePetitionAction = useCallback(async (
+    petition: PetitionMeta,
+    action: "accept_petition" | "reject_petition",
+  ) => {
+    if (reportActionPendingId) return;
+    setReportActionPendingId(petition.petition_id);
+    try {
+      const result = await actOnChannelReport({
+        petition_id: petition.petition_id,
+        action,
+      }) as {
+        ok?: boolean;
+        error?: string;
+        petition?: PetitionMeta;
+        message_text?: string;
+      };
+
+      if (result?.ok && result.petition) {
+        patchPetitionMessage(petition.petition_id, (message) => ({
+          ...message,
+          text: result.message_text || message.text,
+          edited: true,
+          petition_meta: result.petition,
+        }));
+        setBanner({
+          text: action === "accept_petition" ? t("petitionAccepted") : t("petitionRejected"),
+          color: action === "accept_petition" ? "#2a9d4e" : "#d32f2f",
+        });
+      } else if (result?.error === "petition_already_processed") {
+        setBanner({ text: t("petitionAlreadyProcessed"), color: "var(--meta)" });
+      } else {
+        setBanner({ text: t("petitionActionFailed"), color: "#d32f2f" });
+      }
+      setTimeout(() => setBanner(null), 3000);
+    } finally {
+      setReportActionPendingId(null);
+    }
+  }, [patchPetitionMessage, reportActionPendingId, t]);
+  const handleModerationPetitionSubmit = useCallback(async (text: string) => {
+    if (submittingModerationPetition) return;
+    setSubmittingModerationPetition(true);
+    try {
+      const result = await submitModerationPetition(channelId, text.trim()) as { ok?: boolean; error?: string };
+      if (result?.ok) {
+        setOwnerModeration((previous) => previous
+          ? { ...previous, status: "frozen", petitionStatus: "open" }
+          : { status: "frozen", petitionStatus: "open" });
+        setShowModerationPetitionDialog(false);
+        setBanner({ text: t("moderationPetitionSubmitted"), color: "#2a9d4e" });
+      } else if (result?.error === "petition_exists") {
+        setOwnerModeration((previous) => previous
+          ? { ...previous, status: "frozen", petitionStatus: "open" }
+          : previous);
+        setShowModerationPetitionDialog(false);
+        setBanner({ text: t("petitionExists"), color: "var(--meta)" });
+      } else if (result?.error === "petition_unavailable") {
+        refreshOwnerModeration();
+        setBanner({ text: t("petitionUnavailable"), color: "var(--meta)" });
+      } else if (result?.error === "petition_required") {
+        setBanner({ text: t("petitionRequired"), color: "#d32f2f" });
+      } else {
+        setBanner({ text: t("moderationPetitionFailed"), color: "#d32f2f" });
+      }
+      setTimeout(() => setBanner(null), 3000);
+    } finally {
+      setSubmittingModerationPetition(false);
+    }
+  }, [channelId, refreshOwnerModeration, submittingModerationPetition, t]);
 
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
@@ -2553,6 +2737,39 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Frozen banner */}
+      {ownerModerationBlocked && (
+        <div
+          className="flex-none flex items-center justify-between gap-3"
+          style={{
+            padding: "10px 14px",
+            background: "rgba(139,92,246,.08)",
+            borderTop: "0.5px solid rgba(139,92,246,.18)",
+            color: "#5b21b6",
+          }}
+        >
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
+            {ownerModerationBannerText}
+          </div>
+          {ownerCanSubmitPetition && (
+            <button
+              type="button"
+              className="flex-none border-none cursor-pointer"
+              style={{
+                borderRadius: "999px",
+                background: "#8b5cf6",
+                color: "#fff",
+                padding: "8px 12px",
+                fontSize: "calc(var(--bubble-font-size) - 5px)",
+                fontFamily: "inherit",
+                lineHeight: 1,
+              }}
+              onClick={() => setShowModerationPetitionDialog(true)}
+            >
+              {t("submitModerationPetition")}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Composer */}
       <footer
@@ -2577,7 +2794,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
           <button
             className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
-            style={{ color: "var(--meta)", width: "32px", height: "32px", opacity: (isUserBlocked && (hasPetitioned || !petitionEnabled)) ? 0.3 : 1, pointerEvents: (isUserBlocked && (hasPetitioned || !petitionEnabled)) ? "none" : "auto" }}
+            style={{ color: "var(--meta)", width: "32px", height: "32px", opacity: ((isUserBlocked && (hasPetitioned || !petitionEnabled)) || ownerModerationBlocked) ? 0.3 : 1, pointerEvents: ((isUserBlocked && (hasPetitioned || !petitionEnabled)) || ownerModerationBlocked) ? "none" : "auto" }}
             onClick={(e) => setPlusMenu(e.currentTarget.getBoundingClientRect())}
           >
             <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 11px)", height: "calc(var(--bubble-font-size) + 11px)" }}>
@@ -2591,12 +2808,16 @@ export function ChatView({ channelId }: { channelId: string }) {
             style={{
               minHeight: "calc(var(--bubble-font-size) + 19px)",
               padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
-              background: (channel?.is_frozen && !effectiveAdmin && !dmMode)
+              background: ownerModerationBlocked
+                ? "rgba(139,92,246,.06)"
+                : (channel?.is_frozen && !effectiveAdmin && !dmMode)
                 ? "rgba(0,0,0,.03)"
                 : isUserBlocked
                   ? "rgba(255,59,48,.05)"
                   : dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
-              border: (channel?.is_frozen && !effectiveAdmin && !dmMode)
+              border: ownerModerationBlocked
+                ? "1px solid rgba(139,92,246,.28)"
+                : (channel?.is_frozen && !effectiveAdmin && !dmMode)
                 ? "1px solid #ccc"
                 : isUserBlocked
                   ? "1px solid #d32f2f"
@@ -2609,10 +2830,12 @@ export function ChatView({ channelId }: { channelId: string }) {
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              disabled={!!(channel?.is_frozen && !effectiveAdmin && !dmMode) || (isUserBlocked && (hasPetitioned || !petitionEnabled))}
+              disabled={ownerModerationBlocked || !!(channel?.is_frozen && !effectiveAdmin && !dmMode) || (isUserBlocked && (hasPetitioned || !petitionEnabled))}
               rows={1}
               placeholder={
-                (channel?.is_frozen && !effectiveAdmin && !dmMode)
+                ownerModerationBlocked
+                  ? t("ownerSuspendedInput")
+                  : (channel?.is_frozen && !effectiveAdmin && !dmMode)
                   ? t("frozenInput")
                   : isUserBlocked
                     ? (hasPetitioned || !petitionEnabled ? t("blockedInput") : t("petitionInput"))
@@ -2625,7 +2848,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               className="flex-1 border-none bg-transparent outline-none resize-none"
               style={{
                 fontSize: "var(--bubble-font-size)",
-                color: (channel?.is_frozen && !effectiveAdmin && !dmMode) ? "#999" : "var(--gray-text)",
+                color: ownerModerationBlocked || (channel?.is_frozen && !effectiveAdmin && !dmMode) ? "#999" : "var(--gray-text)",
                 padding: "8px 0",
                 caretColor: "var(--tint)",
                 fontFamily: "inherit",
@@ -2635,12 +2858,12 @@ export function ChatView({ channelId }: { channelId: string }) {
               }}
             />
             {/* Emoji bar trigger (live mode only) */}
-            {inLiveMode && !isUserBlocked && (
+            {inLiveMode && !isUserBlocked && !ownerModerationBlocked && (
               <EmojiBar channelId={channelId} presets={emojiPresets} onBroadcast={(emoji, x, h) => {
                 send({ type: "emoji-fx", emoji, x, h });
               }} />
             )}
-            {(input.trim() || pendingPhotos.length > 0) && !(channel?.is_frozen && !effectiveAdmin && !dmMode) && (
+            {(input.trim() || pendingPhotos.length > 0) && !ownerModerationBlocked && !(channel?.is_frozen && !effectiveAdmin && !dmMode) && (
               <button
                 onClick={handleSend}
                 className="flex-none flex items-center justify-center border-none cursor-pointer"
@@ -2711,8 +2934,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           isReported={reportedMsgIds.has(contextMenu.msg.id)}
-          onDelete={contextMenu.isOwn ? handleDelete : undefined}
-          onDeleteWithReplies={effectiveAdmin && !contextMenu.isOwn ? (msgId) => {
+          onDelete={contextMenu.isOwn && !ownerModerationBlocked ? handleDelete : undefined}
+          onDeleteWithReplies={canUseAdminMutations && !contextMenu.isOwn ? (msgId) => {
             const targetMsg = messages.find((m) => m.id === msgId);
             const idsToDelete = new Set([msgId]);
 
@@ -2736,11 +2959,11 @@ export function ChatView({ channelId }: { channelId: string }) {
             setBanner({ text: t("delete"), color: "#d32f2f" });
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
-          onEdit={contextMenu.isOwn ? (msgId) => {
+          onEdit={contextMenu.isOwn && !ownerModerationBlocked ? (msgId) => {
             const msg = messages.find((m) => m.id === msgId);
             if (msg) setEditingMsg({ id: msg.id, text: msg.text });
           } : undefined}
-          onBlock={effectiveAdmin && !contextMenu.isOwn ? (blockUid) => {
+          onBlock={canUseAdminMutations && !contextMenu.isOwn ? (blockUid) => {
             const isBlocked = blockedUsers.some((b) => b.uid === blockUid);
             if (isBlocked) {
               adminAction("unblock", channelId, { uid: blockUid });
@@ -2759,16 +2982,19 @@ export function ChatView({ channelId }: { channelId: string }) {
             setTimeout(() => setBanner(null), 3000);
           } : undefined}
           isBlockedUser={blockedUsers.some((b) => b.uid === contextMenu.msg.uid)}
-          onResolveReport={effectiveAdmin && contextMenu.msg.report_meta?.status === "open" ? () => {
-            void handleReportAction(contextMenu.msg.report_meta!, "resolve");
+          onReportAction={canUseAdminMutations && contextMenu.msg.report_meta ? (action) => {
+            void handleReportAction(contextMenu.msg.report_meta!, action);
           } : undefined}
-          onDismissReport={effectiveAdmin && contextMenu.msg.report_meta?.status === "open" ? () => {
-            void handleReportAction(contextMenu.msg.report_meta!, "dismiss");
+          onPetitionAction={canUseAdminMutations && contextMenu.msg.petition_meta ? (action) => {
+            void handlePetitionAction(contextMenu.msg.petition_meta!, action);
           } : undefined}
           reportActionPending={Boolean(
-            effectiveAdmin
-            && contextMenu.msg.report_meta
-            && reportActionPendingId === contextMenu.msg.report_meta.report_id
+            canUseAdminMutations
+            && reportActionPendingId
+            && (
+              reportActionPendingId === contextMenu.msg.report_meta?.report_id
+              || reportActionPendingId === contextMenu.msg.petition_meta?.petition_id
+            )
           )}
           onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
           onClose={() => setContextMenu(null)}
@@ -2813,6 +3039,16 @@ export function ChatView({ channelId }: { channelId: string }) {
         />
       )}
 
+      {showModerationPetitionDialog && (
+        <ModerationPetitionDialog
+          submitting={submittingModerationPetition}
+          onSubmit={handleModerationPetitionSubmit}
+          onClose={() => {
+            if (!submittingModerationPetition) setShowModerationPetitionDialog(false);
+          }}
+        />
+      )}
+
       {showOwnerChannels && (
         <OwnerChannelsPopup
           currentChannelId={channelId}
@@ -2837,7 +3073,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               updateRecentChannelAppearance(channelId, { bubbleColor: color });
             }
           }}
-          onAdmin={effectiveAdmin ? () => {
+          onAdmin={effectiveAdmin && !ownerModerationBlocked ? () => {
             setShowSettings(false);
             setShowAdminPanel(true);
           } : undefined}
@@ -3013,9 +3249,9 @@ export function ChatView({ channelId }: { channelId: string }) {
           inLiveMode={inLiveMode}
           onPhoto={() => photoInputRef.current?.click()}
           onDmToggle={() => setDmMode(!dmMode)}
-          onFreezeToggle={effectiveAdmin ? handleAdminFreezeToggle : undefined}
-          onLiveToggle={effectiveAdmin ? handleAdminLiveToggle : undefined}
-          onNotice={effectiveAdmin ? () => setShowNoticeEdit(true) : undefined}
+          onFreezeToggle={canUseAdminMutations ? handleAdminFreezeToggle : undefined}
+          onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
+          onNotice={canUseAdminMutations ? () => setShowNoticeEdit(true) : undefined}
           onEmojiPreset={() => setShowEmojiPreset(true)}
           onClose={() => setPlusMenu(null)}
         />
@@ -3049,6 +3285,10 @@ export function ChatView({ channelId }: { channelId: string }) {
               else if (editError === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
               else if (editError === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
               else if (editError === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
+              else if (editError === "owner_suspended") {
+                refreshOwnerModeration();
+                setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
+              }
               else if (editError === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
               else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
               setTimeout(() => setBanner(null), 3000);

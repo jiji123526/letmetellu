@@ -280,8 +280,17 @@ export async function submitChannelReport(payload: {
 }
 
 export async function actOnChannelReport(payload: {
-  report_id: string;
-  action: "resolve" | "dismiss";
+  report_id?: string;
+  petition_id?: string;
+  action:
+    | "resolve"
+    | "dismiss"
+    | "warn_owner"
+    | "send_suspend_notice"
+    | "freeze_channel"
+    | "delete_channel"
+    | "accept_petition"
+    | "reject_petition";
   resolution_note?: string;
 }) {
   if (IS_MOCK) return { ok: true };
@@ -294,6 +303,11 @@ export async function actOnChannelReport(payload: {
     body: JSON.stringify(payload),
   });
   return res.json();
+}
+
+export async function submitModerationPetition(channelId: string, text: string) {
+  if (IS_MOCK) return { ok: true };
+  return adminAction("submit-moderation-petition", channelId, { text });
 }
 
 export async function sendMessage(payload: {

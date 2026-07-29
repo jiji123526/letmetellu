@@ -11,7 +11,18 @@ interface ContextMenuProps {
     uid: string;
     text: string;
     is_admin: number;
-    report_meta?: { status: "open" | "resolved" | "dismissed" };
+    report_meta?: {
+      report_id: string;
+      channel_url: string;
+      status: "open" | "resolved" | "dismissed";
+      moderation_status: "active" | "warned" | "suspended" | "frozen";
+      petition_status: "none" | "open" | "accepted" | "rejected";
+    };
+    petition_meta?: {
+      petition_id: string;
+      channel_url: string;
+      status: "open" | "accepted" | "rejected";
+    };
   };
   isSent: boolean;
   anchorRect: DOMRect;
@@ -27,8 +38,8 @@ interface ContextMenuProps {
   onEdit?: (msgId: string) => void;
   onBlock?: (uid: string) => void;
   isBlockedUser?: boolean;
-  onResolveReport?: (msgId: string) => void;
-  onDismissReport?: (msgId: string) => void;
+  onReportAction?: (action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
+  onPetitionAction?: (action: "accept_petition" | "reject_petition") => void;
   reportActionPending?: boolean;
   onEmojiPicker: (msgId: string, rect: DOMRect) => void;
   onClose: () => void;
@@ -51,8 +62,8 @@ export function ContextMenu({
   onEdit,
   onBlock,
   isBlockedUser,
-  onResolveReport,
-  onDismissReport,
+  onReportAction,
+  onPetitionAction,
   reportActionPending,
   onEmojiPicker,
   onClose,
@@ -143,7 +154,42 @@ export function ContextMenu({
     lineHeight: 1,
   };
   const isReportInboxMessage = isAdmin && !!msg.report_meta;
+  const isPetitionInboxMessage = isAdmin && !!msg.petition_meta;
   const isOpenReport = msg.report_meta?.status === "open";
+  const isOpenPetition = msg.petition_meta?.status === "open";
+
+  const openLinkedChannel = (url?: string) => {
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const ActionButton = ({
+    label,
+    color,
+    borderBottom = true,
+    disabled = false,
+    onClick,
+    icon,
+  }: {
+    label: string;
+    color?: string;
+    borderBottom?: boolean;
+    disabled?: boolean;
+    onClick: () => void;
+    icon: React.ReactNode;
+  }) => (
+    <button
+      style={{ ...actionItemStyle, ...(borderBottom ? null : { borderBottom: "none" }) }}
+      disabled={disabled}
+      onClick={() => {
+        onClick();
+        onClose();
+      }}
+    >
+      {icon}
+      <span style={{ color: color || "var(--gray-text)", opacity: disabled ? 0.65 : 1 }}>{label}</span>
+    </button>
+  );
 
   return (
     <div
@@ -153,57 +199,59 @@ export function ContextMenu({
       onClick={onClose}
     >
       {/* Reaction bar */}
-      <div
-        className="absolute flex animate-[ctxPop_0.2s_ease]"
-        style={{
-          ...positionStyle,
-          top: reactionY,
-          gap: "4px",
-          borderRadius: "22px",
-          padding: "6px 8px",
-          background: "color-mix(in srgb, var(--card) 88%, transparent)",
-          backdropFilter: "saturate(180%) blur(20px)",
-          WebkitBackdropFilter: "saturate(180%) blur(20px)",
-          boxShadow: "0 4px 20px rgba(0,0,0,.15)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {REACTIONS.map((emoji) => (
+      {!isReportInboxMessage && !isPetitionInboxMessage && (
+        <div
+          className="absolute flex animate-[ctxPop_0.2s_ease]"
+          style={{
+            ...positionStyle,
+            top: reactionY,
+            gap: "4px",
+            borderRadius: "22px",
+            padding: "6px 8px",
+            background: "color-mix(in srgb, var(--card) 88%, transparent)",
+            backdropFilter: "saturate(180%) blur(20px)",
+            WebkitBackdropFilter: "saturate(180%) blur(20px)",
+            boxShadow: "0 4px 20px rgba(0,0,0,.15)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              className="border-none bg-transparent rounded-full cursor-pointer flex items-center justify-center hover:scale-[1.2] active:scale-[1.4] transition-transform"
+              style={{
+                width: "calc(var(--bubble-font-size) + 19px)",
+                height: "calc(var(--bubble-font-size) + 19px)",
+                fontSize: "calc(var(--bubble-font-size) + 3px)",
+              }}
+              onClick={() => {
+                onReaction(msg.id, emoji);
+                onClose();
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
           <button
-            key={emoji}
-            className="border-none bg-transparent rounded-full cursor-pointer flex items-center justify-center hover:scale-[1.2] active:scale-[1.4] transition-transform"
+            className="border-none rounded-full cursor-pointer flex items-center justify-center"
             style={{
               width: "calc(var(--bubble-font-size) + 19px)",
               height: "calc(var(--bubble-font-size) + 19px)",
-              fontSize: "calc(var(--bubble-font-size) + 3px)",
+              fontSize: "calc(var(--bubble-font-size) + 1px)",
+              background: "var(--hairline)",
+              color: "var(--meta)",
+              lineHeight: 1,
             }}
-            onClick={() => {
-              onReaction(msg.id, emoji);
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
               onClose();
+              onEmojiPicker(msg.id, rect);
             }}
           >
-            {emoji}
+            +
           </button>
-        ))}
-        <button
-          className="border-none rounded-full cursor-pointer flex items-center justify-center"
-          style={{
-            width: "calc(var(--bubble-font-size) + 19px)",
-            height: "calc(var(--bubble-font-size) + 19px)",
-            fontSize: "calc(var(--bubble-font-size) + 1px)",
-            background: "var(--hairline)",
-            color: "var(--meta)",
-            lineHeight: 1,
-          }}
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            onClose();
-            onEmojiPicker(msg.id, rect);
-          }}
-        >
-          +
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Action list */}
       <div
@@ -220,25 +268,153 @@ export function ContextMenu({
       >
         {isReportInboxMessage ? (
           <>
-            {isOpenReport && onResolveReport && (
-              <button style={actionItemStyle} disabled={reportActionPending} onClick={() => { onResolveReport(msg.id); onClose(); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6 9 17l-5-5" />
+            <ActionButton
+              label={t("viewReportedChannel")}
+              disabled={reportActionPending}
+              onClick={() => openLinkedChannel(msg.report_meta?.channel_url)}
+              icon={(
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 3h7v7" />
+                  <path d="M10 14 21 3" />
+                  <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" />
                 </svg>
-                <span style={{ color: "#2a9d4e", opacity: reportActionPending ? 0.65 : 1 }}>{t("resolveReport")}</span>
-              </button>
+              )}
+            />
+            {isOpenReport && onReportAction && msg.report_meta?.moderation_status === "active" && (
+              <ActionButton
+                label={t("warnOwner")}
+                disabled={reportActionPending}
+                onClick={() => onReportAction("warn_owner")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#b26a00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 9v4" />
+                    <path d="M12 17h.01" />
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  </svg>
+                )}
+              />
             )}
-            {isOpenReport && onDismissReport && (
-              <button style={{ ...actionItemStyle, borderBottom: "none" }} disabled={reportActionPending} onClick={() => { onDismissReport(msg.id); onClose(); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
-                <span style={{ color: "#8e8e93", opacity: reportActionPending ? 0.65 : 1 }}>{t("dismissReport")}</span>
-              </button>
+            {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
+              <ActionButton
+                label={t("sendSuspendNotice")}
+                disabled={reportActionPending}
+                onClick={() => onReportAction("send_suspend_notice")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#9b2226" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v5" />
+                    <path d="M12 16h.01" />
+                  </svg>
+                )}
+              />
+            )}
+            {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
+              <ActionButton
+                label={t("freezeReportedChannel")}
+                color="#8b5cf6"
+                disabled={reportActionPending}
+                onClick={() => onReportAction("freeze_channel")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3v18" />
+                    <path d="M6 8h12" />
+                    <path d="M7 15h10" />
+                  </svg>
+                )}
+              />
+            )}
+            {onReportAction && msg.report_meta?.moderation_status === "frozen" && (
+              <ActionButton
+                label={t("deleteReportedChannel")}
+                color="#d32f2f"
+                disabled={reportActionPending}
+                onClick={() => onReportAction("delete_channel")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                  </svg>
+                )}
+              />
+            )}
+            {isOpenReport && onReportAction && (
+              <ActionButton
+                label={t("resolveReport")}
+                color="#2a9d4e"
+                disabled={reportActionPending}
+                onClick={() => onReportAction("resolve")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
+              />
+            )}
+            {isOpenReport && onReportAction && (
+              <ActionButton
+                label={t("dismissReport")}
+                color="#8e8e93"
+                borderBottom={false}
+                disabled={reportActionPending}
+                onClick={() => onReportAction("dismiss")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                )}
+              />
             )}
             {!isOpenReport && (
               <div style={{ ...actionItemStyle, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
                 <span>{msg.report_meta?.status === "resolved" ? t("reportStatusResolved") : t("reportStatusDismissed")}</span>
+              </div>
+            )}
+          </>
+        ) : isPetitionInboxMessage ? (
+          <>
+            <ActionButton
+              label={t("viewReportedChannel")}
+              disabled={reportActionPending}
+              onClick={() => openLinkedChannel(msg.petition_meta?.channel_url)}
+              icon={(
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 3h7v7" />
+                  <path d="M10 14 21 3" />
+                  <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" />
+                </svg>
+              )}
+            />
+            {isOpenPetition && onPetitionAction && (
+              <ActionButton
+                label={t("acceptPetition")}
+                color="#2a9d4e"
+                disabled={reportActionPending}
+                onClick={() => onPetitionAction("accept_petition")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
+              />
+            )}
+            {isOpenPetition && onPetitionAction && (
+              <ActionButton
+                label={t("rejectPetition")}
+                color="#d32f2f"
+                borderBottom={false}
+                disabled={reportActionPending}
+                onClick={() => onPetitionAction("reject_petition")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                )}
+              />
+            )}
+            {!isOpenPetition && (
+              <div style={{ ...actionItemStyle, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
+                <span>{msg.petition_meta?.status === "accepted" ? t("petitionAccepted") : t("petitionRejected")}</span>
               </div>
             )}
           </>

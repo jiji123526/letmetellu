@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation";
 import { isReportsChannel } from "../lib/special-channels";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
@@ -46,6 +47,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     `).bind(channel_id, parentChannelId).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
     const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
+    if (isChannelOwner) {
+      const moderation = await getChannelModeration(parentChannelId, env);
+      if (isOwnerModerationBlocked(moderation)) {
+        return Response.json({ error: "owner_suspended" }, { status: 403 });
+      }
+    }
     if (isReportsChannel(parentChannelId, env) && !isChannelOwner) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
@@ -266,6 +273,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     `).bind(channel_id, editParent).first();
     if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
     const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
+    if (isChannelOwner) {
+      const moderation = await getChannelModeration(editParent, env);
+      if (isOwnerModerationBlocked(moderation)) {
+        return Response.json({ error: "owner_suspended" }, { status: 403 });
+      }
+    }
     if (isReportsChannel(editParent, env) && !isChannelOwner) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
@@ -365,6 +378,10 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         .bind(patchParent).first();
       if (!channel || channel.owner_uid !== verifiedUserId) {
         return Response.json({ error: "not owner" }, { status: 403 });
+      }
+      const moderation = await getChannelModeration(patchParent, env);
+      if (isOwnerModerationBlocked(moderation)) {
+        return Response.json({ error: "owner_suspended" }, { status: 403 });
       }
     }
     const { passcode: patchPasscode } = await getChannelPasscodeInfo(patchParent, env);

@@ -1,8 +1,29 @@
 import { Env } from "../types";
+import { getChannelModeration, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration } from "../lib/channel-moderation";
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
+
+function formatModerationPetitionMessage(input: {
+  petitionId: string;
+  channelId: string;
+  channelName: string;
+  channelUrl: string;
+  ownerLabel: string;
+  text: string;
+  createdAt: string;
+}) {
+  return [
+    "📝 채널 이의 제기",
+    `이의 제기 ID: ${input.petitionId}`,
+    `채널: ${input.channelName} (${input.channelUrl})`,
+    `제출자: ${input.ownerLabel}`,
+    `접수 시각: ${input.createdAt}`,
+    `내용: ${input.text}`,
+    "상태: 접수됨",
+  ].join("\n");
+}
 
 export async function deleteChannel(channelId: string, env: Env) {
   const channelIds = [channelId, `${channelId}_live`];
@@ -84,6 +105,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     if (!channel || channel.owner_uid !== userId) {
       return Response.json({ error: "not owner" }, { status: 403 });
     }
+
+    const moderation = await getChannelModeration(channel_id, env);
+    if (isOwnerModerationBlocked(moderation) && action !== "submit-moderation-petition") {
+      return Response.json({ error: "owner_suspended" }, { status: 403 });
+    }
   }
 
   switch (action) {
@@ -113,6 +139,91 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "delete-channel": {
       await deleteChannel(channel_id, env);
       return Response.json({ ok: true });
+    }
+
+    case "submit-moderation-petition": {
+      const petitionText = typeof payload?.text === "string" ? payload.text.trim().slice(0, 500) : "";
+      if (!petitionText) {
+        return Response.json({ error: "petition_required" }, { status: 400 });
+      }
+
+      const moderation = await getChannelModeration(channel_id, env);
+      if (!isOwnerModerationBlocked(moderation)) {
+        return Response.json({ error: "petition_unavailable" }, { status: 409 });
+      }
+      if (moderation.petition_status !== "none") {
+        return Response.json({ error: "petition_exists" }, { status: 409 });
+      }
+
+      const channel = await env.DB.prepare("SELECT id, name, owner_uid FROM channels WHERE id = ?")
+        .bind(channel_id)
+        .first<{ id: string; name: string; owner_uid: string }>();
+      if (!channel || channel.owner_uid !== userId) {
+        return Response.json({ error: "not owner" }, { status: 403 });
+      }
+
+      const ownerProfile = await env.DB.prepare("SELECT name FROM users WHERE id = ?")
+        .bind(userId)
+        .first<{ name: string | null }>();
+      const petitionId = crypto.randomUUID();
+      const inboxMessageId = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      const ownerLabel = ownerProfile?.name?.trim()
+        ? `${ownerProfile.name.trim()} 관리자`
+        : `채널 관리자 #${userId.slice(-6)}`;
+      const petitionMeta = {
+        petition_id: petitionId,
+        channel_id: channel_id,
+        channel_name: channel.name,
+        channel_url: `${env.APP_ORIGIN.replace(/\/$/, "")}/ch/${encodeURIComponent(channel_id)}`,
+        owner_label: ownerLabel,
+        text: petitionText,
+        status: "open",
+        created_at: createdAt,
+        resolved_at: null,
+        resolution_note: null,
+      };
+      const petitionMessage = formatModerationPetitionMessage({
+        petitionId,
+        channelId: channel_id,
+        channelName: channel.name,
+        channelUrl: petitionMeta.channel_url,
+        ownerLabel,
+        text: petitionText,
+        createdAt,
+      });
+
+      await env.DB.prepare(`
+        INSERT INTO channel_petitions (
+          id, channel_id, owner_uid, text, status, created_at, inbox_message_id
+        ) VALUES (?, ?, ?, ?, 'open', ?, ?)
+      `).bind(
+        petitionId,
+        channel_id,
+        userId,
+        petitionText,
+        createdAt,
+        inboxMessageId,
+      ).run();
+
+      await setChannelModeration(channel_id, {
+        status: "frozen",
+        petition_status: "open",
+        current_petition_id: petitionId,
+      }, env);
+
+      await postReportsInboxMessage({
+        env,
+        id: inboxMessageId,
+        createdAt,
+        nick: "이의 제기",
+        text: petitionMessage,
+        extra: {
+          petition_meta: petitionMeta,
+        },
+      });
+
+      return Response.json({ ok: true, petition_id: petitionId, created_at: createdAt });
     }
 
     case "freeze": {
