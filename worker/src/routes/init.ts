@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getChannelModeration } from "../lib/channel-moderation";
+import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
@@ -183,8 +183,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const ownerModeration = isOwner
     ? await getChannelModeration(parentChannelId, env)
     : null;
+  const reportsOwnerLocale = isOwner
+    ? await getUserLocale(trustedUserId, env)
+    : "ko";
   const messages = isReportsChannel(parentChannelId, env) && isOwner
-    ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env)
+    ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env, reportsOwnerLocale)
     : rawMessages;
 
   return Response.json({

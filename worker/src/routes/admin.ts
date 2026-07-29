@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { getChannelModeration, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration } from "../lib/channel-moderation";
+import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
@@ -13,16 +13,27 @@ function formatModerationPetitionMessage(input: {
   ownerLabel: string;
   text: string;
   createdAt: string;
+  locale: UserLocale;
 }) {
-  return [
-    "📝 채널 이의 제기",
-    `이의 제기 ID: ${input.petitionId}`,
-    `채널: ${input.channelName} (${input.channelUrl})`,
-    `제출자: ${input.ownerLabel}`,
-    `접수 시각: ${input.createdAt}`,
-    `내용: ${input.text}`,
-    "상태: 접수됨",
-  ].join("\n");
+  return input.locale === "en"
+    ? [
+        "📝 Channel appeal",
+        `Appeal ID: ${input.petitionId}`,
+        `Channel: ${input.channelName} (${input.channelUrl})`,
+        `Submitted by: ${input.ownerLabel}`,
+        `Submitted at: ${input.createdAt}`,
+        `Details: ${input.text}`,
+        "Status: Open",
+      ].join("\n")
+    : [
+        "📝 채널 이의 제기",
+        `이의 제기 ID: ${input.petitionId}`,
+        `채널: ${input.channelName} (${input.channelUrl})`,
+        `제출자: ${input.ownerLabel}`,
+        `접수 시각: ${input.createdAt}`,
+        `내용: ${input.text}`,
+        "상태: 접수됨",
+      ].join("\n");
 }
 
 export async function deleteChannel(channelId: string, env: Env) {
@@ -165,12 +176,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const ownerProfile = await env.DB.prepare("SELECT name FROM users WHERE id = ?")
         .bind(userId)
         .first<{ name: string | null }>();
+      const reportsChannel = await getReportsChannelOwner(env);
+      const reportsOwnerLocale = reportsChannel
+        ? await getUserLocale(reportsChannel.owner_uid, env)
+        : "ko";
       const petitionId = crypto.randomUUID();
       const inboxMessageId = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const ownerLabel = ownerProfile?.name?.trim()
-        ? `${ownerProfile.name.trim()} 관리자`
-        : `채널 관리자 #${userId.slice(-6)}`;
+        ? reportsOwnerLocale === "en"
+          ? `${ownerProfile.name.trim()} Admin`
+          : `${ownerProfile.name.trim()} 관리자`
+        : reportsOwnerLocale === "en"
+          ? `Channel Admin #${userId.slice(-6)}`
+          : `채널 관리자 #${userId.slice(-6)}`;
       const petitionMeta = {
         petition_id: petitionId,
         channel_id: channel_id,
@@ -191,6 +210,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         ownerLabel,
         text: petitionText,
         createdAt,
+        locale: reportsOwnerLocale,
       });
 
       await env.DB.prepare(`
@@ -216,7 +236,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env,
         id: inboxMessageId,
         createdAt,
-        nick: "이의 제기",
+        nick: reportsOwnerLocale === "en" ? "Appeal" : "이의 제기",
         text: petitionMessage,
         extra: {
           petition_meta: petitionMeta,

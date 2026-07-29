@@ -38,7 +38,7 @@ interface ContextMenuProps {
   onEdit?: (msgId: string) => void;
   onBlock?: (uid: string) => void;
   isBlockedUser?: boolean;
-  onReportAction?: (action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
+  onReportAction?: (action: "warn_owner" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition") => void;
   reportActionPending?: boolean;
   onEmojiPicker: (msgId: string, rect: DOMRect) => void;
@@ -108,6 +108,7 @@ export function ContextMenu({
   const positionStyle: React.CSSProperties = isSent
     ? { right: typeof window !== "undefined" ? window.innerWidth - anchorRect.right : 0, left: "auto" }
     : { left: anchorRect.left, right: "auto" };
+  const maxActionHeight = Math.max(120, composerTop - actionY - gap);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -157,11 +158,6 @@ export function ContextMenu({
   const isPetitionInboxMessage = isAdmin && !!msg.petition_meta;
   const isOpenReport = msg.report_meta?.status === "open";
   const isOpenPetition = msg.petition_meta?.status === "open";
-
-  const openLinkedChannel = (url?: string) => {
-    if (!url) return;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
 
   const ActionButton = ({
     label,
@@ -263,23 +259,14 @@ export function ContextMenu({
           backdropFilter: "saturate(180%) blur(20px)",
           WebkitBackdropFilter: "saturate(180%) blur(20px)",
           boxShadow: "0 4px 20px rgba(0,0,0,.15)",
+          maxHeight: `${maxActionHeight}px`,
+          overflowY: "auto",
+          overscrollBehavior: "contain",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {isReportInboxMessage ? (
           <>
-            <ActionButton
-              label={t("viewReportedChannel")}
-              disabled={reportActionPending}
-              onClick={() => openLinkedChannel(msg.report_meta?.channel_url)}
-              icon={(
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 3h7v7" />
-                  <path d="M10 14 21 3" />
-                  <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" />
-                </svg>
-              )}
-            />
             {isOpenReport && onReportAction && msg.report_meta?.moderation_status === "active" && (
               <ActionButton
                 label={t("warnOwner")}
@@ -290,20 +277,6 @@ export function ContextMenu({
                     <path d="M12 9v4" />
                     <path d="M12 17h.01" />
                     <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  </svg>
-                )}
-              />
-            )}
-            {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
-              <ActionButton
-                label={t("sendSuspendNotice")}
-                disabled={reportActionPending}
-                onClick={() => onReportAction("send_suspend_notice")}
-                icon={(
-                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#9b2226" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 8v5" />
-                    <path d="M12 16h.01" />
                   </svg>
                 )}
               />
@@ -373,18 +346,6 @@ export function ContextMenu({
           </>
         ) : isPetitionInboxMessage ? (
           <>
-            <ActionButton
-              label={t("viewReportedChannel")}
-              disabled={reportActionPending}
-              onClick={() => openLinkedChannel(msg.petition_meta?.channel_url)}
-              icon={(
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 3h7v7" />
-                  <path d="M10 14 21 3" />
-                  <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" />
-                </svg>
-              )}
-            />
             {isOpenPetition && onPetitionAction && (
               <ActionButton
                 label={t("acceptPetition")}

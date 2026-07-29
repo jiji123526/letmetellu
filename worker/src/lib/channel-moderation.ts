@@ -3,6 +3,7 @@ import { getParentChannelId, getReportsChannelId } from "./special-channels";
 
 export type ModerationStatus = "active" | "warned" | "suspended" | "frozen";
 export type PetitionStatus = "none" | "open" | "accepted" | "rejected";
+export type UserLocale = "ko" | "en";
 
 export interface ChannelModerationRow {
   channel_id: string;
@@ -44,6 +45,18 @@ const DEFAULT_MODERATION_STATUS: ChannelModerationRow = {
   current_petition_id: null,
   updated_at: null,
 };
+
+export function normalizeUserLocale(value: string | null | undefined): UserLocale {
+  return value === "en" ? "en" : "ko";
+}
+
+export async function getUserLocale(userId: string, env: Env): Promise<UserLocale> {
+  if (!userId) return "ko";
+  const result = await env.DB.prepare("SELECT locale FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ locale: string | null }>();
+  return normalizeUserLocale(result?.locale);
+}
 
 export async function getChannelModeration(channelId: string, env: Env): Promise<ChannelModerationRow> {
   const parentChannelId = getParentChannelId(channelId);

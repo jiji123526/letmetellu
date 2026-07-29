@@ -4,6 +4,11 @@ import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 
 const DEFAULT_FONT_SIZE = 17;
+const DEFAULT_LOCALE = "ko";
+
+function normalizeLocale(value: unknown): "ko" | "en" {
+  return value === "en" ? "en" : "ko";
+}
 
 function normalizeFontSize(value: unknown) {
   const size = Number(value);
@@ -54,20 +59,37 @@ export function UserPreferencesSync() {
     const controller = new AbortController();
     fetch("/api/user", { cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() : null)
-      .then(async (data: { font_size?: number | null } | null) => {
+      .then(async (data: { font_size?: number | null; locale?: string | null } | null) => {
         if (!data) return;
+        const browserLocale = navigator.language.toLowerCase().startsWith("ko") ? "ko" : "en";
+        const localLocale = normalizeLocale(localStorage.getItem("locale") || browserLocale || DEFAULT_LOCALE);
+        const syncedLocale = data.locale === "ko" || data.locale === "en" ? data.locale : null;
+        const nextLocale = syncedLocale || localLocale;
+        localStorage.setItem("locale", nextLocale);
+        window.dispatchEvent(new CustomEvent("locale-changed", {
+          detail: { locale: nextLocale },
+        }));
+
         if (data.font_size) {
           applyFontSize(data.font_size);
-          return;
+        } else {
+          const existingLocalSize = localStorage.getItem("fontSize");
+          const size = applyFontSize(existingLocalSize || DEFAULT_FONT_SIZE);
+          await fetch("/api/user", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ font_size: size }),
+            signal: controller.signal,
+          });
         }
-        const existingLocalSize = localStorage.getItem("fontSize");
-        const size = applyFontSize(existingLocalSize || DEFAULT_FONT_SIZE);
-        await fetch("/api/user", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ font_size: size }),
-          signal: controller.signal,
-        });
+        if (!syncedLocale) {
+          await fetch("/api/user", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ locale: nextLocale }),
+            signal: controller.signal,
+          });
+        }
       })
       .catch(() => {});
     return () => controller.abort();

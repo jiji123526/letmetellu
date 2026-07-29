@@ -5,10 +5,13 @@ import {
   editReportsInboxMessage,
   getChannelModeration,
   getOpenChannelPetition,
+  getReportsChannelOwner,
+  getUserLocale,
   isOwnerModerationBlocked,
   postReportsInboxMessage,
   sendOwnerModerationNotice,
   setChannelModeration,
+  type UserLocale,
 } from "../lib/channel-moderation";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { Env } from "../types";
@@ -25,14 +28,25 @@ const REPORT_REASONS = new Set([
   "other",
 ]);
 
-const REPORT_REASON_LABELS: Record<string, string> = {
-  spam: "스팸",
-  harassment: "괴롭힘 또는 혐오",
-  sexual_content: "성적 콘텐츠",
-  privacy: "개인정보 노출",
-  impersonation: "사칭 또는 사기",
-  illegal_content: "불법 또는 위험 콘텐츠",
-  other: "기타",
+const REPORT_REASON_LABELS: Record<UserLocale, Record<string, string>> = {
+  ko: {
+    spam: "스팸",
+    harassment: "괴롭힘 또는 혐오",
+    sexual_content: "성적 콘텐츠",
+    privacy: "개인정보 노출",
+    impersonation: "사칭 또는 사기",
+    illegal_content: "불법 또는 위험 콘텐츠",
+    other: "기타",
+  },
+  en: {
+    spam: "Spam",
+    harassment: "Harassment or hate",
+    sexual_content: "Sexual content",
+    privacy: "Privacy exposure",
+    impersonation: "Impersonation or fraud",
+    illegal_content: "Illegal or dangerous content",
+    other: "Other",
+  },
 };
 
 const MAX_DETAILS_LENGTH = 500;
@@ -119,58 +133,89 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
   return payload?.device_id || null;
 }
 
-function formatReporterLabel(input: { authUid: string | null; uid: string; deviceId: string | null }): string {
-  if (input.authUid) {
-    return `계정 #${input.authUid.slice(-6)}`;
-  }
-  const deviceSuffix = input.deviceId ? ` / 기기#${input.deviceId.slice(-6)}` : "";
-  return `익명 #${input.uid.slice(-6)}${deviceSuffix}`;
+function reportReasonLabel(reason: string, locale: UserLocale): string {
+  return REPORT_REASON_LABELS[locale][reason] || reason;
 }
 
-function formatOwnerLabel(ownerUid: string, ownerName: string | null): string {
-  if (ownerName?.trim()) return `${ownerName.trim()} 관리자`;
-  return `채널 관리자 #${ownerUid.slice(-6)}`;
+function formatReporterLabel(input: { authUid: string | null; uid: string; deviceId: string | null }, locale: UserLocale): string {
+  if (input.authUid) {
+    return locale === "en"
+      ? `Account #${input.authUid.slice(-6)}`
+      : `계정 #${input.authUid.slice(-6)}`;
+  }
+  const deviceSuffix = input.deviceId
+    ? locale === "en"
+      ? ` / Device#${input.deviceId.slice(-6)}`
+      : ` / 기기#${input.deviceId.slice(-6)}`
+    : "";
+  return locale === "en"
+    ? `Anon #${input.uid.slice(-6)}${deviceSuffix}`
+    : `익명 #${input.uid.slice(-6)}${deviceSuffix}`;
+}
+
+function formatOwnerLabel(ownerUid: string, ownerName: string | null, locale: UserLocale): string {
+  if (ownerName?.trim()) return locale === "en" ? `${ownerName.trim()} Admin` : `${ownerName.trim()} 관리자`;
+  return locale === "en"
+    ? `Channel Admin #${ownerUid.slice(-6)}`
+    : `채널 관리자 #${ownerUid.slice(-6)}`;
 }
 
 function channelReportUrl(channelId: string, env: Env): string {
   return `${env.APP_ORIGIN.replace(/\/$/, "")}/ch/${encodeURIComponent(channelId)}`;
 }
 
-function reportStatusLabel(status: "open" | "resolved" | "dismissed"): string {
+function reportStatusLabel(status: "open" | "resolved" | "dismissed", locale: UserLocale): string {
+  if (locale === "en") {
+    if (status === "resolved") return "Resolved";
+    if (status === "dismissed") return "Dismissed";
+    return "Open";
+  }
   if (status === "resolved") return "해결됨";
   if (status === "dismissed") return "기각됨";
   return "접수됨";
 }
 
-function moderationStatusLabel(status: "active" | "warned" | "suspended" | "frozen"): string {
+function moderationStatusLabel(status: "active" | "warned" | "suspended" | "frozen", locale: UserLocale): string {
+  if (locale === "en") {
+    if (status === "warned") return "Warning sent";
+    if (status === "suspended") return "Suspension notice sent";
+    if (status === "frozen") return "Frozen";
+    return "Active";
+  }
   if (status === "warned") return "경고 발송";
   if (status === "suspended") return "정지 안내 발송";
   if (status === "frozen") return "동결됨";
   return "정상";
 }
 
-function petitionStatusLabel(status: "none" | "open" | "accepted" | "rejected"): string {
+function petitionStatusLabel(status: "none" | "open" | "accepted" | "rejected", locale: UserLocale): string {
+  if (locale === "en") {
+    if (status === "open") return "Open";
+    if (status === "accepted") return "Accepted";
+    if (status === "rejected") return "Rejected";
+    return "None";
+  }
   if (status === "open") return "접수됨";
   if (status === "accepted") return "승인됨";
   if (status === "rejected") return "기각됨";
   return "없음";
 }
 
-function buildReportMeta(row: ChannelReportRow, env: Env): ReportMeta {
+function buildReportMeta(row: ChannelReportRow, env: Env, locale: UserLocale = "ko"): ReportMeta {
   return {
     report_id: row.id,
     channel_id: row.channel_id,
     channel_name: row.channel_name,
     channel_url: channelReportUrl(row.channel_id, env),
     reason: row.reason,
-    reason_label: REPORT_REASON_LABELS[row.reason] || row.reason,
+    reason_label: reportReasonLabel(row.reason, locale),
     status: REPORT_STATUSES.has(row.status) ? row.status : "open",
     details: row.details || null,
     reporter_label: formatReporterLabel({
       authUid: row.reporter_auth_uid,
       uid: row.reporter_uid,
       deviceId: row.reporter_device_id,
-    }),
+    }, locale),
     created_at: row.created_at,
     resolved_at: row.resolved_at || null,
     resolution_note: row.resolution_note || null,
@@ -181,13 +226,13 @@ function buildReportMeta(row: ChannelReportRow, env: Env): ReportMeta {
   };
 }
 
-function buildPetitionMeta(row: ChannelPetitionInboxRow, env: Env): PetitionMeta {
+function buildPetitionMeta(row: ChannelPetitionInboxRow, env: Env, locale: UserLocale = "ko"): PetitionMeta {
   return {
     petition_id: row.id,
     channel_id: row.channel_id,
     channel_name: row.channel_name,
     channel_url: channelReportUrl(row.channel_id, env),
-    owner_label: formatOwnerLabel(row.owner_uid, row.owner_name),
+    owner_label: formatOwnerLabel(row.owner_uid, row.owner_name, locale),
     text: row.text,
     status: PETITION_STATUSES.has(row.status) ? row.status : "open",
     created_at: row.created_at,
@@ -196,47 +241,71 @@ function buildPetitionMeta(row: ChannelPetitionInboxRow, env: Env): PetitionMeta
   };
 }
 
-function formatReportMessageFromMeta(meta: ReportMeta): string {
-  const lines = [
-    "🚨 채널 신고",
-    `신고 ID: ${meta.report_id}`,
-    `채널: ${meta.channel_name} (${meta.channel_url})`,
-    `사유: ${meta.reason_label}`,
-    `신고자: ${meta.reporter_label}`,
-    `접수 시각: ${meta.created_at}`,
-    `상세 내용: ${meta.details || "-"}`,
-    `신고 상태: ${reportStatusLabel(meta.status)}`,
-    `제재 상태: ${moderationStatusLabel(meta.moderation_status)}`,
-  ];
+function formatReportMessageFromMeta(meta: ReportMeta, locale: UserLocale): string {
+  const lines = locale === "en"
+    ? [
+        "🚨 Channel report",
+        `Report ID: ${meta.report_id}`,
+        `Channel: ${meta.channel_name} (${meta.channel_url})`,
+        `Reason: ${meta.reason_label}`,
+        `Reporter: ${meta.reporter_label}`,
+        `Submitted at: ${meta.created_at}`,
+        `Details: ${meta.details || "-"}`,
+        `Report status: ${reportStatusLabel(meta.status, locale)}`,
+        `Moderation status: ${moderationStatusLabel(meta.moderation_status, locale)}`,
+      ]
+    : [
+        "🚨 채널 신고",
+        `신고 ID: ${meta.report_id}`,
+        `채널: ${meta.channel_name} (${meta.channel_url})`,
+        `사유: ${meta.reason_label}`,
+        `신고자: ${meta.reporter_label}`,
+        `접수 시각: ${meta.created_at}`,
+        `상세 내용: ${meta.details || "-"}`,
+        `신고 상태: ${reportStatusLabel(meta.status, locale)}`,
+        `제재 상태: ${moderationStatusLabel(meta.moderation_status, locale)}`,
+      ];
 
   if (meta.petition_status !== "none") {
-    lines.push(`이의 제기: ${petitionStatusLabel(meta.petition_status)}`);
+    lines.push(locale === "en"
+      ? `Appeal: ${petitionStatusLabel(meta.petition_status, locale)}`
+      : `이의 제기: ${petitionStatusLabel(meta.petition_status, locale)}`);
   }
   if (meta.resolved_at) {
-    lines.push(`처리 시각: ${meta.resolved_at}`);
+    lines.push(locale === "en" ? `Handled at: ${meta.resolved_at}` : `처리 시각: ${meta.resolved_at}`);
   }
   if (meta.resolution_note) {
-    lines.push(`처리 메모: ${meta.resolution_note}`);
+    lines.push(locale === "en" ? `Resolution note: ${meta.resolution_note}` : `처리 메모: ${meta.resolution_note}`);
   }
   return lines.join("\n");
 }
 
-function formatPetitionMessageFromMeta(meta: PetitionMeta): string {
-  const lines = [
-    "📝 채널 이의 제기",
-    `이의 제기 ID: ${meta.petition_id}`,
-    `채널: ${meta.channel_name} (${meta.channel_url})`,
-    `제출자: ${meta.owner_label}`,
-    `접수 시각: ${meta.created_at}`,
-    `내용: ${meta.text}`,
-    `상태: ${petitionStatusLabel(meta.status)}`,
-  ];
+function formatPetitionMessageFromMeta(meta: PetitionMeta, locale: UserLocale): string {
+  const lines = locale === "en"
+    ? [
+        "📝 Channel appeal",
+        `Appeal ID: ${meta.petition_id}`,
+        `Channel: ${meta.channel_name} (${meta.channel_url})`,
+        `Submitted by: ${meta.owner_label}`,
+        `Submitted at: ${meta.created_at}`,
+        `Details: ${meta.text}`,
+        `Status: ${petitionStatusLabel(meta.status, locale)}`,
+      ]
+    : [
+        "📝 채널 이의 제기",
+        `이의 제기 ID: ${meta.petition_id}`,
+        `채널: ${meta.channel_name} (${meta.channel_url})`,
+        `제출자: ${meta.owner_label}`,
+        `접수 시각: ${meta.created_at}`,
+        `내용: ${meta.text}`,
+        `상태: ${petitionStatusLabel(meta.status, locale)}`,
+      ];
 
   if (meta.resolved_at) {
-    lines.push(`처리 시각: ${meta.resolved_at}`);
+    lines.push(locale === "en" ? `Handled at: ${meta.resolved_at}` : `처리 시각: ${meta.resolved_at}`);
   }
   if (meta.resolution_note) {
-    lines.push(`처리 메모: ${meta.resolution_note}`);
+    lines.push(locale === "en" ? `Resolution note: ${meta.resolution_note}` : `처리 메모: ${meta.resolution_note}`);
   }
   return lines.join("\n");
 }
@@ -294,6 +363,7 @@ async function fetchChannelPetitionById(petitionId: string, env: Env): Promise<C
 export async function hydrateReportInboxMessages<T extends { id: string }>(
   messages: T[],
   env: Env,
+  locale: UserLocale = "ko",
 ): Promise<Array<T & { report_meta?: ReportMeta; petition_meta?: PetitionMeta }>> {
   if (messages.length === 0) return messages as Array<T & { report_meta?: ReportMeta; petition_meta?: PetitionMeta }>;
   const ids = messages.map((message) => message.id).filter(Boolean);
@@ -348,13 +418,13 @@ export async function hydrateReportInboxMessages<T extends { id: string }>(
   const reportByMessageId = new Map<string, ReportMeta>();
   for (const row of reportRows.results || []) {
     if (!row.inbox_message_id) continue;
-    reportByMessageId.set(row.inbox_message_id, buildReportMeta(row, env));
+    reportByMessageId.set(row.inbox_message_id, buildReportMeta(row, env, locale));
   }
 
   const petitionByMessageId = new Map<string, PetitionMeta>();
   for (const row of petitionRows.results || []) {
     if (!row.inbox_message_id) continue;
-    petitionByMessageId.set(row.inbox_message_id, buildPetitionMeta(row, env));
+    petitionByMessageId.set(row.inbox_message_id, buildPetitionMeta(row, env, locale));
   }
 
   return messages.map((message) => {
@@ -373,11 +443,15 @@ async function requireReportsChannelOwner(request: Request, env: Env): Promise<s
   return await isReportsChannelOwner(userId, env) ? userId : null;
 }
 
-async function syncReportInboxMessage(reportId: string, env: Env): Promise<{ report: ReportMeta; message_text: string } | null> {
+async function syncReportInboxMessage(
+  reportId: string,
+  env: Env,
+  locale: UserLocale,
+): Promise<{ report: ReportMeta; message_text: string } | null> {
   const updated = await fetchChannelReportById(reportId, env);
   if (!updated) return null;
-  const reportMeta = buildReportMeta(updated, env);
-  const reportText = formatReportMessageFromMeta(reportMeta);
+  const reportMeta = buildReportMeta(updated, env, locale);
+  const reportText = formatReportMessageFromMeta(reportMeta, locale);
   if (updated.inbox_message_id) {
     await editReportsInboxMessage({
       env,
@@ -402,15 +476,22 @@ async function maybeSendAutomaticOwnerWarning(input: {
   if (moderation.warned_report_count > 5) return;
 
   const now = new Date().toISOString();
+  const ownerLocale = await getUserLocale(input.ownerUid, input.env);
   await sendOwnerModerationNotice({
     env: input.env,
     channelId: input.channelId,
     ownerUid: input.ownerUid,
-    text: [
-      "[운영 알림]",
-      `${input.channelName} 채널에 신고가 6건 이상 누적되었습니다.`,
-      "운영 기준을 다시 확인해 주세요. 반복될 경우 채널 동결 또는 삭제가 진행될 수 있습니다.",
-    ].join("\n"),
+    text: ownerLocale === "en"
+      ? [
+          "[Moderation notice]",
+          `${input.channelName} has received more than 5 open reports.`,
+          "Please review the channel rules again. Repeated issues may lead to freezing or deletion.",
+        ].join("\n")
+      : [
+          "[운영 알림]",
+          `${input.channelName} 채널에 신고가 6건 이상 누적되었습니다.`,
+          "운영 기준을 다시 확인해 주세요. 반복될 경우 채널 동결 또는 삭제가 진행될 수 있습니다.",
+        ].join("\n"),
   });
   await setChannelModeration(input.channelId, {
     status: moderation.status === "active" ? "warned" : moderation.status,
@@ -424,6 +505,7 @@ async function handleReportResolutionAction(input: {
   action: "resolve" | "dismiss";
   resolutionNote: string;
   actorUserId: string;
+  actorLocale: UserLocale;
   env: Env;
 }): Promise<Response> {
   const existing = await fetchChannelReportById(input.reportId, input.env);
@@ -442,7 +524,7 @@ async function handleReportResolutionAction(input: {
     WHERE id = ? AND status = 'open'
   `).bind(nextStatus, input.resolutionNote || null, resolvedAt, input.reportId).run();
 
-  const synced = await syncReportInboxMessage(input.reportId, input.env);
+  const synced = await syncReportInboxMessage(input.reportId, input.env, input.actorLocale);
   if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
@@ -460,6 +542,7 @@ async function handleModerationAction(input: {
   action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel";
   resolutionNote: string;
   actorUserId: string;
+  actorLocale: UserLocale;
   env: Env;
 }): Promise<Response> {
   const existing = await fetchChannelReportById(input.reportId, input.env);
@@ -468,6 +551,7 @@ async function handleModerationAction(input: {
   }
 
   const moderation = await getChannelModeration(existing.channel_id, input.env);
+  const ownerLocale = await getUserLocale(existing.channel_owner_uid, input.env);
 
   if (input.action === "warn_owner") {
     const warnedAt = new Date().toISOString();
@@ -475,12 +559,19 @@ async function handleModerationAction(input: {
       env: input.env,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
-      text: [
-        "[운영 경고]",
-        `${existing.channel_name} 채널이 신고로 검토 중입니다.`,
-        `최근 신고 사유: ${REPORT_REASON_LABELS[existing.reason] || existing.reason}`,
-        input.resolutionNote ? `메모: ${input.resolutionNote}` : "운영 기준을 다시 확인해 주세요.",
-      ].join("\n"),
+      text: ownerLocale === "en"
+        ? [
+            "[Moderation warning]",
+            `${existing.channel_name} is under moderation review due to reports.`,
+            `Latest reason: ${reportReasonLabel(existing.reason, ownerLocale)}`,
+            input.resolutionNote ? `Note: ${input.resolutionNote}` : "Please review the moderation rules again.",
+          ].join("\n")
+        : [
+            "[운영 경고]",
+            `${existing.channel_name} 채널이 신고로 검토 중입니다.`,
+            `최근 신고 사유: ${reportReasonLabel(existing.reason, ownerLocale)}`,
+            input.resolutionNote ? `메모: ${input.resolutionNote}` : "운영 기준을 다시 확인해 주세요.",
+          ].join("\n"),
     });
     await setChannelModeration(existing.channel_id, {
       status: moderation.status === "active" ? "warned" : moderation.status,
@@ -495,17 +586,24 @@ async function handleModerationAction(input: {
       env: input.env,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
-      text: [
-        "[운영 정지 안내]",
-        `${existing.channel_name} 채널이 정지 검토 단계에 들어갔습니다.`,
-        `사유: ${REPORT_REASON_LABELS[existing.reason] || existing.reason}`,
-        input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 위반이 확인되면 채널이 동결될 수 있습니다.",
-      ].join("\n"),
+      text: ownerLocale === "en"
+        ? [
+            "[Suspension notice]",
+            `${existing.channel_name} has moved into the suspension review stage.`,
+            `Reason: ${reportReasonLabel(existing.reason, ownerLocale)}`,
+            input.resolutionNote ? `Note: ${input.resolutionNote}` : "Further violations may lead to the channel being frozen.",
+          ].join("\n")
+        : [
+            "[운영 정지 안내]",
+            `${existing.channel_name} 채널이 정지 검토 단계에 들어갔습니다.`,
+            `사유: ${reportReasonLabel(existing.reason, ownerLocale)}`,
+            input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 위반이 확인되면 채널이 동결될 수 있습니다.",
+          ].join("\n"),
     });
     await setChannelModeration(existing.channel_id, {
       status: isOwnerModerationBlocked(moderation) ? moderation.status : "suspended",
       suspension_notice_sent_at: suspensionSentAt,
-      suspension_reason: input.resolutionNote || (REPORT_REASON_LABELS[existing.reason] || existing.reason),
+      suspension_reason: input.resolutionNote || reportReasonLabel(existing.reason, ownerLocale),
     }, input.env);
   }
 
@@ -519,6 +617,7 @@ async function handleModerationAction(input: {
       .run();
     await setChannelModeration(existing.channel_id, {
       status: "frozen",
+      suspension_notice_sent_at: frozenAt,
       frozen_at: frozenAt,
       frozen_by: input.actorUserId,
       petition_status: "none",
@@ -529,12 +628,19 @@ async function handleModerationAction(input: {
       env: input.env,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
-      text: [
-        "[채널 동결]",
-        `${existing.channel_name} 채널이 운영 검토를 위해 동결되었습니다.`,
-        "동결 중에는 채널 관리자가 메시지를 보낼 수 없습니다.",
-        "삭제 전에 이의가 있으면 이의 제기를 제출해 주세요.",
-      ].join("\n"),
+      text: ownerLocale === "en"
+        ? [
+            "[Channel suspended and frozen]",
+            `${existing.channel_name} was suspended and frozen for moderation review.`,
+            "While frozen, the channel owner cannot send messages.",
+            "If you want to contest this before deletion, submit an appeal.",
+          ].join("\n")
+        : [
+            "[채널 정지 및 동결]",
+            `${existing.channel_name} 채널이 운영 검토를 위해 정지 및 동결되었습니다.`,
+            "동결 중에는 채널 관리자가 메시지를 보낼 수 없습니다.",
+            "삭제 전에 이의가 있으면 이의 제기를 제출해 주세요.",
+          ].join("\n"),
     });
     await broadcastFreezeChange(existing.channel_id, true, input.env);
   }
@@ -549,9 +655,9 @@ async function handleModerationAction(input: {
     }
 
     const deletedText = [
-      formatReportMessageFromMeta(buildReportMeta(existing, input.env)),
-      `조치 결과: 채널 삭제 완료`,
-      `처리 시각: ${new Date().toISOString()}`,
+      formatReportMessageFromMeta(buildReportMeta(existing, input.env, input.actorLocale), input.actorLocale),
+      input.actorLocale === "en" ? "Action result: Channel deleted" : "조치 결과: 채널 삭제 완료",
+      input.actorLocale === "en" ? `Handled at: ${new Date().toISOString()}` : `처리 시각: ${new Date().toISOString()}`,
     ].join("\n");
     if (existing.inbox_message_id) {
       await editReportsInboxMessage({
@@ -570,7 +676,7 @@ async function handleModerationAction(input: {
     });
   }
 
-  const synced = await syncReportInboxMessage(existing.id, input.env);
+  const synced = await syncReportInboxMessage(existing.id, input.env, input.actorLocale);
   if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
@@ -588,12 +694,14 @@ async function handleChannelPetitionAction(input: {
   action: "accept_petition" | "reject_petition";
   resolutionNote: string;
   actorUserId: string;
+  actorLocale: UserLocale;
   env: Env;
 }): Promise<Response> {
   const petition = await fetchChannelPetitionById(input.petitionId, input.env);
   if (!petition) {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
   }
+  const ownerLocale = await getUserLocale(petition.owner_uid, input.env);
   if (petition.status !== "open") {
     return Response.json({ error: "petition_already_processed" }, { status: 409 });
   }
@@ -621,11 +729,17 @@ async function handleChannelPetitionAction(input: {
       env: input.env,
       channelId: petition.channel_id,
       ownerUid: petition.owner_uid,
-      text: [
-        "[이의 제기 승인]",
-        `${petition.channel_name} 채널의 동결이 해제되었습니다.`,
-        input.resolutionNote ? `메모: ${input.resolutionNote}` : "운영 기준을 준수해 주세요.",
-      ].join("\n"),
+      text: ownerLocale === "en"
+        ? [
+            "[Appeal accepted]",
+            `${petition.channel_name} has been unfrozen.`,
+            input.resolutionNote ? `Note: ${input.resolutionNote}` : "Please continue to follow the moderation rules.",
+          ].join("\n")
+        : [
+            "[이의 제기 승인]",
+            `${petition.channel_name} 채널의 동결이 해제되었습니다.`,
+            input.resolutionNote ? `메모: ${input.resolutionNote}` : "운영 기준을 준수해 주세요.",
+          ].join("\n"),
     });
     await broadcastFreezeChange(petition.channel_id, false, input.env);
   } else {
@@ -638,11 +752,17 @@ async function handleChannelPetitionAction(input: {
       env: input.env,
       channelId: petition.channel_id,
       ownerUid: petition.owner_uid,
-      text: [
-        "[이의 제기 기각]",
-        `${petition.channel_name} 채널의 이의 제기가 기각되었습니다.`,
-        input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 검토 전까지 동결 상태가 유지됩니다.",
-      ].join("\n"),
+      text: ownerLocale === "en"
+        ? [
+            "[Appeal rejected]",
+            `${petition.channel_name}'s appeal was rejected.`,
+            input.resolutionNote ? `Note: ${input.resolutionNote}` : "The channel will remain frozen until further review.",
+          ].join("\n")
+        : [
+            "[이의 제기 기각]",
+            `${petition.channel_name} 채널의 이의 제기가 기각되었습니다.`,
+            input.resolutionNote ? `메모: ${input.resolutionNote}` : "추가 검토 전까지 동결 상태가 유지됩니다.",
+          ].join("\n"),
     });
   }
 
@@ -650,8 +770,8 @@ async function handleChannelPetitionAction(input: {
   if (!updated) {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
   }
-  const petitionMeta = buildPetitionMeta(updated, input.env);
-  const petitionText = formatPetitionMessageFromMeta(petitionMeta);
+  const petitionMeta = buildPetitionMeta(updated, input.env, input.actorLocale);
+  const petitionText = formatPetitionMessageFromMeta(petitionMeta, input.actorLocale);
   if (updated.inbox_message_id) {
     await editReportsInboxMessage({
       env: input.env,
@@ -674,6 +794,7 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
   if (!actorUserId) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
+  const actorLocale = await getUserLocale(actorUserId, env);
 
   const body = await request.json() as Record<string, unknown>;
   const reportId = typeof body.report_id === "string" ? body.report_id : "";
@@ -690,6 +811,7 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
       action,
       resolutionNote,
       actorUserId,
+      actorLocale,
       env,
     });
   }
@@ -704,6 +826,7 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
       action,
       resolutionNote,
       actorUserId,
+      actorLocale,
       env,
     });
   }
@@ -719,6 +842,7 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
       action,
       resolutionNote,
       actorUserId,
+      actorLocale,
       env,
     });
   }
@@ -734,6 +858,7 @@ function formatReportMessage(input: {
   details: string;
   reporterLabel: string;
   createdAt: string;
+  locale: UserLocale;
   moderationStatus?: ReportMeta["moderation_status"];
   petitionStatus?: ReportMeta["petition_status"];
   resolutionNote?: string | null;
@@ -746,7 +871,7 @@ function formatReportMessage(input: {
     channel_name: input.channelName,
     channel_url: channelReportUrl(input.channelId, env),
     reason: input.reason,
-    reason_label: REPORT_REASON_LABELS[input.reason] || input.reason,
+    reason_label: reportReasonLabel(input.reason, input.locale),
     status: input.status || "open",
     details: input.details || null,
     reporter_label: input.reporterLabel,
@@ -755,7 +880,7 @@ function formatReportMessage(input: {
     resolution_note: input.resolutionNote || null,
     moderation_status: input.moderationStatus || "active",
     petition_status: input.petitionStatus || "none",
-  });
+  }, input.locale);
 }
 
 export async function handleChannelReports(request: Request, env: Env): Promise<Response> {
@@ -870,7 +995,11 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
 
-  const reportMeta = buildReportMeta(reportRow, env);
+  const reportsChannelOwner = await getReportsChannelOwner(env);
+  const reportsOwnerLocale = reportsChannelOwner
+    ? await getUserLocale(reportsChannelOwner.owner_uid, env)
+    : "ko";
+  const reportMeta = buildReportMeta(reportRow, env, reportsOwnerLocale);
   const reportText = formatReportMessage({
     reportId,
     channelId,
@@ -881,8 +1010,9 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
       authUid: isVerifiedUser ? verifiedUserId : null,
       uid: anonymousUid,
       deviceId: requesterDeviceId,
-    }),
+    }, reportsOwnerLocale),
     createdAt,
+    locale: reportsOwnerLocale,
     moderationStatus: reportMeta.moderation_status,
     petitionStatus: reportMeta.petition_status,
   }, env);
@@ -892,7 +1022,7 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     id: reportMessageId,
     createdAt,
     text: reportText,
-    nick: "신고함",
+    nick: reportsOwnerLocale === "en" ? "Reports" : "신고함",
     extra: { report_meta: reportMeta },
   });
 

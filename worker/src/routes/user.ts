@@ -56,14 +56,27 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
     const userId = request.headers.get("X-User-Id") || "";
-    const body = await request.json() as { font_size?: number };
+    const body = await request.json() as { font_size?: number; locale?: string };
     const fontSize = Number(body.font_size);
-    if (!userId || !Number.isInteger(fontSize) || fontSize < 12 || fontSize > 20) {
+    const hasFontSize = Number.isInteger(fontSize) && fontSize >= 12 && fontSize <= 20;
+    const locale = body.locale === "en" ? "en" : body.locale === "ko" ? "ko" : null;
+    if (!userId || (!hasFontSize && !locale)) {
       return Response.json({ error: "invalid preference" }, { status: 400 });
     }
-    await env.DB.prepare("UPDATE users SET font_size = ? WHERE id = ?")
-      .bind(fontSize, userId).run();
-    return Response.json({ ok: true, font_size: fontSize });
+    const updates: string[] = [];
+    const binds: Array<number | string> = [];
+    if (hasFontSize) {
+      updates.push("font_size = ?");
+      binds.push(fontSize);
+    }
+    if (locale) {
+      updates.push("locale = ?");
+      binds.push(locale);
+    }
+    binds.push(userId);
+    await env.DB.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`)
+      .bind(...binds).run();
+    return Response.json({ ok: true, ...(hasFontSize ? { font_size: fontSize } : {}), ...(locale ? { locale } : {}) });
   }
 
   if (request.method === "DELETE") {
@@ -188,13 +201,14 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
        WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'`
     ).bind(canonicalUserId).all();
 
-    const preferences = await env.DB.prepare("SELECT font_size FROM users WHERE id = ?")
-      .bind(canonicalUserId).first<{ font_size: number | null }>();
+    const preferences = await env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
+      .bind(canonicalUserId).first<{ font_size: number | null; locale: string | null }>();
     return Response.json({
       ok: true,
       user_id: canonicalUserId,
       channels,
       font_size: preferences?.font_size ?? null,
+      locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
     });
   }
 

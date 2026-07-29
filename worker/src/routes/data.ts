@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { getUserLocale } from "../lib/channel-moderation";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
@@ -21,6 +22,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
   const isOwner = trustedUserId === owner_uid;
   const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
+  const reportsOwnerLocale = isOwner && trustedUserId
+    ? await getUserLocale(trustedUserId, env)
+    : "ko";
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
@@ -77,7 +81,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const stmt = env.DB.prepare(query);
       const { results } = await stmt.bind(...params).all();
       const messages = isReportsChannel(parentChannelId, env) && isOwner
-        ? await hydrateReportInboxMessages((results || []) as Array<{ id: string }>, env)
+        ? await hydrateReportInboxMessages((results || []) as Array<{ id: string }>, env, reportsOwnerLocale)
         : results;
       return Response.json({ messages });
     }
@@ -155,7 +159,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         String(left.created_at || "").localeCompare(String(right.created_at || ""))
       );
       const responseMessages = isReportsChannel(parentChannelId, env) && isOwner
-        ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, env)
+        ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, env, reportsOwnerLocale)
         : messages;
       return Response.json({
         messages: responseMessages,

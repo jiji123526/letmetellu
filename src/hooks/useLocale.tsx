@@ -34,6 +34,15 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem("locale", newLocale);
     } catch {}
+    window.dispatchEvent(new CustomEvent("locale-changed", {
+      detail: { locale: newLocale },
+    }));
+    fetch("/api/user", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locale: newLocale }),
+      keepalive: true,
+    }).catch(() => {});
   }, []);
 
   const t = useCallback((key: LocaleKeys): string => {
@@ -59,6 +68,17 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  useEffect(() => {
+    const handleLocaleChanged = (event: Event) => {
+      const nextLocale = (event as CustomEvent<{ locale?: string }>).detail?.locale;
+      if (nextLocale === "ko" || nextLocale === "en") {
+        setLocaleState(nextLocale);
+      }
+    };
+    window.addEventListener("locale-changed", handleLocaleChanged);
+    return () => window.removeEventListener("locale-changed", handleLocaleChanged);
+  }, []);
 
   return (
     <LocaleContext.Provider value={{ locale, timeZone, setLocale, t }}>

@@ -462,7 +462,7 @@ const MemoizedMessageTextWithEmbeds = React.memo(MessageTextWithEmbeds);
 function stripInboxChannelLine(text: string): string {
   return text
     .split("\n")
-    .filter((line) => !line.startsWith("채널: "))
+    .filter((line) => !line.startsWith("채널: ") && !line.startsWith("Channel: "))
     .join("\n");
 }
 
@@ -2091,7 +2091,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, []);
   const handleReportAction = useCallback(async (
     report: ReportMeta,
-    action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss",
+    action: "warn_owner" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss",
   ) => {
     if (reportActionPendingId) return;
     setReportActionPendingId(report.report_id);
@@ -2118,7 +2118,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           resolve: { text: t("reportResolvedBanner"), color: "#2a9d4e" },
           dismiss: { text: t("reportDismissedBanner"), color: "var(--meta)" },
           warn_owner: { text: t("warnOwnerSentBanner"), color: "#b26a00" },
-          send_suspend_notice: { text: t("suspendNoticeSentBanner"), color: "#9b2226" },
           freeze_channel: { text: t("channelFrozenByModerationBanner"), color: "#8b5cf6" },
           delete_channel: { text: t("channelDeletedByModerationBanner"), color: "#d32f2f" },
         } as const;
