@@ -245,6 +245,42 @@ Deployment notes:
   deploys;
 - no new D1 migration is required for any of these changes.
 
+### Passcode hardening and anonymous block persistence — 2026-07-29
+
+This deployment line hardened two previously reviewed abuse paths without
+adding a new D1 migration.
+
+Passcode changes:
+
+- New and rotated channel passcodes now store salted PBKDF2 verifiers instead
+  of plain SHA-256 digests.
+- Signed room tokens no longer embed `passcode_hash`, so a leaked token no
+  longer exposes an offline-crackable verifier.
+- Successful unlock of a legacy SHA-256-protected room upgrades that room to
+  the PBKDF2 format in place.
+- Existing room tokens issued before this change become invalid, so users may
+  need to enter a room passcode once after deployment.
+
+Anonymous blocking changes:
+
+- Anonymous and device identity now live in HttpOnly cookies rather than
+  browser-local storage readable by client JavaScript.
+- Anonymous chat, DM, report and reaction writes now flow through same-origin
+  Next.js proxy routes so the browser can send those cookies without exposing
+  them to application code.
+- Block persistence now uses a server-issued device token instead of a
+  client-generated fingerprint or empty-string placeholder.
+- Clearing localStorage alone no longer resets a blocked anonymous identity.
+- Remaining limitation: clearing cookies or changing to a different
+  browser/profile still creates a fresh anonymous identity.
+
+Deployment notes:
+
+- passcode hardening is a Worker deploy;
+- anonymous block persistence requires both Worker and frontend deploys because
+  anonymous write paths now proxy through Next.js;
+- no new D1 migration is required for either change.
+
 ---
 
 # CSS → TSX Style Migration Notes
@@ -372,51 +408,60 @@ Trade-offs of historical context mode:
 
 ### Security audit — 2026-07-26
 
-This audit documents open findings; it does not mark them as remediated.
+This audit started as a list of open findings. Status notes below were updated
+after the 2026-07-29 hardening work so the remaining gaps are clear.
 
-#### P0 — signed anonymous identity
+#### P0 — signed anonymous identity and block persistence
 
-Message creation, editing, deletion and reactions currently accept `uid` from
-the request body. Message rows also expose the sender UID, so equality with
-that value is not proof that a later caller is the same browser. Replace this
-boundary with a Worker-issued, HMAC-signed anonymous token:
+This item is no longer open.
 
-1. issue a random subject and expiry from a dedicated anonymous-session route;
-2. store the token in the browser and send it in a header;
-3. verify signature, expiry and version in the Worker;
-4. derive the mutation actor from the verified token, never the JSON body;
-5. use the same subject for messages, reactions, reports, DMs and blocks;
-6. rotate or revoke token versions when abuse requires it.
+- Anonymous write paths now derive identity from Worker-issued tokens rather
+  than trusting client-supplied `uid`.
+- The newer implementation stores anonymous and device identity in HttpOnly
+  cookies and forwards them only through same-origin Next.js proxy routes.
+- Clearing localStorage alone no longer bypasses owner blocks, and reaction
+  writes now enforce the same block boundary.
 
-Do not expose the signing secret or treat the existing canvas fingerprint as
-authentication. Fingerprints and IP HMACs may supplement abuse detection but
-must not establish ownership.
+Remaining limitation:
+
+- Clearing cookies or switching to a different browser/profile still creates a
+  fresh anonymous identity. Fingerprints and IP HMACs may supplement abuse
+  review, but they still must not be treated as proof of ownership.
 
 #### P1 — upload and media lifecycle
 
-- Public-channel upload currently permits unauthenticated 10 MB image writes.
-- Add signed identity and durable quotas by subject, IP HMAC and channel.
-- Prefer a short-lived upload ticket bound to channel, media type and maximum
-  size.
-- Mark uploaded objects pending, attach them atomically to a message, and
-  remove expired pending objects.
-- Delete R2 objects during message/DM deletion, live cleanup and channel
-  deletion.
-- Decide whether passcode-room media is merely unlisted or actually private.
-  For private media, use an authenticated proxy or short-lived signed URL
-  instead of a permanent public object URL.
-- Validate decoded file type instead of trusting only `Content-Type`.
+Most of this item was implemented on 2026-07-29:
+
+- Public chat and DM uploads now require signed anonymous or owner identity,
+  durable per-channel quotas and a matching upload ticket.
+- Pending uploads are tracked durably and cleaned up if they expire unattached.
+- Message, DM, live-cleanup and channel-deletion paths remove their attached R2
+  objects.
+- Passcode-room media is now served through an authenticated same-origin proxy
+  rather than a permanent public URL carrying the room token.
+
+Remaining gap:
+
+- File validation should continue moving toward stricter decoded-type checks so
+  hostile polyglot uploads do not rely only on request metadata or optimistic
+  image handling.
 
 #### P1 — server-side messaging policy
 
-- DM submission must read the parent channel's DM toggle and reject disabled
+Most of this item is now implemented:
+
+- DM submission reads the parent channel's DM toggle and rejects disabled
   submissions.
-- DM and edit routes must enforce length, block, banned-word, freeze and
-  durable rate-limit policy where applicable.
-- Message image fields must refer to a valid object uploaded for the same
-  channel rather than accepting an arbitrary tracking URL.
-- Reports need a dedicated model or strict validation: existing target,
-  reporter/target uniqueness, cooldown, daily quota and server-side status.
+- DM and edit routes enforce length, block, banned-word and freeze policy at
+  the Worker boundary.
+- Message and DM image fields must resolve to a valid upload-ticket-backed
+  object for the same channel and identity.
+
+Remaining gap:
+
+- Reports still need a dedicated model or stricter server validation:
+  existing-target checks, reporter/target uniqueness, cooldowns, daily quota
+  and authoritative server-side status.
 
 #### P1 — preview fetch isolation
 
@@ -462,13 +507,12 @@ repeat `npm audit --omit=dev`.
 
 #### Remediation order and verification
 
-1. Signed anonymous identity; add cross-user edit/delete regression tests.
-2. Upload quotas and pending-object cleanup; verify R2 deletion on every path.
-3. DM/report server policy and direct-API tests with the UI bypassed.
-4. Durable rate limiting, including preview callers, plus redirect and
+1. Report policy and durable deduplication; add direct-API tests with the UI
+   bypassed.
+2. Durable rate limiting, including preview callers, plus redirect and
    oversized-body fixtures.
-5. Edit validation and security headers.
-6. Dependency upgrades, followed by widget tests.
+3. Response security headers.
+4. Dependency upgrades, followed by widget tests.
 
 Every remediation should be deployed Worker-first when the frontend depends on
 new enforcement or token issuance. Keep backward compatibility bounded and

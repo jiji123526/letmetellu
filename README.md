@@ -87,7 +87,7 @@ Before opening credential signup to the public, verify a sending domain and fini
 - channel rules, notice banner and configurable welcome popup
 - freeze/unfreeze
 - banned words with expiry
-- block/unblock by anonymous UID and device fingerprint
+- block/unblock by anonymous identity and server-issued device token
 - optional petitions from blocked users
 - optional private DM to the owner
 - profile image, channel name and channel color
@@ -107,8 +107,8 @@ Before opening credential signup to the public, verify a sending domain and fini
 - Vercel and the Worker share `INTERNAL_SECRET`; the Worker also verifies `X-User-Id` ownership.
 - Anonymous users cannot mark messages as administrative.
 - WebSocket owner authentication uses short-lived tokens from `/api/ws-token`.
-- Passcode-protected endpoints require a signed room token tied to the current passcode hash.
-- Anonymous mutations require a Worker-signed anonymous identity token; the Worker derives anonymous `uid` server-side instead of trusting the client body.
+- Passcode-protected endpoints require a signed room token bound to current room access; the token payload does not expose the passcode verifier.
+- Anonymous mutations require Worker-issued anonymous and device tokens stored in HttpOnly cookies and forwarded through same-origin Next.js proxy routes; the Worker derives anonymous `uid` server-side instead of trusting the client body.
 - New-message and DM length, DM toggles, upload type/size, freeze state, blocked users and banned words are enforced server-side.
 - Message edits reuse the same validation boundary as message creation, including freeze, block, banned-word and rate-limit checks.
 - Message-attached and DM-attached media are deleted from R2 with their source records; passcode-protected media now requires a current room token.
@@ -124,10 +124,12 @@ Before opening credential signup to the public, verify a sending domain and fini
 - Attached message and DM media is removed from R2 when the source content is deleted, and passcode-protected media now checks room access on read.
 - Media reads now resolve source metadata through ordered batched D1 lookups instead of a compound `UNION` query, avoiding `D1_ERROR: too many terms in compound SELECT` on `/api/media/*` without relaxing room-token or upload-ticket checks.
 - Passcode-protected media now stays on the same-origin `/api/media/*` proxy path and forwards room access in headers, so locked media URLs no longer expose `?token=...` to the browser address bar or shared links.
+- New and rotated room passcodes now store salted PBKDF2 verifiers, room tokens no longer embed `passcode_hash`, and a successful legacy SHA-256 unlock upgrades that room in place.
 - Link previews now require absolute `http:`/`https:` URLs, block obvious local/private/internal hostnames, re-check every redirect hop manually, require HTML content, cap response size, use a short timeout and apply a best-effort per-IP rate limit in the Worker.
 - When room access is revoked or expires, the passcode overlay now re-fetches gated channel state so the latest passcode hint appears immediately without a full refresh.
 - DM creation now enforces the channel DM toggle, petition-only behavior for blocked users, rate limits, message length and banned-word checks in the Worker.
-- Anonymous message, reaction, report and DM mutations now derive identity from a Worker-signed token instead of a raw client-provided `uid`.
+- Anonymous message, reaction, report and DM mutations now derive identity from HttpOnly anonymous/device cookies instead of raw client-provided `uid` or client-generated fingerprints, so clearing localStorage alone no longer bypasses blocks.
+- Blocked users can no longer react after a block is applied, and owner-side blocks now persist against the server-issued device token instead of an empty or spoofable client fingerprint.
 - Public-channel uploads now use durable upload tickets, per-channel quotas and pending-object cleanup instead of allowing unattached anonymous R2 writes.
 
 ### Open security findings — 2026-07-26
@@ -140,7 +142,7 @@ Before opening credential signup to the public, verify a sending domain and fini
 | --- | --- | --- | --- |
 | Medium | Preview-fetch hardening is still hostname-based and isolate-local | Best-effort checks can still be bypassed by hostile DNS or distributed callers, and limits reset across isolates/restarts | Add durable caller/IP limits and stronger destination validation if the platform later exposes safe DNS/IP verification primitives |
 | Medium | Reports rely on browser-local deduplication | A caller can submit duplicate or fabricated report messages directly | Validate the target, enforce one active report per signed reporter/target and add durable throttling |
-| Medium | Message rate limiting is isolate-local and keyed by mutable UID | Limits reset across isolates/restarts and can be bypassed by changing UID | Move enforcement to a channel Durable Object, D1 or Cloudflare Rate Limiting and key it with signed identity plus IP HMAC |
+| Medium | Message rate limiting is isolate-local and keyed by resettable anonymous identity | Limits reset across isolates/restarts and can still be bypassed by clearing cookies or moving to a new browser/profile | Move enforcement to a channel Durable Object, D1 or Cloudflare Rate Limiting and key it with signed identity plus IP HMAC |
 | Medium | No explicit application security-header policy | XSS and content-sniffing defenses depend on framework/platform defaults | Add CSP, `nosniff`, Referrer Policy, Permissions Policy, frame restrictions and HSTS with widget domains tested |
 
 `npm audit --omit=dev` reported three high and one moderate production
@@ -167,7 +169,7 @@ Recommended remediation order:
   timeout·호스트 차단을 적용하지만, rate limit은 isolate-local이고
   목적지 검사는 호스트명 기반입니다.
 - **중간:** 신고 중복 제한은 브라우저 저장값에 의존하고, 메시지 rate
-  limit은 Worker 인스턴스 메모리와 변경 가능한 UID에 의존합니다.
+  limit은 Worker 인스턴스 메모리와 초기화 가능한 익명 식별자에 의존합니다.
 - **중간:** CSP, `nosniff`, Referrer Policy, Permissions Policy, 프레임
   제한과 HSTS를 명시적으로 설정하지 않았습니다.
 
@@ -350,6 +352,24 @@ affected content and allowed appeal path, but not the reporter's identity.
 - Never expose raw secrets, IP addresses, fingerprints or authentication tokens
   in audit logs.
 
+### Super-admin support threads
+
+- Do not multiplex reports, user questions and moderation replies into one
+  shared global operator chat room.
+- Prefer dedicated `support_threads` and `support_messages` tables owned by the
+  platform layer rather than reusing channel-owner `dm`.
+- Each user-facing thread should be opened by a high-entropy bearer URL that
+  identifies the thread itself. The token must be random, revocable and
+  rotatable.
+- The support link must not rely only on anonymous `uid`, browser fingerprint
+  or device token. Those signals can aid abuse review but should not be the
+  sole conversation key.
+- Operators need an inbox view of open threads with status, assignment,
+  close/reopen controls and audit logging.
+- Bearer-link trade-off: the flow stays simple for anonymous users, but anyone
+  holding the link can read and write that thread until it is rotated or
+  closed.
+
 ### Recommended delivery phases
 
 1. Define report categories, enforcement states, retention and appeal policy.
@@ -478,6 +498,22 @@ active → restricted → suspended → removed
 - 신고 조회, 내보내기와 운영 조치에 rate limit을 적용합니다.
 - 운영자 권한을 해제하면 활성 운영자 세션도 무효화합니다.
 - 감사 로그에 비밀키, 원본 IP, fingerprint와 인증 토큰을 기록하지 않습니다.
+
+### super_admin 지원 스레드 설계
+
+- 신고, 사용자 문의와 운영자 답변을 하나의 전역 운영 채널에 섞지
+  않습니다.
+- 기존 채널 소유자용 `dm`을 재사용하지 말고, 플랫폼 계층의
+  `support_threads`와 `support_messages`를 별도로 두는 편이 안전합니다.
+- 각 사용자 대화는 스레드 자체를 식별하는 고엔트로피 bearer URL로
+  엽니다. 토큰은 랜덤해야 하고, 회전과 폐기가 가능해야 합니다.
+- 지원 링크를 익명 `uid`, 브라우저 fingerprint, device token만으로
+  식별하지 않습니다. 그런 신호는 남용 분석에는 쓸 수 있지만 대화 접근의
+  유일한 열쇠가 되면 안 됩니다.
+- 운영자 쪽에는 열린 스레드 목록, 상태, 담당자 지정, 닫기/재열기와 감사
+  로그가 필요합니다.
+- bearer 링크의 대가도 명확합니다. 익명 사용자 진입은 쉬워지지만, 링크를
+  가진 사람은 회전 또는 종료 전까지 그 스레드를 읽고 쓸 수 있습니다.
 
 ### 권장 구현 순서
 
