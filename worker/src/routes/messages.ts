@@ -3,7 +3,7 @@ import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
-import { verifyRoomToken } from "./passcode";
+import { authorizeRoomToken } from "./passcode";
 
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
@@ -42,8 +42,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if ((channel as any).passcode && !isChannelOwner) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-      const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
+      const decoded = await authorizeRoomToken(roomToken, parentChannelId, (channel as any).passcode, env);
+      if (!decoded) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }
@@ -165,8 +165,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (delPasscode) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-      const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== delParent || decoded.passcode_hash !== delPasscode) {
+      const decoded = await authorizeRoomToken(roomToken, delParent, delPasscode, env);
+      if (!decoded) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }
@@ -244,8 +244,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if ((channel as any).passcode && !isChannelOwner) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-      const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== editParent || decoded.passcode_hash !== (channel as any).passcode) {
+      const decoded = await authorizeRoomToken(roomToken, editParent, (channel as any).passcode, env);
+      if (!decoded) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }
@@ -329,8 +329,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     if (patchPasscode && !isVerifiedAdmin) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-      const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== patchParent || decoded.passcode_hash !== patchPasscode) {
+      const decoded = await authorizeRoomToken(roomToken, patchParent, patchPasscode, env);
+      if (!decoded) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }

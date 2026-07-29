@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { verifyAdminWsToken } from "../lib/admin-ws-token";
-import { verifyRoomToken } from "../routes/passcode";
+import { authorizeRoomToken } from "../routes/passcode";
 
 interface Connection {
   uid: string;
@@ -76,17 +76,14 @@ export class ChatRoom {
               conn.authorized = true;
               server.send(authResponse("room-authenticated"));
             } else if (typeof data.token === "string" && data.token) {
-              const payload = await verifyRoomToken(data.token, this.env);
+              const payload = await authorizeRoomToken(data.token, conn.channelId, this.currentPasscode, this.env);
               // A newer token attempt or passcode change supersedes this
               // asynchronous verification result.
               if (
                 conn.authAttempt !== authAttempt
                 || this.currentPasscode !== expectedPasscode
               ) return;
-              if (
-                payload?.channel_id === conn.channelId
-                && payload.passcode_hash === this.currentPasscode
-              ) {
+              if (payload) {
                 conn.authorized = true;
                 server.send(authResponse("room-authenticated"));
                 this.broadcastPresence();

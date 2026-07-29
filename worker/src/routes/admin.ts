@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
-import { invalidatePasscodeAttempts } from "./passcode";
+import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
 
 export async function deleteChannel(channelId: string, env: Env) {
   const channelIds = [channelId, `${channelId}_live`];
@@ -464,11 +464,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }
       let hashedPasscode: string | null = null;
       if (passcode && (passcode as string).trim()) {
-        // Hash the passcode
-        const encoder = new TextEncoder();
-        const data = encoder.encode(passcode as string);
-        const hash = await crypto.subtle.digest("SHA-256", data);
-        hashedPasscode = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+        hashedPasscode = await createPasscodeHash(passcode as string);
       }
       // Hints are intentionally public on the locked-channel screen. Clear the
       // hint whenever the passcode itself is removed.

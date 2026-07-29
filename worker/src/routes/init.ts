@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
-import { createRoomToken, verifyRoomToken } from "./passcode";
+import { authorizeRoomToken, createRoomToken } from "./passcode";
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -50,8 +50,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     if (!isOwner) {
       const token = request.headers.get("X-Room-Token");
       if (token) {
-        const decoded = await verifyRoomToken(token, env);
-        if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== (channel as any).passcode) {
+        const decoded = await authorizeRoomToken(token, parentChannelId, (channel as any).passcode, env);
+        if (!decoded) {
           return Response.json({
             hasPasscode: true,
             passcodeHint: (channel as any).passcode_hint || "",

@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
-import { verifyRoomToken } from "./passcode";
+import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
@@ -73,8 +73,8 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     if (!ownerUpload && passcode) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-      const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
+      const decoded = await authorizeRoomToken(roomToken, parentChannelId, passcode, env);
+      if (!decoded) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }
@@ -179,8 +179,8 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
       if (!isOwner) {
         const token = new URL(request.url).searchParams.get("token") || request.headers.get("X-Room-Token");
         if (!token) return Response.json({ error: "passcode required" }, { status: 403 });
-        const decoded = await verifyRoomToken(token, env);
-        if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
+        const decoded = await authorizeRoomToken(token, parentChannelId, passcode, env);
+        if (!decoded) {
           return Response.json({ error: "invalid token" }, { status: 403 });
         }
       }

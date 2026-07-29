@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, checkRateLimit, getChannelPasscodeInfo } from "../lib/validation";
-import { verifyRoomToken } from "./passcode";
+import { authorizeRoomToken } from "./passcode";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 
@@ -40,8 +40,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     if (passcode) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
-      const decoded = await verifyRoomToken(roomToken, env);
-      if (!decoded || decoded.channel_id !== parentChannelId || decoded.passcode_hash !== passcode) {
+      const decoded = await authorizeRoomToken(roomToken, parentChannelId, passcode, env);
+      if (!decoded) {
         return Response.json({ error: "invalid token" }, { status: 403 });
       }
     }
