@@ -257,7 +257,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "freeze-change", frozen: !!payload?.frozen, live: channel_id.endsWith("_live") }),
+        body: JSON.stringify({ type: "freeze-change", frozen: !!payload?.frozen, live: channel_id.endsWith("_live"), moderation: false }),
       }));
 
       return Response.json({ ok: true });

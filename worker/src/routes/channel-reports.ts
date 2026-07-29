@@ -463,6 +463,48 @@ async function syncReportInboxMessage(
   return { report: reportMeta, message_text: reportText };
 }
 
+async function syncChannelReportInboxMessages(
+  channelId: string,
+  env: Env,
+  locale: UserLocale,
+): Promise<void> {
+  const parentChannelId = getParentChannelId(channelId);
+  const rows = await env.DB.prepare(`
+    SELECT
+      cr.id,
+      cr.channel_id,
+      ch.name AS channel_name,
+      ch.owner_uid AS channel_owner_uid,
+      cr.reporter_uid,
+      cr.reporter_auth_uid,
+      cr.reporter_device_id,
+      cr.reason,
+      cr.details,
+      cr.created_at,
+      cr.status,
+      cr.resolution_note,
+      cr.resolved_at,
+      cr.inbox_message_id,
+      cm.status AS moderation_status,
+      cm.petition_status
+    FROM channel_reports cr
+    INNER JOIN channels ch ON ch.id = cr.channel_id
+    LEFT JOIN channel_moderation cm ON cm.channel_id = cr.channel_id
+    WHERE cr.channel_id = ? AND cr.inbox_message_id IS NOT NULL
+  `).bind(parentChannelId).all<ChannelReportRow>();
+
+  for (const row of rows.results || []) {
+    if (!row.inbox_message_id) continue;
+    const reportMeta = buildReportMeta(row, env, locale);
+    await editReportsInboxMessage({
+      env,
+      messageId: row.inbox_message_id,
+      text: formatReportMessageFromMeta(reportMeta, locale),
+      extra: { report_meta: reportMeta },
+    });
+  }
+}
+
 async function maybeSendAutomaticOwnerWarning(input: {
   env: Env;
   channelId: string;
@@ -539,7 +581,7 @@ async function handleReportResolutionAction(input: {
 
 async function handleModerationAction(input: {
   reportId: string;
-  action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "delete_channel";
+  action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "unfreeze_channel" | "delete_channel";
   resolutionNote: string;
   actorUserId: string;
   actorLocale: UserLocale;
@@ -645,6 +687,39 @@ async function handleModerationAction(input: {
     await broadcastFreezeChange(existing.channel_id, true, input.env);
   }
 
+  if (input.action === "unfreeze_channel") {
+    if (moderation.status !== "frozen") {
+      return Response.json({ error: "channel_not_frozen" }, { status: 409 });
+    }
+    await input.env.DB.prepare("UPDATE channels SET is_frozen = 0 WHERE id = ?")
+      .bind(existing.channel_id)
+      .run();
+    await setChannelModeration(existing.channel_id, {
+      status: "active",
+      suspension_notice_sent_at: null,
+      suspension_reason: null,
+      frozen_at: null,
+      frozen_by: null,
+    }, input.env);
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: existing.channel_id,
+      ownerUid: existing.channel_owner_uid,
+      text: ownerLocale === "en"
+        ? [
+            "[Channel unfrozen]",
+            `${existing.channel_name} has been unfrozen after super admin review.`,
+            "Please continue to follow the moderation rules.",
+          ].join("\n")
+        : [
+            "[채널 동결 해제]",
+            `${existing.channel_name} 채널의 동결이 슈퍼 관리자 검토 후 해제되었습니다.`,
+            "운영 기준을 계속 준수해 주세요.",
+          ].join("\n"),
+    });
+    await broadcastFreezeChange(existing.channel_id, false, input.env);
+  }
+
   if (input.action === "delete_channel") {
     if (moderation.status !== "frozen") {
       return Response.json({ error: "freeze_required_before_delete" }, { status: 409 });
@@ -676,6 +751,10 @@ async function handleModerationAction(input: {
     });
   }
 
+  if (input.action === "warn_owner" || input.action === "send_suspend_notice" || input.action === "freeze_channel" || input.action === "unfreeze_channel") {
+    await syncChannelReportInboxMessages(existing.channel_id, input.env, input.actorLocale);
+  }
+
   const synced = await syncReportInboxMessage(existing.id, input.env, input.actorLocale);
   if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
@@ -691,7 +770,7 @@ async function handleModerationAction(input: {
 
 async function handleChannelPetitionAction(input: {
   petitionId: string;
-  action: "accept_petition" | "reject_petition";
+  action: "accept_petition" | "reject_petition" | "unfreeze_channel";
   resolutionNote: string;
   actorUserId: string;
   actorLocale: UserLocale;
@@ -702,6 +781,66 @@ async function handleChannelPetitionAction(input: {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
   }
   const ownerLocale = await getUserLocale(petition.owner_uid, input.env);
+  if (input.action === "unfreeze_channel") {
+    const moderation = await getChannelModeration(petition.channel_id, input.env);
+    if (moderation.status !== "frozen") {
+      return Response.json({ error: "channel_not_frozen" }, { status: 409 });
+    }
+
+    await input.env.DB.prepare("UPDATE channels SET is_frozen = 0 WHERE id = ?")
+      .bind(petition.channel_id)
+      .run();
+    await setChannelModeration(petition.channel_id, {
+      status: "active",
+      suspension_notice_sent_at: null,
+      suspension_reason: null,
+      frozen_at: null,
+      frozen_by: null,
+      petition_status: petition.status,
+      current_petition_id: petition.id,
+    }, input.env);
+    await sendOwnerModerationNotice({
+      env: input.env,
+      channelId: petition.channel_id,
+      ownerUid: petition.owner_uid,
+      text: ownerLocale === "en"
+        ? [
+            "[Channel unfrozen]",
+            `${petition.channel_name} has been unfrozen after super admin review.`,
+            "Please continue to follow the moderation rules.",
+          ].join("\n")
+        : [
+            "[채널 동결 해제]",
+            `${petition.channel_name} 채널의 동결이 슈퍼 관리자 검토 후 해제되었습니다.`,
+            "운영 기준을 계속 준수해 주세요.",
+          ].join("\n"),
+    });
+    await broadcastFreezeChange(petition.channel_id, false, input.env);
+    await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
+
+    const updated = await fetchChannelPetitionById(petition.id, input.env);
+    if (!updated) {
+      return Response.json({ error: "petition_not_found" }, { status: 404 });
+    }
+    const petitionMeta = buildPetitionMeta(updated, input.env, input.actorLocale);
+    const petitionText = formatPetitionMessageFromMeta(petitionMeta, input.actorLocale);
+    if (updated.inbox_message_id) {
+      await editReportsInboxMessage({
+        env: input.env,
+        messageId: updated.inbox_message_id,
+        text: petitionText,
+        extra: { petition_meta: petitionMeta },
+      });
+    }
+
+    return Response.json({
+      ok: true,
+      petition: petitionMeta,
+      message_text: petitionText,
+      acted_by: input.actorUserId,
+    });
+  }
+
   if (petition.status !== "open") {
     return Response.json({ error: "petition_already_processed" }, { status: 409 });
   }
@@ -720,6 +859,8 @@ async function handleChannelPetitionAction(input: {
       .run();
     await setChannelModeration(petition.channel_id, {
       status: "active",
+      suspension_notice_sent_at: null,
+      suspension_reason: null,
       frozen_at: null,
       frozen_by: null,
       petition_status: "accepted",
@@ -766,6 +907,8 @@ async function handleChannelPetitionAction(input: {
     });
   }
 
+  await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
+
   const updated = await fetchChannelPetitionById(petition.id, input.env);
   if (!updated) {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
@@ -803,7 +946,7 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
   const resolutionNote = typeof body.resolution_note === "string" ? body.resolution_note.trim().slice(0, MAX_DETAILS_LENGTH) : "";
 
   if (petitionId) {
-    if (action !== "accept_petition" && action !== "reject_petition") {
+    if (action !== "accept_petition" && action !== "reject_petition" && action !== "unfreeze_channel") {
       return Response.json({ error: "invalid_action" }, { status: 400 });
     }
     return handleChannelPetitionAction({
@@ -835,6 +978,7 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
     action === "warn_owner"
     || action === "send_suspend_notice"
     || action === "freeze_channel"
+    || action === "unfreeze_channel"
     || action === "delete_channel"
   ) {
     return handleModerationAction({

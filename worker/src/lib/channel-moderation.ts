@@ -180,7 +180,7 @@ export async function broadcastFreezeChange(channelId: string, frozen: boolean, 
   const stub = env.CHAT_ROOM.get(doId);
   await stub.fetch(new Request("http://internal/broadcast", {
     method: "POST",
-    body: JSON.stringify({ type: "freeze-change", frozen, live: false }),
+    body: JSON.stringify({ type: "freeze-change", frozen, live: false, moderation: true }),
   }));
 }
 

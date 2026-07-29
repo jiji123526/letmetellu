@@ -112,6 +112,7 @@ interface InitData {
   messages?: Message[];
   blocked?: { uid: string; reason: string }[];
   viewerBlocked?: boolean;
+  viewerFreezeReason?: "moderation" | null;
   dm?: Message[];
   bannerNotice?: string;
   welcomeConfig?: string;
@@ -924,6 +925,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
+  const [viewerFreezeReason, setViewerFreezeReason] = useState<InitData["viewerFreezeReason"]>(null);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
@@ -1062,6 +1064,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setNewerMessageCount(0);
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
+    setViewerFreezeReason(data.viewerFreezeReason ?? null);
     setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     setActiveNotice(data.bannerNotice || "");
     setWelcomeConfig(data.welcomeConfig || "");
@@ -1309,6 +1312,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
           if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
           setOwnerModeration(data.ownerModeration);
+          setViewerFreezeReason(data.viewerFreezeReason ?? null);
         }).catch(() => {});
       }
       // Re-send join-live on reconnect so DO has accurate count
@@ -1340,6 +1344,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
         } else if (!isLiveFreeze && !inLiveModeRef.current) {
           setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
+          setViewerFreezeReason(event.frozen ? (event.moderation ? "moderation" : null) : null);
         }
         if (isOwner) refreshOwnerModeration();
       }
@@ -1468,6 +1473,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages(data.messages);
             setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
             setActiveNotice(data.bannerNotice || "");
+            setViewerFreezeReason(data.viewerFreezeReason ?? null);
           }).catch(() => {});
         }
       }
@@ -1704,7 +1710,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         refreshOwnerModeration();
         setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
       }
-      else if (error === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+      else if (error === "channel frozen") setBanner({ text: viewerFreezeReason === "moderation" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
       else if (error === "dm_disabled") setBanner({ text: t("dmDisabledMessage"), color: "#d32f2f" });
       else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
@@ -1942,6 +1948,11 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
   const ownerModerationBlocked = isOwner && ownerModeration?.status === "frozen";
+  const viewerModerationBlocked = !isOwner
+    && !effectiveAdmin
+    && !dmMode
+    && !!channel?.is_frozen
+    && viewerFreezeReason === "moderation";
   const canUseAdminMutations = effectiveAdmin && !ownerModerationBlocked;
   const ownerPetitionStatus = ownerModeration?.petitionStatus || "none";
   const ownerCanSubmitPetition = ownerModerationBlocked && ownerPetitionStatus === "none";
@@ -2106,7 +2117,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, []);
   const handleReportAction = useCallback(async (
     report: ReportMeta,
-    action: "warn_owner" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss",
+    action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss",
   ) => {
     if (reportActionPendingId) return;
     setReportActionPendingId(report.report_id);
@@ -2134,6 +2145,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           dismiss: { text: t("reportDismissedBanner"), color: "var(--meta)" },
           warn_owner: { text: t("warnOwnerSentBanner"), color: "#b26a00" },
           freeze_channel: { text: t("channelFrozenByModerationBanner"), color: "#8b5cf6" },
+          unfreeze_channel: { text: t("channelUnfrozenByModerationBanner"), color: "#2a9d4e" },
           delete_channel: { text: t("channelDeletedByModerationBanner"), color: "#d32f2f" },
         } as const;
         setBanner(reportActionBanner[action]);
@@ -2151,6 +2163,8 @@ export function ChatView({ channelId }: { channelId: string }) {
         setBanner({ text: t("reportAlreadyProcessed"), color: "var(--meta)" });
       } else if (result?.error === "channel_already_frozen") {
         setBanner({ text: t("channelAlreadyFrozen"), color: "var(--meta)" });
+      } else if (result?.error === "channel_not_frozen") {
+        setBanner({ text: t("channelNotFrozen"), color: "var(--meta)" });
       } else if (result?.error === "freeze_required_before_delete") {
         setBanner({ text: t("freezeBeforeDelete"), color: "var(--meta)" });
       } else if (result?.error === "petition_pending") {
@@ -2165,7 +2179,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [patchReportMessage, reportActionPendingId, t]);
   const handlePetitionAction = useCallback(async (
     petition: PetitionMeta,
-    action: "accept_petition" | "reject_petition",
+    action: "accept_petition" | "reject_petition" | "unfreeze_channel",
   ) => {
     if (reportActionPendingId) return;
     setReportActionPendingId(petition.petition_id);
@@ -2188,11 +2202,17 @@ export function ChatView({ channelId }: { channelId: string }) {
           petition_meta: result.petition,
         }));
         setBanner({
-          text: action === "accept_petition" ? t("petitionAccepted") : t("petitionRejected"),
-          color: action === "accept_petition" ? "#2a9d4e" : "#d32f2f",
+          text: action === "accept_petition"
+            ? t("petitionAccepted")
+            : action === "reject_petition"
+              ? t("petitionRejected")
+              : t("channelUnfrozenByModerationBanner"),
+          color: action === "accept_petition" || action === "unfreeze_channel" ? "#2a9d4e" : "#d32f2f",
         });
       } else if (result?.error === "petition_already_processed") {
         setBanner({ text: t("petitionAlreadyProcessed"), color: "var(--meta)" });
+      } else if (result?.error === "channel_not_frozen") {
+        setBanner({ text: t("channelNotFrozen"), color: "var(--meta)" });
       } else {
         setBanner({ text: t("petitionActionFailed"), color: "#d32f2f" });
       }
@@ -2785,6 +2805,22 @@ export function ChatView({ channelId }: { channelId: string }) {
         </div>
       )}
 
+      {viewerModerationBlocked && (
+        <div
+          className="flex-none flex items-center gap-3"
+          style={{
+            padding: "10px 14px",
+            background: "rgba(139,92,246,.08)",
+            borderTop: "0.5px solid rgba(139,92,246,.18)",
+            color: "#5b21b6",
+          }}
+        >
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
+            {t("moderationFrozenBanner")}
+          </div>
+        </div>
+      )}
+
       {/* Composer */}
       <footer
         className="flex-none flex items-end gap-2"
@@ -2849,6 +2885,8 @@ export function ChatView({ channelId }: { channelId: string }) {
               placeholder={
                 ownerModerationBlocked
                   ? t("ownerSuspendedInput")
+                  : viewerModerationBlocked
+                  ? t("moderationFrozenInput")
                   : (channel?.is_frozen && !effectiveAdmin && !dmMode)
                   ? t("frozenInput")
                   : isUserBlocked
@@ -3303,7 +3341,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 refreshOwnerModeration();
                 setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
               }
-              else if (editError === "channel frozen") setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
+              else if (editError === "channel frozen") setBanner({ text: viewerFreezeReason === "moderation" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
               else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
               setTimeout(() => setBanner(null), 3000);
             }).catch(() => {

@@ -38,8 +38,8 @@ interface ContextMenuProps {
   onEdit?: (msgId: string) => void;
   onBlock?: (uid: string) => void;
   isBlockedUser?: boolean;
-  onReportAction?: (action: "warn_owner" | "freeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
-  onPetitionAction?: (action: "accept_petition" | "reject_petition") => void;
+  onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
+  onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
   reportActionPending?: boolean;
   onEmojiPicker: (msgId: string, rect: DOMRect) => void;
   onClose: () => void;
@@ -298,6 +298,21 @@ export function ContextMenu({
             )}
             {onReportAction && msg.report_meta?.moderation_status === "frozen" && (
               <ActionButton
+                label={t("unfreezeReportedChannel")}
+                color="#2a9d4e"
+                disabled={reportActionPending}
+                onClick={() => onReportAction("unfreeze_channel")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12h16" />
+                    <path d="m9 7-5 5 5 5" />
+                    <path d="M15 7l5 5-5 5" />
+                  </svg>
+                )}
+              />
+            )}
+            {onReportAction && msg.report_meta?.moderation_status === "frozen" && (
+              <ActionButton
                 label={t("deleteReportedChannel")}
                 color="#d32f2f"
                 disabled={reportActionPending}
@@ -373,7 +388,23 @@ export function ContextMenu({
                 )}
               />
             )}
-            {!isOpenPetition && (
+            {!isOpenPetition && msg.petition_meta?.status === "rejected" && onPetitionAction && (
+              <ActionButton
+                label={t("unfreezeReportedChannel")}
+                color="#2a9d4e"
+                borderBottom={false}
+                disabled={reportActionPending}
+                onClick={() => onPetitionAction("unfreeze_channel")}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12h16" />
+                    <path d="m9 7-5 5 5 5" />
+                    <path d="M15 7l5 5-5 5" />
+                  </svg>
+                )}
+              />
+            )}
+            {!isOpenPetition && msg.petition_meta?.status !== "rejected" && (
               <div style={{ ...actionItemStyle, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
                 <span>{msg.petition_meta?.status === "accepted" ? t("petitionAccepted") : t("petitionRejected")}</span>
               </div>

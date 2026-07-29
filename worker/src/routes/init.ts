@@ -110,6 +110,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       `dm_${parentChannelId}`,
     ),
     env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
+    env.DB.prepare("SELECT status FROM channel_moderation WHERE channel_id = ? LIMIT 1").bind(parentChannelId),
   ];
 
   let blockedIndex: number | null = null;
@@ -153,6 +154,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const configRows = (batchResults[1].results || []) as { id: string; text: string }[];
   const config = new Map(configRows.map((row) => [row.id, row.text]));
   const liveRow = batchResults[2].results?.[0] as { is_frozen?: number } | undefined;
+  const moderationRow = batchResults[3].results?.[0] as { status?: string } | undefined;
   const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
   const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
   const viewerBlocked = viewerBlockedIndex === null
@@ -171,6 +173,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   if (isLiveChannel && liveRow) {
     responseChannel = { ...channel, is_frozen: liveRow.is_frozen ?? 0 };
   }
+  const viewerFreezeReason = !isOwner
+    && !isReportsOwnerViewer
+    && Number((responseChannel as { is_frozen?: number }).is_frozen || 0) === 1
+    && moderationRow?.status === "frozen"
+      ? "moderation"
+      : null;
 
   // The passcode column contains the stored credential hash. Clients only
   // need to know whether a gate exists, never the hash itself.
@@ -197,6 +205,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     messages,
     blocked,
     viewerBlocked,
+    viewerFreezeReason,
     dm: dmMessages || [],
     adminDataStatus,
     viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",

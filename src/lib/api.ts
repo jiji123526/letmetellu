@@ -288,6 +288,7 @@ export async function actOnChannelReport(payload: {
     | "warn_owner"
     | "send_suspend_notice"
     | "freeze_channel"
+    | "unfreeze_channel"
     | "delete_channel"
     | "accept_petition"
     | "reject_petition";
