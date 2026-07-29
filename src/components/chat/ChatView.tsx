@@ -460,7 +460,6 @@ interface MessageRowProps {
   onReaction: (messageId: string, emoji: string) => void;
   onEmojiPicker: (messageId: string, rect: DOMRect) => void;
   reportActionPendingId: string | null;
-  onViewReportedChannel: (report: ReportMeta) => void;
   onResolveReport: (report: ReportMeta) => void;
   onDismissReport: (report: ReportMeta) => void;
 }
@@ -488,7 +487,6 @@ const MessageRow = React.memo(function MessageRow({
   onReaction,
   onEmojiPicker,
   reportActionPendingId,
-  onViewReportedChannel,
   onResolveReport,
   onDismissReport,
 }: MessageRowProps) {
@@ -496,10 +494,13 @@ const MessageRow = React.memo(function MessageRow({
   const parentIsSent = parentIsAdmin !== null
     ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
     : false;
+  const isReportInboxMessage = !!msg.report_meta;
   const isSent = isReply
     ? parentIsSent
-    : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-  const isMine = effectiveAdmin ? !!msg.is_admin : !msg.is_admin;
+    : isReportInboxMessage
+      ? false
+      : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const isMine = isReportInboxMessage ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
 
   const bubble = (
@@ -634,6 +635,21 @@ const MessageRow = React.memo(function MessageRow({
         ) : bubble}
         {reportMeta && !isReply && effectiveAdmin && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px", alignItems: "center" }}>
+            <a
+              href={`/ch/${encodeURIComponent(reportMeta.channel_id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                color: "var(--bubble-sent, #3b8df0)",
+                textDecoration: "underline",
+                textUnderlineOffset: "2px",
+                fontSize: "calc(var(--bubble-font-size) - 4px)",
+                lineHeight: 1.25,
+              }}
+            >
+              {reportMeta.channel_name} (/ch/{reportMeta.channel_id})
+            </a>
             <span
               style={{
                 fontSize: "calc(var(--bubble-font-size) - 6px)",
@@ -646,26 +662,6 @@ const MessageRow = React.memo(function MessageRow({
             >
               {reportStatusLabel}
             </span>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                onViewReportedChannel(reportMeta);
-              }}
-              style={{
-                border: "none",
-                borderRadius: "999px",
-                padding: "7px 10px",
-                background: "var(--card, #f2f2f7)",
-                color: "var(--gray-text, #111)",
-                fontSize: "calc(var(--bubble-font-size) - 5px)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                lineHeight: 1,
-              }}
-            >
-              {t("viewReportedChannel")}
-            </button>
             {reportMeta.status === "open" && (
               <>
                 <button
@@ -753,7 +749,6 @@ interface MessageListProps {
   onReaction: MessageRowProps["onReaction"];
   onEmojiPicker: MessageRowProps["onEmojiPicker"];
   reportActionPendingId: string | null;
-  onViewReportedChannel: MessageRowProps["onViewReportedChannel"];
   onResolveReport: MessageRowProps["onResolveReport"];
   onDismissReport: MessageRowProps["onDismissReport"];
 }
@@ -781,7 +776,6 @@ const MessageList = React.memo(function MessageList({
   onReaction,
   onEmojiPicker,
   reportActionPendingId,
-  onViewReportedChannel,
   onResolveReport,
   onDismissReport,
 }: MessageListProps) {
@@ -799,7 +793,6 @@ const MessageList = React.memo(function MessageList({
     onReaction,
     onEmojiPicker,
     reportActionPendingId,
-    onViewReportedChannel,
     onResolveReport,
     onDismissReport,
   };
@@ -2235,10 +2228,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     }));
   }, []);
 
-  const handleViewReportedChannel = useCallback((report: ReportMeta) => {
-    window.open(`/ch/${encodeURIComponent(report.channel_id)}`, "_blank", "noopener,noreferrer");
-  }, []);
-
   const handleReportAction = useCallback(async (report: ReportMeta, action: "resolve" | "dismiss") => {
     if (reportActionPendingId) return;
     setReportActionPendingId(report.report_id);
@@ -2528,7 +2517,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           onReaction={handleMemoizedReaction}
           onEmojiPicker={handleMemoizedEmojiPicker}
           reportActionPendingId={reportActionPendingId}
-          onViewReportedChannel={handleViewReportedChannel}
           onResolveReport={(report) => { void handleReportAction(report, "resolve"); }}
           onDismissReport={(report) => { void handleReportAction(report, "dismiss"); }}
         />
