@@ -341,8 +341,25 @@ export default function DashboardPage() {
     const timer = window.setInterval(() => {
       void loadPlatformDashboard();
       void loadSupportPreview();
-    }, 15000);
+    }, 3000);
     return () => window.clearInterval(timer);
+  }, [status, loadPlatformDashboard, loadSupportPreview]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const refresh = () => {
+      void loadPlatformDashboard();
+      void loadSupportPreview();
+    };
+    const refreshOnVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshOnVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
   }, [status, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
@@ -543,7 +560,7 @@ export default function DashboardPage() {
         id: `support-${supportPreview.threadId}`,
         group: "support-preview",
         kind: "support",
-        route: "/support",
+        route: `/support?thread=${encodeURIComponent(supportPreview.threadId)}`,
         name: t("supportMenu"),
         profileImage: "/logo.svg",
         bubbleColor: "#111827",

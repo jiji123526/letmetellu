@@ -70,6 +70,8 @@ export interface SupportThreadState {
   user_name: string | null;
   user_email: string | null;
   last_message: string | null;
+  has_admin_reply: boolean;
+  can_user_send: boolean;
 }
 
 export interface SupportMessage {
@@ -714,6 +716,8 @@ export async function escalateSupportSession(sessionId: string) {
       user_name: getMockSupportText("supportMockUserName"),
       user_email: "mock@example.com",
       last_message: getMockSupportText("supportMockSummary"),
+      has_admin_reply: false,
+      can_user_send: false,
     };
     mockSupportMessages = [{
       id: crypto.randomUUID(),
@@ -756,6 +760,9 @@ export async function escalateSupportSession(sessionId: string) {
 export async function sendSupportThreadMessage(threadId: string, text: string) {
   if (IS_MOCK) {
     if (!mockSupportThread) return { error: "thread_not_found", _status: 404 };
+    if (!mockSupportThread.can_user_send) {
+      return { error: "await_admin_reply", _status: 409 };
+    }
     const message = {
       id: crypto.randomUUID(),
       thread_id: threadId,
@@ -769,6 +776,7 @@ export async function sendSupportThreadMessage(threadId: string, text: string) {
       ...mockSupportThread,
       updated_at: message.created_at,
       last_message: text,
+      can_user_send: false,
     };
     return { ok: true, message, _status: 200 };
   }
@@ -880,6 +888,8 @@ export async function sendPlatformSupportMessage(threadId: string, text: string)
       ...mockSupportThread,
       updated_at: message.created_at,
       last_message: text,
+      has_admin_reply: true,
+      can_user_send: true,
     };
     return { ok: true, message, _status: 200 };
   }

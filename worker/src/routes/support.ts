@@ -41,6 +41,8 @@ interface SupportThreadRow {
   user_name?: string | null;
   user_email?: string | null;
   last_message?: string | null;
+  last_sender_role?: "user" | "platform_admin" | null;
+  has_admin_reply?: number;
 }
 
 interface SupportMessageRow {
@@ -107,6 +109,8 @@ function serializeNode(node: SupportNode | null) {
 }
 
 function serializeThread(row: SupportThreadRow, locale: UserLocale) {
+  const hasAdminReply = !!row.has_admin_reply;
+  const canUserSend = row.status === "open" && hasAdminReply && row.last_sender_role === "platform_admin";
   return {
     id: row.id,
     user_id: row.user_id,
@@ -122,6 +126,8 @@ function serializeThread(row: SupportThreadRow, locale: UserLocale) {
     user_name: row.user_name || null,
     user_email: row.user_email || null,
     last_message: row.last_message || null,
+    has_admin_reply: hasAdminReply,
+    can_user_send: canUserSend,
   };
 }
 
@@ -204,7 +210,19 @@ async function fetchOpenSupportThreadForUser(userId: string, env: Env): Promise<
         WHERE sm.thread_id = st.id
         ORDER BY sm.created_at DESC, sm.id DESC
         LIMIT 1
-      ) AS last_message
+      ) AS last_message,
+      (
+        SELECT sender_role
+        FROM support_messages sm
+        WHERE sm.thread_id = st.id
+        ORDER BY sm.created_at DESC, sm.id DESC
+        LIMIT 1
+      ) AS last_sender_role,
+      EXISTS(
+        SELECT 1
+        FROM support_messages sm2
+        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
+      ) AS has_admin_reply
     FROM support_threads st
     WHERE st.user_id = ? AND st.status = 'open'
     ORDER BY st.updated_at DESC, st.id DESC
@@ -272,7 +290,19 @@ async function fetchSupportThreadById(threadId: string, env: Env): Promise<Suppo
         WHERE sm.thread_id = st.id
         ORDER BY sm.created_at DESC, sm.id DESC
         LIMIT 1
-      ) AS last_message
+      ) AS last_message,
+      (
+        SELECT sender_role
+        FROM support_messages sm
+        WHERE sm.thread_id = st.id
+        ORDER BY sm.created_at DESC, sm.id DESC
+        LIMIT 1
+      ) AS last_sender_role,
+      EXISTS(
+        SELECT 1
+        FROM support_messages sm2
+        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
+      ) AS has_admin_reply
     FROM support_threads st
     LEFT JOIN users u ON u.id = st.user_id
     WHERE st.id = ?
@@ -320,6 +350,74 @@ async function insertBotMessages(input: {
       input.createdAt,
     ))
   );
+}
+
+async function createEscalatedSupportThread(input: {
+  env: Env;
+  locale: UserLocale;
+  session: SupportSessionRow;
+  userId: string;
+  entryTopic: string | null;
+  escalationNodeId: string;
+}): Promise<Response> {
+  const existingThread = await fetchOpenSupportThreadForUser(input.userId, input.env);
+  if (existingThread) {
+    const messages = await fetchSupportMessages(existingThread.id, input.env);
+    return Response.json({
+      thread: serializeThread(existingThread, input.locale),
+      messages,
+      session: null,
+      transcript: [],
+      currentNode: null,
+    });
+  }
+
+  const transcript = await fetchSupportSessionEvents(input.session.id, input.env);
+  const summary = buildSupportSummary({
+    locale: input.locale,
+    topic: input.entryTopic,
+    events: transcript,
+  });
+  const threadId = crypto.randomUUID();
+  const messageId = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+
+  await input.env.DB.batch([
+    input.env.DB.prepare(`
+      INSERT INTO support_threads (
+        id, user_id, source_session_id, entry_topic, summary, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+    `).bind(threadId, input.userId, input.session.id, input.entryTopic, summary, createdAt, createdAt),
+    input.env.DB.prepare(`
+      INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, text, created_at)
+      VALUES (?, ?, 'user', ?, ?, ?)
+    `).bind(messageId, threadId, input.userId, summary, createdAt),
+    input.env.DB.prepare(`
+      INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
+      VALUES (?, ?, 'escalation', ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      input.session.id,
+      input.escalationNodeId,
+      JSON.stringify({ thread_id: threadId, summary }),
+      createdAt,
+    ),
+    input.env.DB.prepare(`
+      UPDATE support_sessions
+      SET entry_topic = ?, current_node_id = ?, status = 'escalated', escalated_thread_id = ?, updated_at = ?, completed_at = ?
+      WHERE id = ?
+    `).bind(input.entryTopic, input.escalationNodeId, threadId, createdAt, createdAt, input.session.id),
+  ]);
+
+  const thread = await fetchSupportThreadById(threadId, input.env);
+  const messages = await fetchSupportMessages(threadId, input.env);
+  return Response.json({
+    thread: thread ? serializeThread(thread, input.locale) : null,
+    messages,
+    session: null,
+    transcript: [],
+    currentNode: null,
+  });
 }
 
 async function buildUserSupportState(userId: string, env: Env): Promise<Response> {
@@ -498,6 +596,17 @@ async function handleSupportAnswerSession(body: JsonObject, userId: string, env:
   if (!nextNode) {
     return Response.json({ error: "flow_not_found" }, { status: 500 });
   }
+  if (nextNode.kind === "escalate") {
+    return createEscalatedSupportThread({
+      env,
+      locale,
+      session,
+      userId,
+      entryTopic: nextEntryTopic,
+      escalationNodeId: nextNode.id,
+    });
+  }
+
   await insertBotMessages({
     env,
     sessionId: session.id,
@@ -556,57 +665,13 @@ async function handleSupportEscalateSession(body: JsonObject, userId: string, en
     return Response.json({ error: "invalid_state" }, { status: 409 });
   }
 
-  const existingThread = await fetchOpenSupportThreadForUser(userId, env);
-  if (existingThread) {
-    const messages = await fetchSupportMessages(existingThread.id, env);
-    return Response.json({
-      thread: serializeThread(existingThread, locale),
-      messages,
-    });
-  }
-
-  const transcript = await fetchSupportSessionEvents(session.id, env);
-  const summary = buildSupportSummary({
+  return createEscalatedSupportThread({
+    env,
     locale,
-    topic: session.entry_topic,
-    events: transcript,
-  });
-  const threadId = crypto.randomUUID();
-  const messageId = crypto.randomUUID();
-  const createdAt = new Date().toISOString();
-
-  await env.DB.batch([
-    env.DB.prepare(`
-      INSERT INTO support_threads (
-        id, user_id, source_session_id, entry_topic, summary, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
-    `).bind(threadId, userId, session.id, session.entry_topic, summary, createdAt, createdAt),
-    env.DB.prepare(`
-      INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, text, created_at)
-      VALUES (?, ?, 'user', ?, ?, ?)
-    `).bind(messageId, threadId, userId, summary, createdAt),
-    env.DB.prepare(`
-      INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
-      VALUES (?, ?, 'escalation', ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(),
-      session.id,
-      currentNode.id,
-      JSON.stringify({ thread_id: threadId, summary }),
-      createdAt,
-    ),
-    env.DB.prepare(`
-      UPDATE support_sessions
-      SET status = 'escalated', escalated_thread_id = ?, updated_at = ?, completed_at = ?
-      WHERE id = ?
-    `).bind(threadId, createdAt, createdAt, session.id),
-  ]);
-
-  const thread = await fetchSupportThreadById(threadId, env);
-  const messages = await fetchSupportMessages(threadId, env);
-  return Response.json({
-    thread: thread ? serializeThread(thread, locale) : null,
-    messages,
+    session,
+    userId,
+    entryTopic: session.entry_topic,
+    escalationNodeId: currentNode.id,
   });
 }
 
@@ -651,6 +716,9 @@ async function handleUserSupportThreadMessage(body: JsonObject, userId: string, 
   const thread = await fetchSupportThreadById(threadId, env);
   if (!thread || thread.user_id !== userId || thread.status !== "open") {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+  if (!thread.has_admin_reply || thread.last_sender_role !== "platform_admin") {
+    return Response.json({ error: "await_admin_reply" }, { status: 409 });
   }
 
   const createdAt = new Date().toISOString();
@@ -738,7 +806,19 @@ async function fetchPlatformSupportThreads(locale: UserLocale, env: Env): Promis
         WHERE sm.thread_id = st.id
         ORDER BY sm.created_at DESC, sm.id DESC
         LIMIT 1
-      ) AS last_message
+      ) AS last_message,
+      (
+        SELECT sender_role
+        FROM support_messages sm
+        WHERE sm.thread_id = st.id
+        ORDER BY sm.created_at DESC, sm.id DESC
+        LIMIT 1
+      ) AS last_sender_role,
+      EXISTS(
+        SELECT 1
+        FROM support_messages sm2
+        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
+      ) AS has_admin_reply
     FROM support_threads st
     LEFT JOIN users u ON u.id = st.user_id
     WHERE st.status = 'open'
@@ -789,6 +869,13 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
         ORDER BY sm.created_at DESC, sm.id DESC
         LIMIT 1
       ) AS last_message,
+      (
+        SELECT sender_role
+        FROM support_messages sm
+        WHERE sm.thread_id = st.id
+        ORDER BY sm.created_at DESC, sm.id DESC
+        LIMIT 1
+      ) AS last_sender_role,
       EXISTS(
         SELECT 1
         FROM support_messages sm2

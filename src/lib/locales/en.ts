@@ -438,6 +438,8 @@ export const en: Record<LocaleKeys, string> = {
   supportBackToSupport: "Back to Support",
   supportTicketOpen: "Open Ticket",
   supportReplyPlaceholder: "Write your message",
+  supportWaitingForAdmin: "Wait for platform support to reply before sending another message.",
+  supportWaitingForAdminPlaceholder: "Waiting for platform support to reply",
   supportNoAccess: "You do not have access to this page.",
   supportQueueTitle: "Escalated Tickets",
   supportQueueEmpty: "No open support tickets",

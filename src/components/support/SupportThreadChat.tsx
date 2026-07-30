@@ -4,18 +4,6 @@ import type { RefObject } from "react";
 import type { SupportMessage, SupportTranscriptEvent } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
-function formatSupportTimestamp(value: string, locale: "ko" | "en", timeZone: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone,
-  }).format(date);
-}
-
 function readTranscriptText(event: SupportTranscriptEvent, escalatedLabel: string) {
   if (event.event_type === "escalation") return escalatedLabel;
   if (event.event_type === "user_choice") {
@@ -43,6 +31,7 @@ interface SupportThreadChatProps {
   onCloseTicket?: () => void;
   submitting: boolean;
   placeholder: string;
+  canSend?: boolean;
 }
 
 export function SupportThreadChat({
@@ -64,8 +53,9 @@ export function SupportThreadChat({
   onCloseTicket,
   submitting,
   placeholder,
+  canSend = true,
 }: SupportThreadChatProps) {
-  const { locale, timeZone, t } = useLocale();
+  const { t } = useLocale();
   const selfBubbleColor = selfRole === "platform_admin" ? "#202251" : "var(--bubble-sent, #3b8df0)";
 
   return (
@@ -250,26 +240,26 @@ export function SupportThreadChat({
           {messages.map((message) => {
             const isSelf = message.sender_role === selfRole;
             return (
-              <div key={message.id} className={`flex ${isSelf ? "justify-end" : "justify-start"} mb-[3px]`}>
-                <div
-                  className="max-w-[88%] rounded-[18px]"
-                  style={{
-                    padding: "calc(var(--bubble-font-size) * 0.52) calc(var(--bubble-font-size) * 0.74)",
-                    background: isSelf ? selfBubbleColor : "var(--gray-bubble, #f2f2f7)",
-                    color: isSelf ? "#fff" : "var(--gray-text)",
-                  }}
-                >
-                  <div className="whitespace-pre-wrap" style={{ fontSize: "var(--bubble-font-size)", lineHeight: 1.48 }}>
-                    {message.text}
-                  </div>
+              <div
+                key={message.id}
+                className={`flex items-end gap-[6px] max-w-full ${isSelf ? "justify-end" : "justify-start"}`}
+                style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}
+              >
+                <div className={`flex flex-col ${isSelf ? "items-end" : "items-start"}`} style={{ maxWidth: "74%" }}>
                   <div
-                    className="mt-1"
+                    data-bubble
+                    className="relative max-w-full break-words whitespace-pre-wrap select-none"
                     style={{
-                      fontSize: "calc(var(--bubble-font-size) - 6px)",
-                      color: isSelf ? "rgba(255,255,255,.72)" : "var(--meta)",
+                      padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                      fontSize: "var(--bubble-font-size)",
+                      lineHeight: 1.38,
+                      overflowWrap: "anywhere",
+                      borderRadius: isSelf ? "20px 20px 4px 20px" : "20px 20px 20px 4px",
+                      background: isSelf ? selfBubbleColor : "var(--gray-bubble)",
+                      color: isSelf ? "#fff" : "var(--gray-text)",
                     }}
                   >
-                    {formatSupportTimestamp(message.created_at, locale, timeZone)}
+                    {message.text}
                   </div>
                 </div>
               </div>
@@ -320,11 +310,11 @@ export function SupportThreadChat({
               onChange={(event) => onDraftChange(event.target.value)}
               rows={1}
               placeholder={placeholder}
-              disabled={submitting}
+              disabled={submitting || !canSend}
               className="flex-1 border-none bg-transparent outline-none resize-none"
               style={{
                 fontSize: "var(--bubble-font-size)",
-                color: "var(--gray-text)",
+                color: canSend ? "var(--gray-text)" : "var(--meta)",
                 padding: "8px 0",
                 caretColor: "var(--tint)",
                 fontFamily: "inherit",
@@ -333,7 +323,7 @@ export function SupportThreadChat({
                 overflowY: "auto",
               }}
             />
-            {draft.trim() && (
+            {draft.trim() && canSend && (
               <button
                 type="button"
                 onClick={onSend}

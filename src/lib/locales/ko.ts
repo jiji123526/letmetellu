@@ -436,6 +436,8 @@ export const ko = {
   supportBackToSupport: "문의로 돌아가기",
   supportTicketOpen: "진행 중인 문의",
   supportReplyPlaceholder: "메시지를 입력해 주세요",
+  supportWaitingForAdmin: "운영팀 답변이 올 때까지 추가 메시지를 보낼 수 없습니다.",
+  supportWaitingForAdminPlaceholder: "운영팀 답변을 기다리는 중이에요",
   supportNoAccess: "이 페이지에 접근할 수 없습니다.",
   supportQueueTitle: "에스컬레이션된 문의",
   supportQueueEmpty: "열린 문의가 없습니다",

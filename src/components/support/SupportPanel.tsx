@@ -5,7 +5,6 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   answerSupportSession,
   clearSupportSession,
-  escalateSupportSession,
   fetchSupportState,
   sendSupportThreadMessage,
   startSupportSession,
@@ -13,7 +12,6 @@ import {
   type SupportTranscriptEvent,
 } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
-import { SupportThreadChat } from "./SupportThreadChat";
 
 const emptySupportState: SupportStateResponse = {
   thread: null,
@@ -46,6 +44,7 @@ export function SupportPanel() {
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const closingRef = useRef(false);
   const openThreadId = supportState.thread?.id ?? null;
+  const hasActiveTicket = !!supportState.thread;
 
   function applyState(next: Partial<SupportStateResponse>) {
     setSupportState((current) => ({
@@ -172,31 +171,18 @@ export function SupportPanel() {
     setSubmitting(false);
   }
 
-  async function handleEscalate() {
-    if (submitting || !supportState.session) return;
-    setSubmitting(true);
-    const result = await escalateSupportSession(supportState.session.id);
-    if (result._status >= 400) {
-      setError(typeof result.error === "string" ? result.error : t("sendFailed"));
-    } else {
-      applyState({
-        thread: "thread" in result ? result.thread ?? null : null,
-        messages: "messages" in result ? result.messages ?? [] : [],
-        session: null,
-        transcript: [],
-        currentNode: null,
-      });
-      setError("");
-    }
-    setSubmitting(false);
-  }
-
   async function handleThreadSend() {
     if (submitting || !supportState.thread || !threadDraft.trim()) return;
     setSubmitting(true);
     const result = await sendSupportThreadMessage(supportState.thread.id, threadDraft.trim());
     if (result._status >= 400 || !result.message) {
-      setError(typeof result.error === "string" ? result.error : t("sendFailed"));
+      setError(
+        result.error === "await_admin_reply"
+          ? t("supportWaitingForAdmin")
+          : typeof result.error === "string"
+            ? result.error
+            : t("sendFailed")
+      );
     } else {
       const message = result.message;
       setSupportState((current) => ({
@@ -206,6 +192,7 @@ export function SupportPanel() {
           ...current.thread,
           updated_at: message.created_at,
           last_message: message.text,
+          can_user_send: false,
         } : null,
       }));
       setThreadDraft("");
@@ -227,178 +214,320 @@ export function SupportPanel() {
     }
   }
 
-  if (supportState.thread) {
-    return (
-      <SupportThreadChat
-        title={t("supportMenu")}
-        subtitle=""
-        topicLabel={supportState.thread.entry_topic_label}
-        messagesRef={transcriptRef}
-        messages={supportState.messages}
-        loading={loading}
-        error={error}
-        status={supportState.thread.status}
-        selfRole="user"
-        draft={threadDraft}
-        onDraftChange={setThreadDraft}
-        onSend={() => { void handleThreadSend(); }}
-        onBack={() => router.push("/dashboard")}
-        submitting={submitting}
-        placeholder={t("supportReplyPlaceholder")}
-      />
-    );
-  }
-
   return (
-    <main className="min-h-dvh px-4 py-6" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
-      <div className="mx-auto flex min-h-[calc(100dvh-48px)] max-w-[760px] flex-col overflow-hidden rounded-[28px] border" style={{ background: "var(--input-bg)", borderColor: "var(--hairline)", boxShadow: "0 24px 70px rgba(15,23,42,.08)" }}>
-        <header className="flex items-start justify-between gap-4 border-b px-5 py-4" style={{ borderColor: "var(--hairline)" }}>
-          <div>
-            <div className="text-[12px] font-medium uppercase tracking-[0.18em]" style={{ color: "var(--meta)" }}>{t("supportTitle")}</div>
-            <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.03em]">{t("supportTitle")}</h1>
-            <p className="mt-2 max-w-[520px] text-[13px] leading-[1.6]" style={{ color: "var(--secondary-text)" }}>{t("supportSubtitle")}</p>
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              disabled={closing}
-              className="rounded-full border px-3 py-2 text-[12px] font-semibold"
-              style={{ borderColor: "var(--hairline)", color: "var(--gray-text)" }}
-              onClick={() => void handleClosePanel()}
-              aria-label={t("close")}
-            >
-              ✕
-            </button>
-          </div>
-        </header>
+    <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
+      <header
+        className="flex-none flex items-center px-4 relative"
+        style={{
+          background: "var(--header-bg)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          borderBottom: "0.5px solid var(--hairline)",
+          padding: "10px 16px",
+          zIndex: 5,
+        }}
+      >
+        <button
+          type="button"
+          className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          style={{ color: "var(--bubble-sent, #3b8df0)" }}
+          onClick={() => void handleClosePanel()}
+          aria-label={t("dashboardBack")}
+          disabled={closing}
+        >
+          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
+            <path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
 
-        <section ref={transcriptRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          {loading ? (
-            <div className="rounded-[20px] px-4 py-5 text-[14px]" style={{ background: "var(--card)", color: "var(--meta)" }}>
-              {t("loading")}
+        <div className="flex-1 min-w-0 flex flex-col items-center px-12">
+          <div className="max-w-full truncate font-semibold" style={{ fontSize: "var(--bubble-font-size)" }}>
+            {t("supportTitle")}
+          </div>
+          <div className="max-w-full truncate" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)" }}>
+            {hasActiveTicket ? t("supportTicketOpen") : t("supportSubtitle")}
+          </div>
+        </div>
+      </header>
+
+      <div className="relative flex-1 min-h-0 overflow-hidden" style={{ background: "var(--bg)" }}>
+        <main
+          ref={transcriptRef}
+          className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
+          style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", background: "transparent" }}
+        >
+          {loading && !supportState.session && !supportState.thread ? (
+            <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
+              <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
+                <div
+                  data-bubble
+                  className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                  style={{
+                    padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                    fontSize: "var(--bubble-font-size)",
+                    lineHeight: 1.38,
+                    overflowWrap: "anywhere",
+                    borderRadius: "20px 20px 20px 4px",
+                    background: "var(--gray-bubble)",
+                    color: "var(--gray-text)",
+                  }}
+                >
+                  {t("loading")}
+                </div>
+              </div>
             </div>
-          ) : (
+          ) : hasActiveTicket ? (
             <>
-              {supportState.transcript.map((event) => {
-                if (event.event_type === "escalation") {
-                  return (
-                    <div key={event.id} className="flex justify-start">
-                      <div className="rounded-[20px] px-4 py-3 text-[13px] font-medium" style={{ background: "#eef2ff", color: "#312e81" }}>
-                        {t("supportEscalated")}
-                      </div>
-                    </div>
-                  );
-                }
-                const text = readTranscriptText(event);
-                if (!text) return null;
-                const isBot = event.event_type === "bot_message";
-                return (
-                  <div key={event.id} className={`flex ${isBot ? "justify-start" : "justify-end"}`}>
+              <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
+                <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
+                  <div
+                    data-bubble
+                    className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                    style={{
+                      padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                      fontSize: "var(--bubble-font-size)",
+                      lineHeight: 1.38,
+                      overflowWrap: "anywhere",
+                      borderRadius: "20px 20px 20px 4px",
+                      background: "var(--gray-bubble)",
+                      color: "var(--gray-text)",
+                    }}
+                  >
+                    {supportState.thread?.entry_topic_label}
+                  </div>
+                </div>
+              </div>
+              {!supportState.thread?.can_user_send && (
+                <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
+                  <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
                     <div
-                      className="max-w-[88%] rounded-[22px] px-4 py-3"
+                      data-bubble
+                      className="relative max-w-full break-words whitespace-pre-wrap select-none"
                       style={{
-                        background: isBot ? "var(--card)" : "#111827",
+                        padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                        fontSize: "var(--bubble-font-size)",
+                        lineHeight: 1.38,
+                        overflowWrap: "anywhere",
+                        borderRadius: "20px 20px 20px 4px",
+                        background: "var(--gray-bubble)",
+                        color: "var(--gray-text)",
+                      }}
+                    >
+                      {t("supportWaitingForAdmin")}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            supportState.transcript.map((event) => {
+              if (event.event_type === "escalation") return null;
+              const text = readTranscriptText(event);
+              if (!text) return null;
+              const isBot = event.event_type === "bot_message";
+              return (
+                <div
+                  key={event.id}
+                  className={`flex items-end gap-[6px] max-w-full ${isBot ? "justify-start" : "justify-end"}`}
+                  style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}
+                >
+                  <div className={`flex flex-col ${isBot ? "items-start" : "items-end"}`} style={{ maxWidth: "74%" }}>
+                    <div
+                      data-bubble
+                      className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                      style={{
+                        padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                        fontSize: "var(--bubble-font-size)",
+                        lineHeight: 1.38,
+                        overflowWrap: "anywhere",
+                        borderRadius: isBot ? "20px 20px 20px 4px" : "20px 20px 4px 20px",
+                        background: isBot ? "var(--gray-bubble)" : "var(--bubble-sent, #3b8df0)",
                         color: isBot ? "var(--gray-text)" : "#fff",
                       }}
                     >
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: isBot ? "var(--meta)" : "rgba(255,255,255,.68)" }}>
-                        {isBot ? t("supportBot") : t("supportUser")}
-                      </div>
-                      <div className="whitespace-pre-wrap text-[14px] leading-[1.6]">{text}</div>
+                      {text}
                     </div>
                   </div>
-                );
-              })}
-            </>
+                </div>
+              );
+            })
           )}
-          {!loading && error && (
-            <div className="rounded-[18px] border px-4 py-3 text-[13px]" style={{ borderColor: "#fecaca", background: "#fff1f2", color: "#b91c1c" }}>
-              {error}
-            </div>
-          )}
-        </section>
 
-        <footer className="border-t px-4 py-4" style={{ borderColor: "var(--hairline)", background: "rgba(255,255,255,.8)" }}>
-          {supportState.currentNode?.kind === "choice" ? (
-            <div className="flex flex-wrap gap-2">
-              {supportState.currentNode.choices.map((choice) => (
-                <button
-                  key={choice.id}
-                  type="button"
-                  onClick={() => void handleChoice(choice.id)}
-                  disabled={submitting}
-                  className="rounded-full border px-4 py-2 text-[13px] font-medium"
-                  style={{ borderColor: "var(--hairline)", background: "var(--bg)" }}
+          {!loading && error && (
+            <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
+              <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
+                <div
+                  data-bubble
+                  className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                  style={{
+                    padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                    fontSize: "var(--bubble-font-size)",
+                    lineHeight: 1.38,
+                    overflowWrap: "anywhere",
+                    borderRadius: "20px 20px 20px 4px",
+                    background: "#fff1f2",
+                    color: "#b91c1c",
+                  }}
                 >
-                  {choice.label}
-                </button>
-              ))}
+                  {error}
+                </div>
+              </div>
             </div>
-          ) : supportState.currentNode?.kind === "text" ? (
-            <div className="space-y-3">
+          )}
+        </main>
+      </div>
+
+      <footer
+        className="flex-none"
+        style={{
+          padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
+          background: "var(--composer-bg)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          borderTop: "0.5px solid var(--hairline)",
+        }}
+      >
+        {hasActiveTicket ? (
+          <div className="flex items-end gap-2">
+            <div
+              className="flex-1 flex items-center relative"
+              style={{
+                minHeight: "calc(var(--bubble-font-size) + 19px)",
+                padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
+                background: "var(--input-bg)",
+                border: "1px solid var(--input-border)",
+                borderRadius: "20px",
+              }}
+            >
+              <textarea
+                value={threadDraft}
+                onChange={(event) => setThreadDraft(event.target.value)}
+                rows={1}
+                placeholder={supportState.thread?.can_user_send ? t("supportReplyPlaceholder") : t("supportWaitingForAdminPlaceholder")}
+                disabled={submitting || !supportState.thread?.can_user_send}
+                className="flex-1 border-none bg-transparent outline-none resize-none"
+                style={{
+                  fontSize: "var(--bubble-font-size)",
+                  color: supportState.thread?.can_user_send ? "var(--gray-text)" : "var(--meta)",
+                  padding: "8px 0",
+                  caretColor: "var(--tint)",
+                  fontFamily: "inherit",
+                  lineHeight: 1.4,
+                  maxHeight: "80px",
+                  overflowY: "auto",
+                }}
+              />
+              {threadDraft.trim() && supportState.thread?.can_user_send && (
+                <button
+                  type="button"
+                  onClick={() => void handleThreadSend()}
+                  disabled={submitting}
+                  className="flex-none flex items-center justify-center border-none cursor-pointer"
+                  style={{
+                    width: "calc(var(--bubble-font-size) + 9px)",
+                    height: "calc(var(--bubble-font-size) + 9px)",
+                    borderRadius: "50%",
+                    background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)",
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>
+                    <path d="M12 20V5m0 0l-6 6m6-6l6 6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : supportState.currentNode?.kind === "choice" ? (
+          <div className="flex flex-wrap gap-2">
+            {supportState.currentNode.choices.map((choice) => (
+              <button
+                key={choice.id}
+                type="button"
+                onClick={() => void handleChoice(choice.id)}
+                disabled={submitting}
+                className="rounded-full border px-4 py-2 text-[13px] font-medium"
+                style={{ borderColor: "var(--hairline)", background: "var(--bg)", color: "var(--gray-text)" }}
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        ) : supportState.currentNode?.kind === "text" ? (
+          <div className="flex items-end gap-2">
+            <div
+              className="flex-1 flex items-center relative"
+              style={{
+                minHeight: "calc(var(--bubble-font-size) + 19px)",
+                padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
+                background: "var(--input-bg)",
+                border: "1px solid var(--input-border)",
+                borderRadius: "20px",
+              }}
+            >
               <textarea
                 value={textDraft}
                 onChange={(event) => setTextDraft(event.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-[18px] border px-4 py-3 text-[14px] outline-none"
-                style={{ borderColor: "var(--hairline)", background: "var(--bg)" }}
+                rows={1}
                 placeholder={supportState.currentNode.placeholder}
                 disabled={submitting}
+                className="flex-1 border-none bg-transparent outline-none resize-none"
+                style={{
+                  fontSize: "var(--bubble-font-size)",
+                  color: "var(--gray-text)",
+                  padding: "8px 0",
+                  caretColor: "var(--tint)",
+                  fontFamily: "inherit",
+                  lineHeight: 1.4,
+                  maxHeight: "80px",
+                  overflowY: "auto",
+                }}
               />
-              <div className="flex justify-end">
+              {textDraft.trim() && (
                 <button
                   type="button"
                   onClick={() => void handleTextSubmit()}
-                  disabled={submitting || !textDraft.trim()}
-                  className="rounded-[18px] px-4 py-3 text-[14px] font-semibold text-white"
-                  style={{ background: submitting || !textDraft.trim() ? "#9ca3af" : "#111827" }}
+                  disabled={submitting}
+                  className="flex-none flex items-center justify-center border-none cursor-pointer"
+                  style={{
+                    width: "calc(var(--bubble-font-size) + 9px)",
+                    height: "calc(var(--bubble-font-size) + 9px)",
+                    borderRadius: "50%",
+                    background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)",
+                  }}
                 >
-                  {supportState.currentNode.submitLabel || t("send")}
+                  <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>
+                    <path d="M12 20V5m0 0l-6 6m6-6l6 6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
-              </div>
+              )}
             </div>
-          ) : supportState.currentNode?.kind === "escalate" ? (
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[13px] leading-[1.5]" style={{ color: "var(--secondary-text)" }}>
-                {supportState.currentNode.messages[0]}
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleEscalate()}
-                disabled={submitting}
-                className="rounded-[18px] px-4 py-3 text-[14px] font-semibold text-white"
-                style={{ background: submitting ? "#9ca3af" : "#111827" }}
-              >
-                {supportState.currentNode.escalationLabel || t("supportStart")}
-              </button>
-            </div>
-          ) : supportState.currentNode?.kind === "terminal" ? (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => void handleStart()}
-                disabled={submitting}
-                className="rounded-[18px] px-4 py-3 text-[14px] font-semibold text-white"
-                style={{ background: submitting ? "#9ca3af" : "#111827" }}
-              >
-                {t("supportRestart")}
-              </button>
-            </div>
-          ) : (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => void handleStart()}
-                disabled={submitting}
-                className="rounded-[18px] px-4 py-3 text-[14px] font-semibold text-white"
-                style={{ background: submitting ? "#9ca3af" : "#111827" }}
-              >
-                {t("supportStart")}
-              </button>
-            </div>
-          )}
-        </footer>
-      </div>
-    </main>
+          </div>
+        ) : supportState.currentNode?.kind === "terminal" ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => void handleStart()}
+              disabled={submitting}
+              className="rounded-full border-none px-4 py-2 text-[13px] font-semibold text-white"
+              style={{ background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)" }}
+            >
+              {t("supportRestart")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => void handleStart()}
+              disabled={submitting}
+              className="rounded-full border-none px-4 py-2 text-[13px] font-semibold text-white"
+              style={{ background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)" }}
+            >
+              {t("supportStart")}
+            </button>
+          </div>
+        )}
+      </footer>
+    </div>
   );
 }
