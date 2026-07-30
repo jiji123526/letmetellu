@@ -428,7 +428,6 @@ export const en: Record<LocaleKeys, string> = {
   supportSubtitle: "Start with guided troubleshooting, then escalate to platform support only if needed.",
   supportStart: "Start Support",
   supportRestart: "Start Over",
-  supportAdminInbox: "Open Support Inbox",
   supportBackToSupport: "Back to Support",
   supportTicketOpen: "Open Ticket",
   supportReplyPlaceholder: "Write your message",

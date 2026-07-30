@@ -7,7 +7,6 @@ export type SupportTopic =
   | "blocked"
   | "reports"
   | "live"
-  | "billing"
   | "other";
 
 type SupportNodeKind = "choice" | "text" | "escalate" | "terminal";
@@ -51,8 +50,6 @@ export function supportTopicLabel(topic: SupportTopic | string | null | undefine
       return copy.topicLabels.reports;
     case "live":
       return copy.topicLabels.live;
-    case "billing":
-      return copy.topicLabels.billing;
     case "other":
       return copy.topicLabels.other;
     default:
@@ -89,7 +86,6 @@ export function buildSupportFlow(locale: UserLocale): Record<string, SupportNode
         { id: "topic-blocked", label: supportTopicLabel("blocked", locale), next: "blocked-steps", topic: "blocked" },
         { id: "topic-reports", label: supportTopicLabel("reports", locale), next: "reports-steps", topic: "reports" },
         { id: "topic-live", label: supportTopicLabel("live", locale), next: "live-steps", topic: "live" },
-        { id: "topic-billing", label: supportTopicLabel("billing", locale), next: "billing-steps", topic: "billing" },
         { id: "topic-other", label: supportTopicLabel("other", locale), next: "other-details", topic: "other" },
       ],
     },
@@ -123,25 +119,17 @@ export function buildSupportFlow(locale: UserLocale): Record<string, SupportNode
       messages: [copy.stepMessages.live],
       choices: [resolvedChoice, needHelpChoice("live-details")],
     },
-    "billing-steps": {
-      id: "billing-steps",
-      kind: "choice",
-      messages: [copy.stepMessages.billing],
-      choices: [resolvedChoice, needHelpChoice("billing-details")],
-    },
     "login-details": textNode("login-details", "login", locale),
     "passcode-details": textNode("passcode-details", "passcode", locale),
     "blocked-details": textNode("blocked-details", "blocked", locale),
     "reports-details": textNode("reports-details", "reports", locale),
     "live-details": textNode("live-details", "live", locale),
-    "billing-details": textNode("billing-details", "billing", locale),
     "other-details": textNode("other-details", "other", locale),
     "login-escalate": escalateNode("login", locale),
     "passcode-escalate": escalateNode("passcode", locale),
     "blocked-escalate": escalateNode("blocked", locale),
     "reports-escalate": escalateNode("reports", locale),
     "live-escalate": escalateNode("live", locale),
-    "billing-escalate": escalateNode("billing", locale),
     "other-escalate": escalateNode("other", locale),
     resolved: {
       id: "resolved",

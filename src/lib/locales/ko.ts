@@ -426,7 +426,6 @@ export const ko = {
   supportSubtitle: "먼저 안내형 문제 해결을 진행하고, 필요할 때만 운영팀 문의로 넘겨요.",
   supportStart: "문의 시작",
   supportRestart: "처음부터 다시",
-  supportAdminInbox: "운영팀 문의함 열기",
   supportBackToSupport: "문의로 돌아가기",
   supportTicketOpen: "진행 중인 문의",
   supportReplyPlaceholder: "메시지를 입력해 주세요",

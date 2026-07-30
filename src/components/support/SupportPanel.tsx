@@ -14,7 +14,6 @@ import {
 import { useLocale } from "@/hooks/useLocale";
 
 const emptySupportState: SupportStateResponse = {
-  platformAdmin: false,
   thread: null,
   messages: [],
   session: null,
@@ -55,9 +54,9 @@ export function SupportPanel() {
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const openThreadId = supportState.thread?.id ?? null;
 
-  function applyState(next: Partial<SupportStateResponse>, platformAdminFallback?: boolean) {
+  function applyState(next: Partial<SupportStateResponse>) {
     setSupportState((current) => ({
-      platformAdmin: next.platformAdmin ?? platformAdminFallback ?? current.platformAdmin ?? false,
+      platformAdmin: current.platformAdmin ?? false,
       thread: next.thread ?? null,
       messages: next.messages ?? (next.thread ? [] : current.messages),
       session: next.session ?? null,
@@ -85,7 +84,7 @@ export function SupportPanel() {
         setLoading(false);
         return;
       }
-      applyState(started, result.platformAdmin);
+      applyState(started);
       setLoading(false);
       return;
     }
@@ -125,7 +124,7 @@ export function SupportPanel() {
     if (result._status >= 400) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
-      applyState(result, supportState.platformAdmin);
+      applyState(result);
       setError("");
     }
     setSubmitting(false);
@@ -141,7 +140,7 @@ export function SupportPanel() {
     if (result._status >= 400) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
-      applyState(result, supportState.platformAdmin);
+      applyState(result);
       setTextDraft("");
       setError("");
     }
@@ -158,7 +157,7 @@ export function SupportPanel() {
     if (result._status >= 400) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
-      applyState(result, supportState.platformAdmin);
+      applyState(result);
       setTextDraft("");
       setError("");
     }
@@ -178,7 +177,7 @@ export function SupportPanel() {
         session: null,
         transcript: [],
         currentNode: null,
-      }, supportState.platformAdmin);
+      });
       setError("");
     }
     setSubmitting(false);
@@ -217,15 +216,6 @@ export function SupportPanel() {
             <p className="mt-2 max-w-[520px] text-[13px] leading-[1.6]" style={{ color: "var(--secondary-text)" }}>{t("supportSubtitle")}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            {supportState.platformAdmin && (
-              <Link
-                href="/platform/support"
-                className="rounded-full px-3 py-2 text-[12px] font-semibold no-underline"
-                style={{ background: "#111827", color: "#fff" }}
-              >
-                {t("supportAdminInbox")}
-              </Link>
-            )}
             <Link
               href="/dashboard"
               className="rounded-full border px-3 py-2 text-[12px] font-semibold no-underline"
