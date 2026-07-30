@@ -50,12 +50,12 @@ Current shape:
 - Guest ticket previews are mirrored in local storage for dashboard reopen convenience, while Worker authorization still relies on signed anonymous identity cookies.
 - The super admin dashboard shows `Report` and `Tickets` sections instead of a mixed inbox.
 - Reports still stay in the private reports inbox channel; only guided-support escalations become tickets.
-- Closed tickets remain visible to the super admin for audit and follow-up.
+- The super-admin dashboard fetch is now bounded to open tickets plus a recent closed-ticket window, and the user dashboard preview uses a lightweight support-preview read instead of loading full support state.
 
 ### Next support work
 
 - Expand the decision tree coverage for real user issues and keep the locale strings centralized rather than growing inline logic.
-- Add stronger operator filters or sorting once the single-admin queue has enough volume to justify more than the current `Report` / `Tickets` split plus stale/unread signals.
+- Add explicit pagination or archive filtering for older closed tickets if the operator audit workflow outgrows the current recent-closed window.
 - Decide whether support audit logs need an operator-visible review UI or should remain backend-only for incident tracing.
 - Decide the retention window for closed support sessions and tickets, then automate cleanup if the audit policy allows it.
 

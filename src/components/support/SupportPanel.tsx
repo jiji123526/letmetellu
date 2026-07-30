@@ -24,6 +24,7 @@ const emptySupportState: SupportStateResponse = {
   transcript: [],
   currentNode: null,
 };
+const SUPPORT_THREAD_POLL_MS = 3000;
 
 function readTranscriptText(event: SupportTranscriptEvent): string {
   if (event.event_type === "user_choice") {
@@ -132,8 +133,9 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
   useEffect(() => {
     if (!openThreadId) return;
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       loadStateEffect(false);
-    }, 1000);
+    }, SUPPORT_THREAD_POLL_MS);
     return () => window.clearInterval(timer);
   }, [openThreadId]);
 

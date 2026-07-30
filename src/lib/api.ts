@@ -108,9 +108,9 @@ export interface SupportStateResponse {
   currentNode: SupportNodeState | null;
 }
 
-export interface PlatformSupportThreadsResponse {
+export interface SupportPreviewResponse {
   error?: string;
-  threads: SupportThreadState[];
+  thread: SupportThreadState | null;
 }
 
 export interface PlatformSupportThreadResponse {
@@ -376,6 +376,13 @@ function getMockSupportState(): SupportStateResponse {
     session: mockSupportSession,
     transcript: mockSupportSession ? mockSupportTranscript : [],
     currentNode: getMockSupportNode(mockSupportSession?.current_node_id),
+  };
+}
+
+function getMockSupportPreview(): SupportPreviewResponse {
+  const thread = getMockSupportThreadState();
+  return {
+    thread: thread?.status === "open" ? thread : null,
   };
 }
 
@@ -823,6 +830,13 @@ export async function fetchSupportState() {
   });
 }
 
+export async function fetchSupportPreview() {
+  if (IS_MOCK) return { ...getMockSupportPreview(), _status: 200 };
+  return requestSupportJson<SupportPreviewResponse>("/api/support?type=preview", {
+    cache: "no-store",
+  });
+}
+
 export async function startSupportSession() {
   if (IS_MOCK) {
     if (!mockSupportSession) {
@@ -1054,19 +1068,6 @@ export async function clearSupportSession(sessionId: string) {
       action: "clear_session",
       session_id: sessionId,
     }),
-  });
-}
-
-export async function fetchPlatformSupportThreads() {
-  if (IS_MOCK) {
-    const thread = getMockSupportThreadState();
-    return {
-      threads: thread?.status === "open" ? [thread] : [],
-      _status: 200,
-    };
-  }
-  return requestSupportJson<PlatformSupportThreadsResponse>("/api/platform-admin/support?type=threads", {
-    cache: "no-store",
   });
 }
 

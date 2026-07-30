@@ -126,6 +126,23 @@ Deployment notes:
 - deploy the Worker and the Next.js frontend together for this line because both the support payload shape and dashboard rendering changed;
 - no extra migration is needed beyond `0026` for the admin triage card, unread badges, stale indicators or support operator summary chips shipped in the same line.
 
+### Support dashboard load shaping and audit retention index — 2026-07-30
+
+This follow-up line reduced support polling cost and fixed the missing retention-support index for support audit cleanup.
+
+- Added `0027_support_audit_retention_index.sql`.
+- Added `support_audit_logs(created_at DESC)` so scheduled support-audit cleanup no longer depends on table scans as audit volume grows.
+- The user dashboard support preview now reads from a lightweight `/api/support?type=preview` response instead of loading full support messages and guided-session transcript data.
+- The super-admin dashboard now loads all open tickets plus a bounded recent-closed window instead of reloading the full historical ticket list on each refresh.
+- Hidden dashboard tabs and open support-thread views now skip background polling so the frontend does less unnecessary refresh work.
+- Removed the unused platform-admin `type=threads` support list path from the current frontend/backend contract.
+
+Deployment notes:
+
+- apply `0027` before deploying the Worker if you want the support-audit retention cleanup index active immediately;
+- deploy the Worker and the Next.js frontend together for this line because the support/dashboard fetch surface changed on both sides;
+- the application still works without `0027`, but scheduled cleanup on `support_audit_logs` will stay less efficient until that migration is applied.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.
@@ -393,6 +410,25 @@ Adds the first guided support and escalated-ticket schema:
 
 Apply `0025` before deploying Worker code that serves guided support, ticket
 listing or support messaging.
+
+#### `0026_support_operator_hardening.sql`
+
+Adds operator-facing support lifecycle and triage state:
+
+- `support_thread_reads` for per-side unread markers;
+- `support_audit_logs` for append-only support lifecycle events.
+
+Apply `0026` before deploying Worker code that reads support unread state or
+writes support audit entries.
+
+#### `0027_support_audit_retention_index.sql`
+
+Adds the missing retention-support index for support audit cleanup:
+
+- `support_audit_logs(created_at DESC)`.
+
+Apply `0027` before or with the Worker deploy if you want scheduled support
+audit retention cleanup to avoid degrading into table scans as the log grows.
 
 ### Operational checks
 

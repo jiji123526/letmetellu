@@ -16,6 +16,7 @@ const SUPPORT_MESSAGE_LIMIT = 8;
 const ANONYMOUS_SUPPORT_PREFIX = "anon:";
 const SUPPORT_STALE_MS = 24 * 60 * 60 * 1000;
 const SUPPORT_CRITICAL_STALE_MS = 72 * 60 * 60 * 1000;
+const SUPPORT_DASHBOARD_CLOSED_TICKET_LIMIT = 30;
 
 type SupportSessionStatus = "open" | "resolved" | "escalated" | "abandoned";
 type SupportThreadStatus = "open" | "closed";
@@ -657,6 +658,13 @@ async function buildUserSupportState(subjectId: string, locale: UserLocale, env:
   });
 }
 
+async function buildUserSupportPreview(subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
+  const openThread = await fetchOpenSupportThreadForUser(subjectId, env);
+  return Response.json({
+    thread: openThread ? serializeThread(openThread, locale) : null,
+  });
+}
+
 function getNextTextNodeId(currentNodeId: string): string {
   if (currentNodeId.endsWith("-details")) {
     return currentNodeId.replace(/-details$/, "-escalate");
@@ -1036,6 +1044,11 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   const actor = await resolveSupportActor(request, env);
 
   if (request.method === "GET") {
+    const url = new URL(request.url);
+    const type = url.searchParams.get("type") || "state";
+    if (type === "preview") {
+      return withSupportIdentityHeaders(await buildUserSupportPreview(actor.subjectId, actor.locale, env), actor);
+    }
     return withSupportIdentityHeaders(await buildUserSupportState(actor.subjectId, actor.locale, env), actor);
   }
 
@@ -1073,17 +1086,6 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }
 
-async function fetchPlatformSupportThreads(locale: UserLocale, env: Env): Promise<Response> {
-  const { results } = await env.DB.prepare(`
-    ${SUPPORT_THREAD_SELECT_SQL}
-    WHERE st.status = 'open'
-    ORDER BY st.updated_at DESC, st.id DESC
-  `).all<SupportThreadRow>();
-  return Response.json({
-    threads: (results || []).map((thread) => serializeThread(thread, locale)),
-  });
-}
-
 async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Promise<Response> {
   const reportsChannelId = getReportsChannelId(env);
   const reportsChannel = reportsChannelId
@@ -1103,17 +1105,29 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
     `).first<{ open_report_count: number; oldest_report_at: string | null }>()
     : null;
 
-  const { results } = await env.DB.prepare(`
+  const { results: openResults } = await env.DB.prepare(`
     ${SUPPORT_THREAD_SELECT_SQL}
-    ORDER BY CASE WHEN st.status = 'open' THEN 0 ELSE 1 END, st.updated_at DESC, st.id DESC
+    WHERE st.status = 'open'
+    ORDER BY st.updated_at DESC, st.id DESC
   `).all<PlatformDashboardTicketRow>();
+  const { results: closedResults } = await env.DB.prepare(`
+    ${SUPPORT_THREAD_SELECT_SQL}
+    WHERE st.status = 'closed'
+    ORDER BY st.updated_at DESC, st.id DESC
+    LIMIT ?
+  `).bind(SUPPORT_DASHBOARD_CLOSED_TICKET_LIMIT).all<PlatformDashboardTicketRow>();
 
-  const tickets = (results || []).map((thread) => ({
+  const openTickets = (openResults || []).map((thread) => ({
     ...serializeThread(thread, locale),
     user_label: formatSupportUserLabel(thread, locale),
     has_admin_reply: !!thread.has_admin_reply,
   }));
-  const openTickets = tickets.filter((thread) => thread.status === "open");
+  const closedTickets = (closedResults || []).map((thread) => ({
+    ...serializeThread(thread, locale),
+    user_label: formatSupportUserLabel(thread, locale),
+    has_admin_reply: !!thread.has_admin_reply,
+  }));
+  const tickets = [...openTickets, ...closedTickets];
   const stale24hCount = openTickets.filter((thread) => thread.stale_level !== "none").length;
   const stale72hCount = openTickets.filter((thread) => thread.stale_level === "critical").length;
   const oldestOpenDurationMinutes = openTickets.reduce((max, thread) => Math.max(max, thread.open_duration_minutes), 0);
@@ -1273,12 +1287,9 @@ export async function handlePlatformSupport(request: Request, env: Env): Promise
 
   if (request.method === "GET") {
     const url = new URL(request.url);
-    const type = url.searchParams.get("type") || "threads";
+    const type = url.searchParams.get("type") || "dashboard";
     if (type === "dashboard") {
       return fetchPlatformSupportDashboard(locale, env);
-    }
-    if (type === "threads") {
-      return fetchPlatformSupportThreads(locale, env);
     }
     if (type === "thread") {
       const threadId = url.searchParams.get("thread_id") || "";

@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchSupportState, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
+import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchSupportPreview, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -68,6 +68,8 @@ interface DashboardListItem {
   activityAt: string;
   liveActive: boolean;
 }
+
+const DASHBOARD_POLL_MS = 3000;
 
 function formatDate(value: string, locale: "ko" | "en") {
   const date = parseServerDate(value);
@@ -294,21 +296,20 @@ export default function DashboardPage() {
   }, [status]);
 
   const loadSupportPreview = useCallback(async () => {
-    if (status === "loading") {
+    if (status === "loading" || platformDashboard) {
       return;
     }
     try {
-      const result = await fetchSupportState();
+      const result = await fetchSupportPreview();
       if (result._status >= 400 || !result.thread) {
         clearStoredSupportTicketPreview();
         setSupportPreview(null);
         return;
       }
-      const latestMessage = result.messages?.[result.messages.length - 1] || null;
       const preview = {
         threadId: result.thread.id,
         topicLabel: result.thread.entry_topic_label,
-        preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
+        preview: result.thread.last_message || result.thread.summary,
         updatedAt: result.thread.updated_at,
         unreadForUser: result.thread.unread_for_user,
         waitingOn: result.thread.waiting_on,
@@ -319,7 +320,7 @@ export default function DashboardPage() {
     } catch {
       setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
     }
-  }, [status]);
+  }, [status, platformDashboard]);
 
   const connectLocalChannels = async () => {
     if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
@@ -376,11 +377,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (status === "loading") return;
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       if (status === "authenticated") {
         void loadPlatformDashboard();
       }
       void loadSupportPreview();
-    }, 1000);
+    }, DASHBOARD_POLL_MS);
     return () => window.clearInterval(timer);
   }, [status, loadPlatformDashboard, loadSupportPreview]);
 

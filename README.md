@@ -79,12 +79,14 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Support allows only one open ticket per signed actor at a time. Users can revisit the guide while a ticket is open, but cannot submit another ticket until the active ticket is closed.
 - Guest support previews are mirrored in browser local storage for dashboard reopen convenience, while Worker authorization still uses signed anonymous/device identity cookies.
 - Users can remove their temporary `1:1` support dashboard item, and that action also closes the underlying ticket on the super-admin side.
+- The dashboard now reads support preview state from a lightweight support-preview endpoint instead of fetching full transcripts or thread messages just to render the temporary `1:1` item.
 - Channel rules, notice banner, welcome popup, freeze/unfreeze and banned words with expiry.
 - Block and unblock by anonymous identity plus server-issued device token.
 - Non-owner channel reports routed to a private reports inbox channel.
 - Owner warning, freeze, delete and petition flows for moderated channels.
 - Super admin dashboard routing is split between `Report` and `Tickets`: reports still resolve through the reports inbox channel, while escalated support tickets appear as channel-like entries and open in `/support`.
 - Support tickets now track unread state, waiting side, stale age and operator summary data so the super admin can triage without reading the whole thread first.
+- The super-admin dashboard loads all open tickets plus a bounded recent-closed window instead of reloading the entire historical ticket archive on each refresh.
 - Super-admin support threads keep the guided summary as ticket context and suppress the duplicated seed message bubble when that first user message is the same summary text.
 - Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends.
 
@@ -206,6 +208,7 @@ Recent schema additions:
 - `0024`: server-only anonymous actor identities for message-based block resolution
 - `0025`: guided support sessions, escalated support threads and support messages
 - `0026`: support read state, support audit logs and operator triage signals
+- `0027`: support audit retention index and support-dashboard load shaping support
 
 Frontend deployment is triggered by pushing `main`:
 
