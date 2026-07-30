@@ -949,6 +949,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
   const [submittingModerationPetition, setSubmittingModerationPetition] = useState(false);
   const [reportActionPendingId, setReportActionPendingId] = useState<string | null>(null);
+  const [petitionSentUid, setPetitionSentUid] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("petitionSent") || "";
+  });
   const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
   const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -1721,7 +1725,13 @@ export function ChatView({ channelId }: { channelId: string }) {
       else if (error === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
       else if (error === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
       else if (error === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
-      else if (error === "petition_exists") setBanner({ text: t("petitionExists"), color: "#d32f2f" });
+      else if (error === "petition_exists") {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("petitionSent", uid);
+        }
+        setPetitionSentUid(uid);
+        setBanner({ text: t("petitionExists"), color: "#d32f2f" });
+      }
       else if (error === "owner_suspended") {
         refreshOwnerModeration();
         setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
@@ -1756,6 +1766,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         return;
       }
       localStorage.setItem("petitionSent", uid);
+      setPetitionSentUid(uid);
       setBanner({ text: t("petitionSent"), color: "#d32f2f" });
       setTimeout(() => setBanner(null), 3000);
       return;
@@ -2021,11 +2032,15 @@ export function ChatView({ channelId }: { channelId: string }) {
     viewerBlocked
     || blockedUsers.some((b) => b.uid === uid)
   );
-  const hasPetitioned = typeof window !== "undefined" && localStorage.getItem("petitionSent") === uid;
+  const hasPetitioned = petitionSentUid === uid;
   // Reset petition status when unblocked (gives another chance on re-block)
-  if (!isUserBlocked && hasPetitioned && typeof window !== "undefined") {
-    localStorage.removeItem("petitionSent");
-  }
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isUserBlocked && hasPetitioned) {
+      localStorage.removeItem("petitionSent");
+      setPetitionSentUid("");
+    }
+  }, [hasPetitioned, isUserBlocked]);
 
   const handleDelete = (msgId: string) => {
     if (ownerModerationBlocked) {
