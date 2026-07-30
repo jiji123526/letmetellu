@@ -314,29 +314,39 @@ export function MessageEmbeds({ text, isMine, onEmbedReady }: { text: string; is
   // Deduplicate
   const unique = [...new Set(urls)];
 
+  const renderEmbed = (url: string) => {
+    // YouTube — inline iframe
+    if (YOUTUBE_REGEX.test(url)) {
+      return <YouTubeEmbed url={url} onReady={onEmbedReady} />;
+    }
+    // Twitter/X — native widget
+    if (TWITTER_REGEX.test(url)) {
+      return <TwitterEmbed url={url} onReady={onEmbedReady} />;
+    }
+    // Instagram — native widget
+    if (INSTAGRAM_REGEX.test(url)) {
+      return <InstagramEmbed url={url} onReady={onEmbedReady} />;
+    }
+    // Other URLs — OG link preview
+    return <LinkPreviewCard url={url} isMine={isMine} onReady={onEmbedReady} />;
+  };
+
   return (
     <div className="message-embeds" style={{
-      marginTop: 0,
+      marginTop: "2px",
+      paddingBottom: "2px",
       overflow: "visible",
       width: "fit-content",
       maxWidth: "100%",
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
     }}>
-      {unique.map((url) => {
-        // YouTube — inline iframe
-        if (YOUTUBE_REGEX.test(url)) {
-          return <YouTubeEmbed key={url} url={url} onReady={onEmbedReady} />;
-        }
-        // Twitter/X — native widget
-        if (TWITTER_REGEX.test(url)) {
-          return <TwitterEmbed key={url} url={url} onReady={onEmbedReady} />;
-        }
-        // Instagram — native widget
-        if (INSTAGRAM_REGEX.test(url)) {
-          return <InstagramEmbed key={url} url={url} onReady={onEmbedReady} />;
-        }
-        // Other URLs — OG link preview
-        return <LinkPreviewCard key={url} url={url} isMine={isMine} onReady={onEmbedReady} />;
-      })}
+      {unique.map((url) => (
+        <div key={url} style={{ maxWidth: "100%" }}>
+          {renderEmbed(url)}
+        </div>
+      ))}
     </div>
   );
 }

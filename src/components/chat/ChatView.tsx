@@ -379,6 +379,7 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
 
   const isLong = text.length > 1000;
   const displayText = isLong ? text.slice(0, 1000) + "…" : text;
+  const hasEmbeddedWidgets = hiddenEmbedUrls.size > 0;
 
   // Linkify and optionally hide embedded URLs
   const parts = linkifyText(displayText, isMine, hiddenEmbedUrls);
@@ -390,7 +391,14 @@ function MessageText({ text, image, isMine, searchQuery, isSearchMatch, isActive
 
   return (
     <>
-      <span className="message-text" style={image ? { display: "block", padding: "2px 10px 8px" } : undefined}>
+      <span
+        className="message-text"
+        style={image
+          ? { display: "block", padding: "2px 10px 8px" }
+          : hasEmbeddedWidgets
+            ? { display: "block", padding: "2px 2px 8px" }
+            : undefined}
+      >
         {content}
         {editedLabel && (
           <span style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", opacity: 0.6, fontStyle: "italic", marginLeft: "4px" }}>
