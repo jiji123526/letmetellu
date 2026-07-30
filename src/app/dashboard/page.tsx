@@ -341,7 +341,7 @@ export default function DashboardPage() {
     const timer = window.setInterval(() => {
       void loadPlatformDashboard();
       void loadSupportPreview();
-    }, 3000);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [status, loadPlatformDashboard, loadSupportPreview]);
 
@@ -359,6 +359,18 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
+  }, [status, loadPlatformDashboard, loadSupportPreview]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const refresh = () => {
+      void loadPlatformDashboard();
+      void loadSupportPreview();
+    };
+    window.addEventListener("support-ticket-changed", refresh as EventListener);
+    return () => {
+      window.removeEventListener("support-ticket-changed", refresh as EventListener);
     };
   }, [status, loadPlatformDashboard, loadSupportPreview]);
 
@@ -534,7 +546,7 @@ export default function DashboardPage() {
         id: `ticket-${ticket.id}`,
         group: "tickets" as const,
         kind: "support" as const,
-        route: `/support?thread=${encodeURIComponent(ticket.id)}`,
+        route: `/support?thread=${encodeURIComponent(ticket.id)}&admin=1`,
         name: ticket.entry_topic_label,
         profileImage: null,
         bubbleColor: ticket.status === "open" ? "#111827" : "#6b7280",

@@ -435,6 +435,7 @@ export const ko = {
   supportRestart: "처음부터 다시",
   supportBackToSupport: "문의로 돌아가기",
   supportTicketOpen: "진행 중인 문의",
+  supportActiveTicketNote: "이미 진행 중인 1:1 문의가 있어요. 대시보드 상단 항목에서 이어서 확인해 주세요.",
   supportReplyPlaceholder: "메시지를 입력해 주세요",
   supportWaitingForAdmin: "운영팀 답변이 올 때까지 추가 메시지를 보낼 수 없습니다.",
   supportWaitingForAdminPlaceholder: "운영팀 답변을 기다리는 중이에요",

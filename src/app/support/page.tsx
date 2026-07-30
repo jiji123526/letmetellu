@@ -6,7 +6,7 @@ import { SupportPanel } from "@/components/support/SupportPanel";
 export default async function SupportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ thread?: string | string[] }>;
+  searchParams: Promise<{ thread?: string | string[]; admin?: string | string[] }>;
 }) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -15,10 +15,11 @@ export default async function SupportPage({
 
   const params = await searchParams;
   const threadParam = Array.isArray(params.thread) ? params.thread[0] : params.thread;
+  const adminParam = Array.isArray(params.admin) ? params.admin[0] : params.admin;
 
-  if (typeof threadParam === "string" && threadParam) {
+  if (typeof threadParam === "string" && threadParam && adminParam === "1") {
     return <PlatformSupportThreadPanel threadId={threadParam} />;
   }
 
-  return <SupportPanel />;
+  return <SupportPanel showThreadView={typeof threadParam === "string" && !!threadParam} />;
 }

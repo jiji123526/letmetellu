@@ -12,6 +12,7 @@ import {
   type SupportTranscriptEvent,
 } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
+import { SupportThreadChat } from "./SupportThreadChat";
 
 const emptySupportState: SupportStateResponse = {
   thread: null,
@@ -31,7 +32,7 @@ function readTranscriptText(event: SupportTranscriptEvent): string {
   return typeof event.payload.text === "string" ? event.payload.text : "";
 }
 
-export function SupportPanel() {
+export function SupportPanel({ showThreadView = false }: { showThreadView?: boolean }) {
   const router = useRouter();
   const { t } = useLocale();
   const [supportState, setSupportState] = useState<SupportStateResponse>(emptySupportState);
@@ -101,7 +102,7 @@ export function SupportPanel() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      loadStateEffect(true);
+      loadStateEffect(false);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -114,9 +115,18 @@ export function SupportPanel() {
     if (!openThreadId) return;
     const timer = window.setInterval(() => {
       loadStateEffect(false);
-    }, 5000);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [openThreadId]);
+
+  useEffect(() => {
+    if (!showThreadView || loading) return;
+    if (supportState.thread) return;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("support-ticket-changed"));
+    }
+    router.push("/dashboard");
+  }, [showThreadView, loading, supportState.thread, router]);
 
   useEffect(() => {
     const element = transcriptRef.current;
@@ -164,6 +174,14 @@ export function SupportPanel() {
     if (result._status >= 400) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
+      if ("thread" in result && result.thread) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("support-ticket-changed"));
+        }
+        setSubmitting(false);
+        router.push("/dashboard");
+        return;
+      }
       applyState(result);
       setTextDraft("");
       setError("");
@@ -212,6 +230,29 @@ export function SupportPanel() {
     } finally {
       router.push("/dashboard");
     }
+  }
+
+  if (showThreadView && supportState.thread) {
+    return (
+      <SupportThreadChat
+        title={t("supportMenu")}
+        subtitle=""
+        topicLabel={supportState.thread.entry_topic_label}
+        messagesRef={transcriptRef}
+        messages={supportState.messages}
+        loading={loading}
+        error={error}
+        status={supportState.thread.status}
+        selfRole="user"
+        draft={threadDraft}
+        onDraftChange={setThreadDraft}
+        onSend={() => { void handleThreadSend(); }}
+        onBack={() => router.push("/dashboard")}
+        submitting={submitting}
+        placeholder={supportState.thread.can_user_send ? t("supportReplyPlaceholder") : t("supportWaitingForAdminPlaceholder")}
+        canSend={supportState.thread.can_user_send}
+      />
+    );
   }
 
   return (
@@ -276,6 +317,26 @@ export function SupportPanel() {
                 </div>
               </div>
             </div>
+          ) : !hasActiveTicket && !supportState.session && supportState.transcript.length === 0 ? (
+            <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
+              <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
+                <div
+                  data-bubble
+                  className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                  style={{
+                    padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                    fontSize: "var(--bubble-font-size)",
+                    lineHeight: 1.38,
+                    overflowWrap: "anywhere",
+                    borderRadius: "20px 20px 20px 4px",
+                    background: "var(--gray-bubble)",
+                    color: "var(--gray-text)",
+                  }}
+                >
+                  {t("supportSubtitle")}
+                </div>
+              </div>
+            </div>
           ) : hasActiveTicket ? (
             <>
               <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
@@ -293,7 +354,7 @@ export function SupportPanel() {
                       color: "var(--gray-text)",
                     }}
                   >
-                    {supportState.thread?.entry_topic_label}
+                    {t("supportActiveTicketNote")}
                   </div>
                 </div>
               </div>
@@ -389,53 +450,14 @@ export function SupportPanel() {
       >
         {hasActiveTicket ? (
           <div className="flex items-end gap-2">
-            <div
-              className="flex-1 flex items-center relative"
-              style={{
-                minHeight: "calc(var(--bubble-font-size) + 19px)",
-                padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
-                background: "var(--input-bg)",
-                border: "1px solid var(--input-border)",
-                borderRadius: "20px",
-              }}
+            <button
+              type="button"
+              onClick={() => router.push(`/support?thread=${encodeURIComponent(supportState.thread?.id || "")}`)}
+              className="ml-auto rounded-full border-none px-4 py-2 text-[13px] font-semibold text-white"
+              style={{ background: "var(--bubble-sent, #3b8df0)" }}
             >
-              <textarea
-                value={threadDraft}
-                onChange={(event) => setThreadDraft(event.target.value)}
-                rows={1}
-                placeholder={supportState.thread?.can_user_send ? t("supportReplyPlaceholder") : t("supportWaitingForAdminPlaceholder")}
-                disabled={submitting || !supportState.thread?.can_user_send}
-                className="flex-1 border-none bg-transparent outline-none resize-none"
-                style={{
-                  fontSize: "var(--bubble-font-size)",
-                  color: supportState.thread?.can_user_send ? "var(--gray-text)" : "var(--meta)",
-                  padding: "8px 0",
-                  caretColor: "var(--tint)",
-                  fontFamily: "inherit",
-                  lineHeight: 1.4,
-                  maxHeight: "80px",
-                  overflowY: "auto",
-                }}
-              />
-              {threadDraft.trim() && supportState.thread?.can_user_send && (
-                <button
-                  type="button"
-                  onClick={() => void handleThreadSend()}
-                  disabled={submitting}
-                  className="flex-none flex items-center justify-center border-none cursor-pointer"
-                  style={{
-                    width: "calc(var(--bubble-font-size) + 9px)",
-                    height: "calc(var(--bubble-font-size) + 9px)",
-                    borderRadius: "50%",
-                    background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)",
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>
-                    <path d="M12 20V5m0 0l-6 6m6-6l6 6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              )}
-            </div>
+              {t("supportTicketOpen")}
+            </button>
           </div>
         ) : supportState.currentNode?.kind === "choice" ? (
           <div className="flex flex-wrap gap-2">
