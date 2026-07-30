@@ -264,17 +264,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "block": {
-      const { uid, reason, fingerprint } = payload || {};
+      const { uid, reason, device_id } = payload || {};
       await env.DB.prepare(
-        "INSERT INTO blocked (id, uid, reason, fingerprint, channel_id) VALUES (?, ?, ?, ?, ?)"
-      ).bind(crypto.randomUUID(), uid, reason || "", fingerprint || null, channel_id).run();
+        "INSERT INTO blocked (id, uid, reason, device_id, channel_id) VALUES (?, ?, ?, ?, ?)"
+      ).bind(crypto.randomUUID(), uid, reason || "", device_id || null, channel_id).run();
 
       // Broadcast block so the blocked user's UI updates immediately
       const blockDoId = env.CHAT_ROOM.idFromName(channel_id);
       const blockStub = env.CHAT_ROOM.get(blockDoId);
       await blockStub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "user-blocked", uid, fingerprint: fingerprint || null }),
+        body: JSON.stringify({ type: "user-blocked", uid, device_id: device_id || null }),
       }));
 
       return Response.json({ ok: true });
@@ -283,7 +283,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "unblock": {
       const { uid: unblockUid } = payload || {};
       const blockedEntry = await env.DB.prepare(
-        "SELECT fingerprint FROM blocked WHERE uid = ? AND channel_id = ? LIMIT 1"
+        "SELECT COALESCE(device_id, fingerprint) AS device_id FROM blocked WHERE uid = ? AND channel_id = ? LIMIT 1"
       ).bind(unblockUid, channel_id).first();
       await env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
         .bind(unblockUid, channel_id).run();
@@ -301,7 +301,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         body: JSON.stringify({
           type: "user-unblocked",
           uid: unblockUid,
-          fingerprint: blockedEntry?.fingerprint || null,
+          device_id: (blockedEntry as { device_id?: string | null } | null)?.device_id || null,
         }),
       }));
       await stub.fetch(new Request("http://internal/broadcast", {

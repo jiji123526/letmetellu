@@ -2,7 +2,7 @@ import type { NextResponse } from "next/server";
 
 export const ANONYMOUS_IDENTITY_COOKIE_NAME = "letsplay_anonymous_token";
 export const DEVICE_IDENTITY_COOKIE_NAME = "letsplay_device_token";
-const IDENTITY_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
+const IDENTITY_COOKIE_MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
 
 function readCookieValue(cookieHeader: string | null | undefined, cookieName: string): string | null {
   if (!cookieHeader) return null;

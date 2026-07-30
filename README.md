@@ -85,7 +85,11 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Credential signup and password reset use email verification and single-use expiring links.
 - Owner actions are authenticated through the Next.js app and re-checked by the Worker with `INTERNAL_SECRET` and owner identity.
 - Anonymous write actions use Worker-issued anonymous and device tokens stored in HttpOnly cookies rather than trusting raw client identifiers.
+- The service no longer relies on browser-derived fingerprinting for chat identity or abuse control.
+- Anonymous and device identifiers are random first-party signed tokens with a 90-day lifetime rather than canvas or user-agent fingerprints.
 - Message, DM, report and preview routes now enforce durable D1-backed rate limits or quotas where appropriate.
+- Device identifiers are kept for abuse controls such as blocking and report deduplication, but are no longer persisted on normal chat messages.
+- IP-based abuse controls use HMAC-hashed identifiers rather than raw IP storage.
 - Moderation actions are recorded in append-only audit logs, and the Worker records lightweight operational failure events for abuse and reliability monitoring.
 
 ## Local Development
@@ -186,6 +190,7 @@ Recent schema additions:
 - `0020`: user locale
 - `0021`: durable rate limits, moderation audit logs and operational events
 - `0022`: message paging indexes, upload-ticket quota indexes and retention-support indexes
+- `0023`: privacy-focused device-id transition and legacy message-identifier cleanup
 
 Frontend deployment is triggered by pushing `main`:
 

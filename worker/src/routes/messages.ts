@@ -108,8 +108,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // These are independent read-only checks. Run them together only after
     // passcode, freeze, rate-limit and length validation have succeeded.
     const [blocked, allowedByBannedWords] = await Promise.all([
-      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(requesterUid, requesterDeviceId || "", parentChannelId).first(),
+      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ?")
+        .bind(requesterUid, requesterDeviceId || "", requesterDeviceId || "", parentChannelId).first(),
       text
         ? checkBannedWords(text as string, parentChannelId, env)
         : Promise.resolve(true),
@@ -149,9 +149,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const isAdmin = isChannelOwner ? 1 : 0;
     const stmts = [
       env.DB.prepare(`
-        INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, requesterDeviceId || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
+        INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, report, reported_msg_id, gallery_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
     ];
     if (image) {
       stmts.push(
@@ -168,7 +168,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       : channel_id as string;
     const newMessage = {
       id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
-      channel_id, image: image || null, reply_to: reply_to || null, fingerprint: requesterDeviceId || null,
+      channel_id, image: image || null, reply_to: reply_to || null,
       report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
       deleted: 0, edited: 0, reactions: "{}", created_at,
     };
@@ -335,8 +335,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     const [blocked, allowedByBannedWords] = await Promise.all([
-      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(requesterUid, requesterDeviceId || "", editParent).first(),
+      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ?")
+        .bind(requesterUid, requesterDeviceId || "", requesterDeviceId || "", editParent).first(),
       checkBannedWords(text, editParent, env),
     ]);
     if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
@@ -421,8 +421,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const reactionUid = isVerifiedAdmin ? verifiedUserId! : anonymousUid!;
     if (!isVerifiedAdmin) {
       const blocked = await env.DB.prepare(
-        "SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
-      ).bind(reactionUid, requesterDeviceId || "", patchParent).first();
+        "SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
+      ).bind(reactionUid, requesterDeviceId || "", requesterDeviceId || "", patchParent).first();
       if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
     }
 

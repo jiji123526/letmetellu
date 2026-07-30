@@ -54,7 +54,6 @@ interface Message {
   edited?: boolean;
   report?: number;
   reported_msg_id?: string;
-  fingerprint?: string | null;
   report_meta?: ReportMeta;
   petition_meta?: PetitionMeta;
 }
@@ -3044,7 +3043,6 @@ export function ChatView({ channelId }: { channelId: string }) {
               adminAction("block", channelId, {
                 uid: blockUid,
                 reason: msg.text?.slice(0, 50) || "",
-                fingerprint: msg.fingerprint || "",
               });
               setBlockedUsers((prev) => [...prev, { uid: blockUid, reason: msg.text?.slice(0, 50) || "" }]);
               setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonBlocked")}`, color: "#d32f2f" });

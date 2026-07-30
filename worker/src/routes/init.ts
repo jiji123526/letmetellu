@@ -134,8 +134,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       viewerBlockedIndex = statements.length;
       statements.push(
         env.DB.prepare(
-          "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR fingerprint = ?) LIMIT 1"
-        ).bind(parentChannelId, viewerUid, viewerDeviceId)
+          "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
+        ).bind(parentChannelId, viewerUid, viewerDeviceId, viewerDeviceId)
       );
     }
   }

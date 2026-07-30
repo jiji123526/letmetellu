@@ -1,7 +1,7 @@
 import { Env } from "../types";
 
-const ANONYMOUS_IDENTITY_TTL_SECONDS = 365 * 24 * 60 * 60;
-const DEVICE_IDENTITY_TTL_SECONDS = 365 * 24 * 60 * 60;
+const ANONYMOUS_IDENTITY_TTL_SECONDS = 90 * 24 * 60 * 60;
+const DEVICE_IDENTITY_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 interface BaseIdentityPayload {
   iat: number;

@@ -85,8 +85,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         "SELECT id, text FROM config WHERE channel_id = ? AND id IN (?, ?)"
       ).bind(parentChannelId, `dm_${parentChannelId}`, `petition_${parentChannelId}`).all<{ id: string; text: string }>(),
       env.DB.prepare(
-        "SELECT 1 FROM blocked WHERE (uid = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
-      ).bind(requesterUid, requesterDeviceId || "", parentChannelId).first(),
+        "SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
+      ).bind(requesterUid, requesterDeviceId || "", requesterDeviceId || "", parentChannelId).first(),
       rawText ? checkBannedWords(rawText, parentChannelId, env) : Promise.resolve(true),
     ]);
 

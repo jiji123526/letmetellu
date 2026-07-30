@@ -319,7 +319,6 @@ export async function sendMessage(payload: {
   image?: string;
   upload_id?: string;
   reply_to?: string;
-  fingerprint?: string;
 }) {
   if (IS_MOCK) return mockApi.sendMessage(payload);
 
@@ -345,7 +344,6 @@ export async function sendMessageAsAdmin(payload: {
   image?: string;
   upload_id?: string;
   reply_to?: string;
-  fingerprint?: string;
   report?: boolean;
   reported_msg_id?: string;
 }) {
@@ -406,7 +404,6 @@ export async function editMessageApi(payload: {
   message_id: string;
   channel_id: string;
   text: string;
-  fingerprint?: string;
   admin?: boolean;
 }) {
   if (IS_MOCK) return { ok: true };
@@ -444,7 +441,6 @@ export async function sendDm(payload: {
   channel_id: string;
   image?: string;
   upload_id?: string;
-  fingerprint?: string;
 }) {
   if (IS_MOCK) return { ok: true };
   const parentChannelId = getParentChannelId(payload.channel_id);

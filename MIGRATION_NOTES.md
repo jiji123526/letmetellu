@@ -52,6 +52,22 @@ Deployment notes:
 - apply `0022` before deploying the Worker if you want the new query plans active immediately;
 - the scheduled maintenance handler is activated by the Worker cron configured in `worker/wrangler.toml`.
 
+### Privacy-focused identity cleanup — 2026-07-30
+
+This follow-up line removed the last browser-fingerprint-era paths and reduced identifier retention.
+
+- Added `0023_privacy_identity_cleanup.sql`.
+- Added `blocked.device_id` and backfilled it from the legacy `fingerprint` column for backward compatibility.
+- Cleared legacy message-level fingerprint values so normal chat history no longer retains per-message device identifiers.
+- Stopped writing device identifiers onto new normal messages.
+- Shortened anonymous and device identity token lifetime from one year to ninety days.
+- Removed the unused browser fingerprint helper from the frontend codebase.
+
+Deployment notes:
+
+- apply `0023` before deploying the Worker if you want the backfill and message-identifier cleanup in place immediately;
+- the Worker still reads the legacy `blocked.fingerprint` column as a compatibility fallback during the transition.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.
@@ -281,6 +297,18 @@ Adds follow-up performance and retention-support indexes:
 
 Apply `0022` before deploying Worker code if you want the new indexes in place
 before the next traffic spike, though the code remains backward-compatible.
+
+#### `0023_privacy_identity_cleanup.sql`
+
+Adds a privacy-hardening transition for anonymous/device identifiers:
+
+- introduces `blocked.device_id` and backfills it from the legacy column;
+- creates the new `blocked(channel_id, device_id)` index;
+- clears legacy message-level fingerprint values from `messages`.
+
+This migration is intentionally additive rather than a hard rename so the
+existing deployment order remains safe while the Worker code transitions away
+from the legacy field names.
 
 ### Operational checks
 

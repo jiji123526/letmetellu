@@ -271,8 +271,8 @@ export async function postReportsInboxMessage(input: {
 
   await input.env.DB.prepare(`
     INSERT INTO messages (
-      id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, fingerprint, report, reported_msg_id, gallery_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, 1, ?, NULL, NULL, NULL, 0, NULL, NULL, ?)
+      id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, report, reported_msg_id, gallery_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, 1, ?, NULL, NULL, 0, NULL, NULL, ?)
   `).bind(
     id,
     reportsChannel.owner_uid,
@@ -299,7 +299,6 @@ export async function postReportsInboxMessage(input: {
         channel_id: reportsChannel.id,
         image: null,
         reply_to: null,
-        fingerprint: null,
         report: 0,
         reported_msg_id: null,
         gallery_id: null,

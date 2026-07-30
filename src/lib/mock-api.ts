@@ -59,7 +59,6 @@ export async function sendMessage(payload: {
   channel_id: string;
   image?: string;
   reply_to?: string;
-  fingerprint?: string;
 }) {
   const msg = {
     id: crypto.randomUUID(),
