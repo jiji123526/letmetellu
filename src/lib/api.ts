@@ -262,14 +262,90 @@ function getMockSupportState(): SupportStateResponse {
     platformAdmin: true,
     thread: mockSupportThread,
     messages: mockSupportMessages,
-    session: mockSupportThread ? null : mockSupportSession,
-    transcript: mockSupportThread ? [] : mockSupportTranscript,
-    currentNode: mockSupportThread ? null : getMockSupportNode(mockSupportSession?.current_node_id),
+    session: mockSupportSession,
+    transcript: mockSupportSession ? mockSupportTranscript : [],
+    currentNode: getMockSupportNode(mockSupportSession?.current_node_id),
   };
 }
 
 function getMockEscalateNodeId(nodeId: string): string {
   return nodeId.replace(/-details$/, "-escalate");
+}
+
+function createMockEscalatedSupportThread() {
+  if (!mockSupportSession) {
+    return { error: "session_not_found", _status: 404 } as const;
+  }
+
+  const createdAt = new Date().toISOString();
+  if (mockSupportThread) {
+    mockSupportTranscript = [
+      ...mockSupportTranscript,
+      createMockSupportEvent("escalation", mockSupportSession.current_node_id, {
+        thread_id: mockSupportThread.id,
+        reused_existing_thread: true,
+      }),
+    ];
+    mockSupportSession = {
+      ...mockSupportSession,
+      status: "escalated",
+      escalated_thread_id: mockSupportThread.id,
+      updated_at: createdAt,
+      completed_at: createdAt,
+    };
+    return {
+      thread: mockSupportThread,
+      messages: mockSupportMessages,
+      _status: 200,
+    } as const;
+  }
+
+  mockSupportThread = {
+    id: crypto.randomUUID(),
+    user_id: "mock-user",
+    source_session_id: mockSupportSession.id,
+    entry_topic: mockSupportSession.entry_topic,
+    entry_topic_label: mockSupportSession.entry_topic_label,
+    summary: getMockSupportText("supportMockSummary"),
+    status: "open",
+    created_at: createdAt,
+    updated_at: createdAt,
+    closed_at: null,
+    closed_by: null,
+    user_name: getMockSupportText("supportMockUserName"),
+    user_email: "mock@example.com",
+    last_message: getMockSupportText("supportMockSummary"),
+    has_admin_reply: false,
+    can_user_send: false,
+  };
+  mockSupportMessages = [{
+    id: crypto.randomUUID(),
+    thread_id: mockSupportThread.id,
+    sender_role: "user",
+    sender_user_id: "mock-user",
+    text: mockSupportThread.summary,
+    created_at: createdAt,
+  }];
+  mockSupportTranscript = [
+    ...mockSupportTranscript,
+    createMockSupportEvent("escalation", mockSupportSession.current_node_id, {
+      thread_id: mockSupportThread.id,
+      summary: mockSupportThread.summary,
+    }),
+  ];
+  mockSupportSession = {
+    ...mockSupportSession,
+    status: "escalated",
+    escalated_thread_id: mockSupportThread.id,
+    updated_at: createdAt,
+    completed_at: createdAt,
+  };
+
+  return {
+    thread: mockSupportThread,
+    messages: mockSupportMessages,
+    _status: 200,
+  } as const;
 }
 
 async function requestSupportJson<T extends object>(
@@ -596,9 +672,6 @@ export async function fetchSupportState() {
 
 export async function startSupportSession() {
   if (IS_MOCK) {
-    if (mockSupportThread) {
-      return { ...getMockSupportState(), _status: 200 };
-    }
     if (!mockSupportSession) {
       const mockSupportNodes = buildMockSupportNodes();
       const createdAt = new Date().toISOString();
@@ -664,6 +737,16 @@ export async function answerSupportSession(payload: {
 
     const nextNode = getMockSupportNode(nextNodeId);
     if (!nextNode) return { error: "flow_not_found", _status: 500 };
+    if (nextNode.kind === "escalate") {
+      mockSupportSession = {
+        ...mockSupportSession,
+        entry_topic: entryTopic,
+        entry_topic_label: getMockSupportTopicLabel(entryTopic),
+        current_node_id: nextNode.id,
+        updated_at: createdAt,
+      };
+      return createMockEscalatedSupportThread();
+    }
     mockSupportSession = {
       ...mockSupportSession,
       entry_topic: entryTopic,
@@ -700,52 +783,7 @@ export async function answerSupportSession(payload: {
 export async function escalateSupportSession(sessionId: string) {
   if (IS_MOCK) {
     if (!mockSupportSession) return { error: "session_not_found", _status: 404 };
-    const createdAt = new Date().toISOString();
-    mockSupportThread = {
-      id: crypto.randomUUID(),
-      user_id: "mock-user",
-      source_session_id: mockSupportSession.id,
-      entry_topic: mockSupportSession.entry_topic,
-      entry_topic_label: mockSupportSession.entry_topic_label,
-      summary: getMockSupportText("supportMockSummary"),
-      status: "open",
-      created_at: createdAt,
-      updated_at: createdAt,
-      closed_at: null,
-      closed_by: null,
-      user_name: getMockSupportText("supportMockUserName"),
-      user_email: "mock@example.com",
-      last_message: getMockSupportText("supportMockSummary"),
-      has_admin_reply: false,
-      can_user_send: false,
-    };
-    mockSupportMessages = [{
-      id: crypto.randomUUID(),
-      thread_id: mockSupportThread.id,
-      sender_role: "user",
-      sender_user_id: "mock-user",
-      text: mockSupportThread.summary,
-      created_at: createdAt,
-    }];
-    mockSupportTranscript = [
-      ...mockSupportTranscript,
-      createMockSupportEvent("escalation", mockSupportSession.current_node_id, {
-        thread_id: mockSupportThread.id,
-        summary: mockSupportThread.summary,
-      }),
-    ];
-    mockSupportSession = {
-      ...mockSupportSession,
-      status: "escalated",
-      escalated_thread_id: mockSupportThread.id,
-      updated_at: createdAt,
-      completed_at: createdAt,
-    };
-    return {
-      thread: mockSupportThread,
-      messages: mockSupportMessages,
-      _status: 200,
-    };
+    return createMockEscalatedSupportThread();
   }
   return requestSupportJson<PlatformSupportThreadResponse>("/api/support", {
     method: "POST",

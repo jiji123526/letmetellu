@@ -46,6 +46,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
   const closingRef = useRef(false);
   const openThreadId = supportState.thread?.id ?? null;
   const hasActiveTicket = !!supportState.thread;
+  const hasGuidedSession = !!supportState.session;
 
   function applyState(next: Partial<SupportStateResponse>) {
     setSupportState((current) => ({
@@ -74,7 +75,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
       setLoading(false);
       return;
     }
-    if (!result.thread && !result.session && autoStartWhenEmpty) {
+    if (!result.session && autoStartWhenEmpty && !showThreadView) {
       const started = await startSupportSession();
       if (closingRef.current) {
         if (started._status < 400 && started.session?.status === "open") {
@@ -102,7 +103,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      loadStateEffect(false);
+      loadStateEffect(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -286,7 +287,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
             {t("supportTitle")}
           </div>
           <div className="max-w-full truncate" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)" }}>
-            {hasActiveTicket ? t("supportTicketOpen") : t("supportSubtitle")}
+            {!hasGuidedSession && hasActiveTicket ? t("supportTicketOpen") : t("supportSubtitle")}
           </div>
         </div>
       </header>
@@ -337,7 +338,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
                 </div>
               </div>
             </div>
-          ) : hasActiveTicket ? (
+          ) : hasActiveTicket && !hasGuidedSession ? (
             <>
               <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
                 <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
@@ -381,18 +382,10 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
               )}
             </>
           ) : (
-            supportState.transcript.map((event) => {
-              if (event.event_type === "escalation") return null;
-              const text = readTranscriptText(event);
-              if (!text) return null;
-              const isBot = event.event_type === "bot_message";
-              return (
-                <div
-                  key={event.id}
-                  className={`flex items-end gap-[6px] max-w-full ${isBot ? "justify-start" : "justify-end"}`}
-                  style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}
-                >
-                  <div className={`flex flex-col ${isBot ? "items-start" : "items-end"}`} style={{ maxWidth: "74%" }}>
+            <>
+              {hasGuidedSession && hasActiveTicket && (
+                <div className="flex items-end gap-[6px] max-w-full justify-start" style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}>
+                  <div className="flex flex-col items-start" style={{ maxWidth: "74%" }}>
                     <div
                       data-bubble
                       className="relative max-w-full break-words whitespace-pre-wrap select-none"
@@ -401,17 +394,48 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
                         fontSize: "var(--bubble-font-size)",
                         lineHeight: 1.38,
                         overflowWrap: "anywhere",
-                        borderRadius: isBot ? "20px 20px 20px 4px" : "20px 20px 4px 20px",
-                        background: isBot ? "var(--gray-bubble)" : "var(--bubble-sent, #3b8df0)",
-                        color: isBot ? "var(--gray-text)" : "#fff",
+                        borderRadius: "20px 20px 20px 4px",
+                        background: "var(--gray-bubble)",
+                        color: "var(--gray-text)",
                       }}
                     >
-                      {text}
+                      {t("supportActiveTicketNote")}
                     </div>
                   </div>
                 </div>
-              );
-            })
+              )}
+              {supportState.transcript.map((event) => {
+                if (event.event_type === "escalation") return null;
+                const text = readTranscriptText(event);
+                if (!text) return null;
+                const isBot = event.event_type === "bot_message";
+                return (
+                  <div
+                    key={event.id}
+                    className={`flex items-end gap-[6px] max-w-full ${isBot ? "justify-start" : "justify-end"}`}
+                    style={{ paddingTop: "calc(var(--bubble-font-size) * 0.18)" }}
+                  >
+                    <div className={`flex flex-col ${isBot ? "items-start" : "items-end"}`} style={{ maxWidth: "74%" }}>
+                      <div
+                        data-bubble
+                        className="relative max-w-full break-words whitespace-pre-wrap select-none"
+                        style={{
+                          padding: "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+                          fontSize: "var(--bubble-font-size)",
+                          lineHeight: 1.38,
+                          overflowWrap: "anywhere",
+                          borderRadius: isBot ? "20px 20px 20px 4px" : "20px 20px 4px 20px",
+                          background: isBot ? "var(--gray-bubble)" : "var(--bubble-sent, #3b8df0)",
+                          color: isBot ? "var(--gray-text)" : "#fff",
+                        }}
+                      >
+                        {text}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
 
           {!loading && error && (
@@ -448,8 +472,8 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
           borderTop: "0.5px solid var(--hairline)",
         }}
       >
-        {hasActiveTicket ? (
-          <div className="flex items-end gap-2">
+        {hasActiveTicket && (
+          <div className={`flex items-end gap-2 ${hasGuidedSession ? "mb-2" : ""}`}>
             <button
               type="button"
               onClick={() => router.push(`/support?thread=${encodeURIComponent(supportState.thread?.id || "")}`)}
@@ -459,7 +483,8 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
               {t("supportTicketOpen")}
             </button>
           </div>
-        ) : supportState.currentNode?.kind === "choice" ? (
+        )}
+        {hasActiveTicket && !hasGuidedSession ? null : supportState.currentNode?.kind === "choice" ? (
           <div className="flex flex-wrap gap-2">
             {supportState.currentNode.choices.map((choice) => (
               <button
@@ -536,19 +561,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
               {t("supportRestart")}
             </button>
           </div>
-        ) : (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => void handleStart()}
-              disabled={submitting}
-              className="rounded-full border-none px-4 py-2 text-[13px] font-semibold text-white"
-              style={{ background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)" }}
-            >
-              {t("supportStart")}
-            </button>
-          </div>
-        )}
+        ) : null}
       </footer>
     </div>
   );
