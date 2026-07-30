@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow";
@@ -10,6 +11,7 @@ const SUPPORT_RATE_LIMIT_WINDOW_MS = 30_000;
 const SUPPORT_START_LIMIT = 3;
 const SUPPORT_ANSWER_LIMIT = 12;
 const SUPPORT_MESSAGE_LIMIT = 8;
+const ANONYMOUS_SUPPORT_PREFIX = "anon:";
 
 type SupportSessionStatus = "open" | "resolved" | "escalated" | "abandoned";
 type SupportThreadStatus = "open" | "closed";
@@ -76,6 +78,13 @@ interface SupportSessionEventRow {
 }
 
 type JsonObject = Record<string, unknown>;
+
+interface ResolvedSupportActor {
+  subjectId: string;
+  locale: UserLocale;
+  anonymousToken: string | null;
+  deviceToken: string | null;
+}
 
 function parseEventPayload(row: SupportSessionEventRow): SupportTranscriptEvent {
   let payload: Record<string, unknown> = {};
@@ -146,8 +155,22 @@ function serializeSession(row: SupportSessionRow, locale: UserLocale) {
   };
 }
 
-function formatSupportUserLabel(thread: SupportThreadRow): string {
-  return thread.user_name?.trim() || thread.user_email?.trim() || thread.user_id;
+function isAnonymousSupportSubjectId(value: string): boolean {
+  return value.startsWith(ANONYMOUS_SUPPORT_PREFIX);
+}
+
+function formatAnonymousSupportLabel(value: string, locale: UserLocale): string {
+  const suffix = value.slice(ANONYMOUS_SUPPORT_PREFIX.length).slice(-6) || value.slice(-6);
+  return locale === "en" ? `Anon #${suffix}` : `익명 #${suffix}`;
+}
+
+function formatSupportUserLabel(thread: SupportThreadRow, locale: UserLocale): string {
+  if (thread.user_name?.trim()) return thread.user_name.trim();
+  if (thread.user_email?.trim()) return thread.user_email.trim();
+  if (isAnonymousSupportSubjectId(thread.user_id)) {
+    return formatAnonymousSupportLabel(thread.user_id, locale);
+  }
+  return thread.user_id;
 }
 
 async function parseJsonObject(request: Request): Promise<JsonObject | null> {
@@ -173,6 +196,56 @@ async function requirePlatformAdminUserId(request: Request, env: Env): Promise<s
   const userId = await requireTrustedUserId(request, env);
   if (!userId) return null;
   return await isReportsChannelOwner(userId, env) ? userId : null;
+}
+
+function parseSupportRequestLocale(request: Request): UserLocale {
+  const value = (request.headers.get("X-Locale") || request.headers.get("Accept-Language") || "").toLowerCase();
+  return value.startsWith("en") ? "en" : "ko";
+}
+
+async function resolveSupportActor(request: Request, env: Env): Promise<ResolvedSupportActor> {
+  const userId = await requireTrustedUserId(request, env);
+  if (userId) {
+    return {
+      subjectId: userId,
+      locale: await getUserLocale(userId, env),
+      anonymousToken: null,
+      deviceToken: null,
+    };
+  }
+
+  const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
+  const deviceToken = request.headers.get("X-Device-Token") || "";
+  const verifiedAnonymous = anonymousToken
+    ? await verifyAnonymousIdentityToken(anonymousToken, env)
+    : null;
+  const verifiedDevice = deviceToken
+    ? await verifyDeviceIdentityToken(deviceToken, env)
+    : null;
+  const anonymousIdentity = verifiedAnonymous
+    ? { uid: verifiedAnonymous.uid, token: anonymousToken }
+    : await createAnonymousIdentity(env);
+  const deviceIdentity = verifiedDevice
+    ? { deviceId: verifiedDevice.device_id, token: deviceToken }
+    : await createDeviceIdentity(env);
+
+  return {
+    subjectId: `${ANONYMOUS_SUPPORT_PREFIX}${anonymousIdentity.uid}`,
+    locale: parseSupportRequestLocale(request),
+    anonymousToken: anonymousIdentity.token,
+    deviceToken: deviceIdentity.token,
+  };
+}
+
+function withSupportIdentityHeaders(response: Response, actor: ResolvedSupportActor): Response {
+  if (!actor.anonymousToken && !actor.deviceToken) return response;
+  const headers = new Headers(response.headers);
+  if (actor.anonymousToken) headers.set("X-Anonymous-Token", actor.anonymousToken);
+  if (actor.deviceToken) headers.set("X-Device-Token", actor.deviceToken);
+  return new Response(response.body, {
+    status: response.status,
+    headers,
+  });
 }
 
 async function applySupportRateLimit(input: {
@@ -438,11 +511,10 @@ async function createEscalatedSupportThread(input: {
   });
 }
 
-async function buildUserSupportState(userId: string, env: Env): Promise<Response> {
-  const locale = await getUserLocale(userId, env);
-  const platformAdmin = await isReportsChannelOwner(userId, env);
-  const openSession = await fetchOpenSupportSessionForUser(userId, env);
-  const openThread = await fetchOpenSupportThreadForUser(userId, env);
+async function buildUserSupportState(subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
+  const platformAdmin = isAnonymousSupportSubjectId(subjectId) ? false : await isReportsChannelOwner(subjectId, env);
+  const openSession = await fetchOpenSupportSessionForUser(subjectId, env);
+  const openThread = await fetchOpenSupportThreadForUser(subjectId, env);
   if (openSession) {
     const transcript = await fetchSupportSessionEvents(openSession.id, env);
     const currentNode = getSupportNode(openSession.current_node_id, locale);
@@ -485,18 +557,17 @@ function getNextTextNodeId(currentNodeId: string): string {
   return "resolved";
 }
 
-async function handleSupportStartSession(userId: string, env: Env): Promise<Response> {
+async function handleSupportStartSession(subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
   const rateLimited = await applySupportRateLimit({
     env,
     scope: "support-session-start",
-    userId,
+    userId: subjectId,
     limit: SUPPORT_START_LIMIT,
   });
   if (rateLimited) return rateLimited;
 
-  const locale = await getUserLocale(userId, env);
-  const existingThread = await fetchOpenSupportThreadForUser(userId, env);
-  const existingSession = await fetchOpenSupportSessionForUser(userId, env);
+  const existingThread = await fetchOpenSupportThreadForUser(subjectId, env);
+  const existingSession = await fetchOpenSupportSessionForUser(subjectId, env);
   if (existingSession) {
     const transcript = await fetchSupportSessionEvents(existingSession.id, env);
     return Response.json({
@@ -514,7 +585,7 @@ async function handleSupportStartSession(userId: string, env: Env): Promise<Resp
     INSERT INTO support_sessions (
       id, user_id, status, current_node_id, created_at, updated_at
     ) VALUES (?, ?, 'open', 'start', ?, ?)
-  `).bind(sessionId, userId, createdAt, createdAt).run();
+  `).bind(sessionId, subjectId, createdAt, createdAt).run();
   await insertBotMessages({
     env,
     sessionId,
@@ -534,23 +605,22 @@ async function handleSupportStartSession(userId: string, env: Env): Promise<Resp
   });
 }
 
-async function handleSupportAnswerSession(body: JsonObject, userId: string, env: Env): Promise<Response> {
+async function handleSupportAnswerSession(body: JsonObject, subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
   const rateLimited = await applySupportRateLimit({
     env,
     scope: "support-session-answer",
-    userId,
+    userId: subjectId,
     limit: SUPPORT_ANSWER_LIMIT,
   });
   if (rateLimited) return rateLimited;
 
-  const locale = await getUserLocale(userId, env);
   const sessionId = typeof body.session_id === "string" ? body.session_id : "";
   if (!sessionId) {
     return Response.json({ error: "missing session_id" }, { status: 400 });
   }
 
   const session = await fetchSupportSessionById(sessionId, env);
-  if (!session || session.user_id !== userId || session.status !== "open") {
+  if (!session || session.user_id !== subjectId || session.status !== "open") {
     return Response.json({ error: "session_not_found" }, { status: 404 });
   }
 
@@ -608,7 +678,7 @@ async function handleSupportAnswerSession(body: JsonObject, userId: string, env:
       env,
       locale,
       session,
-      userId,
+      userId: subjectId,
       entryTopic: nextEntryTopic,
       escalationNodeId: nextNode.id,
     });
@@ -648,23 +718,22 @@ async function handleSupportAnswerSession(body: JsonObject, userId: string, env:
   });
 }
 
-async function handleSupportEscalateSession(body: JsonObject, userId: string, env: Env): Promise<Response> {
+async function handleSupportEscalateSession(body: JsonObject, subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
   const rateLimited = await applySupportRateLimit({
     env,
     scope: "support-session-escalate",
-    userId,
+    userId: subjectId,
     limit: SUPPORT_START_LIMIT,
   });
   if (rateLimited) return rateLimited;
 
-  const locale = await getUserLocale(userId, env);
   const sessionId = typeof body.session_id === "string" ? body.session_id : "";
   if (!sessionId) {
     return Response.json({ error: "missing session_id" }, { status: 400 });
   }
 
   const session = await fetchSupportSessionById(sessionId, env);
-  if (!session || session.user_id !== userId || session.status !== "open") {
+  if (!session || session.user_id !== subjectId || session.status !== "open") {
     return Response.json({ error: "session_not_found" }, { status: 404 });
   }
   const currentNode = getSupportNode(session.current_node_id, locale);
@@ -673,23 +742,23 @@ async function handleSupportEscalateSession(body: JsonObject, userId: string, en
   }
 
   return createEscalatedSupportThread({
-    env,
-    locale,
-    session,
-    userId,
-    entryTopic: session.entry_topic,
-    escalationNodeId: currentNode.id,
-  });
+      env,
+      locale,
+      session,
+      userId: subjectId,
+      entryTopic: session.entry_topic,
+      escalationNodeId: currentNode.id,
+    });
 }
 
-async function handleSupportClearSession(body: JsonObject, userId: string, env: Env): Promise<Response> {
+async function handleSupportClearSession(body: JsonObject, subjectId: string, env: Env): Promise<Response> {
   const sessionId = typeof body.session_id === "string" ? body.session_id : "";
   if (!sessionId) {
     return Response.json({ error: "missing session_id" }, { status: 400 });
   }
 
   const session = await fetchSupportSessionById(sessionId, env);
-  if (!session || session.user_id !== userId) {
+  if (!session || session.user_id !== subjectId) {
     return Response.json({ error: "session_not_found" }, { status: 404 });
   }
 
@@ -705,11 +774,11 @@ async function handleSupportClearSession(body: JsonObject, userId: string, env: 
   return Response.json({ ok: true });
 }
 
-async function handleUserSupportThreadMessage(body: JsonObject, userId: string, env: Env): Promise<Response> {
+async function handleUserSupportThreadMessage(body: JsonObject, subjectId: string, env: Env): Promise<Response> {
   const rateLimited = await applySupportRateLimit({
     env,
     scope: "support-thread-message",
-    userId,
+    userId: subjectId,
     limit: SUPPORT_MESSAGE_LIMIT,
   });
   if (rateLimited) return rateLimited;
@@ -721,7 +790,7 @@ async function handleUserSupportThreadMessage(body: JsonObject, userId: string, 
   }
 
   const thread = await fetchSupportThreadById(threadId, env);
-  if (!thread || thread.user_id !== userId || thread.status !== "open") {
+  if (!thread || thread.user_id !== subjectId || thread.status !== "open") {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
   if (!thread.has_admin_reply || thread.last_sender_role !== "platform_admin") {
@@ -734,7 +803,7 @@ async function handleUserSupportThreadMessage(body: JsonObject, userId: string, 
     env.DB.prepare(`
       INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, text, created_at)
       VALUES (?, ?, 'user', ?, ?, ?)
-    `).bind(messageId, threadId, userId, text, createdAt),
+    `).bind(messageId, threadId, subjectId, text, createdAt),
     env.DB.prepare(`
       UPDATE support_threads
       SET updated_at = ?
@@ -747,7 +816,7 @@ async function handleUserSupportThreadMessage(body: JsonObject, userId: string, 
       id: messageId,
       thread_id: threadId,
       sender_role: "user",
-      sender_user_id: userId,
+      sender_user_id: subjectId,
       text,
       created_at: createdAt,
     },
@@ -755,13 +824,10 @@ async function handleUserSupportThreadMessage(body: JsonObject, userId: string, 
 }
 
 export async function handleSupport(request: Request, env: Env): Promise<Response> {
-  const userId = await requireTrustedUserId(request, env);
-  if (!userId) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const actor = await resolveSupportActor(request, env);
 
   if (request.method === "GET") {
-    return buildUserSupportState(userId, env);
+    return withSupportIdentityHeaders(await buildUserSupportState(actor.subjectId, actor.locale, env), actor);
   }
 
   if (request.method !== "POST") {
@@ -775,19 +841,19 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   const action = typeof body.action === "string" ? body.action : "";
 
   if (action === "start_session") {
-    return handleSupportStartSession(userId, env);
+    return withSupportIdentityHeaders(await handleSupportStartSession(actor.subjectId, actor.locale, env), actor);
   }
   if (action === "answer_session") {
-    return handleSupportAnswerSession(body, userId, env);
+    return withSupportIdentityHeaders(await handleSupportAnswerSession(body, actor.subjectId, actor.locale, env), actor);
   }
   if (action === "escalate_session") {
-    return handleSupportEscalateSession(body, userId, env);
+    return withSupportIdentityHeaders(await handleSupportEscalateSession(body, actor.subjectId, actor.locale, env), actor);
   }
   if (action === "clear_session") {
-    return handleSupportClearSession(body, userId, env);
+    return withSupportIdentityHeaders(await handleSupportClearSession(body, actor.subjectId, env), actor);
   }
   if (action === "send_thread_message") {
-    return handleUserSupportThreadMessage(body, userId, env);
+    return withSupportIdentityHeaders(await handleUserSupportThreadMessage(body, actor.subjectId, env), actor);
   }
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }
@@ -905,7 +971,7 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
     } : null,
     tickets: (results || []).map((thread) => ({
       ...serializeThread(thread, locale),
-      user_label: formatSupportUserLabel(thread),
+      user_label: formatSupportUserLabel(thread, locale),
       has_admin_reply: !!thread.has_admin_reply,
     })),
   });

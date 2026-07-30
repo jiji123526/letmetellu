@@ -140,7 +140,15 @@ export interface PlatformDashboardResponse {
   tickets: PlatformDashboardTicketPreview[];
 }
 
+export interface StoredSupportTicketPreview {
+  threadId: string;
+  topicLabel: string;
+  preview: string;
+  updatedAt: string;
+}
+
 type SupportApiResult<T extends object> = T & { _status: number };
+const SUPPORT_TICKET_PREVIEW_STORAGE_KEY = "letmetellu_support_ticket_preview";
 
 let mockSupportSession: SupportSessionState | null = null;
 let mockSupportThread: SupportThreadState | null = null;
@@ -393,6 +401,41 @@ export function setAnonymousIdentity(uid: string) {
   window.dispatchEvent(new CustomEvent("anonymous-identity-changed", {
     detail: { uid },
   }));
+}
+
+export function readStoredSupportTicketPreview(): StoredSupportTicketPreview | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SUPPORT_TICKET_PREVIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredSupportTicketPreview;
+    if (
+      !parsed
+      || typeof parsed.threadId !== "string"
+      || typeof parsed.topicLabel !== "string"
+      || typeof parsed.preview !== "string"
+      || typeof parsed.updatedAt !== "string"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function storeSupportTicketPreview(preview: StoredSupportTicketPreview) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SUPPORT_TICKET_PREVIEW_STORAGE_KEY, JSON.stringify(preview));
+  } catch {}
+}
+
+export function clearStoredSupportTicketPreview() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(SUPPORT_TICKET_PREVIEW_STORAGE_KEY);
+  } catch {}
 }
 
 function roomTokenHeaders(channelId: string): Record<string, string> {

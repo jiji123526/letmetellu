@@ -9,15 +9,14 @@ export default async function SupportPage({
   searchParams: Promise<{ thread?: string | string[]; admin?: string | string[] }>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/dashboard?login=true");
-  }
-
   const params = await searchParams;
   const threadParam = Array.isArray(params.thread) ? params.thread[0] : params.thread;
   const adminParam = Array.isArray(params.admin) ? params.admin[0] : params.admin;
 
   if (typeof threadParam === "string" && threadParam && adminParam === "1") {
+    if (!session?.user?.id) {
+      redirect("/dashboard?login=true");
+    }
     return <PlatformSupportThreadPanel threadId={threadParam} />;
   }
 

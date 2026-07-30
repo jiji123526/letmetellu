@@ -14,6 +14,19 @@ import {
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
 
+function formatThreadUserLabel(
+  thread: SupportThreadState | null,
+  anonLabel: string,
+) {
+  if (!thread) return "";
+  if (thread.user_name) return thread.user_name;
+  if (thread.user_email) return thread.user_email;
+  if (thread.user_id.startsWith("anon:")) {
+    return `${anonLabel} #${thread.user_id.slice(5).slice(-6)}`;
+  }
+  return thread.user_id;
+}
+
 export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   const router = useRouter();
   const { t } = useLocale();
@@ -112,7 +125,7 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   return (
     <SupportThreadChat
       title={threadDetail?.entry_topic_label || t("supportMenu")}
-      subtitle={threadDetail ? (threadDetail.user_name || threadDetail.user_email || threadDetail.user_id) : ""}
+      subtitle={formatThreadUserLabel(threadDetail, t("anon"))}
       summary={threadDetail?.summary || ""}
       transcript={sessionDetail?.transcript || []}
       messagesRef={messagesRef}

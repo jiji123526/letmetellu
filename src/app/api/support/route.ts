@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity-cookie";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -11,15 +12,20 @@ export async function POST(request: Request) {
 
 async function forwardSupportRequest(request: Request, method: "GET" | "POST") {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+  const headers: Record<string, string> = {};
+
+  if (session?.user?.id) {
+    headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
+    headers["X-User-Id"] = session.user.id;
   }
 
-  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
-  const headers: Record<string, string> = {
-    "X-Internal-Token": process.env.INTERNAL_SECRET || "",
-    "X-User-Id": session.user.id,
-  };
+  const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
+  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  if (deviceToken) headers["X-Device-Token"] = deviceToken;
+
+  const acceptLanguage = request.headers.get("accept-language");
+  if (acceptLanguage) headers["X-Locale"] = acceptLanguage;
 
   if (method === "GET") {
     const url = new URL(request.url);
@@ -29,7 +35,12 @@ async function forwardSupportRequest(request: Request, method: "GET" | "POST") {
       cache: "no-store",
     });
     const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    const response = NextResponse.json(data, { status: res.status });
+    setIdentityCookies(response, request, {
+      anonymousToken: res.headers.get("X-Anonymous-Token"),
+      deviceToken: res.headers.get("X-Device-Token"),
+    });
+    return response;
   }
 
   const body = await request.json();
@@ -40,5 +51,10 @@ async function forwardSupportRequest(request: Request, method: "GET" | "POST") {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  return NextResponse.json(data, { status: res.status });
+  const response = NextResponse.json(data, { status: res.status });
+  setIdentityCookies(response, request, {
+    anonymousToken: res.headers.get("X-Anonymous-Token"),
+    deviceToken: res.headers.get("X-Device-Token"),
+  });
+  return response;
 }

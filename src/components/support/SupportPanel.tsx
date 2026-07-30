@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   answerSupportSession,
+  clearStoredSupportTicketPreview,
   clearSupportSession,
   fetchSupportState,
   sendSupportThreadMessage,
   startSupportSession,
+  storeSupportTicketPreview,
   type SupportStateResponse,
   type SupportTranscriptEvent,
 } from "@/lib/api";
@@ -74,6 +76,17 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
       setLoading(false);
       return;
+    }
+    if (result.thread) {
+      const latestMessage = result.messages?.[result.messages.length - 1] || null;
+      storeSupportTicketPreview({
+        threadId: result.thread.id,
+        topicLabel: result.thread.entry_topic_label,
+        preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
+        updatedAt: result.thread.updated_at,
+      });
+    } else if (!result.session) {
+      clearStoredSupportTicketPreview();
     }
     if (!result.session && autoStartWhenEmpty && !showThreadView) {
       const started = await startSupportSession();
@@ -176,6 +189,13 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
       if ("thread" in result && result.thread) {
+        const latestMessage = result.messages?.[result.messages.length - 1] || null;
+        storeSupportTicketPreview({
+          threadId: result.thread.id,
+          topicLabel: result.thread.entry_topic_label,
+          preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
+          updatedAt: result.thread.updated_at,
+        });
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("support-ticket-changed"));
         }
@@ -204,16 +224,25 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
       );
     } else {
       const message = result.message;
+      const updatedThread = supportState.thread ? {
+        ...supportState.thread,
+        updated_at: message.created_at,
+        last_message: message.text,
+        can_user_send: false,
+      } : null;
       setSupportState((current) => ({
         ...current,
         messages: [...current.messages, message],
-        thread: current.thread ? {
-          ...current.thread,
-          updated_at: message.created_at,
-          last_message: message.text,
-          can_user_send: false,
-        } : null,
+        thread: updatedThread,
       }));
+      if (updatedThread) {
+        storeSupportTicketPreview({
+          threadId: updatedThread.id,
+          topicLabel: updatedThread.entry_topic_label,
+          preview: message.text,
+          updatedAt: message.created_at,
+        });
+      }
       setThreadDraft("");
       setError("");
     }

@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { decorateMediaUrl, fetchPlatformDashboard, fetchSupportState, type PlatformDashboardResponse } from "@/lib/api";
+import { clearStoredSupportTicketPreview, decorateMediaUrl, fetchPlatformDashboard, fetchSupportState, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -136,7 +136,7 @@ export default function DashboardPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
-  const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(null);
+  const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -264,25 +264,27 @@ export default function DashboardPage() {
   }, [status]);
 
   const loadSupportPreview = useCallback(async () => {
-    if (status !== "authenticated") {
-      setSupportPreview(null);
+    if (status === "loading") {
       return;
     }
     try {
       const result = await fetchSupportState();
       if (result._status >= 400 || !result.thread) {
+        clearStoredSupportTicketPreview();
         setSupportPreview(null);
         return;
       }
       const latestMessage = result.messages?.[result.messages.length - 1] || null;
-      setSupportPreview({
+      const preview = {
         threadId: result.thread.id,
         topicLabel: result.thread.entry_topic_label,
         preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
         updatedAt: result.thread.updated_at,
-      });
+      };
+      storeSupportTicketPreview(preview);
+      setSupportPreview(preview);
     } catch {
-      setSupportPreview(null);
+      setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
     }
   }, [status]);
 
@@ -327,9 +329,11 @@ export default function DashboardPage() {
           loadSupportPreview(),
         ]).finally(() => setLoading(false));
       } else if (status === "unauthenticated") {
-        void loadLocalRecentChannels();
+        void Promise.all([
+          loadLocalRecentChannels(),
+          loadSupportPreview(),
+        ]);
         setPlatformDashboard(null);
-        setSupportPreview(null);
         setLoading(false);
       }
     }, 0);
@@ -337,18 +341,22 @@ export default function DashboardPage() {
   }, [status, session?.user?.id, loadChannels, loadLocalRecentChannels, loadAccountRecentChannels, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status === "loading") return;
     const timer = window.setInterval(() => {
-      void loadPlatformDashboard();
+      if (status === "authenticated") {
+        void loadPlatformDashboard();
+      }
       void loadSupportPreview();
     }, 1000);
     return () => window.clearInterval(timer);
   }, [status, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status === "loading") return;
     const refresh = () => {
-      void loadPlatformDashboard();
+      if (status === "authenticated") {
+        void loadPlatformDashboard();
+      }
       void loadSupportPreview();
     };
     const refreshOnVisible = () => {
@@ -363,9 +371,11 @@ export default function DashboardPage() {
   }, [status, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status === "loading") return;
     const refresh = () => {
-      void loadPlatformDashboard();
+      if (status === "authenticated") {
+        void loadPlatformDashboard();
+      }
       void loadSupportPreview();
     };
     window.addEventListener("support-ticket-changed", refresh as EventListener);

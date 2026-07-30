@@ -66,10 +66,10 @@ export function DashboardHelpMenu({
             WebkitBackdropFilter: "saturate(180%) blur(20px)",
           }}
         >
-          <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: isLoggedIn ? "0.5px solid var(--hairline)" : "none" }} onClick={openUserGuide}>{t("userGuide")}</button>
+          <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={openUserGuide}>{t("userGuide")}</button>
+          <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: isLoggedIn ? "0.5px solid var(--hairline)" : "none" }} onClick={openSupport}>{t("supportMenu")}</button>
           {isLoggedIn && (
             <>
-              <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={openSupport}>{t("supportMenu")}</button>
               <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)" }} onClick={openAdminGuide}>{t("guide")}</button>
             </>
           )}
