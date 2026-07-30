@@ -1,82 +1,61 @@
 # Future Plans
 
-Since the reporting flow is already in place, the next direction should be
-moderation hardening and operations, not more surface features.
+This file tracks remaining product and platform work. It is intentionally forward-looking; implemented changes and deployment history belong in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ## Recommended Order
 
-1. **Abuse controls**  
-   Add durable server-side limits for reports, messages, uploads, and preview
-   fetches. The biggest remaining gap is that some limits are still
-   memory-local or too soft.
+If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
-2. **Moderation audit trail**  
-   Store every freeze, unfreeze, delete, resolve, dismiss, and petition
-   decision in an append-only log. Once moderation affects real users,
-   traceability matters more than new UI.
+1. Durable abuse controls beyond the current first pass.
+2. Monitoring, alerting and operator visibility.
+3. Owner moderation lifecycle polish and regression coverage.
+4. Email and credential-path production hardening.
+5. Dedicated support threads.
 
-3. **Owner moderation lifecycle**  
-   Tighten the full flow for warned or frozen channel owners: `warning` ->
-   `freeze` -> `petition` -> `accept/reject` -> `unfreeze/delete`. This is
-   where product quality will matter most.
+## Remaining Ship Work
 
-4. **Security headers and dependency cleanup**  
-   Add CSP, `nosniff`, referrer policy, frame policy, and HSTS, then do
-   dependency upgrades safely. This is straightforward risk reduction before a
-   wider launch.
+### Abuse controls
 
-5. **Operational visibility**  
-   Add basic metrics and alerts for report volume, moderation actions,
-   `403`/`429`/`5xx` rates, upload failures, and WebSocket auth failures.
+- Expand durable rate limits to broader cross-channel abuse patterns, not just per-route throttles.
+- Add stronger report-target and evidence validation for direct API callers.
+- Keep tightening upload validation toward stricter decoded-type checks.
+- If the platform later exposes safe DNS or IP verification primitives, strengthen preview destination validation beyond hostname rules.
 
-## Not Yet
+### Monitoring and alerts
 
-- Full multi-moderator RBAC
-- A large separate super-admin console
-- A mixed global support inbox inside the current report flow
+- Add dashboards or alerts for `403`, `429` and `5xx` rates.
+- Track moderation action volume, report volume and petition outcomes.
+- Track upload failures, preview failures and WebSocket auth failures.
+- Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
 
-These are worth doing only after the current single-admin moderation flow is
-stable.
+### Email and account hardening
 
-## If The Goal Is To Ship Soon
-
-- Durable quotas and rate limits
-- Audit log
-- Security headers
-- Moderation edge-case testing
-
-## If The Goal Is To Grow The Product
-
-After the hardening work above, the next feature is more likely separate
-support threads, not more reporting UI.
+- Move Resend out of sandbox mode with a verified sending domain.
+- Validate the legacy SHA-256 to PBKDF2 upgrade path end to end in production-like conditions.
+- Continue normal dependency upgrades without using `npm audit fix --force`.
 
 ## 1:1 Support Plan
 
-Build `1:1` support as a dedicated ticket system, separate from reports and
-separate from channel chat.
+Build `1:1` support as a dedicated ticket system, separate from reports and separate from public channel chat.
 
-### MVP Shape
+### MVP shape
 
 - The platform-admin dashboard has two tabs: `Report` and `1:1`.
 - `1:1` shows active support tickets only.
 - One open ticket per user.
-- When the platform admin closes a ticket, it disappears from the user side
-  and from the active admin list.
+- When the platform admin closes a ticket, it disappears from the user side and from the active admin list.
 - Closed tickets stay archived in the database rather than being hard-deleted.
 
-### Recommended Constraints
+### Recommended constraints
 
 - Logged-in users only for the first version.
 - No multi-agent assignment.
 - No reopen flow from the user side.
-- No anonymous support until there is a bearer-thread access model and stronger
-  abuse controls.
+- No anonymous support until there is a stronger bearer-thread access model and better abuse controls.
 
-Logged-in-only is the correct first cut because support access needs stable
-identity. Anonymous support should not rely on browser-local UID or device
-signals.
+Logged-in-only is the correct first cut because support access needs stable identity. Anonymous support should not rely on browser-local UID or device signals.
 
-### User Flow
+### User flow
 
 1. User opens `1:1 Support`.
 2. If the user already has an open ticket, load it.
@@ -85,7 +64,7 @@ signals.
 5. Platform admin closes the ticket when the issue is resolved.
 6. The closed thread is no longer available from the user side.
 
-### Platform-Admin Flow
+### Platform-admin flow
 
 1. Open the dashboard.
 2. Select the `1:1` tab.
@@ -93,7 +72,7 @@ signals.
 4. Open a ticket and reply in-thread.
 5. Close the ticket when done.
 
-### Data Model
+### Data model
 
 `support_threads`
 
@@ -120,7 +99,7 @@ Optional later:
 - `last_read_user_at`
 - `last_read_admin_at`
 
-### API Shape
+### API shape
 
 User-facing routes:
 
@@ -136,7 +115,7 @@ Platform-admin routes:
 - `POST /api/platform-admin/support/messages`
 - `POST /api/platform-admin/support/close`
 
-### UI Shape
+### UI shape
 
 User side:
 
@@ -150,7 +129,7 @@ Platform-admin side:
 - a right conversation panel
 - a `Close ticket` action at the top
 
-### Safety Requirements
+### Safety requirements
 
 Before launch:
 
@@ -160,7 +139,7 @@ Before launch:
 - keep one open ticket per user
 - add a basic audit log for thread creation, admin replies and ticket closure
 
-### Implementation Order
+### Implementation order
 
 1. Add `support_threads` and `support_messages`.
 2. Add user routes for create, load and send.
@@ -169,3 +148,45 @@ Before launch:
 5. Build the user-side support panel.
 6. Add close behavior and archive semantics.
 7. Add rate limits and audit logging.
+
+## Platform Moderation Direction
+
+Current production has a narrow moderation model: one manually bootstrapped reports-inbox owner can review reports, warn owners, freeze or delete channels and resolve owner petitions. The larger delegated moderation system still does not exist.
+
+### Principles
+
+- Platform moderation remains separate from channel ownership.
+- The browser never submits its own trusted role.
+- Vercel can authenticate the session, but the Worker makes the final authorization decision.
+- Sensitive platform actions should live under a dedicated `/api/platform-admin/*` namespace.
+
+### Proposed roles
+
+| Role | Scope |
+| --- | --- |
+| `reviewer` | View reports and evidence, add internal review notes |
+| `moderator` | Resolve reports, warn owners, restrict, suspend and restore channels |
+| `super_admin` | Grant and revoke operator roles, perform destructive or system-level actions |
+
+### Likely data model
+
+- `platform_admins`
+- `channel_reports`
+- `platform_audit_logs`
+
+Reporter network and device signals should stay HMAC-hashed; raw IP addresses and fingerprints should not be retained.
+
+### Delivery phases
+
+1. Finalize report categories, enforcement states and retention policy.
+2. Add role, report and platform-audit migrations.
+3. Implement shared platform-role checks and append-only audit helpers.
+4. Build a dedicated `/platform/reports` queue and detail view.
+5. Add reversible restriction, suspension and restoration actions.
+6. Add owner notifications, appeals and recent re-authentication for sensitive actions.
+
+## Not Next
+
+- Full multi-moderator RBAC before the current single-admin flow is fully stable
+- A large mixed support-plus-reports inbox built on top of the current owner DM model
+- Anonymous support threads before there is a secure bearer-thread access design

@@ -2,6 +2,41 @@
 
 This file records both the original CSS-to-TSX porting constraints and the database/platform changes made during the rebuild.
 
+## Recent implementation updates
+
+### Hardening controls and monitoring — 2026-07-30
+
+This deployment line added the first durable abuse-control and observability pass.
+
+- Added `0021_hardening_controls.sql` with:
+  - `durable_rate_limits`
+  - `moderation_audit_logs`
+  - `operational_events`
+- Replaced isolate-local message, DM and preview throttles with D1-backed durable rate limits.
+- Added a daily durable per-reporter quota for channel reports.
+- Added append-only moderation audit entries for report resolution, warnings, freezes, unfreezes, deletions and petition decisions.
+- Added explicit Worker-side security headers and operational event recording for `429`, `403`, `5xx` and unhandled exceptions.
+- Added focused edge-case tests for rate-limit bucket math and preview URL policy in `worker/tests/hardening.test.ts`.
+
+Deployment notes:
+
+- apply `0021` before deploying the Worker code that reads the new hardening tables;
+- the hardening test command is `cd worker && npm run test:hardening`;
+- local Wrangler D1 commands still depend on the local `workerd` binary, so environment/runtime issues can block local migrations even when the schema itself is valid.
+
+### Chat UI polish — 2026-07-30
+
+This frontend-only line cleaned up recent chat surfaces without changing schema.
+
+- Refined the floating notice banner styling.
+- Capped floating notice banner width.
+- Added explicit text padding for text that shares a bubble with embedded widgets so mixed text-plus-widget bubbles match the media-bubble padding model.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- these are frontend deploys only.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.
@@ -174,6 +209,52 @@ Adds durable upload tracking for chat and DM media:
 Apply `0016` before deploying the Worker version that enforces upload tickets
 for message or DM image attachments.
 
+#### `0017_channel_reports.sql`
+
+Adds durable channel-report storage with reporter identity signals:
+
+- channel ID, reporter UID, optional authenticated reporter ID and optional device ID;
+- structured reason and optional details;
+- channel and reporter indexes for moderation lookup and duplicate detection.
+
+#### `0018_channel_report_status.sql`
+
+Extends `channel_reports` with moderation workflow state:
+
+- `status`
+- `resolution_note`
+- `resolved_at`
+- `inbox_message_id`
+
+This migration supports the private reports inbox workflow and lets the Worker
+sync an inbox message with the current report status.
+
+#### `0019_channel_moderation.sql`
+
+Adds owner-moderation state and petition storage:
+
+- `channel_moderation` tracks warning, suspension and freeze state;
+- `channel_petitions` stores owner appeals tied to a moderated channel.
+
+This migration enables warning, freeze, petition review and explicit
+unfreeze/reject flows without overloading the base `channels` table.
+
+#### `0020_user_locale.sql`
+
+Adds `users.locale` so account-backed UI can persist a preferred language
+instead of relying only on browser-local detection.
+
+#### `0021_hardening_controls.sql`
+
+Adds the first dedicated hardening and observability tables:
+
+- `durable_rate_limits` for D1-backed route throttles and quotas;
+- `moderation_audit_logs` for append-only privileged-action history;
+- `operational_events` for lightweight request-failure and abuse telemetry.
+
+Apply `0021` before deploying Worker code that enforces durable rate limits or
+writes moderation or operational logs.
+
 ### Operational checks
 
 After a migration:
@@ -230,9 +311,8 @@ paths without adding a new migration:
 - The preview Worker route now accepts only absolute `http:`/`https:` URLs,
   blocks obvious local/private/internal hostnames, follows redirects manually
   with per-hop validation, enforces a short timeout, requires HTML-compatible
-  content and caps the body size before OG parsing. The current caller rate
-  limit is still isolate-local memory, so it is best-effort rather than
-  durable.
+  content and caps the body size before OG parsing. This initial route
+  hardening later gained D1-backed durable caller rate limits on 2026-07-30.
 - When room access is revoked or expires, the chat view now re-fetches the
   gated `init` payload before showing the passcode overlay. This ensures the
   latest `passcodeHint` appears immediately instead of only after a full page
@@ -433,10 +513,20 @@ Trade-offs of historical context mode:
 - Continued two-way scrolling grows the in-memory React message list in 50-message pages. It avoids unbounded request loops but does not virtualize an extremely long reading session.
 - Failed access tokens, deleted targets and network errors cannot resolve the requested message.
 
+### Moderation and hardening follow-through — 2026-07-29 to 2026-07-30
+
+- Added same-origin channel-report submission, duplicate report cooldowns and a private reports inbox with inline moderation actions.
+- Added owner freeze petitions plus explicit petition accept, reject and unfreeze flows.
+- Added D1-backed durable quotas and rate limits for reports, messages, DMs and preview fetches.
+- Added append-only moderation audit logs and operational event capture for abuse and failure signals.
+- Added explicit Worker security headers and focused hardening tests.
+- Polished recent chat UI details including floating notice banner sizing and text padding for mixed text-plus-widget bubbles.
+
 ### Security audit — 2026-07-26
 
 This audit started as a list of open findings. Status notes below were updated
-after the 2026-07-29 hardening work so the remaining gaps are clear.
+after the 2026-07-29 and 2026-07-30 hardening work so the remaining gaps are
+clear.
 
 #### P0 — signed anonymous identity and block persistence
 
@@ -487,9 +577,9 @@ Most of this item is now implemented:
 Remaining gap:
 
 - Channel reports now enforce server-side reporter identity, same-channel
-  duplicate prevention and a 24-hour cooldown.
-- Remaining work is durable daily per-reporter quotas, broader cross-channel
-  abuse throttling and direct-API regression coverage around report policy.
+  duplicate prevention, a 24-hour cooldown and a durable daily quota.
+- Remaining work is broader cross-channel abuse throttling and direct-API
+  regression coverage around report policy.
 
 #### P1 — preview fetch isolation
 
@@ -504,20 +594,29 @@ The preview endpoint must:
 - require an HTML-compatible content type;
 - apply durable caller/IP rate limits and cache successful results.
 
-The first six controls above were implemented on 2026-07-29. Remaining gaps:
+The first six controls above were implemented on 2026-07-29, and durable
+caller rate limiting was added on 2026-07-30. Remaining gaps:
 
-- caller rate limiting is still isolate-local rather than durable;
-- destination blocking is hostname-based and does not perform independent DNS
-  or post-resolution private-IP validation.
+- destination blocking is still hostname-based and does not perform
+  independent DNS or post-resolution private-IP validation;
+- successful results should continue to stay tightly bounded and cached only
+  within the intended preview policy.
 
 An allowlist for supported native providers is still safer than unrestricted
 arbitrary-site previewing.
 
 #### P2 — headers and dependencies
 
-Add and test CSP, `X-Content-Type-Options: nosniff`, Referrer Policy,
-Permissions Policy, frame restrictions and HSTS. CSP must account for the
-Twitter and Instagram scripts/frames already used by the client.
+Most response-header work is now in place:
+
+- the Next.js app already defines a broader header policy;
+- the Worker now also applies `nosniff`, Referrer Policy, Permissions Policy,
+  frame restrictions and HSTS on HTTPS responses.
+
+Remaining work:
+
+- keep CSP coverage tested against the Twitter and Instagram widget domains;
+- continue dependency upgrades without using forced audit downgrades.
 
 The production dependency audit reported:
 
@@ -535,12 +634,9 @@ repeat `npm audit --omit=dev`.
 
 #### Remediation order and verification
 
-1. Durable report quotas and abuse throttling; add direct-API tests with the
-   UI bypassed.
-2. Durable rate limiting, including preview callers, plus redirect and
-   oversized-body fixtures.
-3. Response security headers.
-4. Dependency upgrades, followed by widget tests.
+1. Broader abuse throttling and direct-API tests with the UI bypassed.
+2. Stronger preview-destination validation plus redirect and oversized-body fixtures.
+3. Dependency upgrades, followed by widget tests.
 
 Every remediation should be deployed Worker-first when the frontend depends on
 new enforcement or token issuance. Keep backward compatibility bounded and
