@@ -1,4 +1,5 @@
 import { clearRoomTokenCookie, setRoomTokenCookie } from "./room-token-cookie";
+import { en, ko } from "./locales";
 
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
@@ -8,6 +9,20 @@ type UploadResult = { url: string; uploadId?: string };
 type SupportNodeKind = "choice" | "text" | "escalate" | "terminal";
 type SupportSessionStatus = "open" | "resolved" | "escalated" | "abandoned";
 type SupportThreadStatus = "open" | "closed";
+type AppLocale = "ko" | "en";
+type SupportMockLocaleKey =
+  | "supportMockStartPrompt"
+  | "supportMockTopicLogin"
+  | "supportMockTopicOther"
+  | "supportMockLoginDetails"
+  | "supportMockOtherDetails"
+  | "supportMockDescribeIssue"
+  | "supportMockContinue"
+  | "supportMockEscalatePrompt"
+  | "supportMockContactSupport"
+  | "supportMockResolved"
+  | "supportMockSummary"
+  | "supportMockUserName";
 
 export interface SupportChoice {
   id: string;
@@ -104,76 +119,101 @@ export interface PlatformSupportSessionResponse {
 
 type SupportApiResult<T extends object> = T & { _status: number };
 
-const mockSupportNodes: Record<string, SupportNodeState> = {
-  start: {
-    id: "start",
-    kind: "choice",
-    messages: ["Tell me what you need help with first."],
-    choices: [
-      { id: "topic-login", label: "Login or account", next: "login-details", topic: "login" },
-      { id: "topic-other", label: "Other", next: "other-details", topic: "other" },
-    ],
-    placeholder: "",
-    submitLabel: "",
-    escalationLabel: "",
-    resolution: null,
-  },
-  "login-details": {
-    id: "login-details",
-    kind: "text",
-    messages: ["Describe the login issue and what you already tried."],
-    choices: [],
-    placeholder: "Describe the issue",
-    submitLabel: "Continue",
-    escalationLabel: "",
-    resolution: null,
-  },
-  "other-details": {
-    id: "other-details",
-    kind: "text",
-    messages: ["Describe the issue and what you expected to happen."],
-    choices: [],
-    placeholder: "Describe the issue",
-    submitLabel: "Continue",
-    escalationLabel: "",
-    resolution: null,
-  },
-  "login-escalate": {
-    id: "login-escalate",
-    kind: "escalate",
-    messages: ["I can send this case to support."],
-    choices: [],
-    placeholder: "",
-    submitLabel: "",
-    escalationLabel: "Contact support",
-    resolution: "needs_handoff",
-  },
-  "other-escalate": {
-    id: "other-escalate",
-    kind: "escalate",
-    messages: ["I can send this case to support."],
-    choices: [],
-    placeholder: "",
-    submitLabel: "",
-    escalationLabel: "Contact support",
-    resolution: "needs_handoff",
-  },
-  resolved: {
-    id: "resolved",
-    kind: "terminal",
-    messages: ["Glad that helped."],
-    choices: [],
-    placeholder: "",
-    submitLabel: "",
-    escalationLabel: "",
-    resolution: "resolved",
-  },
-};
-
 let mockSupportSession: SupportSessionState | null = null;
 let mockSupportThread: SupportThreadState | null = null;
 let mockSupportMessages: SupportMessage[] = [];
 let mockSupportTranscript: SupportTranscriptEvent[] = [];
+
+function getCurrentLocale(): AppLocale {
+  if (typeof window === "undefined") return "ko";
+  try {
+    const savedLocale = localStorage.getItem("locale");
+    if (savedLocale === "ko" || savedLocale === "en") {
+      return savedLocale;
+    }
+  } catch {}
+  return navigator.language.toLowerCase().startsWith("ko") ? "ko" : "en";
+}
+
+function getMockSupportText(key: SupportMockLocaleKey): string {
+  const locale = getCurrentLocale();
+  const locales = locale === "en" ? en : ko;
+  return locales[key];
+}
+
+function getMockSupportTopicLabel(topic: string | null): string {
+  if (topic === "login") return getMockSupportText("supportMockTopicLogin");
+  if (topic === "other") return getMockSupportText("supportMockTopicOther");
+  return getCurrentLocale() === "en" ? en.supportTitle : ko.supportTitle;
+}
+
+function buildMockSupportNodes(): Record<string, SupportNodeState> {
+  return {
+    start: {
+      id: "start",
+      kind: "choice",
+      messages: [getMockSupportText("supportMockStartPrompt")],
+      choices: [
+        { id: "topic-login", label: getMockSupportText("supportMockTopicLogin"), next: "login-details", topic: "login" },
+        { id: "topic-other", label: getMockSupportText("supportMockTopicOther"), next: "other-details", topic: "other" },
+      ],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: "",
+      resolution: null,
+    },
+    "login-details": {
+      id: "login-details",
+      kind: "text",
+      messages: [getMockSupportText("supportMockLoginDetails")],
+      choices: [],
+      placeholder: getMockSupportText("supportMockDescribeIssue"),
+      submitLabel: getMockSupportText("supportMockContinue"),
+      escalationLabel: "",
+      resolution: null,
+    },
+    "other-details": {
+      id: "other-details",
+      kind: "text",
+      messages: [getMockSupportText("supportMockOtherDetails")],
+      choices: [],
+      placeholder: getMockSupportText("supportMockDescribeIssue"),
+      submitLabel: getMockSupportText("supportMockContinue"),
+      escalationLabel: "",
+      resolution: null,
+    },
+    "login-escalate": {
+      id: "login-escalate",
+      kind: "escalate",
+      messages: [getMockSupportText("supportMockEscalatePrompt")],
+      choices: [],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: getMockSupportText("supportMockContactSupport"),
+      resolution: "needs_handoff",
+    },
+    "other-escalate": {
+      id: "other-escalate",
+      kind: "escalate",
+      messages: [getMockSupportText("supportMockEscalatePrompt")],
+      choices: [],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: getMockSupportText("supportMockContactSupport"),
+      resolution: "needs_handoff",
+    },
+    resolved: {
+      id: "resolved",
+      kind: "terminal",
+      messages: [getMockSupportText("supportMockResolved")],
+      choices: [],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: "",
+      resolution: "resolved",
+    },
+  };
+}
 
 function createMockSupportEvent(
   event_type: SupportTranscriptEvent["event_type"],
@@ -190,6 +230,7 @@ function createMockSupportEvent(
 }
 
 function getMockSupportNode(nodeId: string | null | undefined): SupportNodeState | null {
+  const mockSupportNodes = buildMockSupportNodes();
   return nodeId ? mockSupportNodes[nodeId] || null : null;
 }
 
@@ -536,12 +577,13 @@ export async function startSupportSession() {
       return { ...getMockSupportState(), _status: 200 };
     }
     if (!mockSupportSession) {
+      const mockSupportNodes = buildMockSupportNodes();
       const createdAt = new Date().toISOString();
       mockSupportSession = {
         id: crypto.randomUUID(),
         status: "open",
         entry_topic: null,
-        entry_topic_label: "Support",
+        entry_topic_label: getMockSupportTopicLabel(null),
         current_node_id: "start",
         resolved_via_tree: false,
         escalated_thread_id: null,
@@ -602,7 +644,7 @@ export async function answerSupportSession(payload: {
     mockSupportSession = {
       ...mockSupportSession,
       entry_topic: entryTopic,
-      entry_topic_label: entryTopic === "login" ? "Login or account" : entryTopic === "other" ? "Other" : "Support",
+      entry_topic_label: getMockSupportTopicLabel(entryTopic),
       current_node_id: nextNode.id,
       status: nextNode.kind === "terminal" ? "resolved" : "open",
       resolved_via_tree: nextNode.kind === "terminal",
@@ -642,15 +684,15 @@ export async function escalateSupportSession(sessionId: string) {
       source_session_id: mockSupportSession.id,
       entry_topic: mockSupportSession.entry_topic,
       entry_topic_label: mockSupportSession.entry_topic_label,
-      summary: "Mock support summary",
+      summary: getMockSupportText("supportMockSummary"),
       status: "open",
       created_at: createdAt,
       updated_at: createdAt,
       closed_at: null,
       closed_by: null,
-      user_name: "Mock User",
+      user_name: getMockSupportText("supportMockUserName"),
       user_email: "mock@example.com",
-      last_message: "Mock support summary",
+      last_message: getMockSupportText("supportMockSummary"),
     };
     mockSupportMessages = [{
       id: crypto.randomUUID(),
