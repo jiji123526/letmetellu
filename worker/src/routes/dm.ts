@@ -2,10 +2,13 @@ import { Env } from "../types";
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { isReportsChannel } from "../lib/special-channels";
 import { attachUploadTicket } from "../lib/upload-tickets";
-import { checkBannedWords, checkMessageLength, checkRateLimit, getChannelPasscodeInfo } from "../lib/validation";
+import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation";
+import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 import { authorizeRoomToken } from "./passcode";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
+const DM_RATE_LIMIT_WINDOW_MS = 10_000;
+const DM_RATE_LIMIT_MAX = 5;
 
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
@@ -62,7 +65,14 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
 
-    if (!checkRateLimit(requesterUid)) {
+    const dmRateLimit = await consumeDurableRateLimit({
+      env,
+      scope: "dm-send",
+      subjectKey: `${parentChannelId}:${requesterUid}:${requesterDeviceId || "unknown"}`,
+      limit: DM_RATE_LIMIT_MAX,
+      windowMs: DM_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!dmRateLimit.ok) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
 

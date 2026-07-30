@@ -1,4 +1,6 @@
 import { Env } from "../types";
+import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable-rate-limit";
+import { assertAllowedPreviewUrl, PreviewError } from "../lib/preview-policy";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
 const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
@@ -6,100 +8,10 @@ const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
 
-const previewRateLimit = new Map<string, number[]>();
-let lastPreviewRateLimitCleanup = 0;
-
-class PreviewError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
-  }
-}
-
-function normalizeHostname(hostname: string): string {
-  return hostname.toLowerCase().replace(/\.$/, "");
-}
-
-function isIpv4Literal(hostname: string): boolean {
-  const parts = hostname.split(".");
-  return parts.length === 4 && parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
-}
-
-function isIpv6Literal(hostname: string): boolean {
-  const normalized = hostname.replace(/^\[/, "").replace(/\]$/, "");
-  return normalized.includes(":");
-}
-
-function isPrivateIpv4(hostname: string): boolean {
-  if (!isIpv4Literal(hostname)) return false;
-  const [a, b] = hostname.split(".").map(Number);
-  return a === 0
-    || a === 10
-    || a === 127
-    || (a === 169 && b === 254)
-    || (a === 172 && b >= 16 && b <= 31)
-    || (a === 192 && b === 168);
-}
-
-function isBlockedHostname(hostname: string): boolean {
-  const normalized = normalizeHostname(hostname);
-  if (!normalized || normalized === "localhost") return true;
-  if (normalized.endsWith(".localhost") || normalized.endsWith(".local") || normalized.endsWith(".internal")) {
-    return true;
-  }
-  if (normalized === "metadata.google.internal" || normalized.endsWith(".home.arpa")) {
-    return true;
-  }
-  if (!normalized.includes(".")) return true;
-  if (isPrivateIpv4(normalized)) return true;
-  if (isIpv6Literal(normalized)) return true;
-  return false;
-}
-
-function assertAllowedPreviewUrl(rawUrl: string): URL {
-  let parsed: URL;
-  try {
-    parsed = new URL(rawUrl);
-  } catch {
-    throw new PreviewError("invalid url", 400);
-  }
-
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new PreviewError("unsupported url scheme", 400);
-  }
-  if (parsed.username || parsed.password) {
-    throw new PreviewError("credentials not allowed", 400);
-  }
-  if (isBlockedHostname(parsed.hostname)) {
-    throw new PreviewError("blocked preview host", 400);
-  }
-
-  return parsed;
-}
-
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
     || request.headers.get("X-Client-IP")
     || "unknown";
-}
-
-function enforcePreviewRateLimit(request: Request): boolean {
-  const now = Date.now();
-  if (now - lastPreviewRateLimitCleanup > PREVIEW_RATE_LIMIT_WINDOW_MS) {
-    lastPreviewRateLimitCleanup = now;
-    for (const [ip, timestamps] of previewRateLimit.entries()) {
-      const recent = timestamps.filter((timestamp) => now - timestamp < PREVIEW_RATE_LIMIT_WINDOW_MS);
-      if (recent.length === 0) previewRateLimit.delete(ip);
-      else previewRateLimit.set(ip, recent);
-    }
-  }
-
-  const ip = getPreviewRequestIp(request);
-  const timestamps = previewRateLimit.get(ip) || [];
-  const recent = timestamps.filter((timestamp) => now - timestamp < PREVIEW_RATE_LIMIT_WINDOW_MS);
-  if (recent.length >= PREVIEW_RATE_LIMIT_MAX) return false;
-  recent.push(now);
-  previewRateLimit.set(ip, recent);
-  return true;
 }
 
 function isRedirectStatus(status: number): boolean {
@@ -195,13 +107,19 @@ async function fetchYouTubeOEmbed(videoId: string): Promise<{ title?: string; au
 }
 
 export async function handlePreview(request: Request, env: Env): Promise<Response> {
-  void env;
-
   const rawUrl = new URL(request.url).searchParams.get("url");
   if (!rawUrl) {
     return Response.json({ error: "url parameter required" }, { status: 400 });
   }
-  if (!enforcePreviewRateLimit(request)) {
+  const previewSubject = await hashRateLimitIdentifier("preview-ip", getPreviewRequestIp(request), env);
+  const previewRateLimit = await consumeDurableRateLimit({
+    env,
+    scope: "preview-fetch",
+    subjectKey: previewSubject,
+    limit: PREVIEW_RATE_LIMIT_MAX,
+    windowMs: PREVIEW_RATE_LIMIT_WINDOW_MS,
+  });
+  if (!previewRateLimit.ok) {
     return Response.json({ error: "preview_rate_limited" }, { status: 429 });
   }
 

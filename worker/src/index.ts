@@ -12,6 +12,7 @@ import { handlePreview } from "./routes/preview";
 import { handleVerifyPasscode } from "./routes/passcode";
 import { handleRecentChannels } from "./routes/recent-channels";
 import { handleChannelReports } from "./routes/channel-reports";
+import { recordOperationalEvent } from "./lib/operational-events";
 
 export { ChatRoom };
 
@@ -26,17 +27,60 @@ function corsHeaders(origin: string, allowedOrigin: string): HeadersInit {
   };
 }
 
+function securityHeaders(request: Request): HeadersInit {
+  const headers: Record<string, string> = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), browsing-topics=()",
+    "X-Frame-Options": "DENY",
+  };
+  if (new URL(request.url).protocol === "https:") {
+    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload";
+  }
+  return headers;
+}
+
+function appendVary(headers: Headers, value: string): void {
+  const existing = headers.get("Vary");
+  if (!existing) {
+    headers.set("Vary", value);
+    return;
+  }
+  const values = existing.split(",").map((entry) => entry.trim().toLowerCase());
+  if (!values.includes(value.toLowerCase())) {
+    headers.set("Vary", `${existing}, ${value}`);
+  }
+}
+
+function buildResponse(request: Request, response: Response, origin: string, allowedOrigin: string): Response {
+  const headers = new Headers(response.headers);
+  Object.entries(corsHeaders(origin, allowedOrigin)).forEach(([key, value]) => {
+    if (value) headers.set(key, value);
+    else headers.delete(key);
+  });
+  Object.entries(securityHeaders(request)).forEach(([key, value]) => {
+    headers.set(key, value);
+  });
+  appendVary(headers, "Origin");
+
+  return new Response(response.body, {
+    status: response.status,
+    headers,
+  });
+}
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") || "";
+    const route = `${request.method} ${url.pathname}`;
 
     // Handle CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, {
+      return buildResponse(request, new Response(null, {
         status: 204,
         headers: corsHeaders(origin, env.ALLOWED_ORIGIN),
-      });
+      }), origin, env.ALLOWED_ORIGIN);
     }
 
     // WebSocket upgrade → route to Durable Object
@@ -54,6 +98,7 @@ export default {
 
     // API routes
     let response: Response;
+    let capturedUnhandledException = false;
 
     try {
       if (url.pathname.startsWith("/api/messages")) {
@@ -88,18 +133,53 @@ export default {
       }
     } catch (err) {
       console.error(err);
+      capturedUnhandledException = true;
+      ctx.waitUntil(recordOperationalEvent({
+        env,
+        severity: "error",
+        route,
+        eventType: "unhandled_exception",
+        statusCode: 500,
+        actorUserId: request.headers.get("X-User-Id"),
+        detail: {
+          path: url.pathname,
+          method: request.method,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      }));
       response = Response.json({ error: "internal_error" }, { status: 500 });
     }
 
-    // Attach CORS headers to response
-    const headers = new Headers(response.headers);
-    Object.entries(corsHeaders(origin, env.ALLOWED_ORIGIN)).forEach(([k, v]) => {
-      headers.set(k, v);
-    });
+    if (response.status === 429) {
+      ctx.waitUntil(recordOperationalEvent({
+        env,
+        severity: "warn",
+        route,
+        eventType: "rate_limited",
+        statusCode: response.status,
+        actorUserId: request.headers.get("X-User-Id"),
+      }));
+    } else if (response.status === 403) {
+      ctx.waitUntil(recordOperationalEvent({
+        env,
+        severity: "warn",
+        route,
+        eventType: "forbidden",
+        statusCode: response.status,
+        actorUserId: request.headers.get("X-User-Id"),
+      }));
+    } else if (response.status >= 500) {
+      ctx.waitUntil(recordOperationalEvent({
+        env,
+        severity: "error",
+        route,
+        eventType: "request_failed",
+        statusCode: response.status,
+        actorUserId: request.headers.get("X-User-Id"),
+        detail: capturedUnhandledException ? { source: "unhandled_exception" } : undefined,
+      }));
+    }
 
-    return new Response(response.body, {
-      status: response.status,
-      headers,
-    });
+    return buildResponse(request, response, origin, env.ALLOWED_ORIGIN);
   },
 };

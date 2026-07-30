@@ -2,10 +2,14 @@ import { Env } from "../types";
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation";
 import { isReportsChannel } from "../lib/special-channels";
-import { checkRateLimit, checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
+import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
+import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 import { authorizeRoomToken } from "./passcode";
+
+const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
+const MESSAGE_RATE_LIMIT_MAX = 5;
 
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
@@ -85,8 +89,14 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
 
-    // Rate limit check
-    if (!checkRateLimit(requesterUid)) {
+    const messageRateLimit = await consumeDurableRateLimit({
+      env,
+      scope: "message-send",
+      subjectKey: `${parentChannelId}:${requesterUid}:${requesterDeviceId || "owner"}`,
+      limit: MESSAGE_RATE_LIMIT_MAX,
+      windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!messageRateLimit.ok) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
 
@@ -309,7 +319,14 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
 
-    if (!checkRateLimit(requesterUid)) {
+    const editRateLimit = await consumeDurableRateLimit({
+      env,
+      scope: "message-edit",
+      subjectKey: `${editParent}:${requesterUid}:${requesterDeviceId || "owner"}`,
+      limit: MESSAGE_RATE_LIMIT_MAX,
+      windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
+    });
+    if (!editRateLimit.ok) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
 

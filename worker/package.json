@@ -6,7 +6,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply letsplay-db --local",
-    "db:migrate:prod": "wrangler d1 migrations apply letsplay-db --remote"
+    "db:migrate:prod": "wrangler d1 migrations apply letsplay-db --remote",
+    "test:hardening": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260721.0",

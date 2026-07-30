@@ -14,6 +14,8 @@ import {
   setChannelModeration,
   type UserLocale,
 } from "../lib/channel-moderation";
+import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import { appendModerationAuditLog } from "../lib/moderation-audit";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { Env } from "../types";
 import { deleteChannel } from "./admin";
@@ -52,9 +54,23 @@ const REPORT_REASON_LABELS: Record<UserLocale, Record<string, string>> = {
 
 const MAX_DETAILS_LENGTH = 500;
 const REPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const REPORT_DAILY_LIMIT = 3;
+const REPORT_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const REPORT_STATUSES = new Set(["open", "resolved", "dismissed"]);
 const PETITION_STATUSES = new Set(["open", "accepted", "rejected"]);
 const MODERATION_STATUSES = new Set(["active", "warned", "suspended", "frozen"]);
+
+function buildReporterQuotaSubjectKey(input: {
+  isVerifiedUser: boolean;
+  verifiedUserId: string;
+  anonymousUid: string;
+  requesterDeviceId: string | null;
+}): string {
+  if (input.isVerifiedUser) {
+    return `auth:${input.verifiedUserId}`;
+  }
+  return `anon:${input.anonymousUid}:${input.requesterDeviceId || "unknown"}`;
+}
 
 export interface ReportMeta {
   report_id: string;
@@ -567,6 +583,25 @@ async function handleReportResolutionAction(input: {
     WHERE id = ? AND status = 'open'
   `).bind(nextStatus, input.resolutionNote || null, resolvedAt, input.reportId).run();
 
+  await appendModerationAuditLog({
+    env: input.env,
+    actorUserId: input.actorUserId,
+    action: input.action === "resolve" ? "report_resolved" : "report_dismissed",
+    targetType: "channel_report",
+    targetId: existing.id,
+    reason: input.resolutionNote || null,
+    before: {
+      status: existing.status,
+      resolution_note: existing.resolution_note,
+      resolved_at: existing.resolved_at,
+    },
+    after: {
+      status: nextStatus,
+      resolution_note: input.resolutionNote || null,
+      resolved_at: resolvedAt,
+    },
+  });
+
   const synced = await syncReportInboxMessage(input.reportId, input.env, input.actorLocale);
   if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
@@ -594,10 +629,13 @@ async function handleModerationAction(input: {
   }
 
   const moderation = await getChannelModeration(existing.channel_id, input.env);
+  const moderationBefore = { ...moderation };
   const ownerLocale = await getUserLocale(existing.channel_owner_uid, input.env);
 
   if (input.action === "warn_owner") {
     const warnedAt = new Date().toISOString();
+    const nextStatus = moderation.status === "active" ? "warned" : moderation.status;
+    const warnedReportCount = Math.max(moderation.warned_report_count, await countOpenChannelReports(existing.channel_id, input.env));
     await sendOwnerModerationNotice({
       env: input.env,
       channelId: existing.channel_id,
@@ -617,19 +655,36 @@ async function handleModerationAction(input: {
           ].join("\n"),
     });
     await setChannelModeration(existing.channel_id, {
-      status: moderation.status === "active" ? "warned" : moderation.status,
+      status: nextStatus,
       warning_sent_at: warnedAt,
-      warned_report_count: Math.max(moderation.warned_report_count, await countOpenChannelReports(existing.channel_id, input.env)),
+      warned_report_count: warnedReportCount,
     }, input.env);
     await broadcastModerationStateChange(
       existing.channel_id,
-      moderation.status === "active" ? "warned" : moderation.status,
+      nextStatus,
       input.env,
     );
+    await appendModerationAuditLog({
+      env: input.env,
+      actorUserId: input.actorUserId,
+      action: "warn_owner",
+      targetType: "channel",
+      targetId: existing.channel_id,
+      reason: input.resolutionNote || null,
+      before: moderationBefore,
+      after: {
+        ...moderationBefore,
+        status: nextStatus,
+        warning_sent_at: warnedAt,
+        warned_report_count: warnedReportCount,
+      },
+    });
   }
 
   if (input.action === "send_suspend_notice") {
     const suspensionSentAt = new Date().toISOString();
+    const nextStatus = isOwnerModerationBlocked(moderation) ? moderation.status : "suspended";
+    const suspensionReason = input.resolutionNote || reportReasonLabel(existing.reason, ownerLocale);
     await sendOwnerModerationNotice({
       env: input.env,
       channelId: existing.channel_id,
@@ -649,15 +704,30 @@ async function handleModerationAction(input: {
           ].join("\n"),
     });
     await setChannelModeration(existing.channel_id, {
-      status: isOwnerModerationBlocked(moderation) ? moderation.status : "suspended",
+      status: nextStatus,
       suspension_notice_sent_at: suspensionSentAt,
-      suspension_reason: input.resolutionNote || reportReasonLabel(existing.reason, ownerLocale),
+      suspension_reason: suspensionReason,
     }, input.env);
     await broadcastModerationStateChange(
       existing.channel_id,
-      isOwnerModerationBlocked(moderation) ? moderation.status : "suspended",
+      nextStatus,
       input.env,
     );
+    await appendModerationAuditLog({
+      env: input.env,
+      actorUserId: input.actorUserId,
+      action: "send_suspend_notice",
+      targetType: "channel",
+      targetId: existing.channel_id,
+      reason: input.resolutionNote || null,
+      before: moderationBefore,
+      after: {
+        ...moderationBefore,
+        status: nextStatus,
+        suspension_notice_sent_at: suspensionSentAt,
+        suspension_reason: suspensionReason,
+      },
+    });
   }
 
   if (input.action === "freeze_channel") {
@@ -697,6 +767,25 @@ async function handleModerationAction(input: {
     });
     await broadcastFreezeChange(existing.channel_id, true, input.env);
     await broadcastModerationStateChange(existing.channel_id, "frozen", input.env);
+    await appendModerationAuditLog({
+      env: input.env,
+      actorUserId: input.actorUserId,
+      action: "freeze_channel",
+      targetType: "channel",
+      targetId: existing.channel_id,
+      reason: input.resolutionNote || null,
+      before: moderationBefore,
+      after: {
+        ...moderationBefore,
+        status: "frozen",
+        suspension_notice_sent_at: frozenAt,
+        frozen_at: frozenAt,
+        frozen_by: input.actorUserId,
+        petition_status: "none",
+        current_petition_id: null,
+        suspension_reason: input.resolutionNote || moderation.suspension_reason,
+      },
+    });
   }
 
   if (input.action === "unfreeze_channel") {
@@ -731,6 +820,23 @@ async function handleModerationAction(input: {
     });
     await broadcastFreezeChange(existing.channel_id, false, input.env);
     await broadcastModerationStateChange(existing.channel_id, "active", input.env);
+    await appendModerationAuditLog({
+      env: input.env,
+      actorUserId: input.actorUserId,
+      action: "unfreeze_channel",
+      targetType: "channel",
+      targetId: existing.channel_id,
+      reason: input.resolutionNote || null,
+      before: moderationBefore,
+      after: {
+        ...moderationBefore,
+        status: "active",
+        suspension_notice_sent_at: null,
+        suspension_reason: null,
+        frozen_at: null,
+        frozen_by: null,
+      },
+    });
   }
 
   if (input.action === "delete_channel") {
@@ -754,6 +860,19 @@ async function handleModerationAction(input: {
         text: deletedText,
       });
     }
+    await appendModerationAuditLog({
+      env: input.env,
+      actorUserId: input.actorUserId,
+      action: "delete_channel",
+      targetType: "channel",
+      targetId: existing.channel_id,
+      reason: input.resolutionNote || null,
+      before: moderationBefore,
+      after: {
+        deleted: true,
+        report_status: existing.status,
+      },
+    });
     await deleteChannel(existing.channel_id, input.env);
     return Response.json({
       ok: true,
@@ -794,9 +913,9 @@ async function handleChannelPetitionAction(input: {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
   }
   const ownerLocale = await getUserLocale(petition.owner_uid, input.env);
+  const moderationBefore = await getChannelModeration(petition.channel_id, input.env);
   if (input.action === "unfreeze_channel") {
-    const moderation = await getChannelModeration(petition.channel_id, input.env);
-    if (moderation.status !== "frozen") {
+    if (moderationBefore.status !== "frozen") {
       return Response.json({ error: "channel_not_frozen" }, { status: 409 });
     }
 
@@ -831,6 +950,41 @@ async function handleChannelPetitionAction(input: {
     await broadcastFreezeChange(petition.channel_id, false, input.env);
     await broadcastModerationStateChange(petition.channel_id, "active", input.env);
     await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
+    await appendModerationAuditLog({
+      env: input.env,
+      actorUserId: input.actorUserId,
+      action: "unfreeze_channel",
+      targetType: "channel",
+      targetId: petition.channel_id,
+      reason: input.resolutionNote || null,
+      before: {
+        petition: {
+          id: petition.id,
+          status: petition.status,
+          resolved_at: petition.resolved_at,
+          resolution_note: petition.resolution_note,
+        },
+        moderation: moderationBefore,
+      },
+      after: {
+        petition: {
+          id: petition.id,
+          status: petition.status,
+          resolved_at: petition.resolved_at,
+          resolution_note: petition.resolution_note,
+        },
+        moderation: {
+          ...moderationBefore,
+          status: "active",
+          suspension_notice_sent_at: null,
+          suspension_reason: null,
+          frozen_at: null,
+          frozen_by: null,
+          petition_status: petition.status,
+          current_petition_id: petition.id,
+        },
+      },
+    });
 
     const updated = await fetchChannelPetitionById(petition.id, input.env);
     if (!updated) {
@@ -922,6 +1076,49 @@ async function handleChannelPetitionAction(input: {
     });
     await broadcastModerationStateChange(petition.channel_id, "frozen", input.env);
   }
+
+  await appendModerationAuditLog({
+    env: input.env,
+    actorUserId: input.actorUserId,
+    action: nextStatus === "accepted" ? "accept_petition" : "reject_petition",
+    targetType: "channel_petition",
+    targetId: petition.id,
+    reason: input.resolutionNote || null,
+    before: {
+      petition: {
+        status: petition.status,
+        resolved_at: petition.resolved_at,
+        resolved_by: petition.resolved_by,
+        resolution_note: petition.resolution_note,
+      },
+      moderation: moderationBefore,
+    },
+    after: {
+      petition: {
+        status: nextStatus,
+        resolved_at: resolvedAt,
+        resolved_by: input.actorUserId,
+        resolution_note: input.resolutionNote || null,
+      },
+      moderation: nextStatus === "accepted"
+        ? {
+            ...moderationBefore,
+            status: "active",
+            suspension_notice_sent_at: null,
+            suspension_reason: null,
+            frozen_at: null,
+            frozen_by: null,
+            petition_status: "accepted",
+            current_petition_id: petition.id,
+          }
+        : {
+            ...moderationBefore,
+            status: "frozen",
+            petition_status: "rejected",
+            current_petition_id: petition.id,
+          },
+    },
+  });
 
   await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
 
@@ -1121,6 +1318,22 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
       ).bind(channelId, anonymousUid, requesterDeviceId || "", cooldownCutoff).first<{ id: string }>();
   if (duplicate) {
     return Response.json({ error: "report_exists" }, { status: 409 });
+  }
+
+  const dailyReportQuota = await consumeDurableRateLimit({
+    env,
+    scope: "channel-report-day",
+    subjectKey: buildReporterQuotaSubjectKey({
+      isVerifiedUser,
+      verifiedUserId,
+      anonymousUid,
+      requesterDeviceId,
+    }),
+    limit: REPORT_DAILY_LIMIT,
+    windowMs: REPORT_DAILY_WINDOW_MS,
+  });
+  if (!dailyReportQuota.ok) {
+    return Response.json({ error: "rate_limited" }, { status: 429 });
   }
 
   const reportId = crypto.randomUUID();
