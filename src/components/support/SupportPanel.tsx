@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   answerSupportSession,
+  clearSupportSession,
   escalateSupportSession,
   fetchSupportState,
   sendSupportThreadMessage,
@@ -44,6 +45,7 @@ function readTranscriptText(event: SupportTranscriptEvent): string {
 }
 
 export function SupportPanel() {
+  const router = useRouter();
   const { locale, timeZone, t } = useLocale();
   const [supportState, setSupportState] = useState<SupportStateResponse>(emptySupportState);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,9 @@ export function SupportPanel() {
   const [textDraft, setTextDraft] = useState("");
   const [threadDraft, setThreadDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [closing, setClosing] = useState(false);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const closingRef = useRef(false);
   const openThreadId = supportState.thread?.id ?? null;
 
   function applyState(next: Partial<SupportStateResponse>) {
@@ -67,6 +71,10 @@ export function SupportPanel() {
 
   async function loadState(autoStartWhenEmpty: boolean) {
     const result = await fetchSupportState();
+    if (closingRef.current) {
+      setLoading(false);
+      return;
+    }
     if (result._status === 401) {
       setError(t("supportNoAccess"));
       setLoading(false);
@@ -79,6 +87,13 @@ export function SupportPanel() {
     }
     if (!result.thread && !result.session && autoStartWhenEmpty) {
       const started = await startSupportSession();
+      if (closingRef.current) {
+        if (started._status < 400 && started.session?.status === "open") {
+          await clearSupportSession(started.session.id).catch(() => {});
+        }
+        setLoading(false);
+        return;
+      }
       if (started._status >= 400) {
         setError(typeof started.error === "string" ? started.error : t("sendFailed"));
         setLoading(false);
@@ -101,6 +116,10 @@ export function SupportPanel() {
       loadStateEffect(true);
     }, 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => () => {
+    closingRef.current = true;
   }, []);
 
   useEffect(() => {
@@ -206,6 +225,19 @@ export function SupportPanel() {
     setSubmitting(false);
   }
 
+  async function handleClosePanel() {
+    if (closing) return;
+    closingRef.current = true;
+    setClosing(true);
+    try {
+      if (supportState.session?.status === "open") {
+        await clearSupportSession(supportState.session.id);
+      }
+    } finally {
+      router.push("/dashboard");
+    }
+  }
+
   return (
     <main className="min-h-dvh px-4 py-6" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       <div className="mx-auto flex min-h-[calc(100dvh-48px)] max-w-[760px] flex-col overflow-hidden rounded-[28px] border" style={{ background: "var(--input-bg)", borderColor: "var(--hairline)", boxShadow: "0 24px 70px rgba(15,23,42,.08)" }}>
@@ -216,13 +248,16 @@ export function SupportPanel() {
             <p className="mt-2 max-w-[520px] text-[13px] leading-[1.6]" style={{ color: "var(--secondary-text)" }}>{t("supportSubtitle")}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Link
-              href="/dashboard"
-              className="rounded-full border px-3 py-2 text-[12px] font-semibold no-underline"
+            <button
+              type="button"
+              disabled={closing}
+              className="rounded-full border px-3 py-2 text-[12px] font-semibold"
               style={{ borderColor: "var(--hairline)", color: "var(--gray-text)" }}
+              onClick={() => void handleClosePanel()}
+              aria-label={t("close")}
             >
-              {t("dashboardBack")}
-            </Link>
+              ✕
+            </button>
           </div>
         </header>
 

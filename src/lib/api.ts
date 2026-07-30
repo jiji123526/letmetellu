@@ -766,6 +766,27 @@ export async function sendSupportThreadMessage(threadId: string, text: string) {
   });
 }
 
+export async function clearSupportSession(sessionId: string) {
+  if (IS_MOCK) {
+    if (mockSupportSession?.id === sessionId && mockSupportSession.status === "open") {
+      mockSupportSession = null;
+      mockSupportTranscript = [];
+    }
+    return { ok: true, _status: 200 };
+  }
+  return requestSupportJson<{
+    ok?: boolean;
+    error?: string;
+  }>("/api/support", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "clear_session",
+      session_id: sessionId,
+    }),
+  });
+}
+
 export async function fetchPlatformSupportThreads() {
   if (IS_MOCK) {
     return {

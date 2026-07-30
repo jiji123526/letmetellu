@@ -594,6 +594,29 @@ async function handleSupportEscalateSession(body: JsonObject, userId: string, en
   });
 }
 
+async function handleSupportClearSession(body: JsonObject, userId: string, env: Env): Promise<Response> {
+  const sessionId = typeof body.session_id === "string" ? body.session_id : "";
+  if (!sessionId) {
+    return Response.json({ error: "missing session_id" }, { status: 400 });
+  }
+
+  const session = await fetchSupportSessionById(sessionId, env);
+  if (!session || session.user_id !== userId) {
+    return Response.json({ error: "session_not_found" }, { status: 404 });
+  }
+
+  if (session.status === "open") {
+    const completedAt = new Date().toISOString();
+    await env.DB.prepare(`
+      UPDATE support_sessions
+      SET status = 'abandoned', updated_at = ?, completed_at = ?
+      WHERE id = ?
+    `).bind(completedAt, completedAt, session.id).run();
+  }
+
+  return Response.json({ ok: true });
+}
+
 async function handleUserSupportThreadMessage(body: JsonObject, userId: string, env: Env): Promise<Response> {
   const rateLimited = await applySupportRateLimit({
     env,
@@ -668,6 +691,9 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   }
   if (action === "escalate_session") {
     return handleSupportEscalateSession(body, userId, env);
+  }
+  if (action === "clear_session") {
+    return handleSupportClearSession(body, userId, env);
   }
   if (action === "send_thread_message") {
     return handleUserSupportThreadMessage(body, userId, env);
