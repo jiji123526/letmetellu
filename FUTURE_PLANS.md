@@ -46,6 +46,7 @@ Current shape:
 - Users can reopen the guided flow while an active ticket exists, but the UI does not allow them to submit another ticket until that ticket closes.
 - Users do not get a support history view; the ticket disappears from their side when the super admin closes it.
 - A replied-to ticket can surface as a temporary channel-like item in the user dashboard, then disappears again when closed.
+- Users can also dismiss that temporary support item themselves, which closes the active ticket on the super-admin side instead of keeping a separate user-only hide state.
 - Guest ticket previews are mirrored in local storage for dashboard reopen convenience, while Worker authorization still relies on signed anonymous identity cookies.
 - The super admin dashboard shows `Report` and `Tickets` sections instead of a mixed inbox.
 - Reports still stay in the private reports inbox channel; only guided-support escalations become tickets.
@@ -57,12 +58,14 @@ Current shape:
 - Add clearer operator summaries from the guided path so the super admin sees the issue path before replying.
 - Add explicit support-specific rate limits, audit events and monitoring instead of relying only on the broader platform controls.
 - Add unread and reply-notification behavior that is useful without turning support into a permanent user inbox.
+- Add stale-ticket handling and operator-side queue prioritization so support does not depend on manual dashboard scanning.
 - Decide the retention window for closed support sessions and tickets, then automate cleanup if the audit policy allows it.
 
 ### Constraints to keep
 
 - No second open ticket while one is already active for the same signed actor.
 - No user-visible closed-ticket archive.
+- No separate user-only "hide ticket" state that diverges from the actual support-thread status.
 - No mixed report-plus-support inbox.
 - No paid or plan-gated support path.
 

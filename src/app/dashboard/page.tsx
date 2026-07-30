@@ -1412,10 +1412,6 @@ export default function DashboardPage() {
       {showGuestOnboarding && !isLoggedIn && (
         <GuestOnboarding
           onClose={closeGuestOnboarding}
-          onGuide={() => {
-            setShowGuestOnboarding(false);
-            setShowUserGuide(true);
-          }}
         />
       )}
 

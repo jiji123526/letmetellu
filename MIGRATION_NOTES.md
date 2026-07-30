@@ -98,12 +98,15 @@ This deployment line added the first guided support system and reshaped the supe
 - Support transcript ordering now sorts by `created_at ASC, rowid ASC` so a user's decision-tree choice appears before the next bot response.
 - Later follow-up changes reused the existing signed anonymous/device identity path so guests can also use support without adding a new schema.
 - That same follow-up keeps the guide accessible while a ticket is open, but blocks submitting another ticket until the active ticket is closed.
+- A later follow-up also lets the user delete the temporary `1:1` support dashboard item, which closes the active support thread on the super-admin side instead of only hiding it locally.
+- The super-admin ticket view now keeps the summary card as context but suppresses the duplicated seed user-message bubble when it only repeats that summary text.
+- The dashboard's exact channel-address search now retriggers on blur, so closing the mobile keyboard still resolves `/ch/...` or full-link searches.
 
 Deployment notes:
 
 - apply `0025` before deploying the Worker code that reads or writes support sessions or tickets;
 - deploy the Worker and the Next.js frontend together for this line because the route surface and dashboard entry points changed on both sides;
-- no additional D1 migration is required for the later dashboard reshape, transcript-ordering fix, anonymous-support access, or active-ticket UI guard beyond `0025`.
+- no additional D1 migration is required for the later dashboard reshape, transcript-ordering fix, anonymous-support access, active-ticket UI guard, user-side ticket deletion, super-admin summary dedupe, or mobile address-lookup trigger beyond `0025`.
 
 ## D1 migration runbook
 

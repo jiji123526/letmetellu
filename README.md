@@ -60,7 +60,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Logged-in users get the same help entry plus the in-channel admin guide.
 - Logged-in users sync recent channels, pinned state, personal bubble colors, font size and locale through their account.
 - Guest users keep recent channels and personal UI preferences in the current browser only.
-- Exact channel address lookup supports a raw slug, a `/ch/...` path or a full URL.
+- Exact channel address lookup supports a `/ch/...` path or a full URL, and the dashboard triggers that lookup on paste, `Enter` or mobile keyboard close.
 
 ### Chat features
 
@@ -78,11 +78,13 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Guests and logged-in users can start platform support from a guided chatbot-style flow and escalate to a `1:1` admin ticket only when needed.
 - Support allows only one open ticket per signed actor at a time. Users can revisit the guide while a ticket is open, but cannot submit another ticket until the active ticket is closed.
 - Guest support previews are mirrored in browser local storage for dashboard reopen convenience, while Worker authorization still uses signed anonymous/device identity cookies.
+- Users can remove their temporary `1:1` support dashboard item, and that action also closes the underlying ticket on the super-admin side.
 - Channel rules, notice banner, welcome popup, freeze/unfreeze and banned words with expiry.
 - Block and unblock by anonymous identity plus server-issued device token.
 - Non-owner channel reports routed to a private reports inbox channel.
 - Owner warning, freeze, delete and petition flows for moderated channels.
 - Super admin dashboard routing is split between `Report` and `Tickets`: reports still resolve through the reports inbox channel, while escalated support tickets appear as channel-like entries and open in `/support`.
+- Super-admin support threads keep the guided summary as ticket context and suppress the duplicated seed message bubble when that first user message is the same summary text.
 - Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends.
 
 ### Authentication and safety model
