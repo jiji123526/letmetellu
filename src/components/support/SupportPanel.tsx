@@ -7,6 +7,7 @@ import {
   clearStoredSupportTicketPreview,
   clearSupportSession,
   fetchSupportState,
+  markSupportThreadRead,
   sendSupportThreadMessage,
   startSupportSession,
   storeSupportTicketPreview,
@@ -84,6 +85,9 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
         topicLabel: result.thread.entry_topic_label,
         preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
         updatedAt: result.thread.updated_at,
+        unreadForUser: result.thread.unread_for_user,
+        waitingOn: result.thread.waiting_on,
+        staleLevel: result.thread.stale_level,
       });
     } else if (!result.session) {
       clearStoredSupportTicketPreview();
@@ -148,6 +152,35 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
     element.scrollTop = element.scrollHeight;
   }, [supportState.transcript, supportState.messages, supportState.currentNode?.id, supportState.thread?.updated_at]);
 
+  useEffect(() => {
+    const thread = supportState.thread;
+    if (!showThreadView || !thread?.id || !thread.unread_for_user) return;
+    void markSupportThreadRead(thread.id).then((result) => {
+      if (result._status >= 400) return;
+      setSupportState((current) => (
+        current.thread && current.thread.id === thread.id
+          ? {
+              ...current,
+              thread: {
+                ...current.thread,
+                unread_for_user: false,
+              },
+            }
+          : current
+      ));
+      storeSupportTicketPreview({
+        threadId: thread.id,
+        topicLabel: thread.entry_topic_label,
+        preview: thread.last_message || thread.summary,
+        updatedAt: thread.updated_at,
+        unreadForUser: false,
+        waitingOn: thread.waiting_on,
+        staleLevel: thread.stale_level,
+      });
+      window.dispatchEvent(new CustomEvent("support-ticket-changed"));
+    });
+  }, [showThreadView, supportState.thread]);
+
   async function handleStart() {
     if (submitting) return;
     setSubmitting(true);
@@ -199,6 +232,9 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
           topicLabel: result.thread.entry_topic_label,
           preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
           updatedAt: result.thread.updated_at,
+          unreadForUser: result.thread.unread_for_user,
+          waitingOn: result.thread.waiting_on,
+          staleLevel: result.thread.stale_level,
         });
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("support-ticket-changed"));
@@ -233,6 +269,11 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
         updated_at: message.created_at,
         last_message: message.text,
         can_user_send: false,
+        waiting_on: "platform_admin" as const,
+        last_action: "user_replied" as const,
+        unread_for_admin: true,
+        unread_for_user: false,
+        stale_level: "none" as const,
       } : null;
       setSupportState((current) => ({
         ...current,
@@ -245,6 +286,9 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
           topicLabel: updatedThread.entry_topic_label,
           preview: message.text,
           updatedAt: message.created_at,
+          unreadForUser: false,
+          waitingOn: updatedThread.waiting_on,
+          staleLevel: updatedThread.stale_level,
         });
       }
       setThreadDraft("");

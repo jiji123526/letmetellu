@@ -55,10 +55,8 @@ Current shape:
 ### Next support work
 
 - Expand the decision tree coverage for real user issues and keep the locale strings centralized rather than growing inline logic.
-- Add clearer operator summaries from the guided path so the super admin sees the issue path before replying.
-- Add explicit support-specific rate limits, audit events and monitoring instead of relying only on the broader platform controls.
-- Add unread and reply-notification behavior that is useful without turning support into a permanent user inbox.
-- Add stale-ticket handling and operator-side queue prioritization so support does not depend on manual dashboard scanning.
+- Add stronger operator filters or sorting once the single-admin queue has enough volume to justify more than the current `Report` / `Tickets` split plus stale/unread signals.
+- Decide whether support audit logs need an operator-visible review UI or should remain backend-only for incident tracing.
 - Decide the retention window for closed support sessions and tickets, then automate cleanup if the audit policy allows it.
 
 ### Constraints to keep

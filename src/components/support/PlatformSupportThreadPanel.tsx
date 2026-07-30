@@ -6,9 +6,11 @@ import {
   closePlatformSupportThread,
   fetchPlatformSupportSession,
   fetchPlatformSupportThread,
+  markPlatformSupportThreadRead,
   sendPlatformSupportMessage,
   type PlatformSupportSessionResponse,
   type SupportMessage,
+  type SupportTranscriptEvent,
   type SupportThreadState,
 } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
@@ -25,6 +27,21 @@ function formatThreadUserLabel(
     return `${anonLabel} #${thread.user_id.slice(5).slice(-6)}`;
   }
   return thread.user_id;
+}
+
+function readChoicePath(transcript: SupportTranscriptEvent[]): string {
+  return transcript
+    .filter((event) => event.event_type === "user_choice")
+    .map((event) => (typeof event.payload.label === "string" ? event.payload.label.trim() : ""))
+    .filter(Boolean)
+    .join(" > ");
+}
+
+function readFirstUserText(transcript: SupportTranscriptEvent[]): string {
+  return transcript
+    .filter((event) => event.event_type === "user_text")
+    .map((event) => (typeof event.payload.text === "string" ? event.payload.text.trim() : ""))
+    .find(Boolean) || "";
 }
 
 export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
@@ -97,6 +114,22 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
     element.scrollTop = element.scrollHeight;
   }, [messages, sessionDetail?.transcript.length, threadDetail?.updated_at]);
 
+  useEffect(() => {
+    if (!threadDetail?.id || !threadDetail.unread_for_admin) return;
+    void markPlatformSupportThreadRead(threadDetail.id).then((result) => {
+      if (result._status >= 400) return;
+      setThreadDetail((current) => (
+        current?.id === threadDetail.id
+          ? {
+              ...current,
+              unread_for_admin: false,
+            }
+          : current
+      ));
+      window.dispatchEvent(new CustomEvent("support-ticket-changed"));
+    });
+  }, [threadDetail?.id, threadDetail?.unread_for_admin]);
+
   async function handleSend() {
     if (submitting || !threadDetail || threadDetail.status !== "open" || !draft.trim()) return;
     setSubmitting(true);
@@ -130,12 +163,39 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
       && message.text === threadDetail.summary
     ))
     : [];
+  const choicePath = readChoicePath(sessionDetail?.transcript || []);
+  const firstUserText = readFirstUserText(sessionDetail?.transcript || []);
+  const actorTypeLabel = threadDetail?.actor_type === "guest" ? t("supportActorGuest") : t("supportActorLoggedIn");
+  const lastActionLabel = threadDetail
+    ? (
+      threadDetail.last_action === "ticket_created" ? t("supportLastActionCreated")
+        : threadDetail.last_action === "user_replied" ? t("supportLastActionUserReplied")
+          : threadDetail.last_action === "admin_replied" ? t("supportLastActionAdminReplied")
+            : threadDetail.last_action === "user_closed" ? t("supportLastActionUserClosed")
+              : t("supportLastActionAdminClosed")
+    )
+    : "";
+  const openForLabel = threadDetail
+    ? threadDetail.open_duration_minutes >= 1440
+      ? t("supportOpenForDays").replace("{count}", String(Math.max(1, Math.floor(threadDetail.open_duration_minutes / 1440))))
+      : threadDetail.open_duration_minutes >= 60
+        ? t("supportOpenForHours").replace("{count}", String(Math.max(1, Math.floor(threadDetail.open_duration_minutes / 60))))
+        : t("supportOpenForMinutes").replace("{count}", String(Math.max(1, threadDetail.open_duration_minutes)))
+    : "";
+  const headerRows = threadDetail ? [
+    { label: t("supportIssueCategory"), value: threadDetail.entry_topic_label },
+    ...(choicePath ? [{ label: t("supportChosenPath"), value: choicePath }] : []),
+    { label: t("supportUserMessage"), value: firstUserText || threadDetail.summary },
+    { label: t("supportActorType"), value: actorTypeLabel },
+    { label: t("supportLastAction"), value: lastActionLabel },
+    { label: t("supportOpenFor"), value: openForLabel },
+  ] : [];
 
   return (
     <SupportThreadChat
       title={threadDetail?.entry_topic_label || t("supportMenu")}
       subtitle={formatThreadUserLabel(threadDetail, t("anon"))}
-      summary={threadDetail?.summary || ""}
+      headerRows={headerRows}
       transcript={sessionDetail?.transcript || []}
       messagesRef={messagesRef}
       messages={visibleMessages}

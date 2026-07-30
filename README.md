@@ -84,6 +84,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Non-owner channel reports routed to a private reports inbox channel.
 - Owner warning, freeze, delete and petition flows for moderated channels.
 - Super admin dashboard routing is split between `Report` and `Tickets`: reports still resolve through the reports inbox channel, while escalated support tickets appear as channel-like entries and open in `/support`.
+- Support tickets now track unread state, waiting side, stale age and operator summary data so the super admin can triage without reading the whole thread first.
 - Super-admin support threads keep the guided summary as ticket context and suppress the duplicated seed message bubble when that first user message is the same summary text.
 - Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends.
 
@@ -204,6 +205,7 @@ Recent schema additions:
 - `0023`: privacy-focused device-id transition and legacy message-identifier cleanup
 - `0024`: server-only anonymous actor identities for message-based block resolution
 - `0025`: guided support sessions, escalated support threads and support messages
+- `0026`: support read state, support audit logs and operator triage signals
 
 Frontend deployment is triggered by pushing `main`:
 

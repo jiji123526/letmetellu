@@ -41,6 +41,9 @@ interface SupportDashboardPreview {
   topicLabel: string;
   preview: string;
   updatedAt: string;
+  unreadForUser?: boolean;
+  waitingOn?: "user" | "platform_admin" | null;
+  staleLevel?: "none" | "stale" | "critical";
 }
 
 interface DashboardListItem {
@@ -48,6 +51,10 @@ interface DashboardListItem {
   group: "reports" | "tickets" | "owned" | "joined" | "support-preview";
   kind: "channel" | "support";
   supportThreadId?: string;
+  supportUnread?: boolean;
+  supportWaitingOn?: "user" | "platform_admin" | null;
+  supportActorType?: "guest" | "logged_in";
+  supportStaleLevel?: "none" | "stale" | "critical";
   route: string;
   name: string;
   profileImage: string | null;
@@ -77,6 +84,14 @@ function formatRelativeTime(timestamp: number, locale: "ko" | "en") {
   const days = Math.floor(hours / 24);
   if (days < 7) return locale === "ko" ? `${days}일 전` : `${days}d`;
   return formatDate(new Date(timestamp).toISOString(), locale);
+}
+
+function formatDurationMinutes(minutes: number, locale: "ko" | "en") {
+  if (minutes < 60) return locale === "ko" ? `${Math.max(1, minutes)}분` : `${Math.max(1, minutes)}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return locale === "ko" ? `${hours}시간` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return locale === "ko" ? `${days}일` : `${days}d`;
 }
 
 function getChannelPreviewColor(channelId: string, fallback: string) {
@@ -271,6 +286,7 @@ export default function DashboardPage() {
       setPlatformDashboard({
         reportsInbox: result.reportsInbox ?? null,
         tickets: result.tickets || [],
+        support_stats: result.support_stats ?? null,
       });
     } catch {
       setPlatformDashboard(null);
@@ -294,6 +310,9 @@ export default function DashboardPage() {
         topicLabel: result.thread.entry_topic_label,
         preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
         updatedAt: result.thread.updated_at,
+        unreadForUser: result.thread.unread_for_user,
+        waitingOn: result.thread.waiting_on,
+        staleLevel: result.thread.stale_level,
       };
       storeSupportTicketPreview(preview);
       setSupportPreview(preview);
@@ -573,6 +592,10 @@ export default function DashboardPage() {
         group: "tickets" as const,
         kind: "support" as const,
         supportThreadId: ticket.id,
+        supportUnread: ticket.unread_for_admin,
+        supportWaitingOn: ticket.waiting_on,
+        supportActorType: ticket.actor_type,
+        supportStaleLevel: ticket.stale_level,
         route: `/support?thread=${encodeURIComponent(ticket.id)}&admin=1`,
         name: ticket.entry_topic_label,
         profileImage: null,
@@ -600,6 +623,9 @@ export default function DashboardPage() {
         group: "support-preview",
         kind: "support",
         supportThreadId: supportPreview.threadId,
+        supportUnread: supportPreview.unreadForUser,
+        supportWaitingOn: supportPreview.waitingOn,
+        supportStaleLevel: supportPreview.staleLevel,
         route: `/support?thread=${encodeURIComponent(supportPreview.threadId)}`,
         name: t("supportMenu"),
         profileImage: "/logo.svg",
@@ -1143,6 +1169,36 @@ export default function DashboardPage() {
           </div>
         </header>
 
+        {isPlatformAdmin && platformDashboard?.support_stats && (
+          <section className="px-4 pt-3 pb-1">
+            <div className="rounded-[16px] p-3 flex flex-wrap gap-2" style={{ background: "var(--card)" }}>
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
+                {t("supportStatsOpen").replace("{count}", String(platformDashboard.support_stats.open_count))}
+              </span>
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#fff7ed", color: "#c2410c" }}>
+                {t("supportStatsNeedsReply").replace("{count}", String(platformDashboard.support_stats.waiting_for_admin_count))}
+              </span>
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#eef2ff", color: "#3730a3" }}>
+                {t("supportStatsWaitingUser").replace("{count}", String(platformDashboard.support_stats.waiting_for_user_count))}
+              </span>
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#eff6ff", color: "#1d4ed8" }}>
+                {t("supportStatsUnread").replace("{count}", String(platformDashboard.support_stats.unread_for_admin_count))}
+              </span>
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#fff1f2", color: "#be123c" }}>
+                {t("supportStatsStale").replace("{count}", String(platformDashboard.support_stats.stale_24h_count))}
+              </span>
+              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+                {t("supportStatsCritical").replace("{count}", String(platformDashboard.support_stats.stale_72h_count))}
+              </span>
+              {platformDashboard.support_stats.oldest_open_duration_minutes > 0 && (
+                <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--bg)", color: "var(--meta)" }}>
+                  {t("supportStatsOldest").replace("{duration}", formatDurationMinutes(platformDashboard.support_stats.oldest_open_duration_minutes, locale))}
+                </span>
+              )}
+            </div>
+          </section>
+        )}
+
         {empty ? (
           <section className="px-8 py-24 text-center" style={{ paddingBottom: `calc(6rem + ${listBottomPadding})` }}>
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
@@ -1300,6 +1356,36 @@ export default function DashboardPage() {
                         {item.kind === "support" && item.ownerName && (
                           <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#eef2ff", color: "#3730a3" }}>
                             {item.ownerName}
+                          </span>
+                        )}
+                        {item.group === "tickets" && item.supportActorType && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#f3f4f6", color: "#4b5563" }}>
+                            {item.supportActorType === "guest" ? t("supportActorGuest") : t("supportActorLoggedIn")}
+                          </span>
+                        )}
+                        {item.kind === "support" && item.supportWaitingOn === "platform_admin" && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#fff7ed", color: "#c2410c" }}>
+                            {item.group === "tickets" ? t("supportNeedsReply") : t("supportWaitingBadge")}
+                          </span>
+                        )}
+                        {item.group === "tickets" && item.supportWaitingOn === "user" && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#eef2ff", color: "#3730a3" }}>
+                            {t("supportWaitingUserBadge")}
+                          </span>
+                        )}
+                        {item.kind === "support" && item.supportUnread && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#eff6ff", color: "#1d4ed8" }}>
+                            {item.group === "tickets" ? t("supportUnreadBadge") : t("supportNewReplyBadge")}
+                          </span>
+                        )}
+                        {item.group === "tickets" && item.supportStaleLevel === "stale" && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#fff1f2", color: "#be123c" }}>
+                            {t("supportStaleBadge")}
+                          </span>
+                        )}
+                        {item.group === "tickets" && item.supportStaleLevel === "critical" && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+                            {t("supportCriticalBadge")}
                           </span>
                         )}
                         {item.group === "tickets" && !item.pinned && (

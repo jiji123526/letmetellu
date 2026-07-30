@@ -108,6 +108,24 @@ Deployment notes:
 - deploy the Worker and the Next.js frontend together for this line because the route surface and dashboard entry points changed on both sides;
 - no additional D1 migration is required for the later dashboard reshape, transcript-ordering fix, anonymous-support access, active-ticket UI guard, user-side ticket deletion, super-admin summary dedupe, or mobile address-lookup trigger beyond `0025`.
 
+### Support operator hardening and triage metadata — 2026-07-30
+
+This follow-up line hardened the guided support system for real operator use without turning it into a permanent user inbox.
+
+- Added `0026_support_operator_hardening.sql`.
+- Added `support_thread_reads` for per-thread read markers by user and platform admin.
+- Added `support_audit_logs` for thread lifecycle events such as ticket creation, replies and user/admin closes.
+- Support thread serialization now includes actor type, waiting side, last action, unread flags, stale level and open-duration minutes.
+- The super-admin dashboard now exposes compact support stats for open count, needs-reply count, waiting-on-user count, unread count and stale buckets.
+- The super-admin thread view now renders a structured triage header from the guided transcript: issue category, chosen path, first user free-text, actor type, last action and open duration.
+- Opening a support thread now marks it read for the appropriate side, so unread/reply indicators behave like a temporary active conversation rather than a persistent inbox.
+
+Deployment notes:
+
+- apply `0026` before deploying the Worker code that reads `support_thread_reads` or writes `support_audit_logs`;
+- deploy the Worker and the Next.js frontend together for this line because both the support payload shape and dashboard rendering changed;
+- no extra migration is needed beyond `0026` for the admin triage card, unread badges, stale indicators or support operator summary chips shipped in the same line.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.

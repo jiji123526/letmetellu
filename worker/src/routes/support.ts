@@ -1,8 +1,10 @@
 import type { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation";
+import { recordOperationalEvent } from "../lib/operational-events";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow";
+import { appendSupportAuditLog } from "../lib/support-audit";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 
 const SUPPORT_TEXT_MAX_LENGTH = 1_500;
@@ -12,6 +14,8 @@ const SUPPORT_START_LIMIT = 3;
 const SUPPORT_ANSWER_LIMIT = 12;
 const SUPPORT_MESSAGE_LIMIT = 8;
 const ANONYMOUS_SUPPORT_PREFIX = "anon:";
+const SUPPORT_STALE_MS = 24 * 60 * 60 * 1000;
+const SUPPORT_CRITICAL_STALE_MS = 72 * 60 * 60 * 1000;
 
 type SupportSessionStatus = "open" | "resolved" | "escalated" | "abandoned";
 type SupportThreadStatus = "open" | "closed";
@@ -45,6 +49,10 @@ interface SupportThreadRow {
   last_message?: string | null;
   last_sender_role?: "user" | "platform_admin" | null;
   has_admin_reply?: number;
+  last_user_message_at?: string | null;
+  last_admin_message_at?: string | null;
+  user_read_at?: string | null;
+  admin_read_at?: string | null;
 }
 
 interface SupportMessageRow {
@@ -86,6 +94,110 @@ interface ResolvedSupportActor {
   deviceToken: string | null;
 }
 
+const SUPPORT_THREAD_SELECT_SQL = `
+  SELECT
+    st.id,
+    st.user_id,
+    st.source_session_id,
+    st.entry_topic,
+    st.summary,
+    st.status,
+    st.created_at,
+    st.updated_at,
+    st.closed_at,
+    st.closed_by,
+    u.name AS user_name,
+    u.email AS user_email,
+    (
+      SELECT text
+      FROM support_messages sm
+      WHERE sm.thread_id = st.id
+      ORDER BY sm.created_at DESC, sm.id DESC
+      LIMIT 1
+    ) AS last_message,
+    (
+      SELECT sender_role
+      FROM support_messages sm
+      WHERE sm.thread_id = st.id
+      ORDER BY sm.created_at DESC, sm.id DESC
+      LIMIT 1
+    ) AS last_sender_role,
+    EXISTS(
+      SELECT 1
+      FROM support_messages sm2
+      WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
+    ) AS has_admin_reply,
+    (
+      SELECT created_at
+      FROM support_messages sm3
+      WHERE sm3.thread_id = st.id AND sm3.sender_role = 'user'
+      ORDER BY sm3.created_at DESC, sm3.id DESC
+      LIMIT 1
+    ) AS last_user_message_at,
+    (
+      SELECT created_at
+      FROM support_messages sm4
+      WHERE sm4.thread_id = st.id AND sm4.sender_role = 'platform_admin'
+      ORDER BY sm4.created_at DESC, sm4.id DESC
+      LIMIT 1
+    ) AS last_admin_message_at,
+    (
+      SELECT read_at
+      FROM support_thread_reads str
+      WHERE str.thread_id = st.id AND str.actor_role = 'user'
+      LIMIT 1
+    ) AS user_read_at,
+    (
+      SELECT read_at
+      FROM support_thread_reads str
+      WHERE str.thread_id = st.id AND str.actor_role = 'platform_admin'
+      LIMIT 1
+    ) AS admin_read_at
+  FROM support_threads st
+  LEFT JOIN users u ON u.id = st.user_id
+`;
+
+function parseIsoMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function getSupportActorType(userId: string): "guest" | "logged_in" {
+  return isAnonymousSupportSubjectId(userId) ? "guest" : "logged_in";
+}
+
+function getSupportWaitingOn(thread: SupportThreadRow): "user" | "platform_admin" | null {
+  if (thread.status !== "open") return null;
+  return thread.last_sender_role === "platform_admin" ? "user" : "platform_admin";
+}
+
+function getSupportLastAction(thread: SupportThreadRow): "ticket_created" | "user_replied" | "admin_replied" | "user_closed" | "admin_closed" {
+  if (thread.status === "closed") {
+    return thread.closed_by === thread.user_id ? "user_closed" : "admin_closed";
+  }
+  if (thread.last_sender_role === "platform_admin") return "admin_replied";
+  if (thread.last_sender_role === "user" && !!thread.has_admin_reply) return "user_replied";
+  return "ticket_created";
+}
+
+function isUnreadSince(messageAt: string | null | undefined, readAt: string | null | undefined): boolean {
+  const messageMs = parseIsoMs(messageAt);
+  if (!messageMs) return false;
+  const readMs = parseIsoMs(readAt);
+  return readMs === null || messageMs > readMs;
+}
+
+function getSupportStaleLevel(thread: SupportThreadRow, nowMs: number): "none" | "stale" | "critical" {
+  if (thread.status !== "open") return "none";
+  const updatedMs = parseIsoMs(thread.updated_at);
+  if (updatedMs === null) return "none";
+  const ageMs = Math.max(0, nowMs - updatedMs);
+  if (ageMs >= SUPPORT_CRITICAL_STALE_MS) return "critical";
+  if (ageMs >= SUPPORT_STALE_MS) return "stale";
+  return "none";
+}
+
 function parseEventPayload(row: SupportSessionEventRow): SupportTranscriptEvent {
   let payload: Record<string, unknown> = {};
   try {
@@ -117,9 +229,10 @@ function serializeNode(node: SupportNode | null) {
   };
 }
 
-function serializeThread(row: SupportThreadRow, locale: UserLocale) {
+function serializeThread(row: SupportThreadRow, locale: UserLocale, nowMs = Date.now()) {
   const hasAdminReply = !!row.has_admin_reply;
   const canUserSend = row.status === "open" && hasAdminReply && row.last_sender_role === "platform_admin";
+  const createdMs = parseIsoMs(row.created_at);
   return {
     id: row.id,
     user_id: row.user_id,
@@ -137,6 +250,13 @@ function serializeThread(row: SupportThreadRow, locale: UserLocale) {
     last_message: row.last_message || null,
     has_admin_reply: hasAdminReply,
     can_user_send: canUserSend,
+    actor_type: getSupportActorType(row.user_id),
+    waiting_on: getSupportWaitingOn(row),
+    last_action: getSupportLastAction(row),
+    unread_for_user: isUnreadSince(row.last_admin_message_at, row.user_read_at),
+    unread_for_admin: isUnreadSince(row.last_user_message_at, row.admin_read_at),
+    stale_level: getSupportStaleLevel(row, nowMs),
+    open_duration_minutes: createdMs === null ? 0 : Math.max(0, Math.floor((nowMs - createdMs) / 60_000)),
   };
 }
 
@@ -266,37 +386,7 @@ async function applySupportRateLimit(input: {
 
 async function fetchOpenSupportThreadForUser(userId: string, env: Env): Promise<SupportThreadRow | null> {
   return env.DB.prepare(`
-    SELECT
-      st.id,
-      st.user_id,
-      st.source_session_id,
-      st.entry_topic,
-      st.summary,
-      st.status,
-      st.created_at,
-      st.updated_at,
-      st.closed_at,
-      st.closed_by,
-      (
-        SELECT text
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_message,
-      (
-        SELECT sender_role
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_sender_role,
-      EXISTS(
-        SELECT 1
-        FROM support_messages sm2
-        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
-      ) AS has_admin_reply
-    FROM support_threads st
+    ${SUPPORT_THREAD_SELECT_SQL}
     WHERE st.user_id = ? AND st.status = 'open'
     ORDER BY st.updated_at DESC, st.id DESC
     LIMIT 1
@@ -344,40 +434,7 @@ async function fetchSupportSessionById(sessionId: string, env: Env): Promise<Sup
 
 async function fetchSupportThreadById(threadId: string, env: Env): Promise<SupportThreadRow | null> {
   return env.DB.prepare(`
-    SELECT
-      st.id,
-      st.user_id,
-      st.source_session_id,
-      st.entry_topic,
-      st.summary,
-      st.status,
-      st.created_at,
-      st.updated_at,
-      st.closed_at,
-      st.closed_by,
-      u.name AS user_name,
-      u.email AS user_email,
-      (
-        SELECT text
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_message,
-      (
-        SELECT sender_role
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_sender_role,
-      EXISTS(
-        SELECT 1
-        FROM support_messages sm2
-        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
-      ) AS has_admin_reply
-    FROM support_threads st
-    LEFT JOIN users u ON u.id = st.user_id
+    ${SUPPORT_THREAD_SELECT_SQL}
     WHERE st.id = ?
     LIMIT 1
   `).bind(threadId).first<SupportThreadRow>();
@@ -401,6 +458,24 @@ async function fetchSupportMessages(threadId: string, env: Env): Promise<Support
     ORDER BY created_at ASC, id ASC
   `).bind(threadId).all<SupportMessageRow>();
   return results || [];
+}
+
+async function markSupportThreadRead(input: {
+  env: Env;
+  threadId: string;
+  actorRole: "user" | "platform_admin";
+  readAt?: string;
+}): Promise<void> {
+  await input.env.DB.prepare(`
+    INSERT INTO support_thread_reads (thread_id, actor_role, read_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(thread_id, actor_role)
+    DO UPDATE SET read_at = excluded.read_at
+  `).bind(
+    input.threadId,
+    input.actorRole,
+    input.readAt || new Date().toISOString(),
+  ).run();
 }
 
 async function insertBotMessages(input: {
@@ -499,6 +574,38 @@ async function createEscalatedSupportThread(input: {
       WHERE id = ?
     `).bind(input.entryTopic, input.escalationNodeId, threadId, createdAt, createdAt, input.session.id),
   ]);
+
+  await markSupportThreadRead({
+    env: input.env,
+    threadId,
+    actorRole: "user",
+    readAt: createdAt,
+  });
+  await appendSupportAuditLog({
+    env: input.env,
+    threadId,
+    actorRole: "user",
+    actorUserId: input.userId,
+    action: "ticket_created",
+    detail: {
+      actor_type: getSupportActorType(input.userId),
+      entry_topic: input.entryTopic,
+      source_session_id: input.session.id,
+    },
+  });
+  await recordOperationalEvent({
+    env: input.env,
+    severity: "info",
+    route: "/api/support",
+    eventType: "support_ticket_created",
+    actorUserId: input.userId,
+    targetId: threadId,
+    detail: {
+      actorType: getSupportActorType(input.userId),
+      entryTopic: input.entryTopic,
+      summaryLength: summary.length,
+    },
+  });
 
   const thread = await fetchSupportThreadById(threadId, input.env);
   const messages = await fetchSupportMessages(threadId, input.env);
@@ -810,6 +917,33 @@ async function handleUserSupportThreadMessage(body: JsonObject, subjectId: strin
       WHERE id = ?
     `).bind(createdAt, threadId),
   ]);
+  await markSupportThreadRead({
+    env,
+    threadId,
+    actorRole: "user",
+    readAt: createdAt,
+  });
+  await appendSupportAuditLog({
+    env,
+    threadId,
+    actorRole: "user",
+    actorUserId: subjectId,
+    action: "user_replied",
+    detail: {
+      text_length: text.length,
+    },
+  });
+  await recordOperationalEvent({
+    env,
+    severity: "info",
+    route: "/api/support",
+    eventType: "support_user_replied",
+    actorUserId: subjectId,
+    targetId: threadId,
+    detail: {
+      textLength: text.length,
+    },
+  });
   return Response.json({
     ok: true,
     message: {
@@ -823,7 +957,12 @@ async function handleUserSupportThreadMessage(body: JsonObject, subjectId: strin
   });
 }
 
-async function closeSupportThreadRecord(threadId: string, actorUserId: string, env: Env): Promise<Response> {
+async function closeSupportThreadRecord(
+  threadId: string,
+  actorUserId: string,
+  actorRole: "user" | "platform_admin",
+  env: Env,
+): Promise<Response> {
   const thread = await fetchSupportThreadById(threadId, env);
   if (!thread || thread.status !== "open") {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
@@ -834,6 +973,29 @@ async function closeSupportThreadRecord(threadId: string, actorUserId: string, e
     SET status = 'closed', updated_at = ?, closed_at = ?, closed_by = ?
     WHERE id = ?
   `).bind(closedAt, closedAt, actorUserId, threadId).run();
+  const action = actorRole === "user" ? "user_closed" : "admin_closed";
+  await appendSupportAuditLog({
+    env,
+    threadId,
+    actorRole,
+    actorUserId,
+    action,
+    detail: {
+      actor_type: actorRole === "user" ? getSupportActorType(thread.user_id) : "platform_admin",
+    },
+  });
+  await recordOperationalEvent({
+    env,
+    severity: "info",
+    route: actorRole === "user" ? "/api/support" : "/api/platform-admin/support",
+    eventType: actorRole === "user" ? "support_user_closed" : "support_admin_closed",
+    actorUserId,
+    targetId: threadId,
+    detail: {
+      waitingOn: getSupportWaitingOn(thread),
+      openDurationMinutes: serializeThread(thread, "en", parseIsoMs(closedAt) || Date.now()).open_duration_minutes,
+    },
+  });
   return Response.json({ ok: true });
 }
 
@@ -848,7 +1010,26 @@ async function handleUserSupportCloseThread(body: JsonObject, subjectId: string,
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
 
-  return closeSupportThreadRecord(threadId, subjectId, env);
+  return closeSupportThreadRecord(threadId, subjectId, "user", env);
+}
+
+async function handleUserSupportMarkThreadRead(body: JsonObject, subjectId: string, env: Env): Promise<Response> {
+  const threadId = typeof body.thread_id === "string" ? body.thread_id : "";
+  if (!threadId) {
+    return Response.json({ error: "missing thread_id" }, { status: 400 });
+  }
+
+  const thread = await fetchSupportThreadById(threadId, env);
+  if (!thread || thread.user_id !== subjectId) {
+    return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+
+  await markSupportThreadRead({
+    env,
+    threadId,
+    actorRole: "user",
+  });
+  return Response.json({ ok: true });
 }
 
 export async function handleSupport(request: Request, env: Env): Promise<Response> {
@@ -886,45 +1067,15 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   if (action === "close_thread") {
     return withSupportIdentityHeaders(await handleUserSupportCloseThread(body, actor.subjectId, env), actor);
   }
+  if (action === "mark_thread_read") {
+    return withSupportIdentityHeaders(await handleUserSupportMarkThreadRead(body, actor.subjectId, env), actor);
+  }
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }
 
 async function fetchPlatformSupportThreads(locale: UserLocale, env: Env): Promise<Response> {
   const { results } = await env.DB.prepare(`
-    SELECT
-      st.id,
-      st.user_id,
-      st.source_session_id,
-      st.entry_topic,
-      st.summary,
-      st.status,
-      st.created_at,
-      st.updated_at,
-      st.closed_at,
-      st.closed_by,
-      u.name AS user_name,
-      u.email AS user_email,
-      (
-        SELECT text
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_message,
-      (
-        SELECT sender_role
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_sender_role,
-      EXISTS(
-        SELECT 1
-        FROM support_messages sm2
-        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
-      ) AS has_admin_reply
-    FROM support_threads st
-    LEFT JOIN users u ON u.id = st.user_id
+    ${SUPPORT_THREAD_SELECT_SQL}
     WHERE st.status = 'open'
     ORDER BY st.updated_at DESC, st.id DESC
   `).all<SupportThreadRow>();
@@ -953,42 +1104,19 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
     : null;
 
   const { results } = await env.DB.prepare(`
-    SELECT
-      st.id,
-      st.user_id,
-      st.source_session_id,
-      st.entry_topic,
-      st.summary,
-      st.status,
-      st.created_at,
-      st.updated_at,
-      st.closed_at,
-      st.closed_by,
-      u.name AS user_name,
-      u.email AS user_email,
-      (
-        SELECT text
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_message,
-      (
-        SELECT sender_role
-        FROM support_messages sm
-        WHERE sm.thread_id = st.id
-        ORDER BY sm.created_at DESC, sm.id DESC
-        LIMIT 1
-      ) AS last_sender_role,
-      EXISTS(
-        SELECT 1
-        FROM support_messages sm2
-        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
-      ) AS has_admin_reply
-    FROM support_threads st
-    LEFT JOIN users u ON u.id = st.user_id
+    ${SUPPORT_THREAD_SELECT_SQL}
     ORDER BY CASE WHEN st.status = 'open' THEN 0 ELSE 1 END, st.updated_at DESC, st.id DESC
   `).all<PlatformDashboardTicketRow>();
+
+  const tickets = (results || []).map((thread) => ({
+    ...serializeThread(thread, locale),
+    user_label: formatSupportUserLabel(thread, locale),
+    has_admin_reply: !!thread.has_admin_reply,
+  }));
+  const openTickets = tickets.filter((thread) => thread.status === "open");
+  const stale24hCount = openTickets.filter((thread) => thread.stale_level !== "none").length;
+  const stale72hCount = openTickets.filter((thread) => thread.stale_level === "critical").length;
+  const oldestOpenDurationMinutes = openTickets.reduce((max, thread) => Math.max(max, thread.open_duration_minutes), 0);
 
   return Response.json({
     reportsInbox: reportsChannel ? {
@@ -1000,11 +1128,16 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
       oldest_report_at: reportsSummary?.oldest_report_at || null,
       created_at: reportsChannel.created_at,
     } : null,
-    tickets: (results || []).map((thread) => ({
-      ...serializeThread(thread, locale),
-      user_label: formatSupportUserLabel(thread, locale),
-      has_admin_reply: !!thread.has_admin_reply,
-    })),
+    tickets,
+    support_stats: {
+      open_count: openTickets.length,
+      waiting_for_admin_count: openTickets.filter((thread) => thread.waiting_on === "platform_admin").length,
+      waiting_for_user_count: openTickets.filter((thread) => thread.waiting_on === "user").length,
+      unread_for_admin_count: openTickets.filter((thread) => thread.unread_for_admin).length,
+      stale_24h_count: stale24hCount,
+      stale_72h_count: stale72hCount,
+      oldest_open_duration_minutes: oldestOpenDurationMinutes,
+    },
   });
 }
 
@@ -1066,6 +1199,33 @@ async function handlePlatformSupportSendMessage(body: JsonObject, actorUserId: s
       WHERE id = ?
     `).bind(createdAt, threadId),
   ]);
+  await markSupportThreadRead({
+    env,
+    threadId,
+    actorRole: "platform_admin",
+    readAt: createdAt,
+  });
+  await appendSupportAuditLog({
+    env,
+    threadId,
+    actorRole: "platform_admin",
+    actorUserId,
+    action: "admin_replied",
+    detail: {
+      text_length: text.length,
+    },
+  });
+  await recordOperationalEvent({
+    env,
+    severity: "info",
+    route: "/api/platform-admin/support",
+    eventType: "support_admin_replied",
+    actorUserId,
+    targetId: threadId,
+    detail: {
+      textLength: text.length,
+    },
+  });
   return Response.json({
     ok: true,
     message: {
@@ -1084,7 +1244,24 @@ async function handlePlatformSupportCloseThread(body: JsonObject, actorUserId: s
   if (!threadId) {
     return Response.json({ error: "missing thread_id" }, { status: 400 });
   }
-  return closeSupportThreadRecord(threadId, actorUserId, env);
+  return closeSupportThreadRecord(threadId, actorUserId, "platform_admin", env);
+}
+
+async function handlePlatformSupportMarkThreadRead(body: JsonObject, env: Env): Promise<Response> {
+  const threadId = typeof body.thread_id === "string" ? body.thread_id : "";
+  if (!threadId) {
+    return Response.json({ error: "missing thread_id" }, { status: 400 });
+  }
+  const thread = await fetchSupportThreadById(threadId, env);
+  if (!thread) {
+    return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+  await markSupportThreadRead({
+    env,
+    threadId,
+    actorRole: "platform_admin",
+  });
+  return Response.json({ ok: true });
 }
 
 export async function handlePlatformSupport(request: Request, env: Env): Promise<Response> {
@@ -1128,6 +1305,9 @@ export async function handlePlatformSupport(request: Request, env: Env): Promise
   }
   if (action === "close_thread") {
     return handlePlatformSupportCloseThread(body, actorUserId, env);
+  }
+  if (action === "mark_thread_read") {
+    return handlePlatformSupportMarkThreadRead(body, env);
   }
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }

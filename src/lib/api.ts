@@ -72,6 +72,13 @@ export interface SupportThreadState {
   last_message: string | null;
   has_admin_reply: boolean;
   can_user_send: boolean;
+  actor_type: "guest" | "logged_in";
+  waiting_on: "user" | "platform_admin" | null;
+  last_action: "ticket_created" | "user_replied" | "admin_replied" | "user_closed" | "admin_closed";
+  unread_for_user: boolean;
+  unread_for_admin: boolean;
+  stale_level: "none" | "stale" | "critical";
+  open_duration_minutes: number;
 }
 
 export interface SupportMessage {
@@ -134,10 +141,21 @@ export interface PlatformDashboardTicketPreview extends SupportThreadState {
   has_admin_reply: boolean;
 }
 
+export interface PlatformDashboardSupportStats {
+  open_count: number;
+  waiting_for_admin_count: number;
+  waiting_for_user_count: number;
+  unread_for_admin_count: number;
+  stale_24h_count: number;
+  stale_72h_count: number;
+  oldest_open_duration_minutes: number;
+}
+
 export interface PlatformDashboardResponse {
   error?: string;
   reportsInbox: PlatformDashboardReportsInbox | null;
   tickets: PlatformDashboardTicketPreview[];
+  support_stats?: PlatformDashboardSupportStats | null;
 }
 
 export interface StoredSupportTicketPreview {
@@ -145,15 +163,27 @@ export interface StoredSupportTicketPreview {
   topicLabel: string;
   preview: string;
   updatedAt: string;
+  unreadForUser?: boolean;
+  waitingOn?: "user" | "platform_admin" | null;
+  staleLevel?: "none" | "stale" | "critical";
 }
 
 type SupportApiResult<T extends object> = T & { _status: number };
 const SUPPORT_TICKET_PREVIEW_STORAGE_KEY = "letmetellu_support_ticket_preview";
 
 let mockSupportSession: SupportSessionState | null = null;
-let mockSupportThread: SupportThreadState | null = null;
+type MockSupportThreadState = Omit<
+  SupportThreadState,
+  "actor_type" | "waiting_on" | "last_action" | "unread_for_user" | "unread_for_admin" | "stale_level" | "open_duration_minutes"
+>;
+
+let mockSupportThread: MockSupportThreadState | null = null;
 let mockSupportMessages: SupportMessage[] = [];
 let mockSupportTranscript: SupportTranscriptEvent[] = [];
+let mockSupportReadState: { user: string | null; platform_admin: string | null } = {
+  user: null,
+  platform_admin: null,
+};
 
 function getCurrentLocale(): AppLocale {
   if (typeof window === "undefined") return "ko";
@@ -286,11 +316,63 @@ function getMockSupportNode(nodeId: string | null | undefined): SupportNodeState
   return nodeId ? mockSupportNodes[nodeId] || null : null;
 }
 
+function getMockSupportActorType(userId: string): "guest" | "logged_in" {
+  return userId.startsWith("anon:") ? "guest" : "logged_in";
+}
+
+function getMockSupportWaitingOn(thread: MockSupportThreadState): "user" | "platform_admin" | null {
+  if (thread.status !== "open") return null;
+  const lastMessage = mockSupportMessages[mockSupportMessages.length - 1] || null;
+  return lastMessage?.sender_role === "platform_admin" ? "user" : "platform_admin";
+}
+
+function getMockSupportLastAction(thread: MockSupportThreadState): SupportThreadState["last_action"] {
+  if (thread.status === "closed") {
+    return thread.closed_by === thread.user_id ? "user_closed" : "admin_closed";
+  }
+  const lastMessage = mockSupportMessages[mockSupportMessages.length - 1] || null;
+  if (lastMessage?.sender_role === "platform_admin") return "admin_replied";
+  if (lastMessage?.sender_role === "user" && thread.has_admin_reply) return "user_replied";
+  return "ticket_created";
+}
+
+function getMockUnread(messageAt: string | null | undefined, readAt: string | null): boolean {
+  if (!messageAt) return false;
+  if (!readAt) return true;
+  return new Date(messageAt).getTime() > new Date(readAt).getTime();
+}
+
+function getMockSupportThreadState(): SupportThreadState | null {
+  if (!mockSupportThread) return null;
+  const lastUserMessage = [...mockSupportMessages].reverse().find((message) => message.sender_role === "user") || null;
+  const lastAdminMessage = [...mockSupportMessages].reverse().find((message) => message.sender_role === "platform_admin") || null;
+  const ageMs = Math.max(0, Date.now() - new Date(mockSupportThread.updated_at).getTime());
+  const staleLevel = mockSupportThread.status !== "open"
+    ? "none"
+    : ageMs >= 72 * 60 * 60 * 1000
+      ? "critical"
+      : ageMs >= 24 * 60 * 60 * 1000
+        ? "stale"
+        : "none";
+
+  return {
+    ...mockSupportThread,
+    actor_type: getMockSupportActorType(mockSupportThread.user_id),
+    waiting_on: getMockSupportWaitingOn(mockSupportThread),
+    last_action: getMockSupportLastAction(mockSupportThread),
+    unread_for_user: getMockUnread(lastAdminMessage?.created_at, mockSupportReadState.user),
+    unread_for_admin: getMockUnread(lastUserMessage?.created_at, mockSupportReadState.platform_admin),
+    stale_level: staleLevel,
+    open_duration_minutes: Math.max(0, Math.floor((Date.now() - new Date(mockSupportThread.created_at).getTime()) / 60_000)),
+  };
+}
+
 function getMockSupportState(): SupportStateResponse {
+  const thread = getMockSupportThreadState();
   return {
     platformAdmin: true,
-    thread: mockSupportThread,
-    messages: mockSupportMessages,
+    thread: thread?.status === "open" ? thread : null,
+    messages: thread?.status === "open" ? mockSupportMessages : [],
     session: mockSupportSession,
     transcript: mockSupportSession ? mockSupportTranscript : [],
     currentNode: getMockSupportNode(mockSupportSession?.current_node_id),
@@ -323,7 +405,7 @@ function createMockEscalatedSupportThread() {
       completed_at: createdAt,
     };
     return {
-      thread: mockSupportThread,
+      thread: getMockSupportThreadState(),
       messages: mockSupportMessages,
       _status: 200,
     } as const;
@@ -355,6 +437,10 @@ function createMockEscalatedSupportThread() {
     text: mockSupportThread.summary,
     created_at: createdAt,
   }];
+  mockSupportReadState = {
+    user: createdAt,
+    platform_admin: null,
+  };
   mockSupportTranscript = [
     ...mockSupportTranscript,
     createMockSupportEvent("escalation", mockSupportSession.current_node_id, {
@@ -371,7 +457,7 @@ function createMockEscalatedSupportThread() {
   };
 
   return {
-    thread: mockSupportThread,
+    thread: getMockSupportThreadState(),
     messages: mockSupportMessages,
     _status: 200,
   } as const;
@@ -883,6 +969,7 @@ export async function sendSupportThreadMessage(threadId: string, text: string) {
       last_message: text,
       can_user_send: false,
     };
+    mockSupportReadState.user = message.created_at;
     return { ok: true, message, _status: 200 };
   }
   return requestSupportJson<{
@@ -903,7 +990,14 @@ export async function sendSupportThreadMessage(threadId: string, text: string) {
 export async function closeSupportThread(threadId: string) {
   if (IS_MOCK) {
     if (!mockSupportThread) return { error: "thread_not_found", _status: 404 };
-    mockSupportThread = null;
+    mockSupportThread = {
+      ...mockSupportThread,
+      status: "closed",
+      updated_at: new Date().toISOString(),
+      closed_at: new Date().toISOString(),
+      closed_by: mockSupportThread.user_id,
+    };
+    mockSupportReadState.user = mockSupportThread.updated_at;
     mockSupportMessages = [];
     mockSupportSession = null;
     mockSupportTranscript = [];
@@ -917,6 +1011,26 @@ export async function closeSupportThread(threadId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "close_thread",
+      thread_id: threadId,
+    }),
+  });
+}
+
+export async function markSupportThreadRead(threadId: string) {
+  if (IS_MOCK) {
+    if (mockSupportThread?.id === threadId) {
+      mockSupportReadState.user = new Date().toISOString();
+    }
+    return { ok: true, _status: 200 };
+  }
+  return requestSupportJson<{
+    ok?: boolean;
+    error?: string;
+  }>("/api/support", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "mark_thread_read",
       thread_id: threadId,
     }),
   });
@@ -945,8 +1059,9 @@ export async function clearSupportSession(sessionId: string) {
 
 export async function fetchPlatformSupportThreads() {
   if (IS_MOCK) {
+    const thread = getMockSupportThreadState();
     return {
-      threads: mockSupportThread ? [mockSupportThread] : [],
+      threads: thread?.status === "open" ? [thread] : [],
       _status: 200,
     };
   }
@@ -957,13 +1072,24 @@ export async function fetchPlatformSupportThreads() {
 
 export async function fetchPlatformDashboard() {
   if (IS_MOCK) {
+    const thread = getMockSupportThreadState();
+    const openTickets = thread && thread.status === "open" ? [thread] : [];
     return {
       reportsInbox: null,
-      tickets: mockSupportThread ? [{
-        ...mockSupportThread,
-        user_label: mockSupportThread.user_name || mockSupportThread.user_email || mockSupportThread.user_id,
-        has_admin_reply: mockSupportMessages.some((message) => message.sender_role === "platform_admin"),
+      tickets: thread ? [{
+        ...thread,
+        user_label: thread.user_name || thread.user_email || thread.user_id,
+        has_admin_reply: thread.has_admin_reply,
       }] : [],
+      support_stats: {
+        open_count: openTickets.length,
+        waiting_for_admin_count: openTickets.filter((item) => item.waiting_on === "platform_admin").length,
+        waiting_for_user_count: openTickets.filter((item) => item.waiting_on === "user").length,
+        unread_for_admin_count: openTickets.filter((item) => item.unread_for_admin).length,
+        stale_24h_count: openTickets.filter((item) => item.stale_level !== "none").length,
+        stale_72h_count: openTickets.filter((item) => item.stale_level === "critical").length,
+        oldest_open_duration_minutes: openTickets.reduce((max, item) => Math.max(max, item.open_duration_minutes), 0),
+      },
       _status: 200,
     };
   }
@@ -974,10 +1100,11 @@ export async function fetchPlatformDashboard() {
 
 export async function fetchPlatformSupportThread(threadId: string) {
   if (IS_MOCK) {
+    const thread = getMockSupportThreadState();
     return {
-      thread: mockSupportThread?.id === threadId ? mockSupportThread : null,
-      messages: mockSupportThread?.id === threadId ? mockSupportMessages : [],
-      _status: mockSupportThread?.id === threadId ? 200 : 404,
+      thread: thread?.id === threadId ? thread : null,
+      messages: thread?.id === threadId ? mockSupportMessages : [],
+      _status: thread?.id === threadId ? 200 : 404,
     };
   }
   return requestSupportJson<PlatformSupportThreadResponse>(`/api/platform-admin/support?type=thread&thread_id=${encodeURIComponent(threadId)}`, {
@@ -1018,6 +1145,7 @@ export async function sendPlatformSupportMessage(threadId: string, text: string)
       has_admin_reply: true,
       can_user_send: true,
     };
+    mockSupportReadState.platform_admin = message.created_at;
     return { ok: true, message, _status: 200 };
   }
   return requestSupportJson<{
@@ -1035,10 +1163,37 @@ export async function sendPlatformSupportMessage(threadId: string, text: string)
   });
 }
 
+export async function markPlatformSupportThreadRead(threadId: string) {
+  if (IS_MOCK) {
+    if (mockSupportThread?.id === threadId) {
+      mockSupportReadState.platform_admin = new Date().toISOString();
+    }
+    return { ok: true, _status: 200 };
+  }
+  return requestSupportJson<{
+    ok?: boolean;
+    error?: string;
+  }>("/api/platform-admin/support", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "mark_thread_read",
+      thread_id: threadId,
+    }),
+  });
+}
+
 export async function closePlatformSupportThread(threadId: string) {
   if (IS_MOCK) {
     if (!mockSupportThread) return { error: "thread_not_found", _status: 404 };
-    mockSupportThread = null;
+    mockSupportThread = {
+      ...mockSupportThread,
+      status: "closed",
+      updated_at: new Date().toISOString(),
+      closed_at: new Date().toISOString(),
+      closed_by: "mock-admin",
+    };
+    mockSupportReadState.platform_admin = mockSupportThread.updated_at;
     mockSupportMessages = [];
     mockSupportSession = null;
     mockSupportTranscript = [];

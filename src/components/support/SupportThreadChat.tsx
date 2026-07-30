@@ -15,6 +15,10 @@ function readTranscriptText(event: SupportTranscriptEvent, escalatedLabel: strin
 interface SupportThreadChatProps {
   title: string;
   subtitle?: string;
+  headerRows?: Array<{
+    label: string;
+    value: string;
+  }>;
   topicLabel?: string;
   summary?: string;
   transcript?: SupportTranscriptEvent[];
@@ -37,6 +41,7 @@ interface SupportThreadChatProps {
 export function SupportThreadChat({
   title,
   subtitle = "",
+  headerRows = [],
   topicLabel = "",
   summary = "",
   transcript = [],
@@ -143,6 +148,32 @@ export function SupportThreadChat({
                 </div>
                 <div className="mt-1 whitespace-pre-wrap" style={{ fontSize: "var(--bubble-font-size)", lineHeight: 1.5 }}>
                   {topicLabel}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {headerRows.length > 0 && (
+            <div className="mb-3 flex justify-start">
+              <div
+                className="max-w-[88%] rounded-[18px]"
+                style={{
+                  padding: "calc(var(--bubble-font-size) * 0.52) calc(var(--bubble-font-size) * 0.74)",
+                  background: "var(--card)",
+                  color: "var(--gray-text)",
+                }}
+              >
+                <div className="grid gap-3">
+                  {headerRows.map((row) => (
+                    <div key={row.label}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--meta)" }}>
+                        {row.label}
+                      </div>
+                      <div className="mt-1 whitespace-pre-wrap break-words" style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", lineHeight: 1.5 }}>
+                        {row.value}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
