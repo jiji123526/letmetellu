@@ -437,7 +437,7 @@ export const en: Record<LocaleKeys, string> = {
   supportRestart: "Start Over",
   supportBackToSupport: "Back to Support",
   supportTicketOpen: "Open Ticket",
-  supportActiveTicketNote: "You already have an active 1:1 support ticket. Open it from the dashboard item.",
+  supportActiveTicketNote: "You already have an active 1:1 support ticket, so you cannot submit another one. Open the existing ticket from the dashboard item.",
   supportReplyPlaceholder: "Write your message",
   supportWaitingForAdmin: "Wait for platform support to reply before sending another message.",
   supportWaitingForAdminPlaceholder: "Waiting for platform support to reply",

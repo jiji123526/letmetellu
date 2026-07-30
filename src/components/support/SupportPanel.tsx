@@ -180,6 +180,10 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
 
   async function handleTextSubmit() {
     if (submitting || !supportState.session || !textDraft.trim()) return;
+    if (hasActiveTicket) {
+      setError(t("supportActiveTicketNote"));
+      return;
+    }
     setSubmitting(true);
     const result = await answerSupportSession({
       session_id: supportState.session.id,
@@ -529,6 +533,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
             ))}
           </div>
         ) : supportState.currentNode?.kind === "text" ? (
+          hasActiveTicket ? null : (
           <div className="flex items-end gap-2">
             <div
               className="flex-1 flex items-center relative"
@@ -578,6 +583,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
               )}
             </div>
           </div>
+          )
         ) : supportState.currentNode?.kind === "terminal" ? (
           <div className="flex justify-end">
             <button
