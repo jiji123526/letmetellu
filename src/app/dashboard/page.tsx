@@ -659,7 +659,7 @@ export default function DashboardPage() {
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
     channelItemRefs.current.forEach((element, id) => {
-      const nextTop = element.getBoundingClientRect().top;
+      const nextTop = element.getBoundingClientRect().top + window.scrollY;
       nextPositions.set(id, nextTop);
       const previousTop = previousItemPositionsRef.current.get(id);
       if (previousTop === undefined || previousTop === nextTop) return;
