@@ -13,6 +13,7 @@ import { handleVerifyPasscode } from "./routes/passcode";
 import { handleRecentChannels } from "./routes/recent-channels";
 import { handleChannelReports } from "./routes/channel-reports";
 import { recordOperationalEvent } from "./lib/operational-events";
+import { runScheduledMaintenance } from "./lib/maintenance";
 
 export { ChatRoom };
 
@@ -181,5 +182,24 @@ export default {
     }
 
     return buildResponse(request, response, origin, env.ALLOWED_ORIGIN);
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil((async () => {
+      try {
+        await runScheduledMaintenance(env);
+      } catch (error) {
+        console.error("scheduled maintenance failed", error);
+        await recordOperationalEvent({
+          env,
+          severity: "error",
+          route: "scheduled maintenance",
+          eventType: "maintenance_failed",
+          detail: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    })());
   },
 };

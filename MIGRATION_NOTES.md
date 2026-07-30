@@ -37,6 +37,21 @@ Deployment notes:
 - no new D1 migration is required;
 - these are frontend deploys only.
 
+### Query performance and retention maintenance — 2026-07-30
+
+This follow-up line addressed the next obvious D1 scaling gaps without changing application behavior.
+
+- Added `0022_query_perf_and_retention.sql`.
+- Added message paging indexes aligned to `channel_id`, `created_at` and `id`.
+- Added upload-ticket quota indexes aligned to the actual `channel_id + uid/ip_hash + purpose + created_at/expires_at` count queries.
+- Added created-time indexes for moderation audit log and operational event retention cleanup.
+- Added a daily Worker cron to prune expired upload tickets, old durable rate-limit buckets, old operational events and old moderation audit rows in bounded batches.
+
+Deployment notes:
+
+- apply `0022` before deploying the Worker if you want the new query plans active immediately;
+- the scheduled maintenance handler is activated by the Worker cron configured in `worker/wrangler.toml`.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.
@@ -254,6 +269,18 @@ Adds the first dedicated hardening and observability tables:
 
 Apply `0021` before deploying Worker code that enforces durable rate limits or
 writes moderation or operational logs.
+
+#### `0022_query_perf_and_retention.sql`
+
+Adds follow-up performance and retention-support indexes:
+
+- `messages(channel_id, created_at, id)` for chat paging and history lookups;
+- `messages(channel_id, deleted, reply_to)` for reply-visibility lookups on deleted parent messages;
+- upload-ticket quota indexes aligned to the recent-count and pending-count queries;
+- `moderation_audit_logs(created_at)` and `operational_events(created_at)` so scheduled retention cleanup does not degrade as those tables grow.
+
+Apply `0022` before deploying Worker code if you want the new indexes in place
+before the next traffic spike, though the code remains backward-compatible.
 
 ### Operational checks
 

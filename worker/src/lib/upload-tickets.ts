@@ -36,7 +36,7 @@ export async function hashUploadIp(ip: string, env: Env): Promise<string> {
   return base64UrlEncode(signature);
 }
 
-export async function cleanupExpiredUploadTickets(env: Env, limit = 50): Promise<void> {
+export async function cleanupExpiredUploadTickets(env: Env, limit = 50): Promise<number> {
   const now = new Date().toISOString();
   const { results } = await env.DB.prepare(
     "SELECT id, key FROM upload_tickets WHERE status = 'pending' AND expires_at <= ? ORDER BY expires_at ASC LIMIT ?"
@@ -53,6 +53,7 @@ export async function cleanupExpiredUploadTickets(env: Env, limit = 50): Promise
       .bind(...ids)
       .run();
   }
+  return (results || []).length;
 }
 
 export async function enforceUploadQuota(input: {

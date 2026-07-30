@@ -185,6 +185,7 @@ Recent schema additions:
 - `0017` to `0019`: channel reports, report status, moderation state and owner petitions
 - `0020`: user locale
 - `0021`: durable rate limits, moderation audit logs and operational events
+- `0022`: message paging indexes, upload-ticket quota indexes and retention-support indexes
 
 Frontend deployment is triggered by pushing `main`:
 
