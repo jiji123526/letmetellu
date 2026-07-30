@@ -41,6 +41,53 @@ Cloudflare Worker ── realtime room state ───────> Durable Obje
 
 Normal chat and live-session traffic share the parent channel's Durable Object. Live messages use a temporary `${channelId}_live` D1 channel and are deleted when the live session ends.
 
+## Service Details
+
+### Access model
+
+- Channels are primarily link-addressed through `/ch/[slug]`.
+- Channels may be public or passcode-gated, with an optional passcode hint.
+- Anonymous visitors can read and participate without creating an account.
+- Logged-in users use the dashboard to create, revisit, pin and manage owned channels.
+- Owned channels are private on the owner's public profile by default unless explicitly published.
+
+### Dashboard and account behavior
+
+- The dashboard is the main entry point for both guest and logged-in users.
+- Logged-in users can own up to `5` channels.
+- Owned and recently joined channels are shown separately for owners.
+- Logged-in users sync recent channels, pinned state, personal bubble colors, font size and locale through their account.
+- Guest users keep recent channels and personal UI preferences in the current browser only.
+- Exact channel address lookup supports a raw slug, a `/ch/...` path or a full URL.
+
+### Chat features
+
+- Real-time channel chat over WebSockets with one Durable Object per channel.
+- Replies, reactions, edit/delete, long-message expansion and full-text search.
+- Multi-image messages, R2-backed media, gallery view and link panel.
+- Native YouTube, X/Twitter and Instagram embeds plus Open Graph previews for other links.
+- Cursor-based loading for messages, gallery items and links.
+- Historical message-context loading for older gallery or link references without forcing a jump to the newest messages.
+- Korean and English UI support.
+
+### Owner and moderation features
+
+- Private DMs to the channel owner.
+- Channel rules, notice banner, welcome popup, freeze/unfreeze and banned words with expiry.
+- Block and unblock by anonymous identity plus server-issued device token.
+- Non-owner channel reports routed to a private reports inbox.
+- Owner warning, freeze, delete and petition flows for moderated channels.
+- Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends.
+
+### Authentication and safety model
+
+- Auth.js supports Google OAuth plus existing credential accounts.
+- Credential signup and password reset use email verification and single-use expiring links.
+- Owner actions are authenticated through the Next.js app and re-checked by the Worker with `INTERNAL_SECRET` and owner identity.
+- Anonymous write actions use Worker-issued anonymous and device tokens stored in HttpOnly cookies rather than trusting raw client identifiers.
+- Message, DM, report and preview routes now enforce durable D1-backed rate limits or quotas where appropriate.
+- Moderation actions are recorded in append-only audit logs, and the Worker records lightweight operational failure events for abuse and reliability monitoring.
+
 ## Local Development
 
 Requirements:
