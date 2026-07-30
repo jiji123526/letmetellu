@@ -90,18 +90,20 @@ This deployment line added the first guided support system and reshaped the supe
 
 - Added `0025_support_guided_sessions.sql`.
 - Added `support_sessions`, `support_session_events`, `support_threads` and `support_messages`.
-- Logged-in users now enter help and support from the dashboard help button instead of a persistent support inbox page.
+- Users now enter help and support from the dashboard help button instead of a persistent support inbox page.
 - The user support flow starts as a chatbot-style decision tree with self-resolve steps and escalates to a human thread only when needed.
 - The user side keeps no visible support history; once the super admin closes a ticket, it disappears from the user's dashboard and support panel.
 - After a super-admin reply, the active support thread can surface as a temporary channel-like dashboard item for that user.
 - The super-admin dashboard now exposes `Report` and `Tickets` labels: reports still open the private reports inbox channel, while support tickets appear as separate channel-like rows and open in `/support`.
 - Support transcript ordering now sorts by `created_at ASC, rowid ASC` so a user's decision-tree choice appears before the next bot response.
+- Later follow-up changes reused the existing signed anonymous/device identity path so guests can also use support without adding a new schema.
+- That same follow-up keeps the guide accessible while a ticket is open, but blocks submitting another ticket until the active ticket is closed.
 
 Deployment notes:
 
 - apply `0025` before deploying the Worker code that reads or writes support sessions or tickets;
 - deploy the Worker and the Next.js frontend together for this line because the route surface and dashboard entry points changed on both sides;
-- no additional D1 migration is required for the later dashboard reshape or transcript-ordering fix beyond `0025`.
+- no additional D1 migration is required for the later dashboard reshape, transcript-ordering fix, anonymous-support access, or active-ticket UI guard beyond `0025`.
 
 ## D1 migration runbook
 
@@ -362,7 +364,7 @@ from message or DM context.
 
 Adds the first guided support and escalated-ticket schema:
 
-- `support_sessions` stores the current guided-flow state for a logged-in user;
+- `support_sessions` stores the current guided-flow state for a support actor;
 - `support_session_events` stores the chatbot transcript, user choices and
   escalation path;
 - `support_threads` stores escalated admin tickets and their lifecycle state;

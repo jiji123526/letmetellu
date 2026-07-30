@@ -56,7 +56,8 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - The dashboard is the main entry point for both guest and logged-in users.
 - Logged-in users can own up to `5` channels.
 - Owned and recently joined channels are shown separately for owners.
-- Logged-in users also get a bottom-left help entry for the general guide, in-channel admin guide and platform support.
+- Guest users also get a bottom-left help entry for the general guide and platform support.
+- Logged-in users get the same help entry plus the in-channel admin guide.
 - Logged-in users sync recent channels, pinned state, personal bubble colors, font size and locale through their account.
 - Guest users keep recent channels and personal UI preferences in the current browser only.
 - Exact channel address lookup supports a raw slug, a `/ch/...` path or a full URL.
@@ -74,7 +75,9 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 ### Owner and moderation features
 
 - Private DMs to the channel owner.
-- Logged-in users can start platform support from a guided chatbot-style flow and escalate to a `1:1` admin ticket only when needed.
+- Guests and logged-in users can start platform support from a guided chatbot-style flow and escalate to a `1:1` admin ticket only when needed.
+- Support allows only one open ticket per signed actor at a time. Users can revisit the guide while a ticket is open, but cannot submit another ticket until the active ticket is closed.
+- Guest support previews are mirrored in browser local storage for dashboard reopen convenience, while Worker authorization still uses signed anonymous/device identity cookies.
 - Channel rules, notice banner, welcome popup, freeze/unfreeze and banned words with expiry.
 - Block and unblock by anonymous identity plus server-issued device token.
 - Non-owner channel reports routed to a private reports inbox channel.
@@ -88,6 +91,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Credential signup and password reset use email verification and single-use expiring links.
 - Owner actions are authenticated through the Next.js app and re-checked by the Worker with `INTERNAL_SECRET` and owner identity.
 - Anonymous write actions use Worker-issued anonymous and device tokens stored in HttpOnly cookies rather than trusting raw client identifiers.
+- Anonymous support uses the same signed anonymous identity model through the Next.js `/api/support` proxy rather than trusting a raw browser-local ticket id.
 - The service no longer relies on browser-derived fingerprinting for chat identity or abuse control.
 - Anonymous and device identifiers are random first-party signed tokens with a 90-day lifetime rather than canvas or user-agent fingerprints.
 - Message, DM, report and preview routes now enforce durable D1-backed rate limits or quotas where appropriate.

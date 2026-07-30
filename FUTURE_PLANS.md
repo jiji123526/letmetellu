@@ -40,16 +40,16 @@ The first guided support version now exists as a separate flow from reports and 
 
 Current shape:
 
-- Logged-in users open support from the dashboard help button, not from a separate inbox page.
+- Guests and logged-in users open support from the dashboard help button, not from a separate inbox page.
 - The default user experience is a chatbot-style decision tree with self-resolve paths.
-- Escalation creates at most one open support ticket per user.
+- Escalation creates at most one open support ticket per signed actor.
+- Users can reopen the guided flow while an active ticket exists, but the UI does not allow them to submit another ticket until that ticket closes.
 - Users do not get a support history view; the ticket disappears from their side when the super admin closes it.
 - A replied-to ticket can surface as a temporary channel-like item in the user dashboard, then disappears again when closed.
+- Guest ticket previews are mirrored in local storage for dashboard reopen convenience, while Worker authorization still relies on signed anonymous identity cookies.
 - The super admin dashboard shows `Report` and `Tickets` sections instead of a mixed inbox.
 - Reports still stay in the private reports inbox channel; only guided-support escalations become tickets.
 - Closed tickets remain visible to the super admin for audit and follow-up.
-
-Logged-in-only remains the correct boundary for v1 because support access needs stable identity. Anonymous support should not rely on browser-local UID or device signals.
 
 ### Next support work
 
@@ -61,8 +61,7 @@ Logged-in-only remains the correct boundary for v1 because support access needs 
 
 ### Constraints to keep
 
-- Logged-in users only.
-- No anonymous support threads.
+- No second open ticket while one is already active for the same signed actor.
 - No user-visible closed-ticket archive.
 - No mixed report-plus-support inbox.
 - No paid or plan-gated support path.
@@ -107,4 +106,4 @@ Reporter network and device signals should stay HMAC-hashed; raw IP addresses an
 
 - Full multi-moderator RBAC before the current single-admin flow is fully stable.
 - A large mixed support-plus-reports inbox built on top of the current owner DM model.
-- Anonymous support threads before there is a secure bearer-thread access design.
+- Shareable or raw-ID anonymous support thread access outside the current signed-identity boundary.
