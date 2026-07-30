@@ -13,6 +13,7 @@ import {
   type SupportTranscriptEvent,
 } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
+import { SupportThreadChat } from "./SupportThreadChat";
 
 const emptySupportState: SupportStateResponse = {
   thread: null,
@@ -21,18 +22,6 @@ const emptySupportState: SupportStateResponse = {
   transcript: [],
   currentNode: null,
 };
-
-function formatSupportTimestamp(value: string, locale: "ko" | "en", timeZone: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone,
-  }).format(date);
-}
 
 function readTranscriptText(event: SupportTranscriptEvent): string {
   if (event.event_type === "user_choice") {
@@ -46,7 +35,7 @@ function readTranscriptText(event: SupportTranscriptEvent): string {
 
 export function SupportPanel() {
   const router = useRouter();
-  const { locale, timeZone, t } = useLocale();
+  const { t } = useLocale();
   const [supportState, setSupportState] = useState<SupportStateResponse>(emptySupportState);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -238,6 +227,28 @@ export function SupportPanel() {
     }
   }
 
+  if (supportState.thread) {
+    return (
+      <SupportThreadChat
+        title={t("supportMenu")}
+        subtitle=""
+        topicLabel={supportState.thread.entry_topic_label}
+        messagesRef={transcriptRef}
+        messages={supportState.messages}
+        loading={loading}
+        error={error}
+        status={supportState.thread.status}
+        selfRole="user"
+        draft={threadDraft}
+        onDraftChange={setThreadDraft}
+        onSend={() => { void handleThreadSend(); }}
+        onBack={() => router.push("/dashboard")}
+        submitting={submitting}
+        placeholder={t("supportReplyPlaceholder")}
+      />
+    );
+  }
+
   return (
     <main className="min-h-dvh px-4 py-6" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
       <div className="mx-auto flex min-h-[calc(100dvh-48px)] max-w-[760px] flex-col overflow-hidden rounded-[28px] border" style={{ background: "var(--input-bg)", borderColor: "var(--hairline)", boxShadow: "0 24px 70px rgba(15,23,42,.08)" }}>
@@ -266,35 +277,6 @@ export function SupportPanel() {
             <div className="rounded-[20px] px-4 py-5 text-[14px]" style={{ background: "var(--card)", color: "var(--meta)" }}>
               {t("loading")}
             </div>
-          ) : supportState.thread ? (
-            <>
-              <div className="rounded-[20px] px-4 py-4" style={{ background: "#eef2ff", color: "#312e81" }}>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em]">{t("supportTicketOpen")}</div>
-                <div className="mt-1 text-[14px] font-medium">{supportState.thread.entry_topic_label}</div>
-              </div>
-              {supportState.messages.map((message) => {
-                const isAdmin = message.sender_role === "platform_admin";
-                return (
-                  <div key={message.id} className={`flex ${isAdmin ? "justify-start" : "justify-end"}`}>
-                    <div
-                      className="max-w-[88%] rounded-[22px] px-4 py-3"
-                      style={{
-                        background: isAdmin ? "var(--card)" : "#111827",
-                        color: isAdmin ? "var(--gray-text)" : "#fff",
-                      }}
-                    >
-                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: isAdmin ? "var(--meta)" : "rgba(255,255,255,.68)" }}>
-                        {isAdmin ? t("supportAdmin") : t("supportUser")}
-                      </div>
-                      <div className="whitespace-pre-wrap text-[14px] leading-[1.6]">{message.text}</div>
-                      <div className="mt-2 text-[11px]" style={{ color: isAdmin ? "var(--meta)" : "rgba(255,255,255,.68)" }}>
-                        {formatSupportTimestamp(message.created_at, locale, timeZone)}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </>
           ) : (
             <>
               {supportState.transcript.map((event) => {
@@ -337,28 +319,7 @@ export function SupportPanel() {
         </section>
 
         <footer className="border-t px-4 py-4" style={{ borderColor: "var(--hairline)", background: "rgba(255,255,255,.8)" }}>
-          {supportState.thread ? (
-            <div className="flex gap-2">
-              <textarea
-                value={threadDraft}
-                onChange={(event) => setThreadDraft(event.target.value)}
-                rows={2}
-                className="min-h-[52px] flex-1 resize-none rounded-[18px] border px-4 py-3 text-[14px] outline-none"
-                style={{ borderColor: "var(--hairline)", background: "var(--bg)" }}
-                placeholder={t("supportReplyPlaceholder")}
-                disabled={submitting}
-              />
-              <button
-                type="button"
-                onClick={() => void handleThreadSend()}
-                disabled={submitting || !threadDraft.trim()}
-                className="self-end rounded-[18px] px-4 py-3 text-[14px] font-semibold text-white disabled:cursor-not-allowed"
-                style={{ background: submitting || !threadDraft.trim() ? "#9ca3af" : "#111827" }}
-              >
-                {t("send")}
-              </button>
-            </div>
-          ) : supportState.currentNode?.kind === "choice" ? (
+          {supportState.currentNode?.kind === "choice" ? (
             <div className="flex flex-wrap gap-2">
               {supportState.currentNode.choices.map((choice) => (
                 <button

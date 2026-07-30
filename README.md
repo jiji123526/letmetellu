@@ -9,7 +9,7 @@ Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
 - Link-only channel access with optional passcodes and hints
 - Real-time anonymous chat with replies, reactions, editing, deletion, search and reporting
 - Account-backed dashboard for owned and recently joined channels
-- Private owner DMs, moderation inbox flow, owner freeze/petition handling and live sessions
+- Private owner DMs, guided support flow, moderation inbox flow, owner freeze/petition handling and live sessions
 - Cloudflare-backed persistence with D1, R2 and one Durable Object per channel
 
 ## Current Highlights
@@ -56,6 +56,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - The dashboard is the main entry point for both guest and logged-in users.
 - Logged-in users can own up to `5` channels.
 - Owned and recently joined channels are shown separately for owners.
+- Logged-in users also get a bottom-left help entry for the general guide, in-channel admin guide and platform support.
 - Logged-in users sync recent channels, pinned state, personal bubble colors, font size and locale through their account.
 - Guest users keep recent channels and personal UI preferences in the current browser only.
 - Exact channel address lookup supports a raw slug, a `/ch/...` path or a full URL.
@@ -73,10 +74,12 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 ### Owner and moderation features
 
 - Private DMs to the channel owner.
+- Logged-in users can start platform support from a guided chatbot-style flow and escalate to a `1:1` admin ticket only when needed.
 - Channel rules, notice banner, welcome popup, freeze/unfreeze and banned words with expiry.
 - Block and unblock by anonymous identity plus server-issued device token.
-- Non-owner channel reports routed to a private reports inbox.
+- Non-owner channel reports routed to a private reports inbox channel.
 - Owner warning, freeze, delete and petition flows for moderated channels.
+- Super admin dashboard routing is split between `Report` and `Tickets`: reports still resolve through the reports inbox channel, while escalated support tickets appear as channel-like entries and open in `/support`.
 - Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends.
 
 ### Authentication and safety model
@@ -193,6 +196,8 @@ Recent schema additions:
 - `0021`: durable rate limits, moderation audit logs and operational events
 - `0022`: message paging indexes, upload-ticket quota indexes and retention-support indexes
 - `0023`: privacy-focused device-id transition and legacy message-identifier cleanup
+- `0024`: server-only anonymous actor identities for message-based block resolution
+- `0025`: guided support sessions, escalated support threads and support messages
 
 Frontend deployment is triggered by pushing `main`:
 
@@ -206,6 +211,8 @@ Worker deployment:
 cd worker
 npm run deploy
 ```
+
+Support, moderation and dashboard routing changes often span both runtimes. If a change touches support routes, report routing or dashboard-admin surfaces, deploy the Worker and the Next.js frontend together after any required D1 migration.
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for the full migration inventory, deployment notes and implementation history.
 
@@ -236,4 +243,4 @@ worker/
 ## Additional Docs
 
 - [MIGRATION_NOTES.md](./MIGRATION_NOTES.md): migration inventory, deployment notes, security hardening history and UI porting notes
-- [FUTURE_PLANS.md](./FUTURE_PLANS.md): support-ticket planning, moderation roadmap and remaining follow-up work
+- [FUTURE_PLANS.md](./FUTURE_PLANS.md): support-flow follow-up, moderation roadmap and remaining platform work

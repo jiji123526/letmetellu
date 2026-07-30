@@ -274,17 +274,11 @@ export default function DashboardPage() {
         setSupportPreview(null);
         return;
       }
-      const latestAdminReply = [...(result.messages || [])]
-        .reverse()
-        .find((message) => message.sender_role === "platform_admin");
-      if (!latestAdminReply) {
-        setSupportPreview(null);
-        return;
-      }
+      const latestMessage = result.messages?.[result.messages.length - 1] || null;
       setSupportPreview({
         threadId: result.thread.id,
         topicLabel: result.thread.entry_topic_label,
-        preview: result.thread.last_message || latestAdminReply.text,
+        preview: result.thread.last_message || latestMessage?.text || result.thread.summary,
         updatedAt: result.thread.updated_at,
       });
     } catch {
@@ -1081,6 +1075,7 @@ export default function DashboardPage() {
                 if (index > 0 && previousItem?.group === item.group) return false;
                 if (item.group === "reports" || item.group === "tickets") return true;
                 if (item.group === "support-preview") return false;
+                if (platformDashboard) return false;
                 return isLoggedIn && ownedChannelIds.size > 0;
               })();
               const canEditItem = item.kind === "channel" && (item.group === "owned" || item.group === "joined");

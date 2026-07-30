@@ -84,6 +84,25 @@ Deployment notes:
 - apply `0024` before deploying the Worker if you want message-based anonymous block resolution active immediately;
 - older `blocked.device_id` rows may still contain pre-hash values until they are rewritten or naturally aged out.
 
+### Guided support sessions and admin dashboard routing — 2026-07-30
+
+This deployment line added the first guided support system and reshaped the super-admin dashboard around separate report and ticket flows.
+
+- Added `0025_support_guided_sessions.sql`.
+- Added `support_sessions`, `support_session_events`, `support_threads` and `support_messages`.
+- Logged-in users now enter help and support from the dashboard help button instead of a persistent support inbox page.
+- The user support flow starts as a chatbot-style decision tree with self-resolve steps and escalates to a human thread only when needed.
+- The user side keeps no visible support history; once the super admin closes a ticket, it disappears from the user's dashboard and support panel.
+- After a super-admin reply, the active support thread can surface as a temporary channel-like dashboard item for that user.
+- The super-admin dashboard now exposes `Report` and `Tickets` labels: reports still open the private reports inbox channel, while support tickets appear as separate channel-like rows and open in `/support`.
+- Support transcript ordering now sorts by `created_at ASC, rowid ASC` so a user's decision-tree choice appears before the next bot response.
+
+Deployment notes:
+
+- apply `0025` before deploying the Worker code that reads or writes support sessions or tickets;
+- deploy the Worker and the Next.js frontend together for this line because the route surface and dashboard entry points changed on both sides;
+- no additional D1 migration is required for the later dashboard reshape or transcript-ordering fix beyond `0025`.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.
@@ -326,6 +345,32 @@ This migration is intentionally additive rather than a hard rename so the
 existing deployment order remains safe while the Worker code transitions away
 from the legacy field names.
 
+#### `0024_message_actor_identities.sql`
+
+Adds a server-only actor-identity lookup table for anonymous moderation:
+
+- `message_actor_identities` maps a message or DM row back to the sender's
+  anonymous `uid` and hashed device block key without exposing those values to
+  the browser;
+- channel and created-time indexes support fast block resolution and bounded
+  retention cleanup.
+
+Apply `0024` before deploying Worker code that resolves anonymous block actions
+from message or DM context.
+
+#### `0025_support_guided_sessions.sql`
+
+Adds the first guided support and escalated-ticket schema:
+
+- `support_sessions` stores the current guided-flow state for a logged-in user;
+- `support_session_events` stores the chatbot transcript, user choices and
+  escalation path;
+- `support_threads` stores escalated admin tickets and their lifecycle state;
+- `support_messages` stores the human side of escalated support conversations.
+
+Apply `0025` before deploying Worker code that serves guided support, ticket
+listing or support messaging.
+
 ### Operational checks
 
 After a migration:
@@ -448,9 +493,11 @@ D1 migration.
   channel stuck in moderation state.
 - Viewer-facing moderation UI now only exposes a generic frozen-channel state;
   non-owners do not receive the moderation reason.
-- The general user guide moved to the dashboard menu, guest onboarding's final
-  page can open the same guide, and the in-channel owner guide now documents
-  report-handling and moderation states from the owner's perspective.
+- The general user guide first moved into dashboard entry points, guest
+  onboarding's final page can open the same guide, and the in-channel owner
+  guide now documents report-handling and moderation states from the owner's
+  perspective. Later support work consolidated the current logged-in help entry
+  into the dashboard help button.
 
 Deployment notes:
 

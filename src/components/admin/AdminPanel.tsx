@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import { adminAction, uploadAdminImage } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
-import { AdminGuideContent } from "./AdminGuideContent";
 import { ProfileImageCropper } from "./ProfileImageCropper";
 
 interface AdminPanelProps {
@@ -44,7 +43,7 @@ interface AdminPanelProps {
   onClose: () => void;
 }
 
-type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "background" | "passcode" | "rules" | "welcome" | "banned-words" | "blocked" | "guide";
+type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "background" | "passcode" | "rules" | "welcome" | "banned-words" | "blocked";
 
 const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 const BACKGROUND_COLORS = ["#f2f2f7", "#eef5ff", "#f2efff", "#eef8f2", "#fff5e8", "#fff0f3", "#202124"];
@@ -139,7 +138,6 @@ export function AdminPanel(props: AdminPanelProps) {
   const mainItems: MenuItem[] = [
     { key: "channel", label: t("channel"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>`, arrow: "›" },
     { key: "manage", label: t("manage"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`, arrow: "›" },
-    { key: "guide", label: t("guide"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`, arrow: "›" },
     { key: "toggle-view", label: t("viewAsUser"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`, arrow: "›" },
   ];
 
@@ -171,7 +169,6 @@ export function AdminPanel(props: AdminPanelProps) {
       case "welcome": setView("welcome"); break;
       case "banned-words": setView("banned-words"); break;
       case "blocked": setView("blocked"); break;
-      case "guide": setView("guide"); break;
       case "toggle-view": onClose(); onToggleView(); break;
       case "petition-toggle": onPetitionToggle(); break;
       case "dm-toggle": onDmToggle(); break;
@@ -181,7 +178,7 @@ export function AdminPanel(props: AdminPanelProps) {
   const goBack = () => {
     if (view === "profile" || view === "color" || view === "background" || view === "passcode" || view === "rules" || view === "welcome") setView("channel");
     else if (view === "banned-words" || view === "blocked") setView("manage");
-    else if (view === "channel" || view === "manage" || view === "guide") setView("main");
+    else if (view === "channel" || view === "manage") setView("main");
     else onClose();
   };
 
@@ -216,7 +213,7 @@ export function AdminPanel(props: AdminPanelProps) {
   const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px", lineHeight: 1 };
   const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
 
-  const title = { main: t("adminSettingsTitle"), channel: t("channel"), manage: t("manage"), profile: t("profile"), color: t("color"), background: t("chatBackground"), passcode: t("passcode"), rules: t("rules"), welcome: t("welcomePopup"), "banned-words": t("bannedWords"), blocked: t("blockedUsers"), guide: t("guide") }[view];
+  const title = { main: t("adminSettingsTitle"), channel: t("channel"), manage: t("manage"), profile: t("profile"), color: t("color"), background: t("chatBackground"), passcode: t("passcode"), rules: t("rules"), welcome: t("welcomePopup"), "banned-words": t("bannedWords"), blocked: t("blockedUsers") }[view];
 
   return (
     <div
@@ -693,11 +690,6 @@ export function AdminPanel(props: AdminPanelProps) {
               goBack();
             }}>{ t("save")}</button>
           </div>
-        )}
-
-        {/* Guide panel */}
-        {view === "guide" && (
-          <AdminGuideContent />
         )}
       </div>
       {cropFile && (
