@@ -5,6 +5,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DURABLE_RATE_LIMIT_RETENTION_MS = 7 * DAY_MS;
 const OPERATIONAL_EVENTS_RETENTION_MS = 30 * DAY_MS;
 const MODERATION_AUDIT_RETENTION_MS = 365 * DAY_MS;
+const MESSAGE_ACTOR_IDENTITY_RETENTION_MS = 90 * DAY_MS;
 const CLEANUP_BATCH_LIMIT = 250;
 const CLEANUP_MAX_BATCHES = 8;
 
@@ -14,7 +15,7 @@ function cutoffIso(retentionMs: number, nowMs: number): string {
 
 async function deleteRowsByRowId(
   env: Env,
-  table: "durable_rate_limits" | "operational_events" | "moderation_audit_logs",
+  table: "durable_rate_limits" | "operational_events" | "moderation_audit_logs" | "message_actor_identities",
   timestampColumn: "updated_at" | "created_at",
   cutoff: string,
   limit: number,
@@ -35,7 +36,7 @@ async function deleteRowsByRowId(
 
 async function drainTableRetention(
   env: Env,
-  table: "durable_rate_limits" | "operational_events" | "moderation_audit_logs",
+  table: "durable_rate_limits" | "operational_events" | "moderation_audit_logs" | "message_actor_identities",
   timestampColumn: "updated_at" | "created_at",
   cutoff: string,
 ): Promise<number> {
@@ -63,6 +64,7 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   durableRateLimitsDeleted: number;
   operationalEventsDeleted: number;
   moderationAuditLogsDeleted: number;
+  messageActorIdentitiesDeleted: number;
 }> {
   const uploadTicketsDeleted = await drainExpiredUploadTicketRetention(env);
   const durableRateLimitsDeleted = await drainTableRetention(
@@ -83,11 +85,18 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     "created_at",
     cutoffIso(MODERATION_AUDIT_RETENTION_MS, nowMs),
   );
+  const messageActorIdentitiesDeleted = await drainTableRetention(
+    env,
+    "message_actor_identities",
+    "created_at",
+    cutoffIso(MESSAGE_ACTOR_IDENTITY_RETENTION_MS, nowMs),
+  );
 
   return {
     uploadTicketsDeleted,
     durableRateLimitsDeleted,
     operationalEventsDeleted,
     moderationAuditLogsDeleted,
+    messageActorIdentitiesDeleted,
   };
 }

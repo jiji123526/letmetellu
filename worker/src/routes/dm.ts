@@ -4,6 +4,7 @@ import { isReportsChannel } from "../lib/special-channels";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
@@ -84,9 +85,12 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       env.DB.prepare(
         "SELECT id, text FROM config WHERE channel_id = ? AND id IN (?, ?)"
       ).bind(parentChannelId, `dm_${parentChannelId}`, `petition_${parentChannelId}`).all<{ id: string; text: string }>(),
-      env.DB.prepare(
-        "SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
-      ).bind(requesterUid, requesterDeviceId || "", requesterDeviceId || "", parentChannelId).first(),
+      isBlockedActor({
+        env,
+        channelId: parentChannelId,
+        uid: requesterUid,
+        deviceId: requesterDeviceId,
+      }),
       rawText ? checkBannedWords(rawText, parentChannelId, env) : Promise.resolve(true),
     ]);
 
@@ -133,9 +137,17 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       }
     }
     const created_at = new Date().toISOString();
-    await env.DB.prepare(
-      "INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(id, requesterUid, requesterUid, nick || null, rawText, image || null, channel_id).run();
+    const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(id, requesterUid, requesterUid, nick || null, rawText, image || null, channel_id, created_at),
+      env.DB.prepare(
+        `INSERT OR REPLACE INTO message_actor_identities
+          (record_id, record_type, channel_id, uid, device_id_hash, created_at)
+         VALUES (?, 'dm', ?, ?, ?, ?)`
+      ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
+    ]);
 
     // Broadcast DM with payload — always use parent channel DO
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);

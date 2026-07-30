@@ -3,6 +3,7 @@ import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerMod
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
+import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
 
 function formatModerationPetitionMessage(input: {
@@ -72,6 +73,7 @@ export async function deleteChannel(channelId: string, env: Env) {
     env.DB.prepare(`DELETE FROM gallery WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM dm WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM blocked WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+    env.DB.prepare(`DELETE FROM message_actor_identities WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM moderators WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM banned_words WHERE channel_id IN (${placeholders})`).bind(...channelIds),
@@ -264,17 +266,59 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "block": {
-      const { uid, reason, device_id } = payload || {};
-      await env.DB.prepare(
-        "INSERT INTO blocked (id, uid, reason, device_id, channel_id) VALUES (?, ?, ?, ?, ?)"
-      ).bind(crypto.randomUUID(), uid, reason || "", device_id || null, channel_id).run();
+      const reason = typeof payload?.reason === "string" ? payload.reason : "";
+      const messageId = typeof payload?.message_id === "string" ? payload.message_id : "";
+      const messageKind = payload?.message_kind === "dm" ? "dm" : "message";
+      let uid = typeof payload?.uid === "string" ? payload.uid : "";
+      let deviceId: string | null = typeof payload?.device_id === "string" && payload.device_id
+        ? await hashBlockedDeviceId(payload.device_id, env)
+        : null;
+
+      if (messageId) {
+        const resolved = await resolveActorIdentity({
+          env,
+          recordId: messageId,
+          recordType: messageKind as ActorRecordType,
+          channelId: channel_id,
+        });
+        if (resolved) {
+          uid = resolved.uid;
+          deviceId = resolved.deviceIdHash;
+        } else {
+          const liveChannelId = `${channel_id}_live`;
+          const fallbackRow = messageKind === "dm"
+            ? await env.DB.prepare(
+              "SELECT uid FROM dm WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
+            ).bind(messageId, channel_id, liveChannelId).first<{ uid: string }>()
+            : await env.DB.prepare(
+              "SELECT uid FROM messages WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
+            ).bind(messageId, channel_id, liveChannelId).first<{ uid: string }>();
+          if (!fallbackRow?.uid) {
+            return Response.json({ error: "identity_not_found" }, { status: 404 });
+          }
+          uid = fallbackRow.uid;
+          deviceId = null;
+        }
+      }
+
+      if (!uid) {
+        return Response.json({ error: "missing required fields" }, { status: 400 });
+      }
+
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
+          .bind(uid, channel_id),
+        env.DB.prepare(
+          "INSERT INTO blocked (id, uid, reason, device_id, channel_id) VALUES (?, ?, ?, ?, ?)"
+        ).bind(crypto.randomUUID(), uid, reason, deviceId, channel_id),
+      ]);
 
       // Broadcast block so the blocked user's UI updates immediately
       const blockDoId = env.CHAT_ROOM.idFromName(channel_id);
       const blockStub = env.CHAT_ROOM.get(blockDoId);
       await blockStub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "user-blocked", uid, device_id: device_id || null }),
+        body: JSON.stringify({ type: "user-blocked", uid, device_id: deviceId }),
       }));
 
       return Response.json({ ok: true });
@@ -326,12 +370,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           .map((row) => extractMediaKey(row.image))
           .filter((key): key is string => Boolean(key))
       )];
+      const mappingPlaceholders = deletedIds.map(() => "?").join(", ");
 
       // Remove gallery rows before their source messages, including reply media.
       await env.DB.batch([
         env.DB.prepare(
           "DELETE FROM gallery WHERE channel_id = ? AND (id = ? OR id IN (SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?))"
         ).bind(channel_id, message_id, message_id, channel_id),
+        env.DB.prepare(
+          `DELETE FROM message_actor_identities
+           WHERE record_type = 'message' AND record_id IN (${mappingPlaceholders})`
+        ).bind(...deletedIds),
         env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
         env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
@@ -356,8 +405,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const { dm_id } = payload || {};
       const dm = await env.DB.prepare("SELECT image FROM dm WHERE id = ? AND channel_id = ?")
         .bind(dm_id, channel_id).first<{ image: string | null }>();
-      await env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
-        .bind(dm_id, channel_id).run();
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'")
+          .bind(dm_id),
+        env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
+          .bind(dm_id, channel_id),
+      ]);
       await deleteMediaByUrl(env, dm?.image);
       await deleteUploadTicketByAttachment(env, "dm", dm_id as string);
 

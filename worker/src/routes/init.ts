@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
@@ -131,11 +132,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const viewerUid = anonymousIdentity.uid;
     const viewerDeviceId = deviceIdentity.deviceId;
     if (viewerUid.length <= 128 && viewerDeviceId.length <= 128 && (viewerUid || viewerDeviceId)) {
+      const viewerDeviceLookup = await getBlockedDeviceLookup(viewerDeviceId, env);
       viewerBlockedIndex = statements.length;
       statements.push(
         env.DB.prepare(
-          "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
-        ).bind(parentChannelId, viewerUid, viewerDeviceId, viewerDeviceId)
+          "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
+        ).bind(parentChannelId, viewerUid, viewerDeviceLookup.raw, viewerDeviceLookup.hashed, viewerDeviceLookup.raw)
       );
     }
   }

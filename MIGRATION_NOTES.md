@@ -68,6 +68,22 @@ Deployment notes:
 - apply `0023` before deploying the Worker if you want the backfill and message-identifier cleanup in place immediately;
 - the Worker still reads the legacy `blocked.fingerprint` column as a compatibility fallback during the transition.
 
+### Server-side anonymous block resolution — 2026-07-30
+
+This follow-up restores stronger anonymous blocking without returning to browser fingerprinting or exposing device identifiers to the owner UI.
+
+- Added `0024_message_actor_identities.sql`.
+- Added a server-only `message_actor_identities` table for anonymous message and DM senders.
+- The chat block action now sends record context (`message_id` plus message kind) instead of trusting client-supplied device identifiers.
+- The Worker resolves that record to the sender's anonymous `uid` plus an HMAC-hashed device block key and stores both in `blocked`.
+- Block enforcement now checks both the hashed device key and legacy raw-device and fingerprint values during the transition.
+- Scheduled maintenance now expires old actor-identity rows after ninety days.
+
+Deployment notes:
+
+- apply `0024` before deploying the Worker if you want message-based anonymous block resolution active immediately;
+- older `blocked.device_id` rows may still contain pre-hash values until they are rewritten or naturally aged out.
+
 ## D1 migration runbook
 
 D1 migrations are ordered files in `worker/migrations`. Wrangler records applied migrations, so do not rename or edit a migration after it has reached production. Add a new numbered migration instead.

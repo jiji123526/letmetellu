@@ -3032,19 +3032,21 @@ export function ChatView({ channelId }: { channelId: string }) {
             const msg = messages.find((m) => m.id === msgId);
             if (msg) setEditingMsg({ id: msg.id, text: msg.text });
           } : undefined}
-          onBlock={canUseAdminMutations && !contextMenu.isOwn ? (blockUid) => {
+          onBlock={canUseAdminMutations && !contextMenu.isOwn ? (targetMsg) => {
+            const blockUid = targetMsg.uid;
             const isBlocked = blockedUsers.some((b) => b.uid === blockUid);
             if (isBlocked) {
               adminAction("unblock", channelId, { uid: blockUid });
               setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
               setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonUnblocked")}`, color: "#2a9d4e" });
             } else {
-              const msg = contextMenu.msg;
+              const reason = targetMsg.text?.slice(0, 50) || "";
               adminAction("block", channelId, {
-                uid: blockUid,
-                reason: msg.text?.slice(0, 50) || "",
+                message_id: targetMsg.id,
+                message_kind: targetMsg.dm ? "dm" : "message",
+                reason,
               });
-              setBlockedUsers((prev) => [...prev, { uid: blockUid, reason: msg.text?.slice(0, 50) || "" }]);
+              setBlockedUsers((prev) => [...prev, { uid: blockUid, reason }]);
               setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonBlocked")}`, color: "#d32f2f" });
             }
             setTimeout(() => setBanner(null), 3000);

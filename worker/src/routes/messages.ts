@@ -6,6 +6,7 @@ import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "..
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -108,8 +109,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // These are independent read-only checks. Run them together only after
     // passcode, freeze, rate-limit and length validation have succeeded.
     const [blocked, allowedByBannedWords] = await Promise.all([
-      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(requesterUid, requesterDeviceId || "", requesterDeviceId || "", parentChannelId).first(),
+      isBlockedActor({
+        env,
+        channelId: parentChannelId,
+        uid: requesterUid,
+        deviceId: requesterDeviceId,
+      }),
       text
         ? checkBannedWords(text as string, parentChannelId, env)
         : Promise.resolve(true),
@@ -153,6 +158,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
     ];
+    if (!isChannelOwner && requesterDeviceId) {
+      const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
+      stmts.push(
+        env.DB.prepare(
+          `INSERT OR REPLACE INTO message_actor_identities
+            (record_id, record_type, channel_id, uid, device_id_hash, created_at)
+           VALUES (?, 'message', ?, ?, ?, ?)`
+        ).bind(id, parentChannelId, senderUid, deviceIdHash, created_at)
+      );
+    }
     if (image) {
       stmts.push(
         env.DB.prepare("INSERT INTO gallery (id, image, auth_uid, channel_id, created_at) VALUES (?, ?, ?, ?, ?)")
@@ -230,6 +245,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       await env.DB.batch([
         env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
+          .bind(message_id),
         env.DB.prepare("UPDATE messages SET deleted = 1, text = '삭제된 채팅입니다', image = NULL, gallery_id = NULL WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
       ]);
@@ -238,6 +255,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       await env.DB.batch([
         env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
+          .bind(message_id),
         env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
       ]);
@@ -335,8 +354,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     const [blocked, allowedByBannedWords] = await Promise.all([
-      env.DB.prepare("SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ?")
-        .bind(requesterUid, requesterDeviceId || "", requesterDeviceId || "", editParent).first(),
+      isBlockedActor({
+        env,
+        channelId: editParent,
+        uid: requesterUid,
+        deviceId: requesterDeviceId,
+      }),
       checkBannedWords(text, editParent, env),
     ]);
     if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
@@ -420,9 +443,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
     const reactionUid = isVerifiedAdmin ? verifiedUserId! : anonymousUid!;
     if (!isVerifiedAdmin) {
-      const blocked = await env.DB.prepare(
-        "SELECT 1 FROM blocked WHERE (uid = ? OR device_id = ? OR fingerprint = ?) AND channel_id = ? LIMIT 1"
-      ).bind(reactionUid, requesterDeviceId || "", requesterDeviceId || "", patchParent).first();
+      const blocked = await isBlockedActor({
+        env,
+        channelId: patchParent,
+        uid: reactionUid,
+        deviceId: requesterDeviceId,
+      });
       if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
     }
 

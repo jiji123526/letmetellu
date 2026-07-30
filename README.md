@@ -89,6 +89,8 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Anonymous and device identifiers are random first-party signed tokens with a 90-day lifetime rather than canvas or user-agent fingerprints.
 - Message, DM, report and preview routes now enforce durable D1-backed rate limits or quotas where appropriate.
 - Device identifiers are kept for abuse controls such as blocking and report deduplication, but are no longer persisted on normal chat messages.
+- Anonymous block actions now resolve from a server-only message or DM actor map, so owners can block by row without receiving raw device identifiers.
+- Device-based block keys are HMAC-hashed before persistence, with legacy raw-device and fingerprint lookups kept only as compatibility fallbacks during migration.
 - IP-based abuse controls use HMAC-hashed identifiers rather than raw IP storage.
 - Moderation actions are recorded in append-only audit logs, and the Worker records lightweight operational failure events for abuse and reliability monitoring.
 

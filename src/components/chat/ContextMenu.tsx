@@ -11,6 +11,7 @@ interface ContextMenuProps {
     uid: string;
     text: string;
     is_admin: number;
+    dm?: boolean;
     report_meta?: {
       report_id: string;
       channel_url: string;
@@ -36,7 +37,7 @@ interface ContextMenuProps {
   onDelete?: (msgId: string) => void;
   onDeleteWithReplies?: (msgId: string) => void;
   onEdit?: (msgId: string) => void;
-  onBlock?: (uid: string) => void;
+  onBlock?: (msg: { id: string; uid: string; text: string; dm?: boolean }) => void;
   isBlockedUser?: boolean;
   onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
@@ -457,7 +458,7 @@ export function ContextMenu({
             )}
 
             {isAdmin && !isMyMessage && onBlock && (
-              <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg.uid); onClose(); }}>
+              <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M4.93 4.93l14.14 14.14" />
