@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { decorateMediaUrl } from "@/lib/api";
+import { decorateMediaUrl, fetchPlatformDashboard, fetchSupportState, type PlatformDashboardResponse } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -34,6 +34,31 @@ interface Channel {
   has_passcode: number;
   owner_name: string | null;
   live_active: number;
+}
+
+interface SupportDashboardPreview {
+  threadId: string;
+  topicLabel: string;
+  preview: string;
+  updatedAt: string;
+}
+
+interface DashboardListItem {
+  id: string;
+  group: "reports" | "tickets" | "owned" | "joined" | "support-preview";
+  kind: "channel" | "support";
+  route: string;
+  name: string;
+  profileImage: string | null;
+  bubbleColor: string;
+  hasPasscode: boolean;
+  ownerName: string;
+  meta: string;
+  time: string;
+  owned: boolean;
+  pinned: boolean;
+  activityAt: string;
+  liveActive: boolean;
 }
 
 function formatDate(value: string, locale: "ko" | "en") {
@@ -110,6 +135,8 @@ export default function DashboardPage() {
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
+  const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
+  const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -216,6 +243,55 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadPlatformDashboard = useCallback(async () => {
+    if (status !== "authenticated") {
+      setPlatformDashboard(null);
+      return;
+    }
+    try {
+      const result = await fetchPlatformDashboard();
+      if (result._status === 403 || result._status === 404 || result._status >= 400) {
+        setPlatformDashboard(null);
+        return;
+      }
+      setPlatformDashboard({
+        reportsInbox: result.reportsInbox ?? null,
+        tickets: result.tickets || [],
+      });
+    } catch {
+      setPlatformDashboard(null);
+    }
+  }, [status]);
+
+  const loadSupportPreview = useCallback(async () => {
+    if (status !== "authenticated") {
+      setSupportPreview(null);
+      return;
+    }
+    try {
+      const result = await fetchSupportState();
+      if (result._status >= 400 || !result.thread) {
+        setSupportPreview(null);
+        return;
+      }
+      const latestAdminReply = [...(result.messages || [])]
+        .reverse()
+        .find((message) => message.sender_role === "platform_admin");
+      if (!latestAdminReply) {
+        setSupportPreview(null);
+        return;
+      }
+      setSupportPreview({
+        threadId: result.thread.id,
+        topicLabel: result.thread.entry_topic_label,
+        preview: result.thread.last_message || latestAdminReply.text,
+        updatedAt: result.thread.updated_at,
+      });
+    } catch {
+      setSupportPreview(null);
+    }
+  }, [status]);
+
   const connectLocalChannels = async () => {
     if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
     const migrationKey = `letmetellu_recent_channels_migrated_${session.user.id}`;
@@ -253,14 +329,27 @@ export default function DashboardPage() {
         void Promise.all([
           loadChannels(),
           loadAccountRecentChannels(session.user.id),
+          loadPlatformDashboard(),
+          loadSupportPreview(),
         ]).finally(() => setLoading(false));
       } else if (status === "unauthenticated") {
         void loadLocalRecentChannels();
+        setPlatformDashboard(null);
+        setSupportPreview(null);
         setLoading(false);
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [status, session?.user?.id, loadChannels, loadLocalRecentChannels, loadAccountRecentChannels]);
+  }, [status, session?.user?.id, loadChannels, loadLocalRecentChannels, loadAccountRecentChannels, loadPlatformDashboard, loadSupportPreview]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const timer = window.setInterval(() => {
+      void loadPlatformDashboard();
+      void loadSupportPreview();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [status, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
     if (loading || status !== "unauthenticated" || recentChannels.length > 0) return;
@@ -311,7 +400,7 @@ export default function DashboardPage() {
     };
   }, [linkedChannelId]);
 
-  const activeItems = useMemo(() => {
+  const activeItems = useMemo<DashboardListItem[]>(() => {
     const normalized = query.trim().toLowerCase();
     const fetchedOwnedIds = new Set(channels.map((channel) => channel.id));
     const personalColors = new Map(recentChannels.map((channel) => [channel.id, channel.bubbleColor]));
@@ -319,8 +408,11 @@ export default function DashboardPage() {
       status === "authenticated"
         ? personalColors.get(channelId) || fallback
         : getChannelPreviewColor(channelId, fallback);
-    const ownedItems = channels
+    const ownedItems: DashboardListItem[] = channels
       .map((channel) => ({
+          group: "owned" as const,
+          kind: "channel" as const,
+          route: `/ch/${channel.id}`,
           id: channel.id,
           name: channel.name,
           profileImage: channel.profile_image,
@@ -341,9 +433,12 @@ export default function DashboardPage() {
         Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
         || (parseServerDate(right.activityAt)?.getTime() || 0) - (parseServerDate(left.activityAt)?.getTime() || 0)
       );
-    const fallbackOwnedItems = recentChannels
+    const fallbackOwnedItems: DashboardListItem[] = recentChannels
       .filter((channel) => ownedChannelIds.has(channel.id) && !fetchedOwnedIds.has(channel.id))
       .map((channel) => ({
+        group: "owned" as const,
+        kind: "channel" as const,
+        route: `/ch/${channel.id}`,
         id: channel.id,
         name: channel.name,
         profileImage: channel.profileImage,
@@ -354,12 +449,16 @@ export default function DashboardPage() {
         time: formatRelativeTime(channel.lastVisitedAt, locale),
         owned: true,
         pinned: channel.id === prioritizedOwnedId,
+        activityAt: new Date(channel.lastVisitedAt).toISOString(),
         liveActive: false,
       }))
       .sort((left, right) => Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId));
-    const recentItems = recentChannels
+    const recentItems: DashboardListItem[] = recentChannels
       .filter((channel) => !ownedChannelIds.has(channel.id))
       .map((channel) => ({
+          group: "joined" as const,
+          kind: "channel" as const,
+          route: `/ch/${channel.id}`,
           id: channel.id,
           name: channel.name,
           profileImage: channel.profileImage,
@@ -370,12 +469,16 @@ export default function DashboardPage() {
           time: formatRelativeTime(channel.lastVisitedAt, locale),
           owned: false,
           pinned: channel.pinned,
+          activityAt: new Date(channel.lastVisitedAt).toISOString(),
           liveActive: false,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
-    const items = [...ownedItems, ...fallbackOwnedItems, ...recentItems];
+    const items: DashboardListItem[] = [...ownedItems, ...fallbackOwnedItems, ...recentItems];
     if (linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
       items.push({
+        group: "joined",
+        kind: "channel",
+        route: `/ch/${linkedChannel.id}`,
         id: linkedChannel.id,
         name: linkedChannel.name,
         profileImage: linkedChannel.profile_image,
@@ -386,16 +489,93 @@ export default function DashboardPage() {
         time: "",
         owned: false,
         pinned: false,
+        activityAt: linkedChannel.created_at,
         liveActive: false,
       });
+    }
+    const platformItems: DashboardListItem[] = [];
+    if (platformDashboard?.reportsInbox) {
+      platformItems.push({
+        id: `reports-${platformDashboard.reportsInbox.channel_id}`,
+        group: "reports",
+        kind: "channel",
+        route: `/ch/${platformDashboard.reportsInbox.channel_id}`,
+        name: platformDashboard.reportsInbox.name || t("dashboardReportsInboxTitle"),
+        profileImage: decorateMediaUrl(platformDashboard.reportsInbox.profile_image),
+        bubbleColor: platformDashboard.reportsInbox.bubble_color || "#111827",
+        hasPasscode: false,
+        ownerName: "",
+        meta: platformDashboard.reportsInbox.open_report_count > 0
+          ? t("dashboardReportsCount").replace("{count}", String(platformDashboard.reportsInbox.open_report_count))
+          : t("dashboardReportsEmpty"),
+        time: formatRelativeTime(
+          parseServerDate(platformDashboard.reportsInbox.last_report_at || platformDashboard.reportsInbox.created_at)?.getTime() || Date.now(),
+          locale,
+        ),
+        owned: false,
+        pinned: false,
+        activityAt: platformDashboard.reportsInbox.last_report_at || platformDashboard.reportsInbox.created_at,
+        liveActive: false,
+      });
+    }
+    if (platformDashboard?.tickets?.length) {
+      const ticketItems = platformDashboard.tickets.map((ticket) => ({
+        id: `ticket-${ticket.id}`,
+        group: "tickets" as const,
+        kind: "support" as const,
+        route: `/support?thread=${encodeURIComponent(ticket.id)}`,
+        name: ticket.entry_topic_label,
+        profileImage: null,
+        bubbleColor: ticket.status === "open" ? "#111827" : "#6b7280",
+        hasPasscode: false,
+        ownerName: ticket.user_label,
+        meta: ticket.last_message || ticket.summary,
+        time: formatRelativeTime(
+          parseServerDate(ticket.updated_at)?.getTime() || Date.now(),
+          locale,
+        ),
+        owned: false,
+        pinned: ticket.status === "open",
+        activityAt: ticket.updated_at,
+        liveActive: false,
+      }));
+      platformItems.push(...ticketItems);
+    }
+    if (platformItems.length > 0) {
+      items.unshift(...platformItems);
+    }
+    if (supportPreview && !platformDashboard) {
+      const supportItem: DashboardListItem = {
+        id: `support-${supportPreview.threadId}`,
+        group: "support-preview",
+        kind: "support",
+        route: "/support",
+        name: t("supportMenu"),
+        profileImage: "/logo.svg",
+        bubbleColor: "#111827",
+        hasPasscode: false,
+        ownerName: supportPreview.topicLabel,
+        meta: supportPreview.preview,
+        time: formatRelativeTime(
+          parseServerDate(supportPreview.updatedAt)?.getTime() || Date.now(),
+          locale,
+        ),
+        owned: false,
+        pinned: true,
+        activityAt: supportPreview.updatedAt,
+        liveActive: false,
+      };
+      items.unshift(supportItem);
     }
     if (linkedChannelId) return items.filter((item) => item.id === linkedChannelId);
     if (!normalized) return items;
     return items.filter((item) =>
       item.name.toLowerCase().includes(normalized)
       || item.id.toLowerCase().includes(normalized)
+      || item.meta.toLowerCase().includes(normalized)
+      || item.ownerName.toLowerCase().includes(normalized)
     );
-  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds, platformDashboard, supportPreview, t]);
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
@@ -897,9 +1077,14 @@ export default function DashboardPage() {
           <section style={{ paddingBottom: listBottomPadding }}>
             {activeItems.map((item, index) => {
               const previousItem = activeItems[index - 1];
-              const showSectionLabel = isLoggedIn
-                && ownedChannelIds.size > 0
-                && (index === 0 || previousItem?.owned !== item.owned);
+              const showSectionLabel = (() => {
+                if (index > 0 && previousItem?.group === item.group) return false;
+                if (item.group === "reports" || item.group === "tickets") return true;
+                if (item.group === "support-preview") return false;
+                return isLoggedIn && ownedChannelIds.size > 0;
+              })();
+              const canEditItem = item.kind === "channel" && (item.group === "owned" || item.group === "joined");
+              const canSwipeItem = canEditItem && !editing;
               return (
               <div
                 key={item.id}
@@ -913,49 +1098,57 @@ export default function DashboardPage() {
                     className={`${index === 0 ? "pt-3" : "pt-5"} px-4 pb-1.5 text-[12px] font-semibold`}
                     style={{ color: "var(--meta)", background: "var(--bg)" }}
                   >
-                    {item.owned ? t("dashboardOwnedTab") : t("dashboardJoinedChannels")}
+                    {item.group === "reports"
+                      ? t("dashboardReportsSection")
+                      : item.group === "tickets"
+                        ? t("dashboardTicketsSection")
+                        : item.owned
+                          ? t("dashboardOwnedTab")
+                          : t("dashboardJoinedChannels")}
                   </div>
                 )}
                 <div className="relative min-h-[74px] overflow-hidden">
-                <>
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-[76px] w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
-                    style={{ background: "#8e8e93" }}
-                    onClick={() => item.owned ? toggleOwnedPinned(item.id) : togglePinned(item.id)}
-                  >
-                    {item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={deleting}
-                    className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
-                    style={{ background: "#ff3b30" }}
-                    onClick={() => {
-                      if (item.owned) {
-                        setPendingDelete({ mode: "single", channelIds: [item.id] });
-                      } else {
-                        removeRecent(item.id);
-                        setSwipe({ id: null, offset: 0 });
-                      }
-                    }}
-                  >
-                    {item.owned ? t("dashboardDeleteChannel") : t("delete")}
-                  </button>
-                </>
+                {canEditItem && (
+                  <>
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-[76px] w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
+                      style={{ background: "#8e8e93" }}
+                      onClick={() => item.owned ? toggleOwnedPinned(item.id) : togglePinned(item.id)}
+                    >
+                      {item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
+                      style={{ background: "#ff3b30" }}
+                      onClick={() => {
+                        if (item.owned) {
+                          setPendingDelete({ mode: "single", channelIds: [item.id] });
+                        } else {
+                          removeRecent(item.id);
+                          setSwipe({ id: null, offset: 0 });
+                        }
+                      }}
+                    >
+                      {item.owned ? t("dashboardDeleteChannel") : t("delete")}
+                    </button>
+                  </>
+                )}
                 <div
                   className="relative z-10 flex items-center min-h-[74px] pl-4 cursor-pointer"
                   style={{
-                    touchAction: editing ? "auto" : "pan-y",
-                    transform: `translateX(${!editing && swipe.id === item.id ? swipe.offset : 0}px)`,
+                    touchAction: canSwipeItem ? "pan-y" : "auto",
+                    transform: `translateX(${canSwipeItem && swipe.id === item.id ? swipe.offset : 0}px)`,
                     transition: draggingId === item.id ? "none" : "transform 180ms ease-out",
                     background: "var(--bg)",
                   }}
-                  onPointerDown={!editing ? (event) => startSwipe(event, item.id) : undefined}
-                  onPointerMove={!editing ? (event) => moveSwipe(event, item.id) : undefined}
-                  onPointerUp={!editing ? () => finishSwipe(item.id) : undefined}
-                  onPointerCancel={!editing ? () => finishSwipe(item.id) : undefined}
-                  onContextMenu={!editing ? (event) => {
+                  onPointerDown={canSwipeItem ? (event) => startSwipe(event, item.id) : undefined}
+                  onPointerMove={canSwipeItem ? (event) => moveSwipe(event, item.id) : undefined}
+                  onPointerUp={canSwipeItem ? () => finishSwipe(item.id) : undefined}
+                  onPointerCancel={canSwipeItem ? () => finishSwipe(item.id) : undefined}
+                  onContextMenu={canSwipeItem ? (event) => {
                     event.preventDefault();
                     clearChannelLongPress();
                     suppressClickRef.current = true;
@@ -963,6 +1156,7 @@ export default function DashboardPage() {
                   } : undefined}
                   onClick={() => {
                     if (editing) {
+                      if (!canEditItem) return;
                       setSelectedIds((current) => {
                         const next = new Set(current);
                         if (next.has(item.id)) next.delete(item.id);
@@ -979,10 +1173,10 @@ export default function DashboardPage() {
                       setSwipe({ id: null, offset: 0 });
                       return;
                     }
-                    router.push(`/ch/${item.id}`);
+                    router.push(item.route);
                   }}
                 >
-                  {editing && (
+                  {editing && canEditItem && (
                     <span
                       className="mr-3 w-[22px] h-[22px] rounded-full flex-shrink-0 flex items-center justify-center"
                       style={{
@@ -1002,6 +1196,16 @@ export default function DashboardPage() {
                     <div className="flex min-w-0 items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <h2 className="m-0 truncate text-[16px] font-semibold">{item.name}</h2>
+                        {item.kind === "support" && item.ownerName && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#eef2ff", color: "#3730a3" }}>
+                            {item.ownerName}
+                          </span>
+                        )}
+                        {item.group === "tickets" && !item.pinned && (
+                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "var(--card)", color: "var(--meta)" }}>
+                            {t("dashboardTicketClosed")}
+                          </span>
+                        )}
                         {item.hasPasscode && (
                           <svg
                             viewBox="0 0 24 24"

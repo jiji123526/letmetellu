@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation";
-import { isReportsChannelOwner } from "../lib/special-channels";
+import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 
@@ -50,6 +50,18 @@ interface SupportMessageRow {
   sender_user_id: string | null;
   text: string;
   created_at: string;
+}
+
+interface ReportsChannelRow {
+  id: string;
+  name: string;
+  profile_image: string | null;
+  bubble_color: string | null;
+  created_at: string;
+}
+
+interface PlatformDashboardTicketRow extends SupportThreadRow {
+  has_admin_reply?: number;
 }
 
 interface SupportSessionEventRow {
@@ -126,6 +138,10 @@ function serializeSession(row: SupportSessionRow, locale: UserLocale) {
     updated_at: row.updated_at,
     completed_at: row.completed_at,
   };
+}
+
+function formatSupportUserLabel(thread: SupportThreadRow): string {
+  return thread.user_name?.trim() || thread.user_email?.trim() || thread.user_id;
 }
 
 async function parseJsonObject(request: Request): Promise<JsonObject | null> {
@@ -269,7 +285,7 @@ async function fetchSupportSessionEvents(sessionId: string, env: Env): Promise<S
     SELECT id, session_id, event_type, node_id, payload_json, created_at
     FROM support_session_events
     WHERE session_id = ?
-    ORDER BY created_at ASC, id ASC
+    ORDER BY created_at ASC, rowid ASC
   `).bind(sessionId).all<SupportSessionEventRow>();
   return (results || []).map(parseEventPayload);
 }
@@ -733,6 +749,74 @@ async function fetchPlatformSupportThreads(locale: UserLocale, env: Env): Promis
   });
 }
 
+async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Promise<Response> {
+  const reportsChannelId = getReportsChannelId(env);
+  const reportsChannel = reportsChannelId
+    ? await env.DB.prepare(`
+      SELECT id, name, profile_image, bubble_color, created_at
+      FROM channels
+      WHERE id = ?
+      LIMIT 1
+    `).bind(reportsChannelId).first<ReportsChannelRow>()
+    : null;
+
+  const reportsSummary = reportsChannel
+    ? await env.DB.prepare(`
+      SELECT COUNT(*) AS open_report_count, MAX(created_at) AS last_report_at
+      FROM channel_reports
+      WHERE status = 'open'
+    `).first<{ open_report_count: number; last_report_at: string | null }>()
+    : null;
+
+  const { results } = await env.DB.prepare(`
+    SELECT
+      st.id,
+      st.user_id,
+      st.source_session_id,
+      st.entry_topic,
+      st.summary,
+      st.status,
+      st.created_at,
+      st.updated_at,
+      st.closed_at,
+      st.closed_by,
+      u.name AS user_name,
+      u.email AS user_email,
+      (
+        SELECT text
+        FROM support_messages sm
+        WHERE sm.thread_id = st.id
+        ORDER BY sm.created_at DESC, sm.id DESC
+        LIMIT 1
+      ) AS last_message,
+      EXISTS(
+        SELECT 1
+        FROM support_messages sm2
+        WHERE sm2.thread_id = st.id AND sm2.sender_role = 'platform_admin'
+      ) AS has_admin_reply
+    FROM support_threads st
+    LEFT JOIN users u ON u.id = st.user_id
+    ORDER BY CASE WHEN st.status = 'open' THEN 0 ELSE 1 END, st.updated_at DESC, st.id DESC
+  `).all<PlatformDashboardTicketRow>();
+
+  return Response.json({
+    reportsInbox: reportsChannel ? {
+      channel_id: reportsChannel.id,
+      name: reportsChannel.name,
+      profile_image: reportsChannel.profile_image,
+      bubble_color: reportsChannel.bubble_color || "#111827",
+      open_report_count: Number(reportsSummary?.open_report_count || 0),
+      last_report_at: reportsSummary?.last_report_at || null,
+      created_at: reportsChannel.created_at,
+    } : null,
+    tickets: (results || []).map((thread) => ({
+      ...serializeThread(thread, locale),
+      user_label: formatSupportUserLabel(thread),
+      has_admin_reply: !!thread.has_admin_reply,
+    })),
+  });
+}
+
 async function fetchPlatformSupportThreadDetail(threadId: string, locale: UserLocale, env: Env): Promise<Response> {
   const thread = await fetchSupportThreadById(threadId, env);
   if (!thread) {
@@ -832,6 +916,9 @@ export async function handlePlatformSupport(request: Request, env: Env): Promise
   if (request.method === "GET") {
     const url = new URL(request.url);
     const type = url.searchParams.get("type") || "threads";
+    if (type === "dashboard") {
+      return fetchPlatformSupportDashboard(locale, env);
+    }
     if (type === "threads") {
       return fetchPlatformSupportThreads(locale, env);
     }

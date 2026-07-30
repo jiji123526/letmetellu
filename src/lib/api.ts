@@ -117,6 +117,27 @@ export interface PlatformSupportSessionResponse {
   currentNode: SupportNodeState | null;
 }
 
+export interface PlatformDashboardReportsInbox {
+  channel_id: string;
+  name: string;
+  profile_image: string | null;
+  bubble_color: string;
+  open_report_count: number;
+  last_report_at: string | null;
+  created_at: string;
+}
+
+export interface PlatformDashboardTicketPreview extends SupportThreadState {
+  user_label: string;
+  has_admin_reply: boolean;
+}
+
+export interface PlatformDashboardResponse {
+  error?: string;
+  reportsInbox: PlatformDashboardReportsInbox | null;
+  tickets: PlatformDashboardTicketPreview[];
+}
+
 type SupportApiResult<T extends object> = T & { _status: number };
 
 let mockSupportSession: SupportSessionState | null = null;
@@ -795,6 +816,23 @@ export async function fetchPlatformSupportThreads() {
     };
   }
   return requestSupportJson<PlatformSupportThreadsResponse>("/api/platform-admin/support?type=threads", {
+    cache: "no-store",
+  });
+}
+
+export async function fetchPlatformDashboard() {
+  if (IS_MOCK) {
+    return {
+      reportsInbox: null,
+      tickets: mockSupportThread ? [{
+        ...mockSupportThread,
+        user_label: mockSupportThread.user_name || mockSupportThread.user_email || mockSupportThread.user_id,
+        has_admin_reply: mockSupportMessages.some((message) => message.sender_role === "platform_admin"),
+      }] : [],
+      _status: 200,
+    };
+  }
+  return requestSupportJson<PlatformDashboardResponse>("/api/platform-admin/support?type=dashboard", {
     cache: "no-store",
   });
 }
