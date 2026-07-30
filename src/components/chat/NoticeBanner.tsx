@@ -10,6 +10,7 @@ interface NoticeBannerProps {
 
 export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps) {
   const [expanded, setExpanded] = useState(false);
+  const maxBannerWidth = "min(100%, 360px)";
 
   if (!notice) return null;
 
@@ -53,8 +54,8 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
     <div style={{ position: "absolute", top: "12px", left: "12px", right: "12px", zIndex: 12, pointerEvents: "none" }}>
       <div
         style={{
-          width: expanded ? "100%" : "fit-content",
-          maxWidth: "100%",
+          width: expanded ? maxBannerWidth : "fit-content",
+          maxWidth: maxBannerWidth,
           padding: "9px 10px",
           display: "flex",
           alignItems: "flex-start",
