@@ -36,15 +36,20 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ## 1:1 Support Plan
 
-Build `1:1` support as a dedicated ticket system, separate from reports and separate from public channel chat.
+Build `1:1` support as a guided support system, separate from reports and separate from public channel chat.
+
+The user-facing experience should start as a chatbot-style troubleshooting flow, not as a raw human thread. A real support thread should exist only after escalation to the platform admin.
 
 ### MVP shape
 
 - The platform-admin dashboard has two tabs: `Report` and `1:1`.
-- `1:1` shows active support tickets only.
-- One open ticket per user.
+- `1:1` shows active escalated support tickets only.
+- The user side has no ticket-history tab or previous-support list.
+- One open escalated ticket per user.
+- If the user has no open escalated ticket, they see the guided support flow.
+- If the user has an open escalated ticket, they see that live support conversation instead.
 - When the platform admin closes a ticket, it disappears from the user side and from the active admin list.
-- Closed tickets stay archived in the database rather than being hard-deleted.
+- Closed tickets stay archived in the database for platform-admin visibility and audit purposes rather than being hard-deleted.
 
 ### Recommended constraints
 
@@ -52,27 +57,54 @@ Build `1:1` support as a dedicated ticket system, separate from reports and sepa
 - No multi-agent assignment.
 - No reopen flow from the user side.
 - No anonymous support until there is a stronger bearer-thread access model and better abuse controls.
+- No user-visible archive of closed support tickets.
 
 Logged-in-only is the correct first cut because support access needs stable identity. Anonymous support should not rely on browser-local UID or device signals.
 
 ### User flow
 
 1. User opens `1:1 Support`.
-2. If the user already has an open ticket, load it.
-3. Otherwise create a new ticket.
-4. User and platform admin chat in that ticket.
-5. Platform admin closes the ticket when the issue is resolved.
-6. The closed thread is no longer available from the user side.
+2. If the user already has an open escalated ticket, load it.
+3. Otherwise start a guided troubleshooting flow in chatbot style.
+4. The flow asks structured questions and offers self-resolve steps for common cases.
+5. If the issue is resolved, end the session without creating a human support thread.
+6. If the issue is not resolved, offer escalation to the platform admin.
+7. After escalation, the user and platform admin chat in that ticket.
+8. Platform admin closes the ticket when the issue is resolved.
+9. The closed thread is no longer available from the user side. If the user needs help later, they start again from the guided flow.
 
 ### Platform-admin flow
 
 1. Open the dashboard.
 2. Select the `1:1` tab.
-3. See the active ticket list with user, last message and updated time.
+3. See the active escalated ticket list with user, topic, last message and updated time.
 4. Open a ticket and reply in-thread.
-5. Close the ticket when done.
+5. Review the guided-flow transcript or summary that led to escalation.
+6. Close the ticket when done.
 
 ### Data model
+
+`support_sessions`
+
+- `id`
+- `user_id`
+- `status` = `open | resolved | escalated | abandoned`
+- `entry_topic`
+- `current_node_id`
+- `resolved_via_tree`
+- `escalated_thread_id`
+- `created_at`
+- `updated_at`
+- `completed_at`
+
+`support_session_events`
+
+- `id`
+- `session_id`
+- `event_type` = `bot_message | user_choice | user_text | escalation`
+- `node_id`
+- `payload_json`
+- `created_at`
 
 `support_threads`
 
@@ -98,19 +130,25 @@ Optional later:
 - `subject`
 - `last_read_user_at`
 - `last_read_admin_at`
+- `support_topics`
+- `support_flow_versions`
 
 ### API shape
 
 User-facing routes:
 
+- `GET /api/support/session`
+- `POST /api/support/session/start`
+- `POST /api/support/session/answer`
+- `POST /api/support/session/escalate`
 - `GET /api/support/thread`
-- `POST /api/support/thread`
 - `GET /api/support/messages?thread_id=...`
 - `POST /api/support/messages`
 
 Platform-admin routes:
 
 - `GET /api/platform-admin/support/threads`
+- `GET /api/platform-admin/support/session?session_id=...`
 - `GET /api/platform-admin/support/messages?thread_id=...`
 - `POST /api/platform-admin/support/messages`
 - `POST /api/platform-admin/support/close`
@@ -120,34 +158,41 @@ Platform-admin routes:
 User side:
 
 - a simple support panel rather than a public channel
-- only the current open ticket is visible
-- if the ticket is closed, show no thread or a closed-state message
+- default state is a guided support flow rendered in chatbot style
+- quick replies and short answer prompts for common issues
+- only the current open escalated ticket is visible
+- no history list, no previous ticket browser
+- if the ticket is closed, return the user to the guided support start state rather than showing a closed thread
 
 Platform-admin side:
 
 - a left list of active tickets
 - a right conversation panel
+- a short transcript summary or support-flow path shown with the ticket
 - a `Close ticket` action at the top
 
 ### Safety requirements
 
 Before launch:
 
+- rate-limit support-session start and answer steps
 - rate-limit ticket creation
 - rate-limit support messages
 - enforce a message length limit
-- keep one open ticket per user
-- add a basic audit log for thread creation, admin replies and ticket closure
+- keep one open escalated ticket per user
+- keep one active guided session per user if needed for resume behavior
+- add a basic audit log for session start, escalation, admin replies and ticket closure
 
 ### Implementation order
 
-1. Add `support_threads` and `support_messages`.
-2. Add user routes for create, load and send.
-3. Add platform-admin routes for list, reply and close.
-4. Build the admin `1:1` tab.
-5. Build the user-side support panel.
-6. Add close behavior and archive semantics.
-7. Add rate limits and audit logging.
+1. Add `support_sessions`, `support_session_events`, `support_threads` and `support_messages`.
+2. Define the first guided decision trees for common support topics.
+3. Add user routes for start, answer, escalate, load open thread and send.
+4. Build the user-side guided support panel.
+5. Add platform-admin routes for list, reply, inspect session context and close.
+6. Build the admin `1:1` tab for escalated tickets only.
+7. Add close behavior and archive semantics.
+8. Add rate limits, metrics and audit logging.
 
 ## Platform Moderation Direction
 
