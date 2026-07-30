@@ -24,8 +24,13 @@ async function forwardSupportRequest(request: Request, method: "GET" | "POST") {
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
+  const explicitLocale = request.headers.get("x-locale");
   const acceptLanguage = request.headers.get("accept-language");
-  if (acceptLanguage) headers["X-Locale"] = acceptLanguage;
+  if (explicitLocale === "ko" || explicitLocale === "en") {
+    headers["X-Locale"] = explicitLocale;
+  } else if (acceptLanguage) {
+    headers["X-Locale"] = acceptLanguage;
+  }
 
   if (method === "GET") {
     const url = new URL(request.url);

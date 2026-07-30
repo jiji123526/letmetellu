@@ -166,6 +166,27 @@ function getCurrentLocale(): AppLocale {
   return navigator.language.toLowerCase().startsWith("ko") ? "ko" : "en";
 }
 
+function supportRequestHeaders(headers?: HeadersInit): HeadersInit {
+  const locale = getCurrentLocale();
+  if (!headers) {
+    return { "X-Locale": locale };
+  }
+  if (headers instanceof Headers) {
+    const next = new Headers(headers);
+    next.set("X-Locale", locale);
+    return next;
+  }
+  if (Array.isArray(headers)) {
+    const next = new Headers(headers);
+    next.set("X-Locale", locale);
+    return next;
+  }
+  return {
+    ...headers,
+    "X-Locale": locale,
+  };
+}
+
 function getMockSupportText(key: SupportMockLocaleKey): string {
   const locale = getCurrentLocale();
   const locales = locale === "en" ? en : ko;
@@ -360,7 +381,10 @@ async function requestSupportJson<T extends object>(
   path: string,
   init?: RequestInit,
 ): Promise<SupportApiResult<T>> {
-  const res = await fetch(path, init);
+  const res = await fetch(path, {
+    ...init,
+    headers: supportRequestHeaders(init?.headers),
+  });
   const data = await res.json().catch(() => ({})) as T;
   return { ...data, _status: res.status };
 }

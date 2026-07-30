@@ -156,6 +156,13 @@ export default function DashboardPage() {
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
   const isPlatformAdmin = !!platformDashboard;
+  const submitLinkedChannelSearch = useCallback((value: string) => {
+    const channelId = getChannelIdFromLink(value);
+    if (!channelId) return false;
+    setLinkedChannel(null);
+    setSubmittedLinkedChannelId(channelId);
+    return true;
+  }, []);
   const ownedChannelIds = useMemo(() => {
     const ids = new Set(channels.map((channel) => channel.id));
     const userId = session?.user?.id;
@@ -1055,20 +1062,17 @@ export default function DashboardPage() {
                   const start = event.currentTarget.selectionStart ?? query.length;
                   const end = event.currentTarget.selectionEnd ?? query.length;
                   const nextValue = `${query.slice(0, start)}${pastedText}${query.slice(end)}`;
-                  const channelId = getChannelIdFromLink(nextValue);
-                  if (!channelId) return;
+                  if (!submitLinkedChannelSearch(nextValue)) return;
                   event.preventDefault();
                   setQuery(nextValue);
-                  setLinkedChannel(null);
-                  setSubmittedLinkedChannelId(channelId);
                 }}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter") return;
-                  const channelId = getChannelIdFromLink(query);
-                  if (!channelId) return;
+                  if (!submitLinkedChannelSearch(query)) return;
                   event.preventDefault();
-                  setLinkedChannel(null);
-                  setSubmittedLinkedChannelId(channelId);
+                }}
+                onBlur={(event) => {
+                  submitLinkedChannelSearch(event.currentTarget.value);
                 }}
                 placeholder={t("dashboardSearch")}
                 className="w-full h-10 border-none rounded-[12px] outline-none text-[17px] text-left"
