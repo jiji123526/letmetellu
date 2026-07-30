@@ -122,6 +122,15 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
     setSubmitting(false);
   }
 
+  const visibleMessages = threadDetail
+    ? messages.filter((message, index) => !(
+      index === 0
+      && threadDetail.summary
+      && message.sender_role === "user"
+      && message.text === threadDetail.summary
+    ))
+    : [];
+
   return (
     <SupportThreadChat
       title={threadDetail?.entry_topic_label || t("supportMenu")}
@@ -129,7 +138,7 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
       summary={threadDetail?.summary || ""}
       transcript={sessionDetail?.transcript || []}
       messagesRef={messagesRef}
-      messages={threadDetail ? messages : []}
+      messages={visibleMessages}
       loading={loading}
       error={!threadDetail ? (error || t("supportNoAccess")) : error}
       status={threadDetail?.status || "closed"}

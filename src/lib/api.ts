@@ -900,6 +900,28 @@ export async function sendSupportThreadMessage(threadId: string, text: string) {
   });
 }
 
+export async function closeSupportThread(threadId: string) {
+  if (IS_MOCK) {
+    if (!mockSupportThread) return { error: "thread_not_found", _status: 404 };
+    mockSupportThread = null;
+    mockSupportMessages = [];
+    mockSupportSession = null;
+    mockSupportTranscript = [];
+    return { ok: true, _status: 200 };
+  }
+  return requestSupportJson<{
+    ok?: boolean;
+    error?: string;
+  }>("/api/support", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "close_thread",
+      thread_id: threadId,
+    }),
+  });
+}
+
 export async function clearSupportSession(sessionId: string) {
   if (IS_MOCK) {
     if (mockSupportSession?.id === sessionId && mockSupportSession.status === "open") {

@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { clearStoredSupportTicketPreview, decorateMediaUrl, fetchPlatformDashboard, fetchSupportState, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
+import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchSupportState, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -47,6 +47,7 @@ interface DashboardListItem {
   id: string;
   group: "reports" | "tickets" | "owned" | "joined" | "support-preview";
   kind: "channel" | "support";
+  supportThreadId?: string;
   route: string;
   name: string;
   profileImage: string | null;
@@ -130,8 +131,13 @@ export default function DashboardPage() {
   const [editing, setEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<{ mode: "single" | "selected"; channelIds: string[] } | null>(null);
-  const [showDeleteError, setShowDeleteError] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "owned-single"; channelIds: string[] }
+    | { kind: "selected"; channelIds: string[] }
+    | { kind: "support-thread"; threadId: string }
+    | null
+  >(null);
+  const [deleteError, setDeleteError] = useState<{ title: string; message: string } | null>(null);
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
@@ -146,7 +152,7 @@ export default function DashboardPage() {
   const previousItemPositionsRef = useRef(new Map<string, number>());
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean } | null>(null);
+  const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean; width: number } | null>(null);
   const suppressClickRef = useRef(false);
   const channelLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -566,6 +572,7 @@ export default function DashboardPage() {
         id: `ticket-${ticket.id}`,
         group: "tickets" as const,
         kind: "support" as const,
+        supportThreadId: ticket.id,
         route: `/support?thread=${encodeURIComponent(ticket.id)}&admin=1`,
         name: ticket.entry_topic_label,
         profileImage: null,
@@ -592,6 +599,7 @@ export default function DashboardPage() {
         id: `support-${supportPreview.threadId}`,
         group: "support-preview",
         kind: "support",
+        supportThreadId: supportPreview.threadId,
         route: `/support?thread=${encodeURIComponent(supportPreview.threadId)}`,
         name: t("supportMenu"),
         profileImage: "/logo.svg",
@@ -834,7 +842,10 @@ export default function DashboardPage() {
       setSelectedIds(new Set());
       setEditing(false);
     } catch {
-      setShowDeleteError(true);
+      setDeleteError({
+        title: t("dashboardDeleteChannel"),
+        message: t("dashboardDeleteFailed"),
+      });
     } finally {
       setDeleting(false);
     }
@@ -845,7 +856,7 @@ export default function DashboardPage() {
     const channelIds = [...selectedIds];
     const includesOwned = channelIds.some((id) => ownedChannelIds.has(id));
     if (includesOwned) {
-      setPendingDelete({ mode: "selected", channelIds });
+      setPendingDelete({ kind: "selected", channelIds });
     } else {
       void performDeleteSelected(channelIds);
     }
@@ -863,7 +874,33 @@ export default function DashboardPage() {
       }
       setSwipe({ id: null, offset: 0 });
     } catch {
-      setShowDeleteError(true);
+      setDeleteError({
+        title: t("dashboardDeleteChannel"),
+        message: t("dashboardDeleteFailed"),
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const performDeleteSupportThread = async (threadId: string) => {
+    setDeleting(true);
+    try {
+      const result = await closeSupportThread(threadId);
+      if (result._status >= 400 && result.error !== "thread_not_found") {
+        throw new Error("close support thread failed");
+      }
+      clearStoredSupportTicketPreview();
+      setSupportPreview(null);
+      setSwipe({ id: null, offset: 0 });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("support-ticket-changed"));
+      }
+    } catch {
+      setDeleteError({
+        title: t("supportDeleteTicket"),
+        message: t("supportDeleteFailed"),
+      });
     } finally {
       setDeleting(false);
     }
@@ -894,7 +931,7 @@ export default function DashboardPage() {
     copiedResetTimerRef.current = setTimeout(() => setCopiedChannelId(null), 1600);
   };
 
-  const startSwipe = (event: ReactPointerEvent<HTMLDivElement>, channelId: string) => {
+  const startSwipe = (event: ReactPointerEvent<HTMLDivElement>, channelId: string, width: number, allowLongPressCopy: boolean) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     swipeStartRef.current = {
       id: channelId,
@@ -902,10 +939,12 @@ export default function DashboardPage() {
       y: event.clientY,
       startOffset: swipe.id === channelId ? swipe.offset : 0,
       moved: false,
+      width,
     };
     setDraggingId(channelId);
     if (swipe.id !== channelId) setSwipe({ id: channelId, offset: 0 });
     clearChannelLongPress();
+    if (!allowLongPressCopy) return;
     channelLongPressTimerRef.current = setTimeout(() => {
       const start = swipeStartRef.current;
       if (!start || start.id !== channelId || start.moved) return;
@@ -925,7 +964,7 @@ export default function DashboardPage() {
     if (!start.moved && Math.abs(deltaX) < 8) return;
     if (!start.moved && Math.abs(deltaY) > Math.abs(deltaX)) return;
     start.moved = true;
-    const offset = Math.max(-152, Math.min(0, start.startOffset + deltaX));
+    const offset = Math.max(-start.width, Math.min(0, start.startOffset + deltaX));
     setSwipe({ id: channelId, offset });
   };
 
@@ -936,7 +975,7 @@ export default function DashboardPage() {
     suppressClickRef.current = suppressClickRef.current || start.moved;
     setSwipe((current) => ({
       id: current.id,
-      offset: current.id === channelId && current.offset < -48 ? -152 : 0,
+      offset: current.id === channelId && current.offset < -(start.width / 2) ? -start.width : 0,
     }));
     swipeStartRef.current = null;
     setDraggingId(null);
@@ -1139,7 +1178,10 @@ export default function DashboardPage() {
                 return isLoggedIn && ownedChannelIds.size > 0;
               })();
               const canEditItem = item.kind === "channel" && (item.group === "owned" || item.group === "joined");
-              const canSwipeItem = canEditItem && !editing;
+              const canDeleteSupportItem = item.group === "support-preview" && !!item.supportThreadId;
+              const canSwipeItem = !editing && (canEditItem || canDeleteSupportItem);
+              const canCopyItem = canEditItem;
+              const swipeActionWidth = canEditItem ? 152 : canDeleteSupportItem ? 76 : 0;
               return (
               <div
                 key={item.id}
@@ -1173,23 +1215,27 @@ export default function DashboardPage() {
                     >
                       {item.pinned ? t("dashboardUnpin") : t("dashboardPin")}
                     </button>
-                    <button
-                      type="button"
-                      disabled={deleting}
-                      className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
-                      style={{ background: "#ff3b30" }}
-                      onClick={() => {
-                        if (item.owned) {
-                          setPendingDelete({ mode: "single", channelIds: [item.id] });
-                        } else {
-                          removeRecent(item.id);
-                          setSwipe({ id: null, offset: 0 });
-                        }
-                      }}
-                    >
-                      {item.owned ? t("dashboardDeleteChannel") : t("delete")}
-                    </button>
                   </>
+                )}
+                {(canEditItem || canDeleteSupportItem) && (
+                  <button
+                    type="button"
+                    disabled={deleting}
+                    className="absolute inset-y-0 right-0 w-[76px] border-none cursor-pointer text-[13px] font-medium text-white"
+                    style={{ background: "#ff3b30" }}
+                    onClick={() => {
+                      if (canDeleteSupportItem && item.supportThreadId) {
+                        setPendingDelete({ kind: "support-thread", threadId: item.supportThreadId });
+                      } else if (item.owned) {
+                        setPendingDelete({ kind: "owned-single", channelIds: [item.id] });
+                      } else {
+                        removeRecent(item.id);
+                        setSwipe({ id: null, offset: 0 });
+                      }
+                    }}
+                  >
+                    {canDeleteSupportItem ? t("delete") : item.owned ? t("dashboardDeleteChannel") : t("delete")}
+                  </button>
                 )}
                 <div
                   className="relative z-10 flex items-center min-h-[74px] pl-4 cursor-pointer"
@@ -1199,11 +1245,11 @@ export default function DashboardPage() {
                     transition: draggingId === item.id ? "none" : "transform 180ms ease-out",
                     background: "var(--bg)",
                   }}
-                  onPointerDown={canSwipeItem ? (event) => startSwipe(event, item.id) : undefined}
+                  onPointerDown={canSwipeItem ? (event) => startSwipe(event, item.id, swipeActionWidth, canCopyItem) : undefined}
                   onPointerMove={canSwipeItem ? (event) => moveSwipe(event, item.id) : undefined}
                   onPointerUp={canSwipeItem ? () => finishSwipe(item.id) : undefined}
                   onPointerCancel={canSwipeItem ? () => finishSwipe(item.id) : undefined}
-                  onContextMenu={canSwipeItem ? (event) => {
+                  onContextMenu={canCopyItem ? (event) => {
                     event.preventDefault();
                     clearChannelLongPress();
                     suppressClickRef.current = true;
@@ -1418,14 +1464,16 @@ export default function DashboardPage() {
 
       {pendingDelete && (
         <ConfirmDialog
-          title={t("dashboardDeleteChannel")}
-          message={t("dashboardDeleteOwnedConfirm")}
+          title={pendingDelete.kind === "support-thread" ? t("supportDeleteTicket") : t("dashboardDeleteChannel")}
+          message={pendingDelete.kind === "support-thread" ? t("supportDeleteConfirm") : t("dashboardDeleteOwnedConfirm")}
           confirmLabel={t("delete")}
           confirmColor="#ff3b30"
           onConfirm={() => {
             const request = pendingDelete;
             setPendingDelete(null);
-            if (request.mode === "single") {
+            if (request.kind === "support-thread") {
+              void performDeleteSupportThread(request.threadId);
+            } else if (request.kind === "owned-single") {
               void performDeleteSingleOwned(request.channelIds[0]);
             } else {
               void performDeleteSelected(request.channelIds);
@@ -1435,13 +1483,13 @@ export default function DashboardPage() {
         />
       )}
 
-      {showDeleteError && (
+      {deleteError && (
         <ConfirmDialog
-          title={t("dashboardDeleteChannel")}
-          message={t("dashboardDeleteFailed")}
+          title={deleteError.title}
+          message={deleteError.message}
           confirmLabel={t("confirm")}
-          onConfirm={() => setShowDeleteError(false)}
-          onCancel={() => setShowDeleteError(false)}
+          onConfirm={() => setDeleteError(null)}
+          onCancel={() => setDeleteError(null)}
           showCancel={false}
         />
       )}

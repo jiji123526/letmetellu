@@ -823,6 +823,34 @@ async function handleUserSupportThreadMessage(body: JsonObject, subjectId: strin
   });
 }
 
+async function closeSupportThreadRecord(threadId: string, actorUserId: string, env: Env): Promise<Response> {
+  const thread = await fetchSupportThreadById(threadId, env);
+  if (!thread || thread.status !== "open") {
+    return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+  const closedAt = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE support_threads
+    SET status = 'closed', updated_at = ?, closed_at = ?, closed_by = ?
+    WHERE id = ?
+  `).bind(closedAt, closedAt, actorUserId, threadId).run();
+  return Response.json({ ok: true });
+}
+
+async function handleUserSupportCloseThread(body: JsonObject, subjectId: string, env: Env): Promise<Response> {
+  const threadId = typeof body.thread_id === "string" ? body.thread_id : "";
+  if (!threadId) {
+    return Response.json({ error: "missing thread_id" }, { status: 400 });
+  }
+
+  const thread = await fetchSupportThreadById(threadId, env);
+  if (!thread || thread.user_id !== subjectId || thread.status !== "open") {
+    return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+
+  return closeSupportThreadRecord(threadId, subjectId, env);
+}
+
 export async function handleSupport(request: Request, env: Env): Promise<Response> {
   const actor = await resolveSupportActor(request, env);
 
@@ -854,6 +882,9 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   }
   if (action === "send_thread_message") {
     return withSupportIdentityHeaders(await handleUserSupportThreadMessage(body, actor.subjectId, env), actor);
+  }
+  if (action === "close_thread") {
+    return withSupportIdentityHeaders(await handleUserSupportCloseThread(body, actor.subjectId, env), actor);
   }
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }
@@ -1053,17 +1084,7 @@ async function handlePlatformSupportCloseThread(body: JsonObject, actorUserId: s
   if (!threadId) {
     return Response.json({ error: "missing thread_id" }, { status: 400 });
   }
-  const thread = await fetchSupportThreadById(threadId, env);
-  if (!thread || thread.status !== "open") {
-    return Response.json({ error: "thread_not_found" }, { status: 404 });
-  }
-  const closedAt = new Date().toISOString();
-  await env.DB.prepare(`
-    UPDATE support_threads
-    SET status = 'closed', updated_at = ?, closed_at = ?, closed_by = ?
-    WHERE id = ?
-  `).bind(closedAt, closedAt, actorUserId, threadId).run();
-  return Response.json({ ok: true });
+  return closeSupportThreadRecord(threadId, actorUserId, env);
 }
 
 export async function handlePlatformSupport(request: Request, env: Env): Promise<Response> {
