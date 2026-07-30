@@ -12,6 +12,7 @@ import { handlePreview } from "./routes/preview";
 import { handleVerifyPasscode } from "./routes/passcode";
 import { handleRecentChannels } from "./routes/recent-channels";
 import { handleChannelReports } from "./routes/channel-reports";
+import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { recordOperationalEvent } from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
 
@@ -126,6 +127,10 @@ export default {
         response = await handleVerifyPasscode(request, env);
       } else if (url.pathname.startsWith("/api/channel-reports")) {
         response = await handleChannelReports(request, env);
+      } else if (url.pathname.startsWith("/api/platform-admin/support")) {
+        response = await handlePlatformSupport(request, env);
+      } else if (url.pathname.startsWith("/api/support")) {
+        response = await handleSupport(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key);
