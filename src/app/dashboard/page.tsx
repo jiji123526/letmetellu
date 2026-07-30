@@ -155,6 +155,7 @@ export default function DashboardPage() {
   const linkedChannelId = submittedLinkedChannelId;
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
+  const isPlatformAdmin = !!platformDashboard;
   const ownedChannelIds = useMemo(() => {
     const ids = new Set(channels.map((channel) => channel.id));
     const userId = session?.user?.id;
@@ -506,8 +507,10 @@ export default function DashboardPage() {
           liveActive: false,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
-    const items: DashboardListItem[] = [...ownedItems, ...fallbackOwnedItems, ...recentItems];
-    if (linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
+    const items: DashboardListItem[] = isPlatformAdmin
+      ? []
+      : [...ownedItems, ...fallbackOwnedItems, ...recentItems];
+    if (!isPlatformAdmin && linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
       items.push({
         group: "joined",
         kind: "channel",
@@ -542,12 +545,12 @@ export default function DashboardPage() {
           ? t("dashboardReportsCount").replace("{count}", String(platformDashboard.reportsInbox.open_report_count))
           : t("dashboardReportsEmpty"),
         time: formatRelativeTime(
-          parseServerDate(platformDashboard.reportsInbox.last_report_at || platformDashboard.reportsInbox.created_at)?.getTime() || Date.now(),
+          parseServerDate(platformDashboard.reportsInbox.oldest_report_at || platformDashboard.reportsInbox.created_at)?.getTime() || Date.now(),
           locale,
         ),
         owned: false,
         pinned: false,
-        activityAt: platformDashboard.reportsInbox.last_report_at || platformDashboard.reportsInbox.created_at,
+        activityAt: platformDashboard.reportsInbox.oldest_report_at || platformDashboard.reportsInbox.created_at,
         liveActive: false,
       });
     }
@@ -577,7 +580,7 @@ export default function DashboardPage() {
     if (platformItems.length > 0) {
       items.unshift(...platformItems);
     }
-    if (supportPreview && !platformDashboard) {
+    if (!isPlatformAdmin && supportPreview && !platformDashboard) {
       const supportItem: DashboardListItem = {
         id: `support-${supportPreview.threadId}`,
         group: "support-preview",
@@ -608,7 +611,7 @@ export default function DashboardPage() {
       || item.meta.toLowerCase().includes(normalized)
       || item.ownerName.toLowerCase().includes(normalized)
     );
-  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds, platformDashboard, supportPreview, t]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds, platformDashboard, supportPreview, t, isPlatformAdmin]);
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
@@ -946,7 +949,7 @@ export default function DashboardPage() {
       <div className="max-w-[480px] mx-auto min-h-dvh md:border-x flex flex-col" style={{ borderColor: "var(--hairline)", minHeight: dashboardMinHeight }}>
         <header className="sticky top-0 z-30 backdrop-blur-xl" style={{ background: "var(--header-bg)" }}>
           <div className="h-[64px] px-4 flex items-center justify-between">
-            {activeItems.length > 0 ? (
+            {activeItems.length > 0 && !isPlatformAdmin ? (
               <button
                 type="button"
                 className="border-none bg-transparent cursor-pointer text-[17px] min-w-[72px] text-left"
@@ -1102,9 +1105,23 @@ export default function DashboardPage() {
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
               <Image src="/logo.svg" alt="" width={72} height={72} className="h-[72px] w-[72px]" />
             </div>
-            <h2 className="m-0 text-[19px] font-semibold">{query ? t("dashboardNoSearchResults") : t("dashboardNoRecent")}</h2>
-            {!query && <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{isLoggedIn ? t("dashboardEmptyDesc") : t("dashboardRecentDesc")}</p>}
-            {!query && isLoggedIn && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={openCreateFlow}>{t("dashboardFirstChannel")}</button>}
+            <h2 className="m-0 text-[19px] font-semibold">
+              {query
+                ? t("dashboardNoSearchResults")
+                : isPlatformAdmin
+                  ? t("dashboardPlatformEmptyTitle")
+                  : t("dashboardNoRecent")}
+            </h2>
+            {!query && (
+              <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>
+                {isPlatformAdmin
+                  ? t("dashboardPlatformEmptyDesc")
+                  : isLoggedIn
+                    ? t("dashboardEmptyDesc")
+                    : t("dashboardRecentDesc")}
+              </p>
+            )}
+            {!query && isLoggedIn && !isPlatformAdmin && <button className="border-none bg-transparent cursor-pointer text-[15px] font-medium" style={{ color: "#007aff" }} onClick={openCreateFlow}>{t("dashboardFirstChannel")}</button>}
           </section>
         ) : (
           <section style={{ paddingBottom: listBottomPadding }}>
@@ -1364,14 +1381,16 @@ export default function DashboardPage() {
         <LoginDialog onClose={closeLogin} initialError={loginError} initialTab={loginInitialTab} />
       )}
 
-      <DashboardHelpMenu
-        isLoggedIn={isLoggedIn}
-        onOpenUserGuide={() => setShowUserGuide(true)}
-        onOpenSupport={() => router.push("/support")}
-        onOpenAdminGuide={() => setShowAdminGuide(true)}
-      />
+      {!isPlatformAdmin && (
+        <DashboardHelpMenu
+          isLoggedIn={isLoggedIn}
+          onOpenUserGuide={() => setShowUserGuide(true)}
+          onOpenSupport={() => router.push("/support")}
+          onOpenAdminGuide={() => setShowAdminGuide(true)}
+        />
+      )}
 
-      {isLoggedIn && !editing && ownedChannelIds.size < 5 && (
+      {isLoggedIn && !isPlatformAdmin && !editing && ownedChannelIds.size < 5 && (
         <button
           type="button"
           className="fixed z-40 w-14 h-14 rounded-full border-none cursor-pointer flex items-center justify-center text-white"

@@ -125,7 +125,7 @@ export interface PlatformDashboardReportsInbox {
   profile_image: string | null;
   bubble_color: string;
   open_report_count: number;
-  last_report_at: string | null;
+  oldest_report_at: string | null;
   created_at: string;
 }
 

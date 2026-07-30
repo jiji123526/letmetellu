@@ -409,6 +409,8 @@ export const ko = {
   dashboardReportsInboxTitle: "신고함",
   dashboardReportsEmpty: "열린 신고 없음",
   dashboardReportsCount: "열린 신고 {count}건",
+  dashboardPlatformEmptyTitle: "열린 신고나 티켓이 없습니다",
+  dashboardPlatformEmptyDesc: "열린 신고와 지원 티켓이 이곳에 표시됩니다.",
   dashboardTicketClosed: "종료됨",
   deleteAccount: "계정 삭제",
   deleteAccountConfirm: "계정을 삭제하면 소유한 모든 채널과 메시지, 미디어 및 계정 기록이 영구 삭제됩니다. 같은 로그인으로 나중에 새 계정을 다시 만들 수 있습니다. 이 작업은 되돌릴 수 없습니다.",

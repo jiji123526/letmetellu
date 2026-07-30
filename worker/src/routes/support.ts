@@ -915,10 +915,10 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
 
   const reportsSummary = reportsChannel
     ? await env.DB.prepare(`
-      SELECT COUNT(*) AS open_report_count, MAX(created_at) AS last_report_at
+      SELECT COUNT(*) AS open_report_count, MIN(created_at) AS oldest_report_at
       FROM channel_reports
       WHERE status = 'open'
-    `).first<{ open_report_count: number; last_report_at: string | null }>()
+    `).first<{ open_report_count: number; oldest_report_at: string | null }>()
     : null;
 
   const { results } = await env.DB.prepare(`
@@ -966,7 +966,7 @@ async function fetchPlatformSupportDashboard(locale: UserLocale, env: Env): Prom
       profile_image: reportsChannel.profile_image,
       bubble_color: reportsChannel.bubble_color || "#111827",
       open_report_count: Number(reportsSummary?.open_report_count || 0),
-      last_report_at: reportsSummary?.last_report_at || null,
+      oldest_report_at: reportsSummary?.oldest_report_at || null,
       created_at: reportsChannel.created_at,
     } : null,
     tickets: (results || []).map((thread) => ({

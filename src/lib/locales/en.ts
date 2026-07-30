@@ -411,6 +411,8 @@ export const en: Record<LocaleKeys, string> = {
   dashboardReportsInboxTitle: "Reports Inbox",
   dashboardReportsEmpty: "No open reports",
   dashboardReportsCount: "{count} open reports",
+  dashboardPlatformEmptyTitle: "No open reports or tickets",
+  dashboardPlatformEmptyDesc: "Open platform reports and support tickets will appear here.",
   dashboardTicketClosed: "Closed",
   deleteAccount: "Delete Account",
   deleteAccountConfirm: "Deleting your account permanently removes every channel you own, including all messages and media. Your account history will also be erased. You can create a new account later with the same login. This cannot be undone.",
