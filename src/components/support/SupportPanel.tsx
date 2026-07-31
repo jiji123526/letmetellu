@@ -371,9 +371,6 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
           <div className="max-w-full truncate font-semibold" style={{ fontSize: "var(--bubble-font-size)" }}>
             {t("supportTitle")}
           </div>
-          <div className="max-w-full truncate" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)" }}>
-            {!hasGuidedSession && hasActiveTicket ? t("supportTicketOpen") : t("supportSubtitle")}
-          </div>
         </div>
       </header>
 

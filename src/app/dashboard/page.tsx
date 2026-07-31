@@ -70,6 +70,7 @@ interface DashboardListItem {
 }
 
 const DASHBOARD_POLL_MS = 3000;
+type PlatformTicketFilter = "open" | "needs_reply" | "waiting_user" | "unread" | "stale" | "critical" | null;
 
 function formatDate(value: string, locale: "ko" | "en") {
   const date = parseServerDate(value);
@@ -159,6 +160,7 @@ export default function DashboardPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
+  const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const [prioritizedOwnedId, setPrioritizedOwnedId] = useState<string | null>(() => {
@@ -589,7 +591,17 @@ export default function DashboardPage() {
       });
     }
     if (platformDashboard?.tickets?.length) {
-      const ticketItems = platformDashboard.tickets.map((ticket) => ({
+      const filteredTickets = platformDashboard.tickets.filter((ticket) => {
+        if (!platformTicketFilter) return true;
+        if (platformTicketFilter === "open") return ticket.status === "open";
+        if (platformTicketFilter === "needs_reply") return ticket.waiting_on === "platform_admin";
+        if (platformTicketFilter === "waiting_user") return ticket.waiting_on === "user";
+        if (platformTicketFilter === "unread") return ticket.unread_for_admin;
+        if (platformTicketFilter === "stale") return ticket.stale_level !== "none";
+        if (platformTicketFilter === "critical") return ticket.stale_level === "critical";
+        return true;
+      });
+      const ticketItems = filteredTickets.map((ticket) => ({
         id: `ticket-${ticket.id}`,
         group: "tickets" as const,
         kind: "support" as const,
@@ -603,7 +615,7 @@ export default function DashboardPage() {
         profileImage: null,
         bubbleColor: ticket.status === "open" ? "#111827" : "#6b7280",
         hasPasscode: false,
-        ownerName: ticket.user_label,
+        ownerName: "",
         meta: ticket.last_message || ticket.summary,
         time: formatRelativeTime(
           parseServerDate(ticket.updated_at)?.getTime() || Date.now(),
@@ -654,7 +666,7 @@ export default function DashboardPage() {
       || item.meta.toLowerCase().includes(normalized)
       || item.ownerName.toLowerCase().includes(normalized)
     );
-  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds, platformDashboard, supportPreview, t, isPlatformAdmin]);
+  }, [channels, recentChannels, query, locale, prioritizedOwnedId, linkedChannel, linkedChannelId, status, ownedChannelIds, platformDashboard, platformTicketFilter, supportPreview, t, isPlatformAdmin]);
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
@@ -1174,24 +1186,54 @@ export default function DashboardPage() {
         {isPlatformAdmin && platformDashboard?.support_stats && (
           <section className="px-4 pt-3 pb-1">
             <div className="rounded-[16px] p-3 flex flex-wrap gap-2" style={{ background: "var(--card)" }}>
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
+                style={{ background: platformTicketFilter === "open" ? "#111827" : "var(--bg)", color: platformTicketFilter === "open" ? "#fff" : "var(--gray-text)" }}
+                onClick={() => setPlatformTicketFilter((current) => current === "open" ? null : "open")}
+              >
                 {t("supportStatsOpen").replace("{count}", String(platformDashboard.support_stats.open_count))}
-              </span>
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#fff7ed", color: "#c2410c" }}>
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
+                style={{ background: platformTicketFilter === "needs_reply" ? "#c2410c" : "#fff7ed", color: platformTicketFilter === "needs_reply" ? "#fff" : "#c2410c" }}
+                onClick={() => setPlatformTicketFilter((current) => current === "needs_reply" ? null : "needs_reply")}
+              >
                 {t("supportStatsNeedsReply").replace("{count}", String(platformDashboard.support_stats.waiting_for_admin_count))}
-              </span>
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#eef2ff", color: "#3730a3" }}>
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
+                style={{ background: platformTicketFilter === "waiting_user" ? "#3730a3" : "#eef2ff", color: platformTicketFilter === "waiting_user" ? "#fff" : "#3730a3" }}
+                onClick={() => setPlatformTicketFilter((current) => current === "waiting_user" ? null : "waiting_user")}
+              >
                 {t("supportStatsWaitingUser").replace("{count}", String(platformDashboard.support_stats.waiting_for_user_count))}
-              </span>
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#eff6ff", color: "#1d4ed8" }}>
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
+                style={{ background: platformTicketFilter === "unread" ? "#1d4ed8" : "#eff6ff", color: platformTicketFilter === "unread" ? "#fff" : "#1d4ed8" }}
+                onClick={() => setPlatformTicketFilter((current) => current === "unread" ? null : "unread")}
+              >
                 {t("supportStatsUnread").replace("{count}", String(platformDashboard.support_stats.unread_for_admin_count))}
-              </span>
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#fff1f2", color: "#be123c" }}>
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
+                style={{ background: platformTicketFilter === "stale" ? "#be123c" : "#fff1f2", color: platformTicketFilter === "stale" ? "#fff" : "#be123c" }}
+                onClick={() => setPlatformTicketFilter((current) => current === "stale" ? null : "stale")}
+              >
                 {t("supportStatsStale").replace("{count}", String(platformDashboard.support_stats.stale_24h_count))}
-              </span>
-              <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+              </button>
+              <button
+                type="button"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
+                style={{ background: platformTicketFilter === "critical" ? "#b91c1c" : "#fef2f2", color: platformTicketFilter === "critical" ? "#fff" : "#b91c1c" }}
+                onClick={() => setPlatformTicketFilter((current) => current === "critical" ? null : "critical")}
+              >
                 {t("supportStatsCritical").replace("{count}", String(platformDashboard.support_stats.stale_72h_count))}
-              </span>
+              </button>
               {platformDashboard.support_stats.oldest_open_duration_minutes > 0 && (
                 <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "var(--bg)", color: "var(--meta)" }}>
                   {t("supportStatsOldest").replace("{duration}", formatDurationMinutes(platformDashboard.support_stats.oldest_open_duration_minutes, locale))}
@@ -1355,11 +1397,6 @@ export default function DashboardPage() {
                     <div className="flex min-w-0 items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <h2 className="m-0 truncate text-[16px] font-semibold">{item.name}</h2>
-                        {item.kind === "support" && item.ownerName && (
-                          <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#eef2ff", color: "#3730a3" }}>
-                            {item.ownerName}
-                          </span>
-                        )}
                         {item.group === "tickets" && item.supportActorType && (
                           <span className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#f3f4f6", color: "#4b5563" }}>
                             {item.supportActorType === "guest" ? t("supportActorGuest") : t("supportActorLoggedIn")}
