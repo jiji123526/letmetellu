@@ -16,6 +16,8 @@ import {
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
 
+const PLATFORM_SUPPORT_THREAD_POLL_MS = 15000;
+
 function formatThreadUserLabel(
   thread: SupportThreadState | null,
   anonLabel: string,
@@ -96,17 +98,25 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   });
 
   useEffect(() => {
-    const initialTimer = window.setTimeout(() => {
+    const refreshThread = () => {
+      if (document.visibilityState !== "visible") return;
       loadThreadEffect();
+    };
+    const initialTimer = window.setTimeout(() => {
+      refreshThread();
     }, 0);
     const timer = window.setInterval(() => {
-      loadThreadEffect();
-    }, 5000);
+      refreshThread();
+    }, PLATFORM_SUPPORT_THREAD_POLL_MS);
+    window.addEventListener("focus", refreshThread);
+    document.addEventListener("visibilitychange", refreshThread);
     return () => {
       window.clearTimeout(initialTimer);
       window.clearInterval(timer);
+      window.removeEventListener("focus", refreshThread);
+      document.removeEventListener("visibilitychange", refreshThread);
     };
-  }, [threadId]);
+  }, [threadId, loadThreadEffect]);
 
   useEffect(() => {
     const element = messagesRef.current;

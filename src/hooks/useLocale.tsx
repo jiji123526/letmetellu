@@ -37,12 +37,6 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     window.dispatchEvent(new CustomEvent("locale-changed", {
       detail: { locale: newLocale },
     }));
-    fetch("/api/user", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locale: newLocale }),
-      keepalive: true,
-    }).catch(() => {});
   }, []);
 
   const t = useCallback((key: LocaleKeys): string => {

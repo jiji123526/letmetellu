@@ -41,6 +41,33 @@ interface PreviewData {
 }
 
 const previewCache = new Map<string, PreviewData | null>();
+const previewRequests = new Map<string, Promise<PreviewData | null>>();
+
+function requestPreview(url: string): Promise<PreviewData | null> {
+  const cached = previewCache.get(url);
+  if (cached !== undefined) return Promise.resolve(cached);
+
+  const pending = previewRequests.get(url);
+  if (pending) return pending;
+
+  const request = fetch(`${WORKER_URL}/api/preview?url=${encodeURIComponent(url)}`)
+    .then((response) => response.ok ? response.json() as Promise<PreviewData | null> : null)
+    .then((result) => {
+      const normalized = result && (result.title || result.image) ? result : null;
+      previewCache.set(url, normalized);
+      return normalized;
+    })
+    .catch(() => {
+      previewCache.set(url, null);
+      return null;
+    })
+    .finally(() => {
+      previewRequests.delete(url);
+    });
+
+  previewRequests.set(url, request);
+  return request;
+}
 
 function useResponsiveEmbedScale() {
   const frameRef = useRef<HTMLDivElement>(null);
@@ -112,18 +139,13 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
   useEffect(() => {
     if (previewCache.has(url)) return;
 
-    fetch(`${WORKER_URL}/api/preview?url=${encodeURIComponent(url)}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((result: PreviewData | null) => {
-        if (result && (result.title || result.image)) {
-          previewCache.set(url, result);
+    requestPreview(url)
+      .then((result) => {
+        if (result) {
           setData(result);
           onReady(url);
-        } else {
-          previewCache.set(url, null);
         }
       })
-      .catch(() => { previewCache.set(url, null); })
       .finally(() => setLoading(false));
   }, [onReady, url]);
 

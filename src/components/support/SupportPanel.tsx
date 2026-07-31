@@ -24,7 +24,7 @@ const emptySupportState: SupportStateResponse = {
   transcript: [],
   currentNode: null,
 };
-const SUPPORT_THREAD_POLL_MS = 3000;
+const SUPPORT_THREAD_POLL_MS = 15000;
 
 function readTranscriptText(event: SupportTranscriptEvent): string {
   if (event.event_type === "user_choice") {
@@ -151,12 +151,21 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
 
   useEffect(() => {
     if (!openThreadId) return;
-    const timer = window.setInterval(() => {
+    const refreshThread = () => {
       if (document.visibilityState !== "visible") return;
       loadStateEffect(false);
+    };
+    const timer = window.setInterval(() => {
+      refreshThread();
     }, SUPPORT_THREAD_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [openThreadId]);
+    window.addEventListener("focus", refreshThread);
+    document.addEventListener("visibilitychange", refreshThread);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshThread);
+      document.removeEventListener("visibilitychange", refreshThread);
+    };
+  }, [openThreadId, loadStateEffect]);
 
   useEffect(() => {
     if (!showThreadView || loading) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 
 const DEFAULT_FONT_SIZE = 17;
@@ -37,6 +37,7 @@ export async function saveFontSize(value: number, loggedIn: boolean) {
 
 export function UserPreferencesSync() {
   const { data: session, status } = useSession();
+  const persistedLocaleRef = useRef<"ko" | "en" | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -65,6 +66,7 @@ export function UserPreferencesSync() {
         const localLocale = normalizeLocale(localStorage.getItem("locale") || browserLocale || DEFAULT_LOCALE);
         const syncedLocale = data.locale === "ko" || data.locale === "en" ? data.locale : null;
         const nextLocale = syncedLocale || localLocale;
+        persistedLocaleRef.current = syncedLocale;
         localStorage.setItem("locale", nextLocale);
         window.dispatchEvent(new CustomEvent("locale-changed", {
           detail: { locale: nextLocale },
@@ -89,10 +91,37 @@ export function UserPreferencesSync() {
             body: JSON.stringify({ locale: nextLocale }),
             signal: controller.signal,
           });
+          persistedLocaleRef.current = nextLocale;
         }
       })
       .catch(() => {});
     return () => controller.abort();
+  }, [status, session?.user?.id]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user?.id) return;
+    const controller = new AbortController();
+    const handleLocaleChanged = (event: Event) => {
+      const nextLocale = (event as CustomEvent<{ locale?: string }>).detail?.locale;
+      if (nextLocale !== "ko" && nextLocale !== "en") return;
+      if (persistedLocaleRef.current === nextLocale) return;
+      persistedLocaleRef.current = nextLocale;
+      fetch("/api/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale: nextLocale }),
+        signal: controller.signal,
+        keepalive: true,
+      }).catch(() => {
+        persistedLocaleRef.current = null;
+      });
+    };
+
+    window.addEventListener("locale-changed", handleLocaleChanged);
+    return () => {
+      controller.abort();
+      window.removeEventListener("locale-changed", handleLocaleChanged);
+    };
   }, [status, session?.user?.id]);
 
   return null;

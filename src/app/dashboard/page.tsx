@@ -74,7 +74,8 @@ interface DashboardListItem {
   liveActive: boolean;
 }
 
-const DASHBOARD_POLL_MS = 3000;
+const ADMIN_DASHBOARD_POLL_MS = 15000;
+const SUPPORT_PREVIEW_POLL_MS = 30000;
 type PlatformTicketFilter = "open" | "needs_reply" | "waiting_user" | "unread" | "stale" | "critical" | null;
 
 function formatDate(value: string, locale: "ko" | "en") {
@@ -328,24 +329,26 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const loadPlatformDashboard = useCallback(async () => {
+  const loadPlatformDashboard = useCallback(async (): Promise<boolean> => {
     if (status !== "authenticated") {
       setPlatformDashboard(null);
-      return;
+      return false;
     }
     try {
       const result = await fetchPlatformDashboard();
       if (result._status === 403 || result._status === 404 || result._status >= 400) {
         setPlatformDashboard(null);
-        return;
+        return false;
       }
       setPlatformDashboard({
         reportsInbox: result.reportsInbox ?? null,
         tickets: result.tickets || [],
         support_stats: result.support_stats ?? null,
       });
+      return true;
     } catch {
       setPlatformDashboard(null);
+      return false;
     }
   }, [status]);
 
@@ -409,13 +412,25 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const userId = session?.user?.id;
       if (status === "authenticated" && session?.user?.id) {
-        void Promise.all([
-          loadChannels(),
-          loadAccountRecentChannels(session.user.id),
-          loadPlatformDashboard(),
-          loadSupportPreview(),
-        ]).finally(() => setLoading(false));
+        void (async () => {
+          const hasPlatformDashboard = await loadPlatformDashboard();
+          if (hasPlatformDashboard) {
+            setLoading(false);
+            return;
+          }
+          if (!userId) {
+            setLoading(false);
+            return;
+          }
+          await Promise.all([
+            loadChannels(),
+            loadAccountRecentChannels(userId),
+            loadSupportPreview(),
+          ]);
+          setLoading(false);
+        })();
       } else if (status === "unauthenticated") {
         void Promise.all([
           loadLocalRecentChannels(),
@@ -430,21 +445,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === "loading") return;
+    const pollMs = isPlatformAdmin ? ADMIN_DASHBOARD_POLL_MS : SUPPORT_PREVIEW_POLL_MS;
+    const shouldPoll = isPlatformAdmin || Boolean(supportPreview);
+    if (!shouldPoll) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      if (status === "authenticated") {
+      if (isPlatformAdmin) {
         void loadPlatformDashboard();
+      } else {
+        void loadSupportPreview();
       }
-      void loadSupportPreview();
-    }, DASHBOARD_POLL_MS);
+    }, pollMs);
     return () => window.clearInterval(timer);
-  }, [status, loadPlatformDashboard, loadSupportPreview]);
+  }, [status, isPlatformAdmin, supportPreview, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
     if (status === "loading") return;
     const refresh = () => {
-      if (status === "authenticated") {
+      if (isPlatformAdmin) {
         void loadPlatformDashboard();
+        return;
       }
       void loadSupportPreview();
     };
@@ -457,13 +477,14 @@ export default function DashboardPage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshOnVisible);
     };
-  }, [status, loadPlatformDashboard, loadSupportPreview]);
+  }, [status, isPlatformAdmin, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
     if (status === "loading") return;
     const refresh = () => {
-      if (status === "authenticated") {
+      if (isPlatformAdmin) {
         void loadPlatformDashboard();
+        return;
       }
       void loadSupportPreview();
     };
@@ -471,7 +492,7 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener("support-ticket-changed", refresh as EventListener);
     };
-  }, [status, loadPlatformDashboard, loadSupportPreview]);
+  }, [status, isPlatformAdmin, loadPlatformDashboard, loadSupportPreview]);
 
   useEffect(() => {
     if (loading || status !== "unauthenticated" || recentChannels.length > 0) return;

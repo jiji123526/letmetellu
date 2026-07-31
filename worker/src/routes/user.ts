@@ -6,6 +6,55 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+async function resolveUserIdentity(
+  env: Env,
+  userId: string,
+  userEmail: string,
+): Promise<{ id: string; email: string } | null> {
+  const userById = userId
+    ? await env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
+      .bind(userId).first<{ id: string; email: string }>()
+    : null;
+  if (userById) return userById;
+  return userEmail
+    ? await env.DB.prepare("SELECT id, email FROM users WHERE lower(email) = ?")
+      .bind(userEmail).first<{ id: string; email: string }>()
+    : null;
+}
+
+async function readUserState(
+  env: Env,
+  userId: string,
+  reportsChannelId: string | null,
+) {
+  const [channelsResult, preferences] = await Promise.all([
+    env.DB.prepare(
+      `SELECT channels.id, channels.name, channels.profile_image,
+              channels.bubble_color, channels.created_at,
+              COALESCE(
+                (SELECT MAX(messages.created_at) FROM messages WHERE messages.channel_id = channels.id AND messages.deleted = 0),
+                channels.created_at
+              ) AS last_message_at,
+              channels.passcode IS NOT NULL AS has_passcode,
+              users.name AS owner_name,
+              (SELECT CASE WHEN config.text IS NOT NULL AND config.text != 'false' AND json_extract(config.text, '$.active') = 1 THEN 1 ELSE 0 END
+               FROM config WHERE config.id = 'live_' || channels.id) AS live_active
+       FROM channels
+       LEFT JOIN users ON users.id = channels.owner_uid
+       WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'
+         ${reportsChannelId ? "AND channels.id != ?" : ""}`
+    ).bind(userId, ...(reportsChannelId ? [reportsChannelId] : [])).all(),
+    env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
+      .bind(userId).first<{ font_size: number | null; locale: string | null }>(),
+  ]);
+
+  return {
+    channels: channelsResult.results,
+    font_size: preferences?.font_size ?? null,
+    locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
+  };
+}
+
 export async function handleUser(request: Request, env: Env): Promise<Response> {
   const reportsChannelId = getReportsChannelId(env);
   if (request.method === "GET") {
@@ -31,7 +80,26 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     }
 
     const channelId = url.searchParams.get("channel");
-    if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
+    if (!channelId) {
+      if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) {
+        return Response.json({ error: "unauthorized" }, { status: 401 });
+      }
+      const userId = request.headers.get("X-User-Id") || "";
+      const userEmail = normalizeEmail(request.headers.get("X-User-Email") || "");
+      if (!userId && !userEmail) {
+        return Response.json({ error: "missing user identity" }, { status: 400 });
+      }
+      const user = await resolveUserIdentity(env, userId, userEmail);
+      if (!user) return Response.json({ error: "user_not_found" }, { status: 404 });
+      const state = await readUserState(env, user.id, reportsChannelId);
+      return Response.json({
+        ok: true,
+        user_id: user.id,
+        channels: state.channels,
+        font_size: state.font_size,
+        locale: state.locale,
+      });
+    }
 
     const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
       .bind(channelId).first() as { owner_uid: string } | null;
@@ -88,14 +156,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     if (!userId && !userEmail) {
       return Response.json({ error: "missing user identity" }, { status: 400 });
     }
-    const userById = userId
-      ? await env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
-        .bind(userId).first<{ id: string; email: string }>()
-      : null;
-    const user = userById || (userEmail
-      ? await env.DB.prepare("SELECT id, email FROM users WHERE lower(email) = ?")
-        .bind(userEmail).first<{ id: string; email: string }>()
-      : null);
+    const user = await resolveUserIdentity(env, userId, userEmail);
     if (!user) return Response.json({ error: "user not found" }, { status: 404 });
     const { results: ownedChannels } = await env.DB.prepare(
       "SELECT id FROM channels WHERE owner_uid = ? AND id NOT LIKE '%_live'"
@@ -184,31 +245,13 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       ]);
     }
 
-    // Fetch user's channels
-    const { results: channels } = await env.DB.prepare(
-      `SELECT channels.id, channels.name, channels.profile_image,
-              channels.bubble_color, channels.created_at,
-              COALESCE(
-                (SELECT MAX(messages.created_at) FROM messages WHERE messages.channel_id = channels.id AND messages.deleted = 0),
-                channels.created_at
-              ) AS last_message_at,
-              channels.passcode IS NOT NULL AS has_passcode,
-              users.name AS owner_name,
-              (SELECT CASE WHEN config.text IS NOT NULL AND config.text != 'false' AND json_extract(config.text, '$.active') = 1 THEN 1 ELSE 0 END
-               FROM config WHERE config.id = 'live_' || channels.id) AS live_active
-       FROM channels
-       LEFT JOIN users ON users.id = channels.owner_uid
-       WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'`
-    ).bind(canonicalUserId).all();
-
-    const preferences = await env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
-      .bind(canonicalUserId).first<{ font_size: number | null; locale: string | null }>();
+    const state = await readUserState(env, canonicalUserId, reportsChannelId);
     return Response.json({
       ok: true,
       user_id: canonicalUserId,
-      channels,
-      font_size: preferences?.font_size ?? null,
-      locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
+      channels: state.channels,
+      font_size: state.font_size,
+      locale: state.locale,
     });
   }
 
