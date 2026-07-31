@@ -52,6 +52,9 @@ interface DashboardListItem {
   kind: "channel" | "support";
   supportThreadId?: string;
   supportTopic?: string | null;
+  supportIcon?: string | null;
+  supportIconBg?: string | null;
+  supportIconColor?: string | null;
   supportUnread?: boolean;
   supportWaitingOn?: "user" | "platform_admin" | null;
   supportActorType?: "guest" | "logged_in";
@@ -120,54 +123,45 @@ function localMigrationSignature(channels: RecentChannel[]) {
   return channels.map((channel) => channel.id).sort().join(",");
 }
 
-function makeSupportTopicAvatar(
-  background: string,
-  foreground: string,
-  iconMarkup: string,
-) {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='12' fill='${background}'/>${iconMarkup.replaceAll("currentColor", foreground)}</svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
-function getSupportTopicAvatar(topic: string | null | undefined) {
+function getSupportTopicVisual(topic: string | null | undefined) {
   switch (topic) {
     case "login":
-      return makeSupportTopicAvatar(
-        "#eaf2ff",
-        "#2563eb",
-        "<path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'/><circle cx='12' cy='7' r='4' fill='none' stroke='currentColor' stroke-width='1.9'/>",
-      );
+      return {
+        background: "#eaf2ff",
+        color: "#2563eb",
+        icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>",
+      };
     case "passcode":
-      return makeSupportTopicAvatar(
-        "#fff3d8",
-        "#b45309",
-        "<rect x='3' y='11' width='18' height='10' rx='2' fill='none' stroke='currentColor' stroke-width='1.9'/><path d='M7 11V7a5 5 0 0 1 10 0v4' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'/>",
-      );
+      return {
+        background: "#fff3d8",
+        color: "#b45309",
+        icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'><rect x='3' y='11' width='18' height='10' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>",
+      };
     case "blocked":
-      return makeSupportTopicAvatar(
-        "#ffe8e8",
-        "#dc2626",
-        "<circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='1.9'/><path d='M7 7l10 10' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'/>",
-      );
+      return {
+        background: "#ffe8e8",
+        color: "#dc2626",
+        icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'><circle cx='12' cy='12' r='9'/><path d='M7 7l10 10'/></svg>",
+      };
     case "reports":
-      return makeSupportTopicAvatar(
-        "#ffe8e8",
-        "#b91c1c",
-        "<path d='M12 9v4' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/><circle cx='12' cy='16.5' r='.9' fill='currentColor' stroke='none'/><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/>",
-      );
+      return {
+        background: "#ffe8e8",
+        color: "#b91c1c",
+        icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M12 9v4'/><circle cx='12' cy='16.5' r='.9' fill='currentColor' stroke='none'/><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z'/></svg>",
+      };
     case "live":
-      return makeSupportTopicAvatar(
-        "#e6f7ed",
-        "#15803d",
-        "<circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/><circle cx='12' cy='12' r='2.5' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 3v2M12 19v2M3 12h2M19 12h2' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/>",
-      );
+      return {
+        background: "#e6f7ed",
+        color: "#15803d",
+        icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='2.5'/><path d='M12 3v2M12 19v2M3 12h2M19 12h2'/></svg>",
+      };
     case "other":
     default:
-      return makeSupportTopicAvatar(
-        "#eef2f7",
-        "#475569",
-        "<path d='M9.5 9.5a2.5 2.5 0 1 1 4 2c-.9.6-1.5 1.1-1.5 2.5' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><circle cx='12' cy='17' r='.9' fill='currentColor' stroke='none'/><circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='2'/>",
-      );
+      return {
+        background: "#eef2f7",
+        color: "#475569",
+        icon: "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9.5 9.5a2.5 2.5 0 1 1 4 2c-.9.6-1.5 1.1-1.5 2.5'/><circle cx='12' cy='17' r='.9' fill='currentColor' stroke='none'/><circle cx='12' cy='12' r='9'/></svg>",
+      };
   }
 }
 
@@ -658,19 +652,24 @@ export default function DashboardPage() {
         if (platformTicketFilter === "critical") return ticket.stale_level === "critical";
         return true;
       });
-      const ticketItems = filteredTickets.map((ticket) => ({
+      const ticketItems = filteredTickets.map((ticket) => {
+        const supportVisual = getSupportTopicVisual(ticket.entry_topic);
+        return ({
         id: `ticket-${ticket.id}`,
         group: "tickets" as const,
         kind: "support" as const,
         supportThreadId: ticket.id,
         supportTopic: ticket.entry_topic,
+        supportIcon: supportVisual.icon,
+        supportIconBg: supportVisual.background,
+        supportIconColor: supportVisual.color,
         supportUnread: ticket.unread_for_admin,
         supportWaitingOn: ticket.waiting_on,
         supportActorType: ticket.actor_type,
         supportStaleLevel: ticket.stale_level,
         route: `/support?thread=${encodeURIComponent(ticket.id)}&admin=1`,
         name: ticket.entry_topic_label,
-        profileImage: getSupportTopicAvatar(ticket.entry_topic),
+        profileImage: null,
         bubbleColor: ticket.status === "open" ? "#111827" : "#6b7280",
         hasPasscode: false,
         ownerName: "",
@@ -683,7 +682,8 @@ export default function DashboardPage() {
         pinned: ticket.status === "open",
         activityAt: ticket.updated_at,
         liveActive: false,
-      }));
+      });
+      });
       platformItems.push(...ticketItems);
     }
     if (platformItems.length > 0) {
@@ -1451,9 +1451,22 @@ export default function DashboardPage() {
                       {selectedIds.has(item.id) ? "✓" : ""}
                     </span>
                   )}
-                  <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
-                    {!item.profileImage && item.name.slice(0, 1).toUpperCase()}
-                  </div>
+                  {item.group === "tickets" && item.supportIcon ? (
+                    <div
+                      className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
+                      style={{
+                        background: item.supportIconBg || "var(--card)",
+                        color: item.supportIconColor || "var(--bubble-sent, #3b8df0)",
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: item.supportIcon.replace(/<svg/, `<svg style="width:24px;height:24px"`),
+                      }}
+                    />
+                  ) : (
+                    <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
+                      {!item.profileImage && item.name.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
                   <div className="self-stretch min-w-0 flex-1 ml-3.5 pr-4 py-2 flex flex-col justify-center border-b" style={{ borderColor: "var(--hairline)" }}>
                     <div className="flex min-w-0 items-center">
                       <div className="flex min-w-0 flex-1 items-center gap-2">

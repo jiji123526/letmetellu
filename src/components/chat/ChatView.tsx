@@ -2012,7 +2012,11 @@ export function ChatView({ channelId }: { channelId: string }) {
     : ownerPetitionStatus === "rejected"
       ? t("ownerSuspendedPetitionRejected")
       : t("ownerSuspendedBanner");
-  const isReportsOwnerView = isReportsChannelView && (viewerAccess === "owner" || viewerAccess === "reports_owner");
+  const hasReportsInboxContent = useMemo(
+    () => messages.some((message) => !!message.report_meta || !!message.petition_meta),
+    [messages],
+  );
+  const isReportsOwnerView = effectiveAdmin && (isReportsChannelView || hasReportsInboxContent);
 
   const displayMessages = useMemo(
     () => {
