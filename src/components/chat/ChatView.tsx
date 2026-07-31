@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport, actOnChannelReport, submitModerationPetition } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport, actOnChannelReport, submitModerationPetition } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -1397,7 +1397,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           ? decorateMediaUrl(event.profile_image as string | null)
           : undefined;
         const nextBackgroundImage = event.background_image !== undefined
-          ? decorateMediaUrl(event.background_image as string | null)
+          ? decorateProtectedMediaUrl(event.background_image as string | null)
           : undefined;
         updateRecentChannelAppearance(channelId, {
           ...(event.name ? { name: event.name as string } : {}),
@@ -3486,7 +3486,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             adminAction("update-profile", channelId, { bubble_color: color });
           }}
           onBackgroundChange={(background) => {
-            const decoratedBackgroundImage = decorateMediaUrl(background.background_image) || background.background_image;
+            const decoratedBackgroundImage = decorateProtectedMediaUrl(background.background_image) || background.background_image;
             setChannel((prev) => prev ? {
               ...prev,
               ...background,

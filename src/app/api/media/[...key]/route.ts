@@ -27,8 +27,18 @@ export async function GET(request: Request, { params }: Props) {
 
     const parentChannelId = getParentChannelId(key[0]);
     const roomToken = readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
+    if (roomToken && !target.searchParams.has("token")) {
+      target.searchParams.set("token", roomToken);
+    }
+
+    // Prefer a direct worker fetch whenever the browser already has enough
+    // information to access the media on its own. This keeps media bytes off
+    // Vercel Compute and preserves the proxy only as an owner-auth fallback.
+    if (roomToken || !session?.user?.id) {
+      return NextResponse.redirect(target, 307);
+    }
+
     const forwardHeaders: Record<string, string> = {};
-    if (roomToken) forwardHeaders["X-Room-Token"] = roomToken;
     if (session?.user?.id) {
       forwardHeaders["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
       forwardHeaders["X-User-Id"] = session.user.id;
@@ -37,17 +47,9 @@ export async function GET(request: Request, { params }: Props) {
       headers: Object.keys(forwardHeaders).length > 0 ? forwardHeaders : undefined,
       cache: "no-store",
     });
-    const body = await response.arrayBuffer();
-
-    const headers = new Headers();
-    const contentType = response.headers.get("content-type");
-    const cacheControl = response.headers.get("cache-control");
-    if (contentType) headers.set("Content-Type", contentType);
-    if (cacheControl) headers.set("Cache-Control", cacheControl);
-
-    return new Response(body, {
+    return new Response(response.body, {
       status: response.status,
-      headers,
+      headers: response.headers,
     });
   } catch {
     return NextResponse.json({ error: "media proxy failed" }, { status: 502 });

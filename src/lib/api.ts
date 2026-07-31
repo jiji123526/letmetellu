@@ -560,33 +560,54 @@ function roomTokenHeaders(channelId: string): Record<string, string> {
   return token ? { "X-Room-Token": token } : {};
 }
 
-export function decorateMediaUrl(mediaUrl: string | null | undefined): string | null {
+function buildDirectMediaUrl(
+  mediaUrl: string | null | undefined,
+  options?: { appendRoomToken?: boolean },
+): string | null {
   if (!mediaUrl) return null;
 
   try {
     const parsed = new URL(mediaUrl, WORKER_URL);
     if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
-    const proxy = new URL(parsed.pathname, typeof window !== "undefined" ? window.location.origin : WORKER_URL);
+
+    const direct = new URL(parsed.pathname, WORKER_URL);
     parsed.searchParams.forEach((value, key) => {
-      if (key !== "token") proxy.searchParams.append(key, value);
+      if (key !== "token") direct.searchParams.append(key, value);
     });
-    return typeof window !== "undefined"
-      ? `${proxy.pathname}${proxy.search}`
-      : proxy.toString();
+
+    if (options?.appendRoomToken) {
+      const mediaKey = decodeURIComponent(parsed.pathname.replace(/^\/api\/media\//, ""));
+      const channelId = mediaKey.split("/")[0] || "";
+      const parentChannelId = getParentChannelId(channelId);
+      const roomToken = getRoomToken(parentChannelId);
+      if (roomToken && !direct.searchParams.has("token")) {
+        direct.searchParams.set("token", roomToken);
+      }
+    }
+
+    return direct.toString();
   } catch {
     return mediaUrl;
   }
 }
 
+export function decorateMediaUrl(mediaUrl: string | null | undefined): string | null {
+  return buildDirectMediaUrl(mediaUrl);
+}
+
+export function decorateProtectedMediaUrl(mediaUrl: string | null | undefined): string | null {
+  return buildDirectMediaUrl(mediaUrl, { appendRoomToken: true });
+}
+
 export function decorateMessageMedia<T extends { image?: string | null }>(message: T): T {
   if (!message.image) return message;
-  const image = decorateMediaUrl(message.image);
+  const image = decorateProtectedMediaUrl(message.image);
   return image === message.image ? message : { ...message, image };
 }
 
 function decorateChannelMedia<T extends { profile_image?: string | null; background_image?: string | null }>(channel: T): T {
   const profile_image = decorateMediaUrl(channel.profile_image);
-  const background_image = decorateMediaUrl(channel.background_image);
+  const background_image = decorateProtectedMediaUrl(channel.background_image);
   if (profile_image === channel.profile_image && background_image === channel.background_image) return channel;
   return { ...channel, profile_image, background_image };
 }
@@ -596,7 +617,7 @@ export function decorateWelcomeConfig(config: string | undefined): string | unde
   try {
     const parsed = JSON.parse(config) as { icon?: unknown };
     if (typeof parsed.icon !== "string") return config;
-    const icon = decorateMediaUrl(parsed.icon);
+    const icon = decorateProtectedMediaUrl(parsed.icon);
     if (!icon || icon === parsed.icon) return config;
     return JSON.stringify({ ...parsed, icon });
   } catch {
@@ -741,7 +762,7 @@ export async function fetchGallery(channelId: string, cursor?: string) {
   if (Array.isArray(data?.gallery)) {
     data.gallery = data.gallery.map((item: { image?: string | null }) => ({
       ...item,
-      image: decorateMediaUrl(item.image) || item.image,
+      image: decorateProtectedMediaUrl(item.image) || item.image,
     }));
   }
   return data;
