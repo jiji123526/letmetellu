@@ -7,6 +7,7 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
+const PREVIEW_CACHE_TTL_SECONDS = 60 * 60;
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -111,6 +112,24 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
   if (!rawUrl) {
     return Response.json({ error: "url parameter required" }, { status: 400 });
   }
+  let previewUrl: URL;
+  try {
+    previewUrl = assertAllowedPreviewUrl(rawUrl);
+  } catch (error) {
+    if (error instanceof PreviewError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    return Response.json({ error: "invalid url" }, { status: 400 });
+  }
+
+  const cacheKey = new Request(new URL(`/__preview_cache?url=${encodeURIComponent(rawUrl)}`, request.url).toString(), {
+    method: "GET",
+  });
+  const cached = await caches.default.match(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const previewSubject = await hashRateLimitIdentifier("preview-ip", getPreviewRequestIp(request), env);
   const previewRateLimit = await consumeDurableRateLimit({
     env,
@@ -124,21 +143,21 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
   }
 
   try {
-    const previewUrl = assertAllowedPreviewUrl(rawUrl);
-
     // YouTube: use noembed for title, return thumbnail directly.
     const ytMatch = rawUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) {
       const videoId = ytMatch[1];
       const oembedData = await fetchYouTubeOEmbed(videoId);
-      return Response.json({
+      const previewResponse = Response.json({
         title: oembedData.title || "",
         description: oembedData.author_name || "",
         image: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         video: "",
         siteName: "YouTube",
         url: rawUrl,
-      }, { headers: { "Cache-Control": "public, max-age=3600" } });
+      }, { headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` } });
+      await caches.default.put(cacheKey, previewResponse.clone());
+      return previewResponse;
     }
 
     // Twitter/X: use fxtwitter for better OG tags.
@@ -176,9 +195,11 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
       video = "";
     }
 
-    return Response.json({ title, description, image, video, siteName, url: rawUrl }, {
-      headers: { "Cache-Control": "public, max-age=3600" },
+    const previewResponse = Response.json({ title, description, image, video, siteName, url: rawUrl }, {
+      headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` },
     });
+    await caches.default.put(cacheKey, previewResponse.clone());
+    return previewResponse;
   } catch (error) {
     if (error instanceof PreviewError) {
       return Response.json({ error: error.message }, { status: error.status });

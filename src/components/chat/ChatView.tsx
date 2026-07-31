@@ -1060,30 +1060,6 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
 
-  // Logged-in owners receive admin auth; the reports-channel owner may receive
-  // a separate viewer token for read-only moderation access to locked rooms.
-  const authenticateAdminSocket = useCallback(async () => {
-    if (!isLoggedIn || !channelId) return;
-    try {
-      const response = await fetch(`/api/ws-token?channel=${encodeURIComponent(channelId)}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) return;
-      const data = await response.json() as { token?: string; mode?: "admin" | "viewer" };
-      if (data.token && data.mode === "admin") {
-        send({ type: "auth-admin", token: data.token });
-      } else if (data.token && data.mode === "viewer") {
-        send({ type: "auth-viewer", token: data.token });
-      }
-    } catch {
-      // The next reconnect will request a fresh token again.
-    }
-  }, [isLoggedIn, channelId, send]);
-
-  useEffect(() => {
-    authenticateAdminSocket();
-  }, [authenticateAdminSocket]);
-
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
 
@@ -1525,11 +1501,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (event.type === "reconnected" && inLiveModeRef.current) {
         send({ type: "join-live" });
       }
-      // Authenticate owners as soon as every new socket opens. Waiting for the
-      // generic room authentication to finish creates a deadlock in protected rooms.
-      if (event.type === "socket-opened") {
-        authenticateAdminSocket();
-      }
       if (event.type === "dm-new") {
         const dm = decorateMessageMedia(event.dm as Message);
         const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
@@ -1745,7 +1716,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, authenticateAdminSocket, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner, refreshOwnerModeration]);
+  }, [subscribe, channelId, send, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner, refreshOwnerModeration]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {

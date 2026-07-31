@@ -1,6 +1,11 @@
 import { auth } from "@/lib/auth";
 import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
+import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
+
+function getParentChannelId(channelId: string) {
+  return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -36,7 +41,9 @@ export async function POST(request: Request) {
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
-  const roomToken = request.headers.get("X-Room-Token");
+  const parentChannelId = getParentChannelId(channelId);
+  const roomToken = request.headers.get("X-Room-Token")
+    || readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
   if (session?.user?.id && !anonymousMode) {

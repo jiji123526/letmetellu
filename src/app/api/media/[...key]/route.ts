@@ -27,18 +27,17 @@ export async function GET(request: Request, { params }: Props) {
 
     const parentChannelId = getParentChannelId(key[0]);
     const roomToken = readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
-    if (roomToken && !target.searchParams.has("token")) {
-      target.searchParams.set("token", roomToken);
-    }
 
-    // Prefer a direct worker fetch whenever the browser already has enough
-    // information to access the media on its own. This keeps media bytes off
-    // Vercel Compute and preserves the proxy only as an owner-auth fallback.
-    if (roomToken || !session?.user?.id) {
+    // Protected media now stays on the same-origin proxy so room-access tokens
+    // remain HttpOnly and never have to appear in JS or media URLs.
+    if (!roomToken && !session?.user?.id) {
       return NextResponse.redirect(target, 307);
     }
 
     const forwardHeaders: Record<string, string> = {};
+    if (roomToken) {
+      forwardHeaders["X-Room-Token"] = roomToken;
+    }
     if (session?.user?.id) {
       forwardHeaders["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
       forwardHeaders["X-User-Id"] = session.user.id;

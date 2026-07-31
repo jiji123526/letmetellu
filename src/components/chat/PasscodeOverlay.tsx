@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { verifyPasscode, setRoomToken } from "@/lib/api";
+import { notifyRoomAccessGranted, verifyPasscode } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
 interface PasscodeOverlayProps {
@@ -29,8 +29,8 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
 
     const result = await verifyPasscode(channelId, passcode);
 
-    if (result.token) {
-      setRoomToken(channelId, result.token);
+    if (result.ok) {
+      notifyRoomAccessGranted(channelId);
       onSuccess();
     } else {
       setShake(true);

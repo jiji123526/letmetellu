@@ -1,4 +1,3 @@
-import { clearRoomTokenCookie, setRoomTokenCookie } from "./room-token-cookie";
 import { en, ko } from "./locales";
 
 const IS_MOCK = process.env.NEXT_PUBLIC_MOCK === "true";
@@ -491,25 +490,24 @@ export function getStoredUid(): string | null {
   return localStorage.getItem("letsplay_uid");
 }
 
-// Room token management
-export function getRoomToken(channelId: string): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(`roomToken_${channelId}`);
-}
-
-export function setRoomToken(channelId: string, token: string) {
-  localStorage.setItem(`roomToken_${channelId}`, token);
-  setRoomTokenCookie(channelId, token);
+// Room access management
+export function notifyRoomAccessGranted(channelId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(`roomToken_${channelId}`);
   window.dispatchEvent(new CustomEvent("room-token-changed", {
-    detail: { channelId, token },
+    detail: { channelId, hasAccess: true },
   }));
 }
 
 export function clearRoomToken(channelId: string) {
+  if (typeof window === "undefined") return;
   localStorage.removeItem(`roomToken_${channelId}`);
-  clearRoomTokenCookie(channelId);
+  void fetch(`/api/room-token?channel=${encodeURIComponent(channelId)}`, {
+    method: "DELETE",
+    cache: "no-store",
+  }).catch(() => {});
   window.dispatchEvent(new CustomEvent("room-token-changed", {
-    detail: { channelId, token: null },
+    detail: { channelId, hasAccess: false },
   }));
 }
 
@@ -555,14 +553,13 @@ export function clearStoredSupportTicketPreview() {
   } catch {}
 }
 
-function roomTokenHeaders(channelId: string): Record<string, string> {
-  const token = getRoomToken(channelId);
-  return token ? { "X-Room-Token": token } : {};
+function roomTokenHeaders(_channelId: string): Record<string, string> {
+  return {};
 }
 
 function buildDirectMediaUrl(
   mediaUrl: string | null | undefined,
-  options?: { appendRoomToken?: boolean },
+  options?: { keepSameOrigin?: boolean },
 ): string | null {
   if (!mediaUrl) return null;
 
@@ -570,20 +567,14 @@ function buildDirectMediaUrl(
     const parsed = new URL(mediaUrl, WORKER_URL);
     if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
 
+    if (options?.keepSameOrigin) {
+      return `${parsed.pathname}${parsed.search}`;
+    }
+
     const direct = new URL(parsed.pathname, WORKER_URL);
     parsed.searchParams.forEach((value, key) => {
       if (key !== "token") direct.searchParams.append(key, value);
     });
-
-    if (options?.appendRoomToken) {
-      const mediaKey = decodeURIComponent(parsed.pathname.replace(/^\/api\/media\//, ""));
-      const channelId = mediaKey.split("/")[0] || "";
-      const parentChannelId = getParentChannelId(channelId);
-      const roomToken = getRoomToken(parentChannelId);
-      if (roomToken && !direct.searchParams.has("token")) {
-        direct.searchParams.set("token", roomToken);
-      }
-    }
 
     return direct.toString();
   } catch {
@@ -596,7 +587,7 @@ export function decorateMediaUrl(mediaUrl: string | null | undefined): string | 
 }
 
 export function decorateProtectedMediaUrl(mediaUrl: string | null | undefined): string | null {
-  return buildDirectMediaUrl(mediaUrl, { appendRoomToken: true });
+  return buildDirectMediaUrl(mediaUrl, { keepSameOrigin: true });
 }
 
 export function decorateMessageMedia<T extends { image?: string | null }>(message: T): T {
@@ -631,17 +622,9 @@ import * as mockApi from "./mock-api";
 export async function fetchInit(channelId: string) {
   if (IS_MOCK) return mockApi.fetchInit(channelId);
 
-  const parentChannelId = getParentChannelId(channelId);
-  const roomToken = getRoomToken(parentChannelId);
-  const headers: Record<string, string> = {};
-  if (roomToken) headers["X-Room-Token"] = roomToken;
-
   // Always use the same-origin proxy. Auth.js session cookies are HttpOnly, so
-  // client-side cookie inspection cannot reliably decide whether the user is
-  // signed in. The proxy verifies the session server-side and forwards owner
-  // identity only when appropriate.
+  // channel-access cookies and session cookies stay server-readable only.
   const res = await fetch(`/api/init?channel=${channelId}`, {
-    headers,
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
@@ -649,7 +632,6 @@ export async function fetchInit(channelId: string) {
   if (typeof data?.anonymousUid === "string") {
     setAnonymousIdentity(data.anonymousUid);
   }
-  if (data?.roomToken) setRoomToken(parentChannelId, data.roomToken);
   if (data?.channel) data.channel = decorateChannelMedia(data.channel);
   if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
   if (Array.isArray(data?.dm)) data.dm = data.dm.map(decorateMessageMedia);
@@ -680,11 +662,12 @@ export async function fetchOwnerChannels(channelId: string): Promise<{
   return data;
 }
 
-export async function verifyPasscode(channelId: string, passcode: string): Promise<{ token?: string; error?: string }> {
-  const res = await fetch(`${WORKER_URL}/api/verify-passcode`, {
+export async function verifyPasscode(channelId: string, passcode: string): Promise<{ ok?: boolean; error?: string }> {
+  const res = await fetch("/api/verify-passcode", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel_id: channelId, passcode }),
+    cache: "no-store",
   });
   return res.json();
 }

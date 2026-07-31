@@ -1,3 +1,4 @@
+import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable-rate-limit";
 import { invalidatePasscodeCache } from "../lib/validation";
 import { Env } from "../types";
 
@@ -5,6 +6,8 @@ const PASSCODE_HASH_PREFIX = "pbkdf2-sha256$";
 const PASSCODE_PBKDF2_ITERATIONS = 100_000;
 const LEGACY_PASSCODE_HASH_PATTERN = /^[a-f0-9]{64}$/i;
 type InternalSecretUsage = "sign" | "verify";
+const PASSCODE_VERIFY_LIMIT = 5;
+const PASSCODE_VERIFY_WINDOW_MS = 60_000;
 
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -119,11 +122,14 @@ async function createRoomTokenBinding(
   return toBase64Url(signature);
 }
 
-// Rate limit: 5 attempts per 60 seconds per channel
-const passcodeAttempts = new Map<string, number[]>();
+function getPasscodeRequestIp(request: Request): string {
+  return request.headers.get("CF-Connecting-IP")
+    || request.headers.get("X-Client-IP")
+    || "unknown";
+}
 
 export function invalidatePasscodeAttempts(channelId: string) {
-  passcodeAttempts.delete(channelId);
+  void channelId;
 }
 
 export interface RoomTokenPayload {
@@ -171,15 +177,21 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
     return Response.json({ error: "missing fields" }, { status: 400 });
   }
 
-  // Rate limit check
-  const now = Date.now();
-  const attempts = passcodeAttempts.get(channel_id) || [];
-  const recent = attempts.filter((t) => now - t < 60000);
-  if (recent.length >= 5) {
+  const rateLimitSubject = await hashRateLimitIdentifier(
+    "passcode-verify",
+    `${channel_id}:${getPasscodeRequestIp(request)}`,
+    env,
+  );
+  const rateLimit = await consumeDurableRateLimit({
+    env,
+    scope: "passcode-verify",
+    subjectKey: rateLimitSubject,
+    limit: PASSCODE_VERIFY_LIMIT,
+    windowMs: PASSCODE_VERIFY_WINDOW_MS,
+  });
+  if (!rateLimit.ok) {
     return Response.json({ error: "too_many_attempts" }, { status: 429 });
   }
-  recent.push(now);
-  passcodeAttempts.set(channel_id, recent);
 
   // Get channel's stored passcode hash
   const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")

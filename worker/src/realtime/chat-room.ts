@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { verifyAdminWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
+import { verifyAdminWsToken, verifyRoomViewerWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 
@@ -62,6 +62,9 @@ export class ChatRoom {
         authorized: isReportsChannel(channelId, this.env) ? false : !this.currentPasscode,
         authAttempt: 0,
       });
+      if (!isReportsChannel(channelId, this.env) && !this.currentPasscode) {
+        server.send(JSON.stringify({ type: "room-authenticated" }));
+      }
 
       server.addEventListener("message", async (event) => {
         if (typeof event.data !== "string") return;
@@ -123,6 +126,24 @@ export class ChatRoom {
               this.queuePresenceBroadcast();
             } else {
               conn.viewerOverride = false;
+              conn.authorized = false;
+              server.send(authResponse);
+            }
+          }
+
+          if (data.type === "auth-room-viewer" && typeof data.token === "string") {
+            const payload = await verifyRoomViewerWsToken(data.token, this.env);
+            const authResponse = JSON.stringify({
+              type: payload?.channel_id === conn.channelId ? "room-authenticated" : "room-auth-failed",
+              requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+            });
+            if (payload?.channel_id === conn.channelId) {
+              conn.authAttempt++;
+              conn.uid = payload.user_id;
+              conn.authorized = true;
+              server.send(authResponse);
+              this.queuePresenceBroadcast();
+            } else {
               conn.authorized = false;
               server.send(authResponse);
             }

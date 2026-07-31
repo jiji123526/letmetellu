@@ -1,4 +1,6 @@
 import { auth } from "@/lib/auth";
+import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity-cookie";
+import { clearRoomTokenResponseCookie, readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
 function encodeBase64Url(value: string | Uint8Array): string {
@@ -7,7 +9,7 @@ function encodeBase64Url(value: string | Uint8Array): string {
 }
 
 async function createWsToken(
-  type: "admin-ws" | "viewer-ws",
+  type: "admin-ws" | "viewer-ws" | "room-viewer-ws",
   channelId: string,
   userId: string,
 ): Promise<string> {
@@ -31,15 +33,14 @@ async function createWsToken(
   return `${payload}.${encodeBase64Url(signature)}`;
 }
 
+function getParentChannelId(channelId: string) {
+  return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+}
+
 // Returns the WebSocket auth token for verified channel owners
 // This token is used to authenticate as admin on the DO WebSocket
 export async function GET(request: Request) {
   const session = await auth();
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
   const url = new URL(request.url);
   const channelId = url.searchParams.get("channel");
   if (!channelId) {
@@ -47,26 +48,63 @@ export async function GET(request: Request) {
   }
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
-  const res = await fetch(`${workerUrl}/api/init?channel=${channelId}`, {
-    headers: {
-      "X-Internal-Token": process.env.INTERNAL_SECRET || "",
-      "X-User-Id": session.user.id,
-    },
+  if (session?.user?.id) {
+    const ownerRes = await fetch(`${workerUrl}/api/init?channel=${channelId}`, {
+      headers: {
+        "X-Internal-Token": process.env.INTERNAL_SECRET || "",
+        "X-User-Id": session.user.id,
+      },
+      cache: "no-store",
+    });
+    const ownerData = await ownerRes.json() as { channel?: { owner_uid: string }; viewerAccess?: "owner" | "reports_owner" | "standard" };
+    if (ownerRes.ok && ownerData.channel) {
+      if (ownerData.viewerAccess === "owner" && ownerData.channel.owner_uid === session.user.id) {
+        const token = await createWsToken("admin-ws", channelId, session.user.id);
+        return NextResponse.json({ token, mode: "admin" });
+      }
+      if (ownerData.viewerAccess === "reports_owner") {
+        const token = await createWsToken("viewer-ws", channelId, session.user.id);
+        return NextResponse.json({ token, mode: "viewer" });
+      }
+    }
+  }
+
+  const parentChannelId = getParentChannelId(channelId);
+  const roomToken = readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
+  if (!roomToken) {
+    return new NextResponse(null, { status: 204 });
+  }
+
+  const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
+  const headers: Record<string, string> = { "X-Room-Token": roomToken };
+  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  if (deviceToken) headers["X-Device-Token"] = deviceToken;
+
+  const roomRes = await fetch(`${workerUrl}/api/init?channel=${channelId}`, {
+    headers,
+    cache: "no-store",
   });
-  const data = await res.json() as { channel?: { owner_uid: string }; viewerAccess?: "owner" | "reports_owner" | "standard" };
-  if (!res.ok || !data.channel) {
-    return NextResponse.json({ error: "not authorized" }, { status: 403 });
+  const roomData = await roomRes.json().catch(() => ({})) as {
+    channel?: { id: string };
+    anonymousUid?: string;
+    anonymousToken?: string;
+    deviceToken?: string;
+  };
+  if (!roomRes.ok || !roomData.channel) {
+    const response = NextResponse.json({ error: "not authorized" }, { status: 403 });
+    clearRoomTokenResponseCookie(response, request, parentChannelId);
+    return response;
   }
 
-  if (data.viewerAccess === "owner" && data.channel.owner_uid === session.user.id) {
-    const token = await createWsToken("admin-ws", channelId, session.user.id);
-    return NextResponse.json({ token, mode: "admin" });
-  }
-
-  if (data.viewerAccess === "reports_owner") {
-    const token = await createWsToken("viewer-ws", channelId, session.user.id);
-    return NextResponse.json({ token, mode: "viewer" });
-  }
-
-  return NextResponse.json({ error: "not authorized" }, { status: 403 });
+  const token = await createWsToken(
+    "room-viewer-ws",
+    channelId,
+    typeof roomData.anonymousUid === "string" && roomData.anonymousUid ? roomData.anonymousUid : "viewer",
+  );
+  const response = NextResponse.json({ token, mode: "room" });
+  setIdentityCookies(response, request, {
+    anonymousToken: typeof roomData.anonymousToken === "string" ? roomData.anonymousToken : null,
+    deviceToken: typeof roomData.deviceToken === "string" ? roomData.deviceToken : null,
+  });
+  return response;
 }

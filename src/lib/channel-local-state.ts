@@ -20,7 +20,7 @@ export function clearChannelLocalState(channelId: string) {
   if (typeof window === "undefined") return;
   channelLocalStorageKeys(channelId).forEach((key) => localStorage.removeItem(key));
   window.dispatchEvent(new CustomEvent("room-token-changed", {
-    detail: { channelId, token: null },
+    detail: { channelId, hasAccess: false },
   }));
 }
 

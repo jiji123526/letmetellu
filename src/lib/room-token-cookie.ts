@@ -1,36 +1,52 @@
+import type { NextResponse } from "next/server";
+
 const ROOM_TOKEN_COOKIE_PREFIX = "roomToken_";
 const ROOM_TOKEN_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
-function getSecureCookieAttributes() {
-  if (typeof window === "undefined" || window.location.protocol !== "https:") {
-    return "";
+function shouldUseSecureCookies(request: Request): boolean {
+  try {
+    return new URL(request.url).protocol === "https:";
+  } catch {
+    return process.env.NODE_ENV === "production";
   }
-  return "; Secure";
 }
 
 export function getRoomTokenCookieName(channelId: string): string {
   return `${ROOM_TOKEN_COOKIE_PREFIX}${encodeURIComponent(channelId)}`;
 }
 
-export function setRoomTokenCookie(channelId: string, token: string) {
-  if (typeof document === "undefined") return;
-  document.cookie = [
-    `${getRoomTokenCookieName(channelId)}=${encodeURIComponent(token)}`,
-    "Path=/",
-    "SameSite=Lax",
-    `Max-Age=${ROOM_TOKEN_COOKIE_MAX_AGE_SECONDS}`,
-  ].join("; ") + getSecureCookieAttributes();
+export function setRoomTokenResponseCookie(
+  response: NextResponse,
+  request: Request,
+  channelId: string,
+  token: string,
+) {
+  response.cookies.set({
+    name: getRoomTokenCookieName(channelId),
+    value: token,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: shouldUseSecureCookies(request),
+    path: "/",
+    maxAge: ROOM_TOKEN_COOKIE_MAX_AGE_SECONDS,
+  });
 }
 
-export function clearRoomTokenCookie(channelId: string) {
-  if (typeof document === "undefined") return;
-  document.cookie = [
-    `${getRoomTokenCookieName(channelId)}=`,
-    "Path=/",
-    "SameSite=Lax",
-    "Max-Age=0",
-    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
-  ].join("; ") + getSecureCookieAttributes();
+export function clearRoomTokenResponseCookie(
+  response: NextResponse,
+  request: Request,
+  channelId: string,
+) {
+  response.cookies.set({
+    name: getRoomTokenCookieName(channelId),
+    value: "",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: shouldUseSecureCookies(request),
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+  });
 }
 
 export function readRoomTokenCookie(cookieHeader: string | null | undefined, channelId: string): string | null {

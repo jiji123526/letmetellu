@@ -1,6 +1,11 @@
 import { auth } from "@/lib/auth";
 import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity-cookie";
+import { readRoomTokenCookie, setRoomTokenResponseCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
+
+function getParentChannelId(channelId: string) {
+  return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+}
 
 // Init proxy for authenticated users — forwards session identity to Worker
 // Worker can use this to bypass passcode gate for channel owners
@@ -22,8 +27,9 @@ export async function GET(request: Request) {
     headers["X-User-Id"] = session.user.id;
   }
 
-  // Forward room token if present
-  const roomToken = request.headers.get("X-Room-Token");
+  const parentChannelId = getParentChannelId(channel);
+  const roomToken = request.headers.get("X-Room-Token")
+    || readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
   if (roomToken) {
     headers["X-Room-Token"] = roomToken;
   }
@@ -36,15 +42,20 @@ export async function GET(request: Request) {
   const data = await res.json() as Record<string, unknown>;
   const nextAnonymousToken = typeof data.anonymousToken === "string" ? data.anonymousToken : null;
   const nextDeviceToken = typeof data.deviceToken === "string" ? data.deviceToken : null;
+  const nextRoomToken = typeof data.roomToken === "string" ? data.roomToken : null;
 
   delete data.anonymousToken;
   delete data.deviceToken;
+  delete data.roomToken;
 
   const response = NextResponse.json(data, { status: res.status });
   setIdentityCookies(response, request, {
     anonymousToken: nextAnonymousToken,
     deviceToken: nextDeviceToken,
   });
+  if (nextRoomToken) {
+    setRoomTokenResponseCookie(response, request, parentChannelId, nextRoomToken);
+  }
 
   return response;
 }

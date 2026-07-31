@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { getRoomToken, getWebSocketUrl } from "@/lib/api";
+import { getWebSocketUrl } from "@/lib/api";
 
 type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 
@@ -21,6 +21,31 @@ export function useRealtime(channelId: string | null, uid: string) {
   const mountedRef = useRef(false);
   const intentionalCloseRef = useRef(false);
   const sleepingRef = useRef(false);
+
+  const requestSocketAuthorization = useCallback(async (socket: WebSocket) => {
+    if (!channelId) return;
+    try {
+      const response = await fetch(`/api/ws-token?channel=${encodeURIComponent(channelId)}`, {
+        cache: "no-store",
+      });
+      if (socket !== wsRef.current || socket.readyState !== WebSocket.OPEN) return;
+      if (response.status === 204) return;
+      if (!response.ok) return;
+      const data = await response.json() as { token?: string; mode?: "admin" | "viewer" | "room" };
+      if (!data.token) return;
+      const requestId = crypto.randomUUID();
+      latestRoomAuthRequest.current = requestId;
+      if (data.mode === "admin") {
+        socket.send(JSON.stringify({ type: "auth-admin", token: data.token, requestId }));
+      } else if (data.mode === "viewer") {
+        socket.send(JSON.stringify({ type: "auth-viewer", token: data.token, requestId }));
+      } else if (data.mode === "room") {
+        socket.send(JSON.stringify({ type: "auth-room-viewer", token: data.token, requestId }));
+      }
+    } catch {
+      // The next reconnect or room-access change will retry.
+    }
+  }, [channelId]);
 
   const clearReconnectTimeout = useCallback(() => {
     if (!reconnectTimeout.current) return;
@@ -87,10 +112,7 @@ export function useRealtime(channelId: string | null, uid: string) {
       setSocketConnected(true);
       setRoomAuthenticated(false);
       handlersRef.current.forEach((handler) => handler({ type: "socket-opened" }));
-      const roomToken = getRoomToken(channelId);
-      const requestId = crypto.randomUUID();
-      latestRoomAuthRequest.current = requestId;
-      ws.send(JSON.stringify({ type: "auth-room", token: roomToken, requestId }));
+      void requestSocketAuthorization(ws);
     };
 
     ws.onmessage = (e) => {
@@ -156,7 +178,7 @@ export function useRealtime(channelId: string | null, uid: string) {
     ws.onerror = () => {
       ws.close();
     };
-  }, [channelId, uid, clearReconnectTimeout]);
+  }, [channelId, uid, clearReconnectTimeout, requestSocketAuthorization]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -208,21 +230,19 @@ export function useRealtime(channelId: string | null, uid: string) {
   useEffect(() => {
     if (!channelId) return;
     const handleRoomTokenChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ channelId: string; token: string | null }>).detail;
+      const detail = (event as CustomEvent<{ channelId: string; hasAccess?: boolean }>).detail;
       if (detail.channelId !== channelId) return;
-      if (!detail.token) {
+      if (detail.hasAccess === false) {
         setRoomAuthenticated(false);
         return;
       }
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        const requestId = crypto.randomUUID();
-        latestRoomAuthRequest.current = requestId;
-        wsRef.current.send(JSON.stringify({ type: "auth-room", token: detail.token, requestId }));
+        void requestSocketAuthorization(wsRef.current);
       }
     };
     window.addEventListener("room-token-changed", handleRoomTokenChanged);
     return () => window.removeEventListener("room-token-changed", handleRoomTokenChanged);
-  }, [channelId]);
+  }, [channelId, requestSocketAuthorization]);
 
   const subscribe = useCallback((handler: MessageHandler) => {
     handlersRef.current.add(handler);

@@ -69,6 +69,18 @@ function requestPreview(url: string): Promise<PreviewData | null> {
   return request;
 }
 
+function normalizeInstagramEmbedUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname !== "instagram.com" && hostname !== "www.instagram.com") return null;
+    if (!/^\/(p|reel)\/[\w-]+\/?$/i.test(parsed.pathname)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function useResponsiveEmbedScale() {
   const frameRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -271,6 +283,7 @@ function TwitterEmbed({ url, onReady }: { url: string; onReady: (url: string) =>
 function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
   const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
   const [loading, setLoading] = useState(true);
+  const embedUrl = normalizeInstagramEmbedUrl(url);
 
   useEffect(() => {
     onReady(url);
@@ -278,9 +291,23 @@ function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) 
 
   useEffect(() => {
     const container = contentRef.current;
-    if (!container) return;
+    if (!container || !embedUrl) return;
 
-    container.innerHTML = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="max-width:${NATIVE_EMBED_WIDTH}px;width:${NATIVE_EMBED_WIDTH}px;min-width:0;margin:0;border:0;border-radius:12px;background:var(--card);"></blockquote>`;
+    container.replaceChildren();
+    const blockquote = document.createElement("blockquote");
+    blockquote.className = "instagram-media";
+    blockquote.dataset.instgrmPermalink = embedUrl;
+    blockquote.dataset.instgrmVersion = "14";
+    Object.assign(blockquote.style, {
+      maxWidth: `${NATIVE_EMBED_WIDTH}px`,
+      width: `${NATIVE_EMBED_WIDTH}px`,
+      minWidth: "0",
+      margin: "0",
+      border: "0",
+      borderRadius: "12px",
+      background: "var(--card)",
+    });
+    container.appendChild(blockquote);
 
     const observer = new MutationObserver(() => {
       if (container.querySelector("iframe")) {
@@ -310,7 +337,9 @@ function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) 
     }
 
     return () => observer.disconnect();
-  }, [url, contentRef]);
+  }, [embedUrl, url, contentRef]);
+
+  if (!embedUrl) return null;
 
   return (
     <div
