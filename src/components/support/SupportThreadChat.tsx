@@ -142,58 +142,6 @@ export function SupportThreadChat({
               {t("supportCloseTicket")}
             </button>
           )}
-          {menuActions.length > 0 && (
-            <div ref={menuRef} className="relative">
-              <button
-                type="button"
-                className="border-none rounded-full cursor-pointer flex items-center justify-center"
-                style={{
-                  background: "var(--card)",
-                  color: selfBubbleColor,
-                  width: 34,
-                  height: 34,
-                  lineHeight: 1,
-                }}
-                aria-label={t("supportMenuActions")}
-                onClick={() => setMenuOpen((current) => !current)}
-              >
-                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <path d="M12 5v14" />
-                  <path d="M5 12h14" />
-                </svg>
-              </button>
-              {menuOpen && (
-                <div
-                  className="absolute right-0 top-[42px] min-w-[200px] overflow-hidden rounded-[12px]"
-                  style={{
-                    background: "var(--header-bg)",
-                    boxShadow: "0 4px 20px rgba(0,0,0,.15)",
-                    backdropFilter: "saturate(180%) blur(20px)",
-                    WebkitBackdropFilter: "saturate(180%) blur(20px)",
-                  }}
-                >
-                  {menuActions.map((action, index) => (
-                    <button
-                      key={action.label}
-                      type="button"
-                      className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]"
-                      style={{
-                        background: "transparent",
-                        color: "var(--gray-text)",
-                        borderBottom: index < menuActions.length - 1 ? "0.5px solid var(--hairline)" : "none",
-                      }}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        action.onClick();
-                      }}
-                    >
-                      {action.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </header>
 
@@ -396,6 +344,52 @@ export function SupportThreadChat({
             borderTop: "0.5px solid var(--hairline)",
           }}
         >
+          {menuActions.length > 0 && (
+            <div ref={menuRef} className="relative self-center">
+              <button
+                type="button"
+                className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer"
+                style={{ color: "var(--meta)", width: "32px", height: "32px" }}
+                aria-label={t("supportMenuActions")}
+                onClick={() => setMenuOpen((current) => !current)}
+              >
+                <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 11px)", height: "calc(var(--bubble-font-size) + 11px)" }}>
+                  <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M12 7v10M7 12h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div
+                  className="absolute bottom-[42px] left-0 min-w-[220px] overflow-hidden rounded-[12px]"
+                  style={{
+                    background: "var(--header-bg)",
+                    boxShadow: "0 4px 20px rgba(0,0,0,.15)",
+                    backdropFilter: "saturate(180%) blur(20px)",
+                    WebkitBackdropFilter: "saturate(180%) blur(20px)",
+                  }}
+                >
+                  {menuActions.map((action, index) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]"
+                      style={{
+                        background: "transparent",
+                        color: "var(--gray-text)",
+                        borderBottom: index < menuActions.length - 1 ? "0.5px solid var(--hairline)" : "none",
+                      }}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        action.onClick();
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div
             className="flex-1 flex items-center relative"
             style={{

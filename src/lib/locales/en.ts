@@ -454,7 +454,7 @@ export const en: Record<LocaleKeys, string> = {
   supportDeleteConfirm: "Deleting this 1:1 support channel will also close the ticket on the admin side. Continue?",
   supportDeleteFailed: "Could not delete the support ticket. Please try again.",
   supportMenuActions: "Support menu",
-  supportRestartWithNewTopic: "Choose a new topic and restart the guide",
+  supportRestartWithNewTopic: "Restart",
   supportActorGuest: "Guest",
   supportActorLoggedIn: "Logged-in",
   supportIssueCategory: "Issue Category",
