@@ -125,7 +125,7 @@ function makeSupportTopicAvatar(
   foreground: string,
   iconMarkup: string,
 ) {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='32' fill='${background}'/>${iconMarkup.replaceAll("currentColor", foreground)}</svg>`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='12' fill='${background}'/>${iconMarkup.replaceAll("currentColor", foreground)}</svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
@@ -133,40 +133,40 @@ function getSupportTopicAvatar(topic: string | null | undefined) {
   switch (topic) {
     case "login":
       return makeSupportTopicAvatar(
-        "#dbeafe",
-        "#1d4ed8",
-        "<path d='M32 15a9 9 0 1 1 0 18a9 9 0 0 1 0-18Z' fill='currentColor'/><path d='M17 49c2.4-7.6 8-11 15-11s12.6 3.4 15 11' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round'/>",
+        "#eaf2ff",
+        "#2563eb",
+        "<path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'/><circle cx='12' cy='7' r='4' fill='none' stroke='currentColor' stroke-width='1.9'/>",
       );
     case "passcode":
       return makeSupportTopicAvatar(
-        "#fef3c7",
+        "#fff3d8",
         "#b45309",
-        "<rect x='18' y='28' width='28' height='20' rx='6' fill='none' stroke='currentColor' stroke-width='5'/><path d='M24 28v-5a8 8 0 0 1 16 0v5' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round'/><circle cx='32' cy='38' r='3.5' fill='currentColor'/>",
+        "<rect x='3' y='11' width='18' height='10' rx='2' fill='none' stroke='currentColor' stroke-width='1.9'/><path d='M7 11V7a5 5 0 0 1 10 0v4' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'/>",
       );
     case "blocked":
       return makeSupportTopicAvatar(
-        "#fee2e2",
+        "#ffe8e8",
         "#dc2626",
-        "<circle cx='32' cy='32' r='16' fill='none' stroke='currentColor' stroke-width='5'/><path d='M22 42l20-20' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round'/>",
+        "<circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='1.9'/><path d='M7 7l10 10' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round'/>",
       );
     case "reports":
       return makeSupportTopicAvatar(
-        "#fee2e2",
+        "#ffe8e8",
         "#b91c1c",
-        "<path d='M32 14l18 32H14l18-32Z' fill='currentColor'/><rect x='29.5' y='24' width='5' height='12' rx='2.5' fill='#fff'/><circle cx='32' cy='41' r='2.6' fill='#fff'/>",
+        "<path d='M12 9v4' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/><circle cx='12' cy='16.5' r='.9' fill='currentColor' stroke='none'/><path d='M10.29 3.86 1.82 18a2 2 0 0 0 1.72 3h16.92a2 2 0 0 0 1.72-3L13.71 3.86a2 2 0 0 0-3.42 0z' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/>",
       );
     case "live":
       return makeSupportTopicAvatar(
-        "#dcfce7",
+        "#e6f7ed",
         "#15803d",
-        "<circle cx='32' cy='32' r='8' fill='currentColor'/><path d='M19 32a13 13 0 0 1 0-10M45 22a13 13 0 0 1 0 20M13 32a21 21 0 0 1 0-16M51 16a21 21 0 0 1 0 32' fill='none' stroke='currentColor' stroke-width='4.5' stroke-linecap='round'/>",
+        "<circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/><circle cx='12' cy='12' r='2.5' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 3v2M12 19v2M3 12h2M19 12h2' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/>",
       );
     case "other":
     default:
       return makeSupportTopicAvatar(
-        "#e5e7eb",
+        "#eef2f7",
         "#475569",
-        "<path d='M26 25a6.5 6.5 0 1 1 10.7 5c-2.9 2.2-4.2 3.7-4.2 7' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/><circle cx='32' cy='45' r='3' fill='currentColor'/>",
+        "<path d='M9.5 9.5a2.5 2.5 0 1 1 4 2c-.9.6-1.5 1.1-1.5 2.5' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><circle cx='12' cy='17' r='.9' fill='currentColor' stroke='none'/><circle cx='12' cy='12' r='9' fill='none' stroke='currentColor' stroke-width='2'/>",
       );
   }
 }
@@ -728,7 +728,7 @@ export default function DashboardPage() {
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
-    const skipAnimation = skipNextListAnimationRef.current;
+    const skipAnimation = skipNextListAnimationRef.current || isPlatformAdmin;
     channelItemRefs.current.forEach((element, id) => {
       const nextTop = element.getBoundingClientRect().top + window.scrollY;
       nextPositions.set(id, nextTop);
@@ -748,7 +748,7 @@ export default function DashboardPage() {
     });
     previousItemPositionsRef.current = nextPositions;
     skipNextListAnimationRef.current = false;
-  }, [activeItems]);
+  }, [activeItems, isPlatformAdmin]);
 
   const handleCreate = async () => {
     const slug = newSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
