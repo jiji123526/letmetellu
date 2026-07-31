@@ -4,6 +4,21 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Live expiry sync for connected viewers — 2026-07-31
+
+This frontend follow-up closes the last obvious gap in live-session expiry behavior for people who are already inside the room.
+
+- When a joined live session's local timer reaches zero, the client now forces a fresh live `init` check instead of waiting for the next manual refresh or write attempt.
+- That recheck hits the Worker `init` path with `no-store`, so an expired live session is ended immediately through the existing Worker cleanup path and `live-ended` broadcast.
+- Connected viewers therefore see the live session end at the deadline instead of sitting in a stale room until someone reloads.
+- Truly abandoned live sessions are still covered by the earlier fallback paths: expired writes are rejected, `init` auto-closes stale sessions, and hourly Worker maintenance sweeps anything nobody reopened.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Next.js frontend for this line;
+- this behavior assumes the earlier Worker live-expiry support from the 8-hour session update is already deployed.
+
 ### Live session timeout and hourly expiry cleanup — 2026-07-31
 
 This follow-up line stops temporary live rooms from staying open indefinitely.

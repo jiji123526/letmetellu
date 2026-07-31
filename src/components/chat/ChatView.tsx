@@ -1021,6 +1021,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const handleTouchStartRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
   const handleTouchEndRef = useRef<() => void>(() => {});
   const liveCountdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveExpiryRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveExpiryCheckInFlightRef = useRef(false);
   const previousLiveTimeLeftRef = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -1029,6 +1031,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
     if (liveCountdownTimeoutRef.current) {
       clearTimeout(liveCountdownTimeoutRef.current);
+    }
+    if (liveExpiryRetryTimerRef.current) {
+      clearTimeout(liveExpiryRetryTimerRef.current);
     }
   }, []);
 
@@ -1179,6 +1184,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         clearTimeout(liveCountdownTimeoutRef.current);
         liveCountdownTimeoutRef.current = null;
       }
+      if (liveExpiryRetryTimerRef.current) {
+        clearTimeout(liveExpiryRetryTimerRef.current);
+        liveExpiryRetryTimerRef.current = null;
+      }
+      liveExpiryCheckInFlightRef.current = false;
       setInLiveMode(false);
       localStorage.setItem(`liveActive_${channelId}`, "false");
       localStorage.setItem(`inLiveMode_${channelId}`, "false");
@@ -1249,6 +1259,11 @@ export function ChatView({ channelId }: { channelId: string }) {
       clearTimeout(liveCountdownTimeoutRef.current);
       liveCountdownTimeoutRef.current = null;
     }
+    if (liveExpiryRetryTimerRef.current) {
+      clearTimeout(liveExpiryRetryTimerRef.current);
+      liveExpiryRetryTimerRef.current = null;
+    }
+    liveExpiryCheckInFlightRef.current = false;
     setLiveCountdownNotice(null);
   }, [liveSessionId]);
 
@@ -1302,6 +1317,62 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!liveActive || !inLiveMode || liveTimeLeftMs === null || liveTimeLeftMs > 60 * 1000) return null;
     return t("liveCountdownLabel").replace("{time}", formatLiveCountdownClock(liveTimeLeftMs));
   }, [inLiveMode, liveActive, liveTimeLeftMs, t]);
+
+  const attemptLiveExpirySync = useCallback(async () => {
+    if (liveExpiryCheckInFlightRef.current) return;
+    liveExpiryCheckInFlightRef.current = true;
+    try {
+      const liveData = await fetchInit(`${channelId}_live`) as InitData;
+      if (liveData.live?.active) {
+        if (liveData.live.expiresAt && liveData.live.expiresAt !== liveExpiresAt) {
+          setLiveExpiresAt(liveData.live.expiresAt);
+        }
+        return;
+      }
+
+      if (inLiveModeRef.current) {
+        setInLiveMode(false);
+        localStorage.setItem(`inLiveMode_${channelId}`, "false");
+        setShowLiveEnded(true);
+      }
+
+      const normalData = await fetchInit(channelId) as InitData;
+      applyInitData(normalData);
+    } catch {
+      // Retry on the next poll while the local timer remains at zero.
+    } finally {
+      liveExpiryCheckInFlightRef.current = false;
+    }
+  }, [applyInitData, channelId, liveExpiresAt]);
+
+  useEffect(() => {
+    if (!liveActive || !inLiveMode || !liveExpiresAt || liveTimeLeftMs === null || liveTimeLeftMs > 0) {
+      if (liveExpiryRetryTimerRef.current) {
+        clearTimeout(liveExpiryRetryTimerRef.current);
+        liveExpiryRetryTimerRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const runCheck = async () => {
+      await attemptLiveExpirySync();
+      if (cancelled) return;
+      if (!inLiveModeRef.current || !liveActive) return;
+      liveExpiryRetryTimerRef.current = setTimeout(runCheck, 5000);
+    };
+
+    void runCheck();
+
+    return () => {
+      cancelled = true;
+      if (liveExpiryRetryTimerRef.current) {
+        clearTimeout(liveExpiryRetryTimerRef.current);
+        liveExpiryRetryTimerRef.current = null;
+      }
+    };
+  }, [attemptLiveExpirySync, inLiveMode, liveActive, liveExpiresAt, liveTimeLeftMs]);
 
   // Sync bubble color to CSS variable so var(--bubble-sent) works everywhere
   useEffect(() => {
@@ -1614,6 +1685,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           clearTimeout(liveCountdownTimeoutRef.current);
           liveCountdownTimeoutRef.current = null;
         }
+        if (liveExpiryRetryTimerRef.current) {
+          clearTimeout(liveExpiryRetryTimerRef.current);
+          liveExpiryRetryTimerRef.current = null;
+        }
+        liveExpiryCheckInFlightRef.current = false;
         if (inLiveModeRef.current) {
           setInLiveMode(false);
           localStorage.setItem(`inLiveMode_${channelId}`, "false");
@@ -3789,6 +3865,11 @@ export function ChatView({ channelId }: { channelId: string }) {
               clearTimeout(liveCountdownTimeoutRef.current);
               liveCountdownTimeoutRef.current = null;
             }
+            if (liveExpiryRetryTimerRef.current) {
+              clearTimeout(liveExpiryRetryTimerRef.current);
+              liveExpiryRetryTimerRef.current = null;
+            }
+            liveExpiryCheckInFlightRef.current = false;
             await adminAction("end-live", channelId);
             fetchInit(channelId).then((data) => {
               setChannel(data.channel);

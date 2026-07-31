@@ -18,6 +18,7 @@ Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
 - Append-only moderation audit logs plus operational event logging for `429`, `403`, `5xx` and unhandled exceptions
 - The 2026-07-31 bandwidth spike was reduced by moving eligible media reads off the Next.js proxy and by tightening dashboard/support polling and duplicate request paths
 - Reduced dashboard and support traffic overhead through bounded polling, lighter support-preview reads and deduped preview/version requests
+- Live sessions now auto-expire after 8 hours, and connected viewers are forced through a real expiry recheck at the deadline so the room ends visibly without waiting for a manual refresh
 - Locale-aware legal pages now render only the active app language and treat a manual locale choice as higher priority than device language
 - Explicit Worker-side security headers in addition to the existing Next.js app headers
 - Multi-image chat, embeds, gallery and link panels, temporary live sessions and recent chat UI polish
@@ -95,7 +96,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Super-admin `1:1` ticket rows use topic-specific simple icons instead of a generic profile image slot.
 - The super-admin dashboard loads all open tickets plus a bounded recent-closed window instead of reloading the entire historical ticket archive on each refresh.
 - Super-admin support threads keep the guided summary as ticket context and suppress the duplicated seed message bubble when that first user message is the same summary text.
-- Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends or auto-expires after 8 hours.
+- Temporary live sessions with a separate live message stream, title, emoji presets, an 8-hour hard limit, immediate end-state sync for connected viewers at the deadline, and hourly cleanup fallback for abandoned sessions.
 
 ### Authentication and safety model
 

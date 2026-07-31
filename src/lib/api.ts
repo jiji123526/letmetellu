@@ -640,7 +640,10 @@ export async function fetchInit(channelId: string) {
   // client-side cookie inspection cannot reliably decide whether the user is
   // signed in. The proxy verifies the session server-side and forwards owner
   // identity only when appropriate.
-  const res = await fetch(`/api/init?channel=${channelId}`, { headers });
+  const res = await fetch(`/api/init?channel=${channelId}`, {
+    headers,
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(`Init failed: ${res.status}`);
   const data = await res.json();
   if (typeof data?.anonymousUid === "string") {
