@@ -5,6 +5,9 @@ import { getRoomToken, getWebSocketUrl } from "@/lib/api";
 
 type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 
+const RECONNECT_DELAY_MS = 2000;
+const HIDDEN_SOCKET_SLEEP_MS = 90 * 1000;
+
 export function useRealtime(channelId: string | null, uid: string) {
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
@@ -13,10 +16,49 @@ export function useRealtime(channelId: string | null, uid: string) {
   const [presence, setPresence] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sleepTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestRoomAuthRequest = useRef<string | null>(null);
+  const mountedRef = useRef(false);
+  const intentionalCloseRef = useRef(false);
+  const sleepingRef = useRef(false);
+
+  const clearReconnectTimeout = useCallback(() => {
+    if (!reconnectTimeout.current) return;
+    clearTimeout(reconnectTimeout.current);
+    reconnectTimeout.current = null;
+  }, []);
+
+  const clearSleepTimeout = useCallback(() => {
+    if (!sleepTimeout.current) return;
+    clearTimeout(sleepTimeout.current);
+    sleepTimeout.current = null;
+  }, []);
+
+  const closeSocket = useCallback((reason: "sleep" | "cleanup") => {
+    const socket = wsRef.current;
+    if (!socket) return;
+    intentionalCloseRef.current = true;
+    if (reason === "sleep") {
+      sleepingRef.current = true;
+    }
+    wsRef.current = null;
+    try {
+      socket.close(1000, reason === "sleep" ? "tab hidden idle" : "cleanup");
+    } catch {}
+  }, []);
 
   const connect = useCallback(() => {
     if (!channelId) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible" && sleepingRef.current) {
+      return;
+    }
+
+    const existing = wsRef.current;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    clearReconnectTimeout();
 
     const url = getWebSocketUrl(channelId, uid);
     if (!url) {
@@ -27,8 +69,11 @@ export function useRealtime(channelId: string | null, uid: string) {
       return;
     }
 
+    sleepingRef.current = false;
+    intentionalCloseRef.current = false;
     const ws = new WebSocket(url);
     let synchronized = false;
+    wsRef.current = ws;
 
     const notifySynchronized = () => {
       if (synchronized) return;
@@ -37,6 +82,7 @@ export function useRealtime(channelId: string | null, uid: string) {
     };
 
     ws.onopen = () => {
+      if (!mountedRef.current) return;
       setSocketConnected(true);
       setRoomAuthenticated(false);
       handlersRef.current.forEach((handler) => handler({ type: "socket-opened" }));
@@ -47,6 +93,7 @@ export function useRealtime(channelId: string | null, uid: string) {
     };
 
     ws.onmessage = (e) => {
+      if (!mountedRef.current) return;
       try {
         const data = JSON.parse(e.data);
         if (
@@ -88,26 +135,74 @@ export function useRealtime(channelId: string | null, uid: string) {
     };
 
     ws.onclose = () => {
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+      if (!mountedRef.current) return;
       setSocketConnected(false);
       setRoomAuthenticated(false);
-      // Reconnect after 2s
-      reconnectTimeout.current = setTimeout(connect, 2000);
+      const intentionalClose = intentionalCloseRef.current;
+      intentionalCloseRef.current = false;
+      if (intentionalClose || sleepingRef.current) {
+        return;
+      }
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      reconnectTimeout.current = setTimeout(connect, RECONNECT_DELAY_MS);
     };
 
     ws.onerror = () => {
       ws.close();
     };
-
-    wsRef.current = ws;
-  }, [channelId, uid]);
+  }, [channelId, uid, clearReconnectTimeout]);
 
   useEffect(() => {
+    mountedRef.current = true;
     connect();
     return () => {
-      clearTimeout(reconnectTimeout.current ?? undefined);
-      wsRef.current?.close();
+      mountedRef.current = false;
+      clearReconnectTimeout();
+      clearSleepTimeout();
+      sleepingRef.current = false;
+      closeSocket("cleanup");
     };
-  }, [connect]);
+  }, [connect, clearReconnectTimeout, clearSleepTimeout, closeSocket]);
+
+  useEffect(() => {
+    if (!channelId) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clearReconnectTimeout();
+        clearSleepTimeout();
+        const socket = wsRef.current;
+        if (!socket || (socket.readyState !== WebSocket.OPEN && socket.readyState !== WebSocket.CONNECTING)) {
+          return;
+        }
+        sleepTimeout.current = setTimeout(() => {
+          if (document.visibilityState !== "hidden") return;
+          closeSocket("sleep");
+        }, HIDDEN_SOCKET_SLEEP_MS);
+        return;
+      }
+
+      clearSleepTimeout();
+      if (sleepingRef.current) {
+        sleepingRef.current = false;
+      }
+      const socket = wsRef.current;
+      if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+        connect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearSleepTimeout();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [channelId, connect, clearReconnectTimeout, clearSleepTimeout, closeSocket]);
 
   useEffect(() => {
     if (!channelId) return;

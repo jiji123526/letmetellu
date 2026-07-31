@@ -1570,6 +1570,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (document.visibilityState === "hidden") {
         lastHidden = Date.now();
       } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
+        if (!connected) return;
         if (historyModeRef.current === "context") return;
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchMessages(fetchChannel).then((data) => {
@@ -1581,7 +1582,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
-  }, [channelId]);
+  }, [channelId, connected]);
 
   // Position the initial channel view at the latest message once. Subsequent
   // message mutations (new/edit/delete/reaction/refetch) preserve scroll.
