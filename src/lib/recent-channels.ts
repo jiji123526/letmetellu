@@ -11,6 +11,29 @@ export interface RecentChannel {
 }
 
 const STORAGE_KEY = "letmetellu_recent_channels";
+const VALIDATION_STORAGE_KEY = "letmetellu_recent_channels_validation";
+const RECENT_CHANNEL_VALIDATION_TTL_MS = 5 * 60 * 1000;
+
+function buildRecentChannelValidationSignature(channels: Pick<RecentChannel, "id">[]): string {
+  return channels.map((channel) => channel.id).sort().join(",");
+}
+
+function readRecentChannelValidationState(): { signature: string; checkedAt: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(VALIDATION_STORAGE_KEY) || "null");
+    if (
+      !parsed
+      || typeof parsed.signature !== "string"
+      || typeof parsed.checkedAt !== "number"
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 export function getRecentChannels(): RecentChannel[] {
   if (typeof window === "undefined") return [];
@@ -94,7 +117,29 @@ export function clearRecentChannels() {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(VALIDATION_STORAGE_KEY);
   } catch {
     // Keep the dashboard usable when browser storage is unavailable.
+  }
+}
+
+export function shouldValidateRecentChannels(channels: RecentChannel[]): boolean {
+  if (channels.length === 0) return false;
+  const cached = readRecentChannelValidationState();
+  const signature = buildRecentChannelValidationSignature(channels);
+  if (!cached) return true;
+  if (cached.signature !== signature) return true;
+  return Date.now() - cached.checkedAt >= RECENT_CHANNEL_VALIDATION_TTL_MS;
+}
+
+export function markRecentChannelsValidated(channels: RecentChannel[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(VALIDATION_STORAGE_KEY, JSON.stringify({
+      signature: buildRecentChannelValidationSignature(channels),
+      checkedAt: Date.now(),
+    }));
+  } catch {
+    // Recent history is optional and must never prevent channel entry.
   }
 }

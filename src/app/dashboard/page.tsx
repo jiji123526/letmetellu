@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchSupportPreview, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
-import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { clearRecentChannels, getRecentChannels, markRecentChannelsValidated, removeRecentChannel, shouldValidateRecentChannels, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
@@ -279,6 +279,7 @@ export default function DashboardPage() {
     const stored = getRecentChannels();
     setRecentChannels(stored);
     if (stored.length === 0) return;
+    if (!shouldValidateRecentChannels(stored)) return;
     try {
       const chunks: RecentChannel[][] = [];
       for (let index = 0; index < stored.length; index += 20) {
@@ -296,7 +297,9 @@ export default function DashboardPage() {
       stored.forEach((channel) => {
         if (!existingIds.has(channel.id)) removeRecentChannel(channel.id);
       });
-      setRecentChannels(getRecentChannels());
+      const refreshed = getRecentChannels();
+      setRecentChannels(refreshed);
+      markRecentChannelsValidated(refreshed);
     } catch {
       // Keep locally stored channels when validation is temporarily unavailable.
     }
