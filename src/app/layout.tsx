@@ -6,9 +6,18 @@ export const metadata: Metadata = {
   title: "yap.",
   description: "Anonymous chat platform",
   icons: {
-    icon: "/logo.svg",
-    shortcut: "/logo.svg",
-    apple: "/logo.svg",
+    icon: [
+      { url: "/logo.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/logo-white.svg", media: "(prefers-color-scheme: dark)" },
+    ],
+    shortcut: [
+      { url: "/logo.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/logo-white.svg", media: "(prefers-color-scheme: dark)" },
+    ],
+    apple: [
+      { url: "/logo.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/logo-white.svg", media: "(prefers-color-scheme: dark)" },
+    ],
   },
 };
 

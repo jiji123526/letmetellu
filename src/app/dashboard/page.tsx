@@ -17,6 +17,7 @@ import { AdminGuidePanel } from "@/components/admin/AdminGuidePanel";
 import { DashboardHelpMenu } from "@/components/dashboard/DashboardHelpMenu";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
 import { LegalFooter } from "@/components/legal/LegalFooter";
+import { ThemeLogo } from "@/components/ThemeLogo";
 import {
   fetchAccountRecentChannels,
   mergeAccountRecentChannels,
@@ -1113,7 +1114,7 @@ export default function DashboardPage() {
               <span className="min-w-[72px]" />
             )}
             <h1 className="m-0 inline-flex items-center text-[17px] font-semibold tracking-[-.02em]">
-              <Image src="/logo.svg" alt="" width={48} height={48} className="h-12 w-12" />
+              <ThemeLogo alt="" width={48} height={48} className="h-12 w-12" />
             </h1>
             <div ref={accountMenuRef} className="min-w-[72px] flex items-center justify-end gap-3 relative">
               <button
@@ -1307,7 +1308,7 @@ export default function DashboardPage() {
         {empty ? (
           <section className="px-8 py-24 text-center" style={{ paddingBottom: `calc(6rem + ${listBottomPadding})` }}>
             <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
-              <Image src="/logo.svg" alt="" width={72} height={72} className="h-[72px] w-[72px]" />
+              <ThemeLogo alt="" width={72} height={72} className="h-[72px] w-[72px]" />
             </div>
             <h2 className="m-0 text-[19px] font-semibold">
               {query
@@ -1462,6 +1463,10 @@ export default function DashboardPage() {
                         __html: item.supportIcon.replace(/<svg/, `<svg style="width:24px;height:24px"`),
                       }}
                     />
+                  ) : item.group === "support-preview" && item.profileImage === "/logo.svg" ? (
+                    <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden" style={{ backgroundColor: item.bubbleColor || "#111827" }}>
+                      <ThemeLogo alt="" width={26} height={26} className="h-[26px] w-[26px]" />
+                    </div>
                   ) : (
                     <div className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden text-white font-semibold text-[17px]" style={{ backgroundColor: item.bubbleColor || "#007aff", backgroundImage: item.profileImage ? `url("${item.profileImage}")` : undefined, backgroundPosition: "center", backgroundSize: "cover" }}>
                       {!item.profileImage && item.name.slice(0, 1).toUpperCase()}
