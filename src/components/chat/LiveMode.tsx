@@ -77,6 +77,9 @@ export function LiveTitlePrompt({ onStart, onCancel }: { onStart: (title: string
         <div style={{ marginTop: "10px", fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--meta)", lineHeight: 1.5 }}>
           {t("liveAutoEnds")}
         </div>
+        <div style={{ marginTop: "6px", fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--meta)", lineHeight: 1.5 }}>
+          {t("liveAutoWarns")}
+        </div>
         <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card)", color: "var(--secondary-text)" }} onClick={onCancel}>{ t("cancel")}</button>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#c0392b", color: "#fff" }} onClick={() => { if (inputRef?.value.trim()) onStart(inputRef.value.trim()); }}>{ t("liveStartBtn")}</button>
@@ -99,13 +102,27 @@ export function LiveJoinBanner({ title, onJoin }: { title: string; onJoin: () =>
 }
 
 // Banner shown when user is inside live mode
-export function LiveExitBanner({ isAdmin, title, onExit, viewerCount }: { isAdmin: boolean; title: string; onExit: () => void; viewerCount: number }) {
+export function LiveExitBanner({ isAdmin, title, onExit, viewerCount, countdownLabel }: { isAdmin: boolean; title: string; onExit: () => void; viewerCount: number; countdownLabel?: string | null }) {
   const { t } = useLocale();
   return (
     <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "8px", padding: "8px 16px", background: "#fff0f0", borderTop: "0.5px solid #ffcdd2", borderBottom: "0.5px solid #ffcdd2", flexShrink: 0, lineHeight: 1 }}>
       <span style={{ color: "#c0392b", fontSize: "10px", animation: "livePulse 1.5s infinite" }}>●</span>
       <span style={{ flex: 1, fontSize: "var(--bubble-font-size, 13px)", color: "#c62828" }}>{t("liveChatJoined")}: {title}</span>
+      {countdownLabel ? (
+        <span style={{ flexShrink: 0, borderRadius: "999px", background: "#c0392b", color: "#fff", padding: "4px 8px", fontSize: "calc(var(--bubble-font-size) - 5px)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+          {countdownLabel}
+        </span>
+      ) : null}
       <button style={{ background: "none", color: "#c0392b", border: "1px solid #c0392b", borderRadius: "10px", padding: "4px 10px", fontSize: "var(--bubble-font-size, 13px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }} onClick={onExit}>{isAdmin ? t("liveEndBtn") : t("liveLeave")}</button>
+    </div>
+  );
+}
+
+export function LiveCountdownBanner({ text }: { text: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "8px 16px", background: "#c0392b", borderBottom: "0.5px solid #a62f23", flexShrink: 0, color: "#fff", fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 600, lineHeight: 1.2 }}>
+      <span style={{ fontSize: "10px", animation: "livePulse 1.1s infinite" }}>●</span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{text}</span>
     </div>
   );
 }

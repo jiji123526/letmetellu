@@ -713,10 +713,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "start-live": {
       const { title } = payload || {};
       const sessionId = crypto.randomUUID();
-      const liveState = JSON.stringify(createLiveSessionState(
+      const liveSession = createLiveSessionState(
         typeof title === "string" ? title : undefined,
         sessionId,
-      ));
+      );
+      const liveState = JSON.stringify(liveSession);
 
       await env.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
@@ -733,10 +734,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "live-started", channel_id, title: title || "라이브 채팅", sessionId }),
+        body: JSON.stringify({
+          type: "live-started",
+          channel_id,
+          title: liveSession.title,
+          sessionId,
+          startedAt: liveSession.startedAt,
+          expiresAt: liveSession.expiresAt,
+        }),
       }));
 
-      return Response.json({ ok: true, sessionId });
+      return Response.json({ ok: true, sessionId, live: liveSession });
     }
 
     case "end-live": {

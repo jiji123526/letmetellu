@@ -21,7 +21,7 @@ import { GalleryPanel } from "./GalleryPanel";
 import { LinksPanel } from "./LinksPanel";
 import { PlusMenu } from "./PlusMenu";
 import { EditDialog } from "./EditDialog";
-import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePrompt } from "./LiveMode";
+import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePrompt, LiveCountdownBanner } from "./LiveMode";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
@@ -116,7 +116,7 @@ interface InitData {
   dm?: Message[];
   bannerNotice?: string;
   welcomeConfig?: string;
-  live?: { active: boolean; title?: string; sessionId?: string } | null;
+  live?: { active: boolean; title?: string; sessionId?: string; startedAt?: string; expiresAt?: string } | null;
   emojiPresets?: string | null;
   petitionEnabled?: boolean;
   dmEnabled?: boolean;
@@ -143,6 +143,28 @@ interface RestrictedChannelSummaryItem {
 }
 
 type ReportsOwnerFilter = "open" | "warned" | "frozen" | null;
+
+const LIVE_WARNING_THRESHOLDS_MS = [60 * 60 * 1000, 30 * 60 * 1000, 10 * 60 * 1000, 5 * 60 * 1000] as const;
+
+function formatLiveThresholdLabel(locale: "ko" | "en", thresholdMs: number): string {
+  if (locale === "ko") {
+    if (thresholdMs === 60 * 60 * 1000) return "1시간";
+    if (thresholdMs === 30 * 60 * 1000) return "30분";
+    if (thresholdMs === 10 * 60 * 1000) return "10분";
+    return "5분";
+  }
+  if (thresholdMs === 60 * 60 * 1000) return "1 hour";
+  if (thresholdMs === 30 * 60 * 1000) return "30 minutes";
+  if (thresholdMs === 10 * 60 * 1000) return "10 minutes";
+  return "5 minutes";
+}
+
+function formatLiveCountdownClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 interface ContextMenuState {
   msg: Message;
@@ -931,6 +953,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(`liveSession_${channelId}`) || "";
   });
+  const [liveExpiresAt, setLiveExpiresAt] = useState<string | null>(null);
+  const [liveTimeLeftMs, setLiveTimeLeftMs] = useState<number | null>(null);
+  const [liveCountdownNotice, setLiveCountdownNotice] = useState<string | null>(null);
   const [showLivePopup, setShowLivePopup] = useState(false);
   const [showLiveEnded, setShowLiveEnded] = useState(false);
   const [showLiveTitlePrompt, setShowLiveTitlePrompt] = useState(false);
@@ -995,10 +1020,15 @@ export function ChatView({ channelId }: { channelId: string }) {
   const handleLongPressRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
   const handleTouchStartRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
   const handleTouchEndRef = useRef<() => void>(() => {});
+  const liveCountdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousLiveTimeLeftRef = useRef<number | null>(null);
 
   useEffect(() => () => {
     if (reactionFrameRef.current !== null) {
       cancelAnimationFrame(reactionFrameRef.current);
+    }
+    if (liveCountdownTimeoutRef.current) {
+      clearTimeout(liveCountdownTimeoutRef.current);
     }
   }, []);
 
@@ -1130,6 +1160,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       setLiveActive(true);
       setLiveTitle(title);
       setLiveSessionId(sessionId);
+      setLiveExpiresAt(data.live.expiresAt || null);
       localStorage.setItem(`liveActive_${channelId}`, "true");
       localStorage.setItem(`liveTitle_${channelId}`, title);
       if (sessionId) {
@@ -1141,6 +1172,13 @@ export function ChatView({ channelId }: { channelId: string }) {
       setLiveActive(false);
       setLiveTitle(t("liveTitle"));
       setLiveSessionId("");
+      setLiveExpiresAt(null);
+      setLiveTimeLeftMs(null);
+      setLiveCountdownNotice(null);
+      if (liveCountdownTimeoutRef.current) {
+        clearTimeout(liveCountdownTimeoutRef.current);
+        liveCountdownTimeoutRef.current = null;
+      }
       setInLiveMode(false);
       localStorage.setItem(`liveActive_${channelId}`, "false");
       localStorage.setItem(`inLiveMode_${channelId}`, "false");
@@ -1204,6 +1242,66 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [channelId, applyInitData]);
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
+
+  useEffect(() => {
+    previousLiveTimeLeftRef.current = null;
+    if (liveCountdownTimeoutRef.current) {
+      clearTimeout(liveCountdownTimeoutRef.current);
+      liveCountdownTimeoutRef.current = null;
+    }
+    setLiveCountdownNotice(null);
+  }, [liveSessionId]);
+
+  useEffect(() => {
+    if (!liveActive || !liveExpiresAt || !inLiveMode) {
+      setLiveTimeLeftMs(null);
+      return;
+    }
+    const updateTimeLeft = () => {
+      const expiresAtMs = Date.parse(liveExpiresAt);
+      if (!Number.isFinite(expiresAtMs)) {
+        setLiveTimeLeftMs(null);
+        return;
+      }
+      setLiveTimeLeftMs(Math.max(0, expiresAtMs - Date.now()));
+    };
+    updateTimeLeft();
+    const intervalId = window.setInterval(updateTimeLeft, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [inLiveMode, liveActive, liveExpiresAt]);
+
+  useEffect(() => {
+    if (!liveActive || !inLiveMode || liveTimeLeftMs === null) {
+      previousLiveTimeLeftRef.current = null;
+      return;
+    }
+
+    const previous = previousLiveTimeLeftRef.current;
+    for (const thresholdMs of LIVE_WARNING_THRESHOLDS_MS) {
+      if (previous !== null && previous > thresholdMs && liveTimeLeftMs <= thresholdMs) {
+        const nextNotice = t("liveCountdownBanner").replace("{time}", formatLiveThresholdLabel(locale, thresholdMs));
+        if (liveCountdownTimeoutRef.current) {
+          clearTimeout(liveCountdownTimeoutRef.current);
+        }
+        setLiveCountdownNotice(nextNotice);
+        liveCountdownTimeoutRef.current = setTimeout(() => {
+          setLiveCountdownNotice((current) => current === nextNotice ? null : current);
+          liveCountdownTimeoutRef.current = null;
+        }, 3000);
+      }
+    }
+    previousLiveTimeLeftRef.current = liveTimeLeftMs;
+  }, [inLiveMode, liveActive, liveTimeLeftMs, locale, t]);
+
+  const liveLastMinuteBannerText = useMemo(() => {
+    if (!liveActive || !inLiveMode || liveTimeLeftMs === null || liveTimeLeftMs > 60 * 1000) return null;
+    return t("liveCountdownBanner").replace("{time}", formatLiveCountdownClock(liveTimeLeftMs));
+  }, [inLiveMode, liveActive, liveTimeLeftMs, t]);
+
+  const liveLastMinuteLabel = useMemo(() => {
+    if (!liveActive || !inLiveMode || liveTimeLeftMs === null || liveTimeLeftMs > 60 * 1000) return null;
+    return t("liveCountdownLabel").replace("{time}", formatLiveCountdownClock(liveTimeLeftMs));
+  }, [inLiveMode, liveActive, liveTimeLeftMs, t]);
 
   // Sync bubble color to CSS variable so var(--bubble-sent) works everywhere
   useEffect(() => {
@@ -1507,6 +1605,15 @@ export function ChatView({ channelId }: { channelId: string }) {
         localStorage.removeItem(`liveTitle_${channelId}`);
         localStorage.removeItem(`liveSession_${channelId}`);
         setLiveActive(false);
+        setLiveTitle(t("liveTitle"));
+        setLiveSessionId("");
+        setLiveExpiresAt(null);
+        setLiveTimeLeftMs(null);
+        setLiveCountdownNotice(null);
+        if (liveCountdownTimeoutRef.current) {
+          clearTimeout(liveCountdownTimeoutRef.current);
+          liveCountdownTimeoutRef.current = null;
+        }
         if (inLiveModeRef.current) {
           setInLiveMode(false);
           localStorage.setItem(`inLiveMode_${channelId}`, "false");
@@ -1526,6 +1633,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         setLiveActive(true);
         setLiveTitle((event.title as string) || t("liveTitle"));
         setLiveSessionId(sessionId);
+        setLiveExpiresAt(typeof event.expiresAt === "string" ? event.expiresAt : null);
         localStorage.setItem(`liveActive_${channelId}`, "true");
         localStorage.setItem(`liveTitle_${channelId}`, (event.title as string) || t("liveTitle"));
         localStorage.setItem(`liveSession_${channelId}`, sessionId);
@@ -2710,13 +2818,14 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); localStorage.removeItem(`noticeDismissed_${channelId}_live`); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); localStorage.removeItem(`noticeDismissed_${channelId}_live`); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); setLiveExpiresAt(data.live?.expiresAt || null); }).catch(() => {}); }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
           isAdmin={effectiveAdmin}
           title={liveTitle}
           viewerCount={liveCount}
+          countdownLabel={liveLastMinuteLabel}
           onExit={() => {
             if (effectiveAdmin) {
               setShowEndLiveConfirm(true);
@@ -2735,6 +2844,11 @@ export function ChatView({ channelId }: { channelId: string }) {
           }}
         />
       )}
+      {liveLastMinuteBannerText ? (
+        <LiveCountdownBanner text={liveLastMinuteBannerText} />
+      ) : liveCountdownNotice ? (
+        <LiveCountdownBanner text={liveCountdownNotice} />
+      ) : null}
 
       {/* Offline banner */}
       {!connected && !loading && (
@@ -3642,6 +3756,9 @@ export function ChatView({ channelId }: { channelId: string }) {
               setLiveSessionId(res.sessionId);
               localStorage.setItem(`liveSession_${channelId}`, res.sessionId);
             }
+            if (typeof res?.live?.expiresAt === "string") {
+              setLiveExpiresAt(res.live.expiresAt);
+            }
           }}
           onCancel={() => setShowLiveTitlePrompt(false)}
         />
@@ -3663,6 +3780,15 @@ export function ChatView({ channelId }: { channelId: string }) {
             localStorage.removeItem(`liveSeen_${channelId}`);
             localStorage.removeItem(`liveTitle_${channelId}`);
             localStorage.removeItem(`liveSession_${channelId}`);
+            setLiveTitle(t("liveTitle"));
+            setLiveSessionId("");
+            setLiveExpiresAt(null);
+            setLiveTimeLeftMs(null);
+            setLiveCountdownNotice(null);
+            if (liveCountdownTimeoutRef.current) {
+              clearTimeout(liveCountdownTimeoutRef.current);
+              liveCountdownTimeoutRef.current = null;
+            }
             await adminAction("end-live", channelId);
             fetchInit(channelId).then((data) => {
               setChannel(data.channel);
@@ -3697,7 +3823,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setMessages([]);
             setDmMessages([]);
             setActiveNotice("");
-            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); }).catch(() => {});
+            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); setLiveExpiresAt(data.live?.expiresAt || null); }).catch(() => {});
           }}
           onDismiss={() => {
             setShowLivePopup(false);
