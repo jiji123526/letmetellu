@@ -8,6 +8,7 @@ import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/uploa
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
+import { syncMessageLink } from "../lib/message-links";
 import { authorizeRoomToken } from "./passcode";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -185,6 +186,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       );
     }
     await env.DB.batch(stmts);
+    await syncMessageLink(env, id, channel_id as string, created_at, text as string | undefined);
 
     // Broadcast via Durable Object
     // For live channels, only broadcast to the parent channel's DO (where clients connect)
@@ -255,6 +257,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       await env.DB.batch([
         env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
+          .bind(message_id),
         env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
           .bind(message_id),
         env.DB.prepare("UPDATE messages SET deleted = 1, text = '삭제된 채팅입니다', image = NULL, gallery_id = NULL WHERE id = ? AND channel_id = ?")
@@ -265,6 +269,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       await env.DB.batch([
         env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
+          .bind(message_id),
         env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
           .bind(message_id),
         env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
@@ -378,13 +384,14 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
 
     // Verify ownership
-    const msg = await env.DB.prepare("SELECT uid FROM messages WHERE id = ? AND channel_id = ?")
-      .bind(message_id, channel_id).first();
+    const msg = await env.DB.prepare("SELECT uid, created_at FROM messages WHERE id = ? AND channel_id = ?")
+      .bind(message_id, channel_id).first<{ uid: string; created_at: string }>();
     if (!msg) return Response.json({ error: "not found" }, { status: 404 });
     if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
 
     await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ?")
       .bind(text, message_id).run();
+    await syncMessageLink(env, message_id as string, channel_id as string, msg.created_at, text);
 
     // Broadcast edit with payload
     const broadcastChannelId = (channel_id as string).endsWith("_live")

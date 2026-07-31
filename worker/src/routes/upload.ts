@@ -1,13 +1,21 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
-import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MEDIA_KEY_CHANNEL_PATTERN = /^[a-z0-9-]{3,30}(?:_live)?$/;
+
+function readChannelIdFromMediaKey(key: string): string | null {
+  const slashIndex = key.indexOf("/");
+  if (slashIndex <= 0) return null;
+  const channelId = key.slice(0, slashIndex);
+  return MEDIA_KEY_CHANNEL_PATTERN.test(channelId) ? channelId : null;
+}
 
 export async function handleUpload(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
@@ -23,7 +31,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   }
 
   // Passcode gate
-  const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const parentChannelId = getParentChannelId(channelId);
   if (channelId.endsWith("_live") && purpose !== "channel-asset") {
     const liveSession = await readLiveSessionState(env, parentChannelId);
     if (!liveSession || isLiveSessionExpired(liveSession)) {
@@ -142,49 +150,76 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 export async function handleMediaServe(request: Request, env: Env, key: string): Promise<Response> {
   const decodedKey = decodeURIComponent(key);
   const mediaSuffix = `/api/media/${decodedKey}`;
-  // D1 can reject larger compound SELECTs here, so keep the lookup ordered but
-  // execute each source query independently in a single batch round trip.
-  const mediaLookupResults = await env.DB.batch([
-    env.DB.prepare(
-      "SELECT channel_id, 'message' AS source_type FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
-    ).bind(mediaSuffix, mediaSuffix),
-    env.DB.prepare(
-      "SELECT channel_id, 'gallery' AS source_type FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
-    ).bind(mediaSuffix, mediaSuffix),
-    env.DB.prepare(
-      "SELECT channel_id, 'dm' AS source_type FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
-    ).bind(mediaSuffix, mediaSuffix),
-    env.DB.prepare(
-      "SELECT id AS channel_id, 'channel-profile' AS source_type FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ? LIMIT 1"
-    ).bind(mediaSuffix, mediaSuffix),
-    env.DB.prepare(
-      "SELECT id AS channel_id, 'channel-background' AS source_type FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ? LIMIT 1"
-    ).bind(mediaSuffix, mediaSuffix),
-    env.DB.prepare(
-      "SELECT channel_id, 'channel-config' AS source_type FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0 LIMIT 1"
-    ).bind(mediaSuffix),
-  ]);
-  const mediaRow = mediaLookupResults
-    .map((result) => result.results?.[0] as { channel_id: string; source_type: string } | undefined)
-    .find((row): row is { channel_id: string; source_type: string } => Boolean(row));
+  const inferredChannelId = readChannelIdFromMediaKey(decodedKey);
+  let mediaRow: { channel_id: string; source_type: string } | null = null;
+  let pendingTicket: { purpose: UploadPurpose; expires_at: string } | null = null;
+
+  if (inferredChannelId) {
+    const [channelLookupResult, pendingTicketResult] = await env.DB.batch([
+      env.DB.prepare(
+        `SELECT id AS channel_id,
+                CASE
+                  WHEN profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ? THEN 'channel-profile'
+                  WHEN background_image IS NOT NULL AND substr(background_image, -length(?)) = ? THEN 'channel-background'
+                  ELSE 'channel-media'
+                END AS source_type
+         FROM channels
+         WHERE id = ?
+         LIMIT 1`
+      ).bind(mediaSuffix, mediaSuffix, mediaSuffix, mediaSuffix, inferredChannelId),
+      env.DB.prepare(
+        "SELECT purpose, expires_at FROM upload_tickets WHERE key = ? AND status = 'pending' LIMIT 1"
+      ).bind(decodedKey),
+    ]);
+    mediaRow = (channelLookupResult.results?.[0] as { channel_id: string; source_type: string } | undefined) || null;
+    pendingTicket = (pendingTicketResult.results?.[0] as { purpose: UploadPurpose; expires_at: string } | undefined) || null;
+  }
+
   if (!mediaRow) {
-    const pendingTicket = await env.DB.prepare(
-      "SELECT purpose, status, expires_at FROM upload_tickets WHERE key = ? LIMIT 1"
-    ).bind(decodedKey).first<{ purpose: UploadPurpose; status: string; expires_at: string }>();
-    if (pendingTicket?.status === "pending" && pendingTicket.purpose !== "channel-asset") {
-      if (pendingTicket.expires_at <= new Date().toISOString()) {
-        await env.MEDIA.delete(decodedKey).catch(() => {});
-        await env.DB.prepare("DELETE FROM upload_tickets WHERE key = ?").bind(decodedKey).run();
-      }
-      return new Response("not found", { status: 404 });
+    // Legacy or malformed keys still fall back to the wider reverse lookup.
+    const mediaLookupResults = await env.DB.batch([
+      env.DB.prepare(
+        "SELECT channel_id, 'message' AS source_type FROM messages WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
+      ).bind(mediaSuffix, mediaSuffix),
+      env.DB.prepare(
+        "SELECT channel_id, 'gallery' AS source_type FROM gallery WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
+      ).bind(mediaSuffix, mediaSuffix),
+      env.DB.prepare(
+        "SELECT channel_id, 'dm' AS source_type FROM dm WHERE image IS NOT NULL AND substr(image, -length(?)) = ? LIMIT 1"
+      ).bind(mediaSuffix, mediaSuffix),
+      env.DB.prepare(
+        "SELECT id AS channel_id, 'channel-profile' AS source_type FROM channels WHERE profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ? LIMIT 1"
+      ).bind(mediaSuffix, mediaSuffix),
+      env.DB.prepare(
+        "SELECT id AS channel_id, 'channel-background' AS source_type FROM channels WHERE background_image IS NOT NULL AND substr(background_image, -length(?)) = ? LIMIT 1"
+      ).bind(mediaSuffix, mediaSuffix),
+      env.DB.prepare(
+        "SELECT channel_id, 'channel-config' AS source_type FROM config WHERE text IS NOT NULL AND instr(text, ?) > 0 LIMIT 1"
+      ).bind(mediaSuffix),
+      env.DB.prepare(
+        "SELECT purpose, expires_at FROM upload_tickets WHERE key = ? AND status = 'pending' LIMIT 1"
+      ).bind(decodedKey),
+    ]);
+    mediaRow = mediaLookupResults
+      .slice(0, 6)
+      .map((result) => result.results?.[0] as { channel_id: string; source_type: string } | undefined)
+      .find((row): row is { channel_id: string; source_type: string } => Boolean(row)) || null;
+    pendingTicket = pendingTicket
+      || (mediaLookupResults[6].results?.[0] as { purpose: UploadPurpose; expires_at: string } | undefined)
+      || null;
+  }
+
+  if (pendingTicket && pendingTicket.purpose !== "channel-asset") {
+    if (pendingTicket.expires_at <= new Date().toISOString()) {
+      await env.MEDIA.delete(decodedKey).catch(() => {});
+      await env.DB.prepare("DELETE FROM upload_tickets WHERE key = ?").bind(decodedKey).run();
     }
+    return new Response("not found", { status: 404 });
   }
 
   const requiresRoomAccess = mediaRow?.source_type !== "channel-profile";
   if (mediaRow?.channel_id && requiresRoomAccess) {
-    const parentChannelId = mediaRow.channel_id.endsWith("_live")
-      ? mediaRow.channel_id.replace(/_live$/, "")
-      : mediaRow.channel_id;
+    const parentChannelId = getParentChannelId(mediaRow.channel_id);
     const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
 
     if (passcode) {

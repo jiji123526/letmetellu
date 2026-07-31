@@ -24,7 +24,7 @@ const emptySupportState: SupportStateResponse = {
   transcript: [],
   currentNode: null,
 };
-const SUPPORT_THREAD_POLL_MS = 15000;
+const SUPPORT_THREAD_POLL_MS = 30000;
 
 function readTranscriptText(event: SupportTranscriptEvent): string {
   if (event.event_type === "user_choice") {

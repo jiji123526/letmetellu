@@ -74,8 +74,8 @@ interface DashboardListItem {
   liveActive: boolean;
 }
 
-const ADMIN_DASHBOARD_POLL_MS = 15000;
-const SUPPORT_PREVIEW_POLL_MS = 30000;
+const ADMIN_DASHBOARD_POLL_MS = 30000;
+const SUPPORT_PREVIEW_POLL_MS = 60000;
 type PlatformTicketFilter = "open" | "needs_reply" | "waiting_user" | "unread" | "stale" | "critical" | null;
 
 function formatDate(value: string, locale: "ko" | "en") {

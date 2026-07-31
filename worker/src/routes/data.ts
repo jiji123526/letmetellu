@@ -202,13 +202,18 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
     case "links": {
       const cursor = url.searchParams.get("cursor");
-      let query = "SELECT id, text, created_at FROM messages WHERE channel_id = ? AND deleted = 0 AND (text LIKE '%http://%' OR text LIKE '%https://%' OR text LIKE '%www.%')";
+      let query = `
+        SELECT m.id, m.text, ml.created_at
+        FROM message_links ml
+        INNER JOIN messages m ON m.id = ml.message_id
+        WHERE ml.channel_id = ? AND m.deleted = 0
+      `;
       const params: unknown[] = [channelId];
       if (cursor) {
-        query += " AND created_at < ?";
+        query += " AND ml.created_at < ?";
         params.push(cursor);
       }
-      query += " ORDER BY created_at DESC LIMIT 30";
+      query += " ORDER BY ml.created_at DESC, ml.message_id DESC LIMIT 30";
       const { results } = await env.DB.prepare(query).bind(...params).all();
       return Response.json({ links: results });
     }

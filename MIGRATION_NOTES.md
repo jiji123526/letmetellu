@@ -80,6 +80,30 @@ Deployment notes:
 - the `/api/user` read-first contract requires both Worker and Next.js deploys;
 - in practice, deploy both runtimes together when catching up this whole incident-fix line.
 
+### Media lookup fast path and indexed links panel — 2026-07-31
+
+This follow-up line reduces hot D1 work that still remained after the Vercel-transfer and dashboard polling fixes.
+
+- Added D1 migration `0028_media_lookup_and_message_links.sql`.
+- The new `message_links` table stores one indexed row per message that currently contains a link and is backfilled from existing messages during migration.
+- Message create, edit, delete, admin delete, channel delete, and live-session cleanup paths now keep that link index synchronized.
+- The links panel no longer scans `messages.text` with leading-wildcard `LIKE` filters and instead reads recent link-bearing messages through `message_links(channel_id, created_at, message_id)`.
+- Protected media reads now infer the channel directly from the R2 object key prefix, then do a narrow channel lookup plus pending-upload check on the common path.
+- The older multi-table reverse lookup remains in place only as a compatibility fallback for malformed or legacy keys that do not follow the current `{channelId}/{uuid}.{ext}` object-key format.
+- Support thread polling was slowed from `15s` to `30s`, the admin dashboard poll was slowed from `15s` to `30s`, and the normal-user support preview poll was slowed from `30s` to `60s`.
+
+Why this mattered:
+
+- The previous links query had to search message text directly, which gets more expensive as a room grows.
+- The previous protected-media route could do up to six reverse-lookup queries before it even reached access checks or R2.
+- Support and dashboard traffic was already bounded, but the baseline idle request rate was still higher than necessary.
+
+Deployment notes:
+
+- apply D1 migration `0028_media_lookup_and_message_links.sql` first;
+- deploy the Worker next so write paths and the media/links readers understand the new table;
+- deploy the Next.js frontend as well if you want the slower support/dashboard polling constants to take effect immediately.
+
 ### Locale-aware legal pages and language-preference precedence — 2026-07-31
 
 This frontend-only line finished the user-facing legal surface.

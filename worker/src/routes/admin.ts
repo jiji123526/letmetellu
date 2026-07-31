@@ -71,6 +71,7 @@ export async function deleteChannel(channelId: string, env: Env) {
 
   await env.DB.batch([
     env.DB.prepare(`DELETE FROM messages WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+    env.DB.prepare(`DELETE FROM message_links WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM gallery WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM dm WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM blocked WHERE channel_id IN (${placeholders})`).bind(...channelIds),
@@ -378,6 +379,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         env.DB.prepare(
           "DELETE FROM gallery WHERE channel_id = ? AND (id = ? OR id IN (SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?))"
         ).bind(channel_id, message_id, message_id, channel_id),
+        env.DB.prepare(
+          `DELETE FROM message_links WHERE message_id IN (${mappingPlaceholders})`
+        ).bind(...deletedIds),
         env.DB.prepare(
           `DELETE FROM message_actor_identities
            WHERE record_type = 'message' AND record_id IN (${mappingPlaceholders})`

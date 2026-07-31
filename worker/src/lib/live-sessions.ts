@@ -116,6 +116,7 @@ export async function endLiveSession(
 
   await env.DB.batch([
     env.DB.prepare("DELETE FROM messages WHERE channel_id = ?").bind(liveChannelId),
+    env.DB.prepare("DELETE FROM message_links WHERE channel_id = ?").bind(liveChannelId),
     env.DB.prepare("DELETE FROM gallery WHERE channel_id = ?").bind(liveChannelId),
     env.DB.prepare("DELETE FROM dm WHERE channel_id = ?").bind(liveChannelId),
     env.DB.prepare("DELETE FROM blocked WHERE channel_id = ?").bind(liveChannelId),

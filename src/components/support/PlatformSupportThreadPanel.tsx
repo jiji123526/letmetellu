@@ -16,7 +16,7 @@ import {
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
 
-const PLATFORM_SUPPORT_THREAD_POLL_MS = 15000;
+const PLATFORM_SUPPORT_THREAD_POLL_MS = 30000;
 
 function formatThreadUserLabel(
   thread: SupportThreadState | null,
