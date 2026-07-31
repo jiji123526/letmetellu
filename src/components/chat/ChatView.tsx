@@ -1339,7 +1339,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       // local Wrangler restarts its isolated Durable Object during development).
       // Refresh channel configuration as well as messages so non-admin viewers
       // do not keep a stale profile or background until a manual reload.
-      if (event.type === "reconnected") {
+      if (event.type === "reconnected" && !isOwner && !isAdmin) {
         const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
         fetchInit(fetchChannel).then((data: InitData) => {
           if (!data.channel || data.messages === undefined) return;

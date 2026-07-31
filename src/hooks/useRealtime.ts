@@ -49,7 +49,8 @@ export function useRealtime(channelId: string | null, uid: string) {
 
   const connect = useCallback(() => {
     if (!channelId) return;
-    if (typeof document !== "undefined" && document.visibilityState !== "visible" && sleepingRef.current) {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      sleepingRef.current = true;
       return;
     }
 
