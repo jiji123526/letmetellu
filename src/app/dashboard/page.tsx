@@ -169,6 +169,7 @@ export default function DashboardPage() {
   });
   const channelItemRefs = useRef(new Map<string, HTMLDivElement>());
   const previousItemPositionsRef = useRef(new Map<string, number>());
+  const skipNextListAnimationRef = useRef(false);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean; width: number } | null>(null);
@@ -181,6 +182,10 @@ export default function DashboardPage() {
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
   const isPlatformAdmin = !!platformDashboard;
+  const togglePlatformTicketFilter = useCallback((nextFilter: Exclude<PlatformTicketFilter, null>) => {
+    skipNextListAnimationRef.current = true;
+    setPlatformTicketFilter((current) => current === nextFilter ? null : nextFilter);
+  }, []);
   const submitLinkedChannelSearch = useCallback((value: string) => {
     const channelId = getChannelIdFromLink(value);
     if (!channelId) return false;
@@ -670,9 +675,11 @@ export default function DashboardPage() {
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
+    const skipAnimation = skipNextListAnimationRef.current;
     channelItemRefs.current.forEach((element, id) => {
       const nextTop = element.getBoundingClientRect().top + window.scrollY;
       nextPositions.set(id, nextTop);
+      if (skipAnimation) return;
       const previousTop = previousItemPositionsRef.current.get(id);
       if (previousTop === undefined || previousTop === nextTop) return;
       element.animate(
@@ -687,6 +694,7 @@ export default function DashboardPage() {
       );
     });
     previousItemPositionsRef.current = nextPositions;
+    skipNextListAnimationRef.current = false;
   }, [activeItems]);
 
   const handleCreate = async () => {
@@ -1190,7 +1198,7 @@ export default function DashboardPage() {
                 type="button"
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
                 style={{ background: platformTicketFilter === "open" ? "#111827" : "var(--bg)", color: platformTicketFilter === "open" ? "#fff" : "var(--gray-text)" }}
-                onClick={() => setPlatformTicketFilter((current) => current === "open" ? null : "open")}
+                onClick={() => togglePlatformTicketFilter("open")}
               >
                 {t("supportStatsOpen").replace("{count}", String(platformDashboard.support_stats.open_count))}
               </button>
@@ -1198,7 +1206,7 @@ export default function DashboardPage() {
                 type="button"
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
                 style={{ background: platformTicketFilter === "needs_reply" ? "#c2410c" : "#fff7ed", color: platformTicketFilter === "needs_reply" ? "#fff" : "#c2410c" }}
-                onClick={() => setPlatformTicketFilter((current) => current === "needs_reply" ? null : "needs_reply")}
+                onClick={() => togglePlatformTicketFilter("needs_reply")}
               >
                 {t("supportStatsNeedsReply").replace("{count}", String(platformDashboard.support_stats.waiting_for_admin_count))}
               </button>
@@ -1206,7 +1214,7 @@ export default function DashboardPage() {
                 type="button"
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
                 style={{ background: platformTicketFilter === "waiting_user" ? "#3730a3" : "#eef2ff", color: platformTicketFilter === "waiting_user" ? "#fff" : "#3730a3" }}
-                onClick={() => setPlatformTicketFilter((current) => current === "waiting_user" ? null : "waiting_user")}
+                onClick={() => togglePlatformTicketFilter("waiting_user")}
               >
                 {t("supportStatsWaitingUser").replace("{count}", String(platformDashboard.support_stats.waiting_for_user_count))}
               </button>
@@ -1214,7 +1222,7 @@ export default function DashboardPage() {
                 type="button"
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
                 style={{ background: platformTicketFilter === "unread" ? "#1d4ed8" : "#eff6ff", color: platformTicketFilter === "unread" ? "#fff" : "#1d4ed8" }}
-                onClick={() => setPlatformTicketFilter((current) => current === "unread" ? null : "unread")}
+                onClick={() => togglePlatformTicketFilter("unread")}
               >
                 {t("supportStatsUnread").replace("{count}", String(platformDashboard.support_stats.unread_for_admin_count))}
               </button>
@@ -1222,7 +1230,7 @@ export default function DashboardPage() {
                 type="button"
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
                 style={{ background: platformTicketFilter === "stale" ? "#be123c" : "#fff1f2", color: platformTicketFilter === "stale" ? "#fff" : "#be123c" }}
-                onClick={() => setPlatformTicketFilter((current) => current === "stale" ? null : "stale")}
+                onClick={() => togglePlatformTicketFilter("stale")}
               >
                 {t("supportStatsStale").replace("{count}", String(platformDashboard.support_stats.stale_24h_count))}
               </button>
@@ -1230,7 +1238,7 @@ export default function DashboardPage() {
                 type="button"
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold border-none cursor-pointer"
                 style={{ background: platformTicketFilter === "critical" ? "#b91c1c" : "#fef2f2", color: platformTicketFilter === "critical" ? "#fff" : "#b91c1c" }}
-                onClick={() => setPlatformTicketFilter((current) => current === "critical" ? null : "critical")}
+                onClick={() => togglePlatformTicketFilter("critical")}
               >
                 {t("supportStatsCritical").replace("{count}", String(platformDashboard.support_stats.stale_72h_count))}
               </button>

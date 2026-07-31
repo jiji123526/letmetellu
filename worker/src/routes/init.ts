@@ -210,6 +210,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     dm: dmMessages || [],
     adminDataStatus,
     viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
+    isReportsChannel: isReportsChannel(parentChannelId, env),
     presence: presence.count,
     bannerNotice: config.get(`notice_${channelId}`) || "",
     welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",

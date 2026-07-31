@@ -125,10 +125,21 @@ interface InitData {
   adminDataStatus?: "authorized" | "unauthorized";
   anonymousUid?: string;
   viewerAccess?: "owner" | "reports_owner" | "standard";
+  isReportsChannel?: boolean;
   ownerModeration?: {
     status: "active" | "warned" | "suspended" | "frozen";
     petitionStatus: "none" | "open" | "accepted" | "rejected";
   };
+}
+
+interface RestrictedChannelSummaryItem {
+  channelId: string;
+  channelName: string;
+  channelUrl: string;
+  moderationStatus: "suspended" | "frozen";
+  hasOpenReport: boolean;
+  hasOpenPetition: boolean;
+  lastActivityAt: string;
 }
 
 interface ContextMenuState {
@@ -934,6 +945,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [dmEnabled, setDmEnabled] = useState(true);
   const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
   const [viewerModerationStatus, setViewerModerationStatus] = useState<InitData["viewerModerationStatus"]>(null);
+  const [viewerAccess, setViewerAccess] = useState<InitData["viewerAccess"]>("standard");
+  const [isReportsChannelView, setIsReportsChannelView] = useState(false);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
@@ -958,6 +971,11 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (typeof window === "undefined") return new Set();
     try { return new Set(JSON.parse(localStorage.getItem("reportedMsgIds") || "[]")); } catch { return new Set(); }
   });
+
+  useEffect(() => {
+    setViewerAccess("standard");
+    setIsReportsChannelView(false);
+  }, [channelId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -1078,6 +1096,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
     setViewerModerationStatus(data.viewerModerationStatus ?? null);
+    setViewerAccess(data.viewerAccess ?? "standard");
+    setIsReportsChannelView(Boolean(data.isReportsChannel));
     setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     setActiveNotice(data.bannerNotice || "");
     setWelcomeConfig(data.welcomeConfig || "");
@@ -1988,13 +2008,81 @@ export function ChatView({ channelId }: { channelId: string }) {
     : ownerPetitionStatus === "rejected"
       ? t("ownerSuspendedPetitionRejected")
       : t("ownerSuspendedBanner");
+  const isReportsOwnerView = isReportsChannelView && (viewerAccess === "owner" || viewerAccess === "reports_owner");
 
   const displayMessages = useMemo(
-    () => effectiveAdmin
-      ? [...messages, ...dmMessages].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""))
-      : messages.filter((message) => !message.report),
-    [effectiveAdmin, messages, dmMessages],
+    () => {
+      if (!effectiveAdmin) return messages.filter((message) => !message.report);
+      const adminMessages = [...messages, ...dmMessages];
+      if (!isReportsOwnerView) {
+        return adminMessages.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+      }
+      return adminMessages
+        .map((message, index) => ({ message, index }))
+        .sort((left, right) => {
+          const leftOpenReport = left.message.report_meta?.status === "open" ? 1 : 0;
+          const rightOpenReport = right.message.report_meta?.status === "open" ? 1 : 0;
+          if (leftOpenReport !== rightOpenReport) return leftOpenReport - rightOpenReport;
+          const timeCompare = (left.message.created_at || "").localeCompare(right.message.created_at || "");
+          if (timeCompare !== 0) return timeCompare;
+          return left.index - right.index;
+        })
+        .map(({ message }) => message);
+    },
+    [dmMessages, effectiveAdmin, isReportsOwnerView, messages],
   );
+  const restrictedChannels = useMemo<RestrictedChannelSummaryItem[]>(() => {
+    if (!isReportsOwnerView) return [];
+    const restrictedMap = new Map<string, RestrictedChannelSummaryItem>();
+    for (const message of displayMessages) {
+      const reportMeta = message.report_meta;
+      const petitionMeta = message.petition_meta;
+      const channelIdFromMeta = reportMeta?.channel_id || petitionMeta?.channel_id;
+      if (!channelIdFromMeta) continue;
+      const moderationStatus = reportMeta?.moderation_status;
+      const isRestricted = moderationStatus === "suspended" || moderationStatus === "frozen";
+      const existing = restrictedMap.get(channelIdFromMeta);
+      const activityCandidates = [
+        message.created_at,
+        reportMeta?.resolved_at || "",
+        petitionMeta?.resolved_at || "",
+      ].filter(Boolean).sort();
+      const nextActivityAt = activityCandidates[activityCandidates.length - 1] || "";
+      if (!existing && !isRestricted) continue;
+      if (!existing) {
+        restrictedMap.set(channelIdFromMeta, {
+          channelId: channelIdFromMeta,
+          channelName: reportMeta?.channel_name || petitionMeta?.channel_name || channelIdFromMeta,
+          channelUrl: reportMeta?.channel_url || petitionMeta?.channel_url || `/ch/${encodeURIComponent(channelIdFromMeta)}`,
+          moderationStatus: moderationStatus as "suspended" | "frozen",
+          hasOpenReport: reportMeta?.status === "open",
+          hasOpenPetition: reportMeta?.petition_status === "open" || petitionMeta?.status === "open",
+          lastActivityAt: nextActivityAt,
+        });
+        continue;
+      }
+      if (isRestricted) {
+        existing.moderationStatus = moderationStatus;
+      }
+      if (reportMeta?.channel_name || petitionMeta?.channel_name) {
+        existing.channelName = reportMeta?.channel_name || petitionMeta?.channel_name || existing.channelName;
+      }
+      if (reportMeta?.channel_url || petitionMeta?.channel_url) {
+        existing.channelUrl = reportMeta?.channel_url || petitionMeta?.channel_url || existing.channelUrl;
+      }
+      existing.hasOpenReport = existing.hasOpenReport || reportMeta?.status === "open";
+      existing.hasOpenPetition = existing.hasOpenPetition || reportMeta?.petition_status === "open" || petitionMeta?.status === "open";
+      if ((existing.lastActivityAt || "").localeCompare(nextActivityAt) < 0) {
+        existing.lastActivityAt = nextActivityAt;
+      }
+    }
+    return [...restrictedMap.values()].sort((left, right) => {
+      if (left.moderationStatus !== right.moderationStatus) {
+        return left.moderationStatus === "frozen" ? -1 : 1;
+      }
+      return (right.lastActivityAt || "").localeCompare(left.lastActivityAt || "");
+    });
+  }, [displayMessages, isReportsOwnerView]);
   const blockedUidSet = useMemo(
     () => new Set(blockedUsers.map((blockedUser) => blockedUser.uid)),
     [blockedUsers],
@@ -2676,6 +2764,116 @@ export function ChatView({ channelId }: { channelId: string }) {
           className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
           style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", background: "transparent" }}
         >
+        {isReportsOwnerView && restrictedChannels.length > 0 && (
+          <section
+            style={{
+              marginBottom: "12px",
+              padding: "12px",
+              borderRadius: "18px",
+              background: "rgba(255,255,255,0.88)",
+              border: "1px solid rgba(15,23,42,0.08)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              boxShadow: "0 10px 30px rgba(15,23,42,0.08)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px",
+                marginBottom: "10px",
+              }}
+            >
+              <strong style={{ fontSize: "calc(var(--bubble-font-size) - 1px)", color: "#0f172a" }}>
+                {t("restrictedChannelsTitle")}
+              </strong>
+              <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>
+                {restrictedChannels.length}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {restrictedChannels.map((item) => (
+                <a
+                  key={item.channelId}
+                  href={`/ch/${encodeURIComponent(item.channelId)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px",
+                    padding: "10px 12px",
+                    borderRadius: "14px",
+                    background: "#f8fafc",
+                    color: "inherit",
+                    textDecoration: "none",
+                    border: "1px solid rgba(148,163,184,0.22)",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--bubble-font-size)", fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.channelName}
+                    </div>
+                    <div style={{ marginTop: "5px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "3px 8px",
+                          borderRadius: "999px",
+                          fontSize: "calc(var(--bubble-font-size) - 5px)",
+                          fontWeight: 700,
+                          background: item.moderationStatus === "frozen" ? "#fee2e2" : "#fff7d6",
+                          color: item.moderationStatus === "frozen" ? "#991b1b" : "#8a5a00",
+                        }}
+                      >
+                        {item.moderationStatus === "frozen" ? t("reportModerationFrozen") : t("reportModerationSuspended")}
+                      </span>
+                      {item.hasOpenReport && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "3px 8px",
+                            borderRadius: "999px",
+                            fontSize: "calc(var(--bubble-font-size) - 5px)",
+                            fontWeight: 600,
+                            background: "#e0ecff",
+                            color: "#1d4ed8",
+                          }}
+                        >
+                          {t("reportOpenBadge")}
+                        </span>
+                      )}
+                      {item.hasOpenPetition && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "3px 8px",
+                            borderRadius: "999px",
+                            fontSize: "calc(var(--bubble-font-size) - 5px)",
+                            fontWeight: 600,
+                            background: "#ede9fe",
+                            color: "#6d28d9",
+                          }}
+                        >
+                          {t("petitionOpenBadge")}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span style={{ flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>
+                    {t("viewReportedChannel")}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
         <MessageList
           threadedMessages={threadedMessages}
           effectiveAdmin={effectiveAdmin}
