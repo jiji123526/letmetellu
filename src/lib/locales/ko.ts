@@ -451,6 +451,8 @@ export const ko = {
   supportDeleteTicket: "문의 삭제",
   supportDeleteConfirm: "이 1:1 문의 채널을 삭제하면 운영팀 쪽 문의도 함께 종료됩니다. 계속할까요?",
   supportDeleteFailed: "문의를 삭제하지 못했습니다. 다시 시도해 주세요.",
+  supportMenuActions: "문의 메뉴",
+  supportRestartWithNewTopic: "새 주제를 선택하고 다시 안내받기",
   supportActorGuest: "게스트",
   supportActorLoggedIn: "로그인 사용자",
   supportIssueCategory: "문의 유형",

@@ -1,6 +1,6 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { SupportMessage, SupportTranscriptEvent } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
@@ -33,6 +33,10 @@ interface SupportThreadChatProps {
   onSend: () => void;
   onBack: () => void;
   onCloseTicket?: () => void;
+  menuActions?: Array<{
+    label: string;
+    onClick: () => void;
+  }>;
   submitting: boolean;
   placeholder: string;
   canSend?: boolean;
@@ -56,12 +60,26 @@ export function SupportThreadChat({
   onSend,
   onBack,
   onCloseTicket,
+  menuActions = [],
   submitting,
   placeholder,
   canSend = true,
 }: SupportThreadChatProps) {
   const { t } = useLocale();
   const selfBubbleColor = selfRole === "platform_admin" ? "#202251" : "var(--bubble-sent, #3b8df0)";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [menuOpen]);
 
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
@@ -123,6 +141,58 @@ export function SupportThreadChat({
             >
               {t("supportCloseTicket")}
             </button>
+          )}
+          {menuActions.length > 0 && (
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                className="border-none rounded-full cursor-pointer flex items-center justify-center"
+                style={{
+                  background: "var(--card)",
+                  color: selfBubbleColor,
+                  width: 34,
+                  height: 34,
+                  lineHeight: 1,
+                }}
+                aria-label={t("supportMenuActions")}
+                onClick={() => setMenuOpen((current) => !current)}
+              >
+                <svg viewBox="0 0 24 24" style={{ width: 18, height: 18 }} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div
+                  className="absolute right-0 top-[42px] min-w-[200px] overflow-hidden rounded-[12px]"
+                  style={{
+                    background: "var(--header-bg)",
+                    boxShadow: "0 4px 20px rgba(0,0,0,.15)",
+                    backdropFilter: "saturate(180%) blur(20px)",
+                    WebkitBackdropFilter: "saturate(180%) blur(20px)",
+                  }}
+                >
+                  {menuActions.map((action, index) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]"
+                      style={{
+                        background: "transparent",
+                        color: "var(--gray-text)",
+                        borderBottom: index < menuActions.length - 1 ? "0.5px solid var(--hairline)" : "none",
+                      }}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        action.onClick();
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </header>

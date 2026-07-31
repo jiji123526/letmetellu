@@ -328,6 +328,12 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
         onDraftChange={setThreadDraft}
         onSend={() => { void handleThreadSend(); }}
         onBack={() => router.push("/dashboard")}
+        menuActions={[
+          {
+            label: t("supportRestartWithNewTopic"),
+            onClick: () => router.push("/support"),
+          },
+        ]}
         submitting={submitting}
         placeholder={supportState.thread.can_user_send ? t("supportReplyPlaceholder") : t("supportWaitingForAdminPlaceholder")}
         canSend={supportState.thread.can_user_send}
