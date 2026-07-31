@@ -17,6 +17,8 @@ interface PlusMenuProps {
   onLiveToggle?: () => void;
   onNotice?: () => void;
   onEmojiPreset?: () => void;
+  reportFilter?: "open" | "warned" | "frozen" | null;
+  onReportFilterSelect?: (filter: "open" | "warned" | "frozen") => void;
   onClose: () => void;
 }
 
@@ -31,7 +33,24 @@ const ITEMS = [
   },
 ];
 
-export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, isFrozen, liveActive, inLiveMode, onPhoto, onDmToggle, onFreezeToggle, onLiveToggle, onNotice, onEmojiPreset, onClose }: PlusMenuProps) {
+export function PlusMenu({
+  anchorRect,
+  dmMode,
+  dmEnabled,
+  isAdmin,
+  isFrozen,
+  liveActive,
+  inLiveMode,
+  onPhoto,
+  onDmToggle,
+  onFreezeToggle,
+  onLiveToggle,
+  onNotice,
+  onEmojiPreset,
+  reportFilter,
+  onReportFilterSelect,
+  onClose,
+}: PlusMenuProps) {
   const { t } = useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +81,46 @@ export function PlusMenu({ anchorRect, dmMode, dmEnabled, isAdmin, isFrozen, liv
     whiteSpace: "nowrap",
     lineHeight: 1,
   };
+
+  if (onReportFilterSelect) {
+    const reportFilterItems: Array<{ key: "open" | "warned" | "frozen"; label: string }> = [
+      { key: "open", label: t("reportFilterOpen") },
+      { key: "warned", label: t("reportFilterWarned") },
+      { key: "frozen", label: t("reportFilterFrozen") },
+    ];
+    return (
+      <div
+        ref={menuRef}
+        className="fixed z-[110] rounded-[14px] overflow-hidden animate-[ctxPop_0.15s_ease]"
+        style={{
+          bottom: window.innerHeight - anchorRect.top + 8,
+          left: anchorRect.left,
+          background: "var(--header-bg)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          boxShadow: "0 4px 20px rgba(0,0,0,.15)",
+        }}
+      >
+        {reportFilterItems.map((item, index) => (
+          <button
+            key={item.key}
+            style={{
+              ...itemStyle,
+              borderBottom: index === reportFilterItems.length - 1 ? "none" : "0.5px solid var(--hairline)",
+              color: reportFilter === item.key ? "var(--bubble-sent, #3b8df0)" : "var(--gray-text)",
+              fontWeight: reportFilter === item.key ? 700 : 500,
+            }}
+            onClick={() => {
+              onReportFilterSelect(item.key);
+              onClose();
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div

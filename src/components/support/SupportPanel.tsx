@@ -48,9 +48,21 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
   const [closing, setClosing] = useState(false);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const closingRef = useRef(false);
+  const sessionIdRef = useRef<string | null>(null);
   const openThreadId = supportState.thread?.id ?? null;
   const hasActiveTicket = !!supportState.thread;
   const hasGuidedSession = !!supportState.session;
+
+  function resetGuidedSessionState() {
+    setSupportState((current) => ({
+      ...current,
+      session: null,
+      transcript: [],
+      currentNode: null,
+    }));
+    setTextDraft("");
+    setError("");
+  }
 
   function applyState(next: Partial<SupportStateResponse>) {
     setSupportState((current) => ({
@@ -128,7 +140,14 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
 
   useEffect(() => () => {
     closingRef.current = true;
-  }, []);
+    if (!showThreadView && sessionIdRef.current) {
+      void clearSupportSession(sessionIdRef.current).catch(() => {});
+    }
+  }, [showThreadView]);
+
+  useEffect(() => {
+    sessionIdRef.current = supportState.session?.id ?? null;
+  }, [supportState.session?.id]);
 
   useEffect(() => {
     if (!openThreadId) return;
@@ -303,9 +322,11 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
     if (closing) return;
     closingRef.current = true;
     setClosing(true);
+    const sessionId = supportState.session?.id ?? sessionIdRef.current;
+    resetGuidedSessionState();
     try {
-      if (supportState.session?.status === "open") {
-        await clearSupportSession(supportState.session.id);
+      if (sessionId) {
+        await clearSupportSession(sessionId);
       }
     } finally {
       router.push("/dashboard");

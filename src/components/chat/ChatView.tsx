@@ -142,6 +142,8 @@ interface RestrictedChannelSummaryItem {
   lastActivityAt: string;
 }
 
+type ReportsOwnerFilter = "open" | "warned" | "frozen" | null;
+
 interface ContextMenuState {
   msg: Message;
   isSent: boolean;
@@ -947,6 +949,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [viewerModerationStatus, setViewerModerationStatus] = useState<InitData["viewerModerationStatus"]>(null);
   const [viewerAccess, setViewerAccess] = useState<InitData["viewerAccess"]>("standard");
   const [isReportsChannelView, setIsReportsChannelView] = useState(false);
+  const [reportsOwnerFilter, setReportsOwnerFilter] = useState<ReportsOwnerFilter>(null);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
@@ -975,6 +978,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   useEffect(() => {
     setViewerAccess("standard");
     setIsReportsChannelView(false);
+    setReportsOwnerFilter(null);
   }, [channelId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -2017,7 +2021,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       if (!isReportsOwnerView) {
         return adminMessages.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
       }
-      return adminMessages
+      const orderedMessages = adminMessages
         .map((message, index) => ({ message, index }))
         .sort((left, right) => {
           const leftOpenReport = left.message.report_meta?.status === "open" ? 1 : 0;
@@ -2028,8 +2032,22 @@ export function ChatView({ channelId }: { channelId: string }) {
           return left.index - right.index;
         })
         .map(({ message }) => message);
+      if (!reportsOwnerFilter) return orderedMessages;
+      return orderedMessages.filter((message) => {
+        const moderationStatus = message.report_meta?.moderation_status;
+        if (reportsOwnerFilter === "open") {
+          return message.report_meta?.status === "open";
+        }
+        if (reportsOwnerFilter === "warned") {
+          return moderationStatus === "warned";
+        }
+        if (reportsOwnerFilter === "frozen") {
+          return moderationStatus === "frozen";
+        }
+        return true;
+      });
     },
-    [dmMessages, effectiveAdmin, isReportsOwnerView, messages],
+    [dmMessages, effectiveAdmin, isReportsOwnerView, messages, reportsOwnerFilter],
   );
   const restrictedChannels = useMemo<RestrictedChannelSummaryItem[]>(() => {
     if (!isReportsOwnerView) return [];
@@ -3545,6 +3563,10 @@ export function ChatView({ channelId }: { channelId: string }) {
           onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
           onNotice={canUseAdminMutations ? () => setShowNoticeEdit(true) : undefined}
           onEmojiPreset={() => setShowEmojiPreset(true)}
+          reportFilter={reportsOwnerFilter}
+          onReportFilterSelect={isReportsOwnerView ? (filter) => {
+            setReportsOwnerFilter((current) => current === filter ? null : filter);
+          } : undefined}
           onClose={() => setPlusMenu(null)}
         />
       )}

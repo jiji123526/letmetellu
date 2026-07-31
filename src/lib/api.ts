@@ -1063,6 +1063,7 @@ export async function clearSupportSession(sessionId: string) {
     error?: string;
   }>("/api/support", {
     method: "POST",
+    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "clear_session",
