@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalDocumentPage } from "@/components/legal/LegalDocumentPage";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy · yap.",
+  title: "개인정보처리방침 / Privacy Policy · yap.",
 };
 
 export default function PrivacyPage() {
