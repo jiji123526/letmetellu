@@ -8,23 +8,17 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 Do not treat the app as public-launch ready until these are complete:
 
-1. Server-side report policy
-- Validate the target message/report payload on the Worker.
-- Enforce one active report per signed reporter and target.
-- Add durable throttling for report creation.
+1. Regression coverage for state-heavy flows
+- Add automated tests for guided support reset/escalation, support ticket visibility and reports inbox filtering.
+- Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
-2. Durable rate limits
-- Move message rate limiting off isolate-local memory.
-- Move preview caller rate limiting off isolate-local memory.
-- Key limits by signed identity plus IP-derived signal where appropriate.
+2. Monitoring and operator alerting
+- Turn operational events and moderation/support audit data into visible dashboards or alerts.
+- Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 
-3. Explicit security headers
-- Add and test CSP.
-- Add `X-Content-Type-Options: nosniff`.
-- Add `Referrer-Policy`.
-- Add `Permissions-Policy`.
-- Add frame restrictions.
-- Add HSTS for the production domain after confirming HTTPS-only access.
+3. Production email hardening
+- Move Resend out of sandbox mode with a verified sending domain.
+- Rehearse signup verification, password reset and legacy password-hash upgrade flows in production-like conditions.
 
 ## Pre-deploy checks
 
@@ -130,6 +124,16 @@ Run these after deployment.
 3. Password reset request and reset completion work.
 4. Logout works.
 
+### Support and moderation
+
+1. Open the dashboard help menu as a guest and as a logged-in user.
+2. Start guided `1:1` support, close it mid-flow and confirm reopening starts from the first step.
+3. Escalate a support ticket and confirm it appears immediately for the super admin.
+4. Confirm the user cannot submit a second ticket while one is still open.
+5. Confirm deleting the temporary user support item closes the thread on the super-admin side.
+6. Open the reports inbox and confirm `Open`, `Warned`, and `Frozen` filters work.
+7. Confirm the restricted-channel summary matches the currently warned/frozen channels.
+
 ## Observability checks
 
 Before wider rollout, verify that you can inspect:
@@ -172,6 +176,6 @@ Internal or limited beta can proceed after:
 
 Public launch should wait until:
 
-- report policy is server-enforced;
-- durable rate limits are in place;
-- security headers are explicit and tested.
+- regression coverage exists for support/report/dashboard state sync;
+- monitoring and alerting are visible to operators;
+- production email delivery no longer depends on sandbox constraints.

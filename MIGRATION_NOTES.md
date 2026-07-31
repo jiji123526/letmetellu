@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Support, reports and dashboard UI polish — 2026-07-31
+
+This frontend-only line polished the current support and moderation surfaces without adding schema.
+
+- The guided user support panel now clears its in-progress session when the user closes it, so reopening starts from the first step instead of dropping back into the previous `still need help` state.
+- The super-admin reports inbox now keeps unresolved reports at the bottom while preserving chronological order inside each group.
+- The reports inbox now includes a restricted-channel summary block plus simple plus-menu filters for `Open`, `Warned`, and `Frozen`.
+- The super-admin dashboard support rows now use topic-specific simple icons instead of a generic empty profile image slot.
+- The super-admin dashboard no longer applies the row-reorder animation, so new `1:1` tickets do not shake the whole list.
+- Visible app logos now switch to `logo-white.svg` in dark mode, including dashboard and onboarding surfaces.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- Worker deploy is only required if you are also catching up the earlier support/report payload changes from `0025` to `0027`;
+- otherwise these are frontend deploys only.
+
 ### Hardening controls and monitoring — 2026-07-30
 
 This deployment line added the first durable abuse-control and observability pass.

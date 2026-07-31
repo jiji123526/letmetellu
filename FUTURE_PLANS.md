@@ -6,11 +6,11 @@ This file tracks remaining product and platform work. Implemented behavior and d
 
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
-1. Durable abuse controls beyond the current first pass.
+1. Regression coverage for support, reports and dashboard state transitions.
 2. Monitoring, alerting and operator visibility.
-3. Owner moderation lifecycle polish and regression coverage.
-4. Email and credential-path production hardening.
-5. Guided support follow-up and operator tooling.
+3. Operator efficiency improvements for support and moderation.
+4. Durable abuse controls beyond the current first pass.
+5. Email and credential-path production hardening.
 
 ## Remaining Ship Work
 
@@ -44,17 +44,21 @@ Current shape:
 - The default user experience is a chatbot-style decision tree with self-resolve paths.
 - Escalation creates at most one open support ticket per signed actor.
 - Users can reopen the guided flow while an active ticket exists, but the UI does not allow them to submit another ticket until that ticket closes.
+- Closing the guided support panel abandons the in-progress guided session so reopening starts from the beginning.
 - Users do not get a support history view; the ticket disappears from their side when the super admin closes it.
 - A replied-to ticket can surface as a temporary channel-like item in the user dashboard, then disappears again when closed.
 - Users can also dismiss that temporary support item themselves, which closes the active ticket on the super-admin side instead of keeping a separate user-only hide state.
 - Guest ticket previews are mirrored in local storage for dashboard reopen convenience, while Worker authorization still relies on signed anonymous identity cookies.
 - The super admin dashboard shows `Report` and `Tickets` sections instead of a mixed inbox.
 - Reports still stay in the private reports inbox channel; only guided-support escalations become tickets.
+- The reports inbox now includes simple `Open`, `Warned`, and `Frozen` filters plus a restricted-channel summary block for follow-up work.
 - The super-admin dashboard fetch is now bounded to open tickets plus a recent closed-ticket window, and the user dashboard preview uses a lightweight support-preview read instead of loading full support state.
 
 ### Next support work
 
 - Expand the decision tree coverage for real user issues and keep the locale strings centralized rather than growing inline logic.
+- Add focused regression tests for guided-session reset, active-ticket visibility, report filters and dashboard sync between user and super-admin views.
+- Add operator macros or close-reason presets for common support replies once the current flow stabilizes.
 - Add explicit pagination or archive filtering for older closed tickets if the operator audit workflow outgrows the current recent-closed window.
 - Decide whether support audit logs need an operator-visible review UI or should remain backend-only for incident tracing.
 - Decide the retention window for closed support sessions and tickets, then automate cleanup if the audit policy allows it.
