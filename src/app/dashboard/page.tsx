@@ -350,7 +350,7 @@ export default function DashboardPage() {
   }, [status]);
 
   const loadSupportPreview = useCallback(async () => {
-    if (status === "loading" || platformDashboard) {
+    if (status === "loading" || isPlatformAdmin) {
       return;
     }
     try {
@@ -374,7 +374,7 @@ export default function DashboardPage() {
     } catch {
       setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
     }
-  }, [status, platformDashboard]);
+  }, [status, isPlatformAdmin]);
 
   const connectLocalChannels = async () => {
     if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
