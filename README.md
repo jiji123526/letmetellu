@@ -16,6 +16,8 @@ Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
 
 - D1-backed durable rate limits and quotas for messages, DMs, preview fetches and daily channel reports
 - Append-only moderation audit logs plus operational event logging for `429`, `403`, `5xx` and unhandled exceptions
+- Reduced dashboard and support traffic overhead through bounded polling, lighter support-preview reads and deduped preview/version requests
+- Locale-aware legal pages now render only the active app language and treat a manual locale choice as higher priority than device language
 - Explicit Worker-side security headers in addition to the existing Next.js app headers
 - Multi-image chat, embeds, gallery and link panels, temporary live sessions and recent chat UI polish
 
@@ -59,6 +61,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - The bottom-left help entry opens the user guide and guided `1:1` platform support for everyone.
 - Logged-in users also get the admin guide from that same dashboard help entry.
 - Logged-in users sync recent channels, pinned state, personal bubble colors, font size and locale through their account.
+- Manual locale selection overrides device language for both guests and members, and the legal pages follow that active locale instead of rendering both languages together.
 - Guest users keep recent channels and personal UI preferences in the current browser only.
 - Exact channel address lookup supports a `/ch/...` path or a full URL, and the dashboard triggers that lookup on paste, `Enter` or mobile keyboard close.
 
@@ -227,6 +230,11 @@ npm run deploy
 ```
 
 Support, moderation and dashboard routing changes often span both runtimes. If a change touches support routes, report routing or dashboard-admin surfaces, deploy the Worker and the Next.js frontend together after any required D1 migration.
+
+Recent deployment notes:
+
+- `Reduce dashboard and support traffic overhead` required both Worker and frontend deploys, but no new D1 migration.
+- `Refine locale-specific legal pages` is frontend-only and does not require a Worker deploy or migration.
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for the full migration inventory, deployment notes and implementation history, including recent frontend-only support/report/dashboard polish that required no schema changes.
 

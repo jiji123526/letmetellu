@@ -4,6 +4,36 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Locale-aware legal pages and language-preference precedence — 2026-07-31
+
+This frontend-only line finished the user-facing legal surface.
+
+- The `/privacy` and `/terms` pages now render only the currently active locale instead of showing Korean and English together on the same page.
+- Both legal documents were rewritten into fuller article-by-article documents aligned to the current product behavior and to the fact that `yap.` is a personally operated project, not a separate company entity.
+- The legal renderer now waits for the hydrated locale before drawing the final document, which avoids flashing the wrong language first.
+- Manual locale choice now takes precedence over device language for the legal pages because they follow the same app-level locale state as the rest of the product.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- this is a frontend deploy only.
+
+### Dashboard and support traffic reduction — 2026-07-31
+
+This follow-up line reduced avoidable request volume without changing schema.
+
+- The Next.js `/api/user` proxy now reads the existing user row first and only falls back to the sync-creation path when the Worker reports `user_not_found`, instead of writing on every dashboard load.
+- The Worker `/api/user` route now supports that read-first contract by resolving internal user identity and returning current channel and preference state without forcing a write.
+- The super-admin dashboard now polls more slowly, and the normal user dashboard polls support preview state only when a temporary active `1:1` ticket item actually exists.
+- Open support-thread views now skip background polling while the tab is hidden and refresh on focus or visibility return instead of hammering the endpoint continuously.
+- Locale persistence writes are now deduped through `UserPreferencesSync`, so changing language no longer triggers duplicate preference PATCHes.
+- Link-preview fetches now share one in-flight request per URL, and app-version checks now run less often without a timestamp cache-buster.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker and the Next.js frontend together for this line because the `/api/user` read/sync behavior changed on both sides.
+
 ### Support, reports and dashboard UI polish — 2026-07-31
 
 This frontend-only line polished the current support and moderation surfaces without adding schema.

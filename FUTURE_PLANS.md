@@ -49,6 +49,7 @@ Current shape:
 - A replied-to ticket can surface as a temporary channel-like item in the user dashboard, then disappears again when closed.
 - Users can also dismiss that temporary support item themselves, which closes the active ticket on the super-admin side instead of keeping a separate user-only hide state.
 - Guest ticket previews are mirrored in local storage for dashboard reopen convenience, while Worker authorization still relies on signed anonymous identity cookies.
+- Manual locale selection now overrides device language for support-adjacent surfaces, and the legal pages now render only the active locale instead of a bilingual combined view.
 - The super admin dashboard shows `Report` and `Tickets` sections instead of a mixed inbox.
 - Reports still stay in the private reports inbox channel; only guided-support escalations become tickets.
 - The reports inbox now includes simple `Open`, `Warned`, and `Frozen` filters plus a restricted-channel summary block for follow-up work.
@@ -56,7 +57,7 @@ Current shape:
 
 ### Next support work
 
-- Expand the decision tree coverage for real user issues and keep the locale strings centralized rather than growing inline logic.
+- Expand the decision tree coverage for real user issues and keep all new user-facing support copy in the centralized locale files rather than growing inline logic again.
 - Add focused regression tests for guided-session reset, active-ticket visibility, report filters and dashboard sync between user and super-admin views.
 - Add operator macros or close-reason presets for common support replies once the current flow stabilizes.
 - Add explicit pagination or archive filtering for older closed tickets if the operator audit workflow outgrows the current recent-closed window.
