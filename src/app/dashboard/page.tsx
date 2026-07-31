@@ -1307,7 +1307,7 @@ export default function DashboardPage() {
 
         {empty ? (
           <section className="px-8 py-24 text-center" style={{ paddingBottom: `calc(6rem + ${listBottomPadding})` }}>
-            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "var(--card)" }}>
+            <div className="mx-auto mb-4 flex items-center justify-center">
               <ThemeLogo alt="" width={72} height={72} className="h-[72px] w-[72px]" />
             </div>
             <h2 className="m-0 text-[19px] font-semibold">
