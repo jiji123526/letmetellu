@@ -4,6 +4,7 @@ import { isReportsChannel } from "../lib/special-channels";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
 
@@ -43,7 +44,17 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
 
     // Passcode gate
-    const parentChannelId = (channel_id as string).endsWith("_live") ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const isLiveChannel = (channel_id as string).endsWith("_live");
+    const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    if (isLiveChannel) {
+      const liveSession = await readLiveSessionState(env, parentChannelId);
+      if (!liveSession || isLiveSessionExpired(liveSession)) {
+        if (liveSession) {
+          await endLiveSession(env, parentChannelId, "expired");
+        }
+        return Response.json({ error: "live_session_ended" }, { status: 403 });
+      }
+    }
     if (isReportsChannel(parentChannelId, env)) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }

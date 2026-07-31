@@ -95,7 +95,7 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - Super-admin `1:1` ticket rows use topic-specific simple icons instead of a generic profile image slot.
 - The super-admin dashboard loads all open tickets plus a bounded recent-closed window instead of reloading the entire historical ticket archive on each refresh.
 - Super-admin support threads keep the guided summary as ticket context and suppress the duplicated seed message bubble when that first user message is the same summary text.
-- Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends.
+- Temporary live sessions with a separate live message stream, title, emoji presets and automatic cleanup when the session ends or auto-expires after 8 hours.
 
 ### Authentication and safety model
 

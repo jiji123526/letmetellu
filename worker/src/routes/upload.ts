@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
+import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { authorizeRoomToken } from "./passcode";
@@ -23,6 +24,15 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   // Passcode gate
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  if (channelId.endsWith("_live") && purpose !== "channel-asset") {
+    const liveSession = await readLiveSessionState(env, parentChannelId);
+    if (!liveSession || isLiveSessionExpired(liveSession)) {
+      if (liveSession) {
+        await endLiveSession(env, parentChannelId, "expired");
+      }
+      return Response.json({ error: "live_session_ended" }, { status: 403 });
+    }
+  }
   const internalRequest = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET;
   const internalUserId = request.headers.get("X-User-Id") || "";
   let ownerUpload = false;

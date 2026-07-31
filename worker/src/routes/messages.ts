@@ -6,6 +6,7 @@ import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "..
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
 
@@ -44,6 +45,15 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // Passcode gate — check if channel requires passcode for writing
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    if (isLiveChannel) {
+      const liveSession = await readLiveSessionState(env, parentChannelId);
+      if (!liveSession || isLiveSessionExpired(liveSession)) {
+        if (liveSession) {
+          await endLiveSession(env, parentChannelId, "expired");
+        }
+        return Response.json({ error: "live_session_ended" }, { status: 403 });
+      }
+    }
     const channel = await env.DB.prepare(`
       SELECT id, is_frozen, owner_uid, passcode,
         (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen

@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
+import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
@@ -712,7 +713,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "start-live": {
       const { title } = payload || {};
       const sessionId = crypto.randomUUID();
-      const liveState = JSON.stringify({ active: true, title: title || "라이브 채팅", sessionId });
+      const liveState = JSON.stringify(createLiveSessionState(
+        typeof title === "string" ? title : undefined,
+        sessionId,
+      ));
 
       await env.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
@@ -736,62 +740,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "end-live": {
-      const liveChannelId = `${channel_id}_live`;
-
-      // Mark live as inactive
-      await env.DB.prepare(
-        "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
-      ).bind(`live_${channel_id}`, "false", channel_id, "false").run();
-
-      // Broadcast live-ended BEFORE cleanup so clients exit live mode
-      const doId = env.CHAT_ROOM.idFromName(channel_id);
-      const stub = env.CHAT_ROOM.get(doId);
-      await stub.fetch(new Request("http://internal/broadcast", {
-        method: "POST",
-        body: JSON.stringify({ type: "live-ended", channel_id }),
-      }));
-
-      // Collect R2 media keys from live messages before deleting
-      const { results: liveMedia } = await env.DB.prepare(
-        "SELECT image FROM messages WHERE channel_id = ? AND image IS NOT NULL"
-      ).bind(liveChannelId).all();
-      const { results: liveGalleryMedia } = await env.DB.prepare(
-        "SELECT image FROM gallery WHERE channel_id = ? AND image IS NOT NULL"
-      ).bind(liveChannelId).all();
-      const { results: liveDmMedia } = await env.DB.prepare(
-        "SELECT image FROM dm WHERE channel_id = ? AND image IS NOT NULL"
-      ).bind(liveChannelId).all();
-      const { results: liveUploadTickets } = await env.DB.prepare(
-        "SELECT key FROM upload_tickets WHERE channel_id = ?"
-      ).bind(liveChannelId).all<{ key: string }>();
-
-      // Delete R2 objects for live media
-      const allMedia = [...(liveMedia || []), ...(liveGalleryMedia || []), ...(liveDmMedia || [])];
-      for (const row of allMedia) {
-        if (row.image) {
-          // Extract key from URL (format: .../api/media/KEY)
-          const key = (row.image as string).split("/api/media/").pop();
-          if (key) {
-            try { await env.MEDIA.delete(key); } catch {}
-          }
-        }
-      }
-      for (const row of liveUploadTickets || []) {
-        if (row.key) {
-          try { await env.MEDIA.delete(row.key); } catch {}
-        }
-      }
-
-      // Delete all live channel data
-      await env.DB.prepare("DELETE FROM messages WHERE channel_id = ?").bind(liveChannelId).run();
-      await env.DB.prepare("DELETE FROM gallery WHERE channel_id = ?").bind(liveChannelId).run();
-      await env.DB.prepare("DELETE FROM dm WHERE channel_id = ?").bind(liveChannelId).run();
-      await env.DB.prepare("DELETE FROM blocked WHERE channel_id = ?").bind(liveChannelId).run();
-      await env.DB.prepare("DELETE FROM config WHERE channel_id = ?").bind(liveChannelId).run();
-      await env.DB.prepare("DELETE FROM upload_tickets WHERE channel_id = ?").bind(liveChannelId).run();
-      // Remove the temporary live channel entry
-      await env.DB.prepare("DELETE FROM channels WHERE id = ?").bind(liveChannelId).run();
-
+      await endLiveSession(env, channel_id, "manual");
       return Response.json({ ok: true });
     }
 

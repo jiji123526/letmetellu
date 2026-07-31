@@ -2,6 +2,7 @@ import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
+import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
@@ -97,7 +98,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC"
     ).bind(channelId, channelId),
     env.DB.prepare(`
-      SELECT id, text FROM config
+      SELECT id, text, updated_at FROM config
       WHERE (channel_id = ? AND id = ?)
          OR (channel_id = ? AND id IN (?, ?, ?, ?, ?))
     `).bind(
@@ -153,7 +154,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const presence = await presenceRes.json() as { count: number };
 
   const rawMessages = batchResults[0].results || [];
-  const configRows = (batchResults[1].results || []) as { id: string; text: string }[];
+  const configRows = (batchResults[1].results || []) as { id: string; text: string; updated_at?: string | null }[];
   const config = new Map(configRows.map((row) => [row.id, row.text]));
   const liveRow = batchResults[2].results?.[0] as { is_frozen?: number } | undefined;
   const moderationRow = batchResults[3].results?.[0] as { status?: string } | undefined;
@@ -164,10 +165,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     : (batchResults[viewerBlockedIndex].results?.length || 0) > 0;
 
   // Parse live status
-  let liveStatus: { active: boolean; title: string; sessionId: string } | null = null;
-  const liveConfig = config.get(`live_${parentChannelId}`);
-  if (liveConfig && liveConfig !== "false") {
-    try { liveStatus = JSON.parse(liveConfig); } catch {}
+  let liveStatus: LiveSessionState | null = null;
+  const liveConfigRow = configRows.find((row) => row.id === `live_${parentChannelId}`);
+  liveStatus = parseLiveSessionState(liveConfigRow?.text, liveConfigRow?.updated_at);
+  if (isLiveSessionExpired(liveStatus)) {
+    await endLiveSession(env, parentChannelId, "expired");
+    liveStatus = null;
   }
 
   // For live channels, override is_frozen with the _live row's value

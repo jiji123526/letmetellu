@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { endLiveSession, isLiveSessionExpired, parseLiveSessionState } from "./live-sessions";
 import { cleanupExpiredUploadTickets } from "./upload-tickets";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -9,6 +10,7 @@ const SUPPORT_AUDIT_RETENTION_MS = 365 * DAY_MS;
 const MESSAGE_ACTOR_IDENTITY_RETENTION_MS = 90 * DAY_MS;
 const CLEANUP_BATCH_LIMIT = 250;
 const CLEANUP_MAX_BATCHES = 8;
+const LIVE_SESSION_EXPIRY_BATCH_LIMIT = 20;
 
 function cutoffIso(retentionMs: number, nowMs: number): string {
   return new Date(nowMs - retentionMs).toISOString();
@@ -60,7 +62,23 @@ async function drainExpiredUploadTicketRetention(env: Env): Promise<number> {
   return deleted;
 }
 
+async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<number> {
+  const { results } = await env.DB.prepare(
+    "SELECT id, channel_id, text, updated_at FROM config WHERE id GLOB 'live_*' AND text IS NOT NULL AND text != 'false' ORDER BY updated_at ASC LIMIT ?"
+  ).bind(LIVE_SESSION_EXPIRY_BATCH_LIMIT).all<{ id: string; channel_id: string; text: string; updated_at: string | null }>();
+
+  let expiredCount = 0;
+  for (const row of results || []) {
+    const liveSession = parseLiveSessionState(row.text, row.updated_at);
+    if (!isLiveSessionExpired(liveSession, nowMs)) continue;
+    await endLiveSession(env, row.channel_id, "expired");
+    expiredCount += 1;
+  }
+  return expiredCount;
+}
+
 export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Promise<{
+  expiredLiveSessionsEnded: number;
   uploadTicketsDeleted: number;
   durableRateLimitsDeleted: number;
   operationalEventsDeleted: number;
@@ -68,6 +86,7 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   supportAuditLogsDeleted: number;
   messageActorIdentitiesDeleted: number;
 }> {
+  const expiredLiveSessionsEnded = await expireTimedOutLiveSessions(env, nowMs);
   const uploadTicketsDeleted = await drainExpiredUploadTicketRetention(env);
   const durableRateLimitsDeleted = await drainTableRetention(
     env,
@@ -101,6 +120,7 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   );
 
   return {
+    expiredLiveSessionsEnded,
     uploadTicketsDeleted,
     durableRateLimitsDeleted,
     operationalEventsDeleted,

@@ -74,6 +74,9 @@ export function LiveTitlePrompt({ onStart, onCancel }: { onStart: (title: string
           onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--input-border)"; }}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && inputRef?.value.trim()) { onStart(inputRef.value.trim()); } }}
         />
+        <div style={{ marginTop: "10px", fontSize: "calc(var(--bubble-font-size) - 3px)", color: "var(--meta)", lineHeight: 1.5 }}>
+          {t("liveAutoEnds")}
+        </div>
         <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card)", color: "var(--secondary-text)" }} onClick={onCancel}>{ t("cancel")}</button>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "#c0392b", color: "#fff" }} onClick={() => { if (inputRef?.value.trim()) onStart(inputRef.value.trim()); }}>{ t("liveStartBtn")}</button>

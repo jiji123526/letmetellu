@@ -104,6 +104,7 @@ export const en: Record<LocaleKeys, string> = {
   liveTitle: "Live",
   liveEnterTitle: "Start Live",
   liveEnterPlaceholder: "Enter live title",
+  liveAutoEnds: "Live sessions end automatically after 8 hours.",
   liveEndTitle: "End Live",
   liveEndMessage: "End live session?<br>All messages will be deleted.",
   liveEndBtn: "End",

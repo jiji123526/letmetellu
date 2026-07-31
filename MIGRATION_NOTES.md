@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Live session timeout and hourly expiry cleanup — 2026-07-31
+
+This follow-up line stops temporary live rooms from staying open indefinitely.
+
+- Live sessions now store a started timestamp and an expiry timestamp when the owner starts them.
+- The current timeout is `8` hours per live session, which fits the requested `5` to `10` hour window without leaving sessions open forever.
+- Live message, DM and upload write paths now reject expired live sessions immediately and trigger the same cleanup path used by manual live-end.
+- Channel init now auto-closes an expired live session before returning live state, so stale live banners do not linger after refresh.
+- Scheduled Worker maintenance now checks live-session expiry hourly instead of once per day, which cleans up abandoned sessions even when nobody revisits the room.
+- No D1 migration is required because the live-session state remains stored in existing `config` rows.
+
+Deployment notes:
+
+- deploy the Worker because the timeout enforcement and hourly cleanup run there;
+- deploy the Next.js frontend as well if you want the owner-facing live-start prompt to mention the 8-hour auto-end behavior;
+- no new D1 migration is required.
+
 ### Vercel origin-transfer spike and dashboard request spike — 2026-07-31
 
 This incident line explains the unusually large morning bandwidth and request jump that showed up after the support/dashboard rollout.

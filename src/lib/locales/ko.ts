@@ -102,6 +102,7 @@ export const ko = {
   liveTitle: "라이브",
   liveEnterTitle: "라이브 시작",
   liveEnterPlaceholder: "라이브 제목을 입력하세요",
+  liveAutoEnds: "라이브는 시작 후 8시간이 지나면 자동으로 종료됩니다.",
   liveEndTitle: "라이브 종료",
   liveEndMessage: "라이브를 종료하시겠습니까?<br>모든 메시지가 삭제됩니다.",
   liveEndBtn: "종료",
