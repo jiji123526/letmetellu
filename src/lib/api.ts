@@ -566,6 +566,9 @@ function buildDirectMediaUrl(
   try {
     const parsed = new URL(mediaUrl, WORKER_URL);
     if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
+    if (parsed.searchParams.has("media_token")) {
+      return parsed.toString();
+    }
 
     if (options?.keepSameOrigin) {
       return `${parsed.pathname}${parsed.search}`;

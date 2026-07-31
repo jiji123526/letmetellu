@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
@@ -32,5 +33,6 @@ export async function GET(request: Request) {
 
   const response = await fetch(targetUrl, { headers, cache: "no-store" });
   const data = await response.json();
-  return NextResponse.json(data, { status: response.status });
+  const signedData = await signProtectedMediaInPayload(data);
+  return NextResponse.json(signedData, { status: response.status });
 }

@@ -10,6 +10,44 @@ const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const MEDIA_KEY_CHANNEL_PATTERN = /^[a-z0-9-]{3,30}(?:_live)?$/;
 
+function decodeBase64Url(value: string): Uint8Array {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
+async function verifyMediaAccessToken(token: string, mediaKey: string, env: Env): Promise<boolean> {
+  try {
+    const [payloadPart, signaturePart, extra] = token.split(".");
+    if (!payloadPart || !signaturePart || extra) return false;
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(env.INTERNAL_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      decodeBase64Url(signaturePart),
+      encoder.encode(payloadPart),
+    );
+    if (!valid) return false;
+    const payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(payloadPart))) as {
+      type?: string;
+      key?: string;
+      exp?: number;
+    };
+    return payload.type === "media-access"
+      && payload.key === mediaKey
+      && typeof payload.exp === "number"
+      && payload.exp > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
+}
+
 function readChannelIdFromMediaKey(key: string): string | null {
   const slashIndex = key.indexOf("/");
   if (slashIndex <= 0) return null;
@@ -219,6 +257,17 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
 
   const requiresRoomAccess = mediaRow?.source_type !== "channel-profile";
   if (mediaRow?.channel_id && requiresRoomAccess) {
+    const mediaAccessToken = new URL(request.url).searchParams.get("media_token");
+    if (mediaAccessToken && await verifyMediaAccessToken(mediaAccessToken, decodedKey, env)) {
+      const object = await env.MEDIA.get(decodedKey);
+      if (!object) return new Response("not found", { status: 404 });
+
+      const headers = new Headers();
+      headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
+      headers.set("Cache-Control", "private, max-age=900");
+      return new Response(object.body, { headers });
+    }
+
     const parentChannelId = getParentChannelId(mediaRow.channel_id);
     const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
 

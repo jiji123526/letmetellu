@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity-cookie";
+import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie, setRoomTokenResponseCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
@@ -47,8 +48,9 @@ export async function GET(request: Request) {
   delete data.anonymousToken;
   delete data.deviceToken;
   delete data.roomToken;
+  const signedData = await signProtectedMediaInPayload(data);
 
-  const response = NextResponse.json(data, { status: res.status });
+  const response = NextResponse.json(signedData, { status: res.status });
   setIdentityCookies(response, request, {
     anonymousToken: nextAnonymousToken,
     deviceToken: nextDeviceToken,
