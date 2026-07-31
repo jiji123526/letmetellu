@@ -51,6 +51,7 @@ interface DashboardListItem {
   group: "reports" | "tickets" | "owned" | "joined" | "support-preview";
   kind: "channel" | "support";
   supportThreadId?: string;
+  supportTopic?: string | null;
   supportUnread?: boolean;
   supportWaitingOn?: "user" | "platform_admin" | null;
   supportActorType?: "guest" | "logged_in";
@@ -117,6 +118,57 @@ function looksLikeChannelAddress(value: string) {
 
 function localMigrationSignature(channels: RecentChannel[]) {
   return channels.map((channel) => channel.id).sort().join(",");
+}
+
+function makeSupportTopicAvatar(
+  background: string,
+  foreground: string,
+  iconMarkup: string,
+) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='32' fill='${background}'/>${iconMarkup.replaceAll("currentColor", foreground)}</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function getSupportTopicAvatar(topic: string | null | undefined) {
+  switch (topic) {
+    case "login":
+      return makeSupportTopicAvatar(
+        "#dbeafe",
+        "#1d4ed8",
+        "<path d='M32 15a9 9 0 1 1 0 18a9 9 0 0 1 0-18Z' fill='currentColor'/><path d='M17 49c2.4-7.6 8-11 15-11s12.6 3.4 15 11' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round'/>",
+      );
+    case "passcode":
+      return makeSupportTopicAvatar(
+        "#fef3c7",
+        "#b45309",
+        "<rect x='18' y='28' width='28' height='20' rx='6' fill='none' stroke='currentColor' stroke-width='5'/><path d='M24 28v-5a8 8 0 0 1 16 0v5' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round'/><circle cx='32' cy='38' r='3.5' fill='currentColor'/>",
+      );
+    case "blocked":
+      return makeSupportTopicAvatar(
+        "#fee2e2",
+        "#dc2626",
+        "<circle cx='32' cy='32' r='16' fill='none' stroke='currentColor' stroke-width='5'/><path d='M22 42l20-20' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round'/>",
+      );
+    case "reports":
+      return makeSupportTopicAvatar(
+        "#fee2e2",
+        "#b91c1c",
+        "<path d='M32 14l18 32H14l18-32Z' fill='currentColor'/><rect x='29.5' y='24' width='5' height='12' rx='2.5' fill='#fff'/><circle cx='32' cy='41' r='2.6' fill='#fff'/>",
+      );
+    case "live":
+      return makeSupportTopicAvatar(
+        "#dcfce7",
+        "#15803d",
+        "<circle cx='32' cy='32' r='8' fill='currentColor'/><path d='M19 32a13 13 0 0 1 0-10M45 22a13 13 0 0 1 0 20M13 32a21 21 0 0 1 0-16M51 16a21 21 0 0 1 0 32' fill='none' stroke='currentColor' stroke-width='4.5' stroke-linecap='round'/>",
+      );
+    case "other":
+    default:
+      return makeSupportTopicAvatar(
+        "#e5e7eb",
+        "#475569",
+        "<path d='M26 25a6.5 6.5 0 1 1 10.7 5c-2.9 2.2-4.2 3.7-4.2 7' fill='none' stroke='currentColor' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/><circle cx='32' cy='45' r='3' fill='currentColor'/>",
+      );
+  }
 }
 
 export default function DashboardPage() {
@@ -611,13 +663,14 @@ export default function DashboardPage() {
         group: "tickets" as const,
         kind: "support" as const,
         supportThreadId: ticket.id,
+        supportTopic: ticket.entry_topic,
         supportUnread: ticket.unread_for_admin,
         supportWaitingOn: ticket.waiting_on,
         supportActorType: ticket.actor_type,
         supportStaleLevel: ticket.stale_level,
         route: `/support?thread=${encodeURIComponent(ticket.id)}&admin=1`,
         name: ticket.entry_topic_label,
-        profileImage: null,
+        profileImage: getSupportTopicAvatar(ticket.entry_topic),
         bubbleColor: ticket.status === "open" ? "#111827" : "#6b7280",
         hasPasscode: false,
         ownerName: "",
