@@ -4,6 +4,50 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Vercel origin-transfer spike and dashboard request spike — 2026-07-31
+
+This incident line explains the unusually large morning bandwidth and request jump that showed up after the support/dashboard rollout.
+
+Observed symptoms:
+
+- Vercel `Outgoing Fast Origin Transfer` spiked unexpectedly even though no new media set had been uploaded.
+- Edge request volume also jumped, especially around dashboard and support surfaces.
+
+Root causes:
+
+- A meaningful share of media reads was still passing through the same-origin Next.js `/api/media/*` proxy even when the browser already had enough information to fetch the object directly from the Worker. That made Vercel sit in the middle of large media responses that should have stayed on the Cloudflare side.
+- The super-admin dashboard was still refreshing too aggressively and was also touching support-preview reads that were only relevant to normal users.
+- Open support-thread views and support panels were polling too often, including cases where the tab was hidden.
+- The Next.js `/api/user` GET path could still fall through to a sync-style write path instead of behaving as a read-first endpoint.
+- Link previews, locale persistence, and version checks were generating avoidable duplicate requests.
+
+Fixes shipped:
+
+- `31574f9` `Bypass Vercel media proxy for worker assets`
+  - The media route now redirects straight to the Worker whenever the browser already has room-token access or is using the guest path.
+  - The same-origin proxy is preserved only as an authenticated owner fallback path instead of the default byte-serving path.
+- `88334cd` `Fix dashboard request loop for admin support`
+  - Removed the bad dashboard refresh behavior that kept super-admin support surfaces hotter than intended.
+- `3b45189` `Reduce dashboard and support traffic overhead`
+  - Changed `/api/user` to a read-first contract and added matching Worker-side read behavior.
+  - Slowed and gated dashboard polling so the super-admin dashboard and normal-user support preview do not both refresh all the time.
+  - Stopped polling support preview when the user has no active temporary `1:1` ticket item.
+  - Made support-thread polling visibility-aware and focus-aware.
+  - Deduped locale persistence writes, link-preview in-flight fetches, and version checks.
+
+Result:
+
+- Media bytes that do not need authenticated frontend proxying now bypass Vercel.
+- The dashboard and support surfaces generate materially fewer repeated reads.
+- Request growth from ordinary dashboard/support usage is now bounded much more tightly.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- the media-bypass change is frontend-only;
+- the `/api/user` read-first contract requires both Worker and Next.js deploys;
+- in practice, deploy both runtimes together when catching up this whole incident-fix line.
+
 ### Locale-aware legal pages and language-preference precedence — 2026-07-31
 
 This frontend-only line finished the user-facing legal surface.

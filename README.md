@@ -16,6 +16,7 @@ Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
 
 - D1-backed durable rate limits and quotas for messages, DMs, preview fetches and daily channel reports
 - Append-only moderation audit logs plus operational event logging for `429`, `403`, `5xx` and unhandled exceptions
+- The 2026-07-31 bandwidth spike was reduced by moving eligible media reads off the Next.js proxy and by tightening dashboard/support polling and duplicate request paths
 - Reduced dashboard and support traffic overhead through bounded polling, lighter support-preview reads and deduped preview/version requests
 - Locale-aware legal pages now render only the active app language and treat a manual locale choice as higher priority than device language
 - Explicit Worker-side security headers in addition to the existing Next.js app headers
@@ -233,6 +234,8 @@ Support, moderation and dashboard routing changes often span both runtimes. If a
 
 Recent deployment notes:
 
+- `Bypass Vercel media proxy for worker assets` was the main fix for the Vercel outgoing-origin-transfer spike: media reads that already have guest or room-token access now redirect straight to the Worker instead of proxying large responses through Vercel.
+- `Fix dashboard request loop for admin support` and `Reduce dashboard and support traffic overhead` were the main fixes for the edge-request spike: admin polling was reduced, user support preview is now conditional, support-thread refresh is visibility-aware, `/api/user` became read-first, and duplicate preview/version/locale writes were removed.
 - `Reduce dashboard and support traffic overhead` required both Worker and frontend deploys, but no new D1 migration.
 - `Refine locale-specific legal pages` is frontend-only and does not require a Worker deploy or migration.
 
