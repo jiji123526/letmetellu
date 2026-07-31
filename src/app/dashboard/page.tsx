@@ -1144,8 +1144,20 @@ export default function DashboardPage() {
                     {isLoggedIn ? (
                       <>
                         <div className="px-4 py-3 text-[12px] truncate" style={{ color: "var(--meta)", borderBottom: "0.5px solid var(--hairline)" }}>{session.user?.email}</div>
-                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "var(--tint)", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => signOut({ callbackUrl: "/dashboard" })}>{t("logout")}</button>
-                        <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowDeleteAccountConfirm(true); }}>{t("deleteAccount")}</button>
+                        <button
+                          className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]"
+                          style={{
+                            background: "transparent",
+                            color: "var(--tint)",
+                            borderBottom: !isPlatformAdmin ? "0.5px solid var(--hairline)" : "none",
+                          }}
+                          onClick={() => signOut({ callbackUrl: "/dashboard" })}
+                        >
+                          {t("logout")}
+                        </button>
+                        {!isPlatformAdmin && (
+                          <button className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]" style={{ background: "transparent", color: "#ff453a", borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { setShowAccount(false); setShowDeleteAccountConfirm(true); }}>{t("deleteAccount")}</button>
+                        )}
                       </>
                     ) : (
                       <>
