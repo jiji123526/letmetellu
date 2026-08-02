@@ -208,6 +208,7 @@ export default function DashboardPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
+  const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -342,10 +343,24 @@ export default function DashboardPage() {
         setPlatformDashboard(null);
         return false;
       }
-      setPlatformDashboard({
+      const nextDashboard: PlatformDashboardResponse = {
         reportsInbox: result.reportsInbox ?? null,
         tickets: result.tickets || [],
+        open_pagination: result.open_pagination ?? null,
         support_stats: result.support_stats ?? null,
+      };
+      setPlatformDashboard((current) => {
+        if (!current) return nextDashboard;
+        const currentOpenCount = current.tickets.filter((ticket) => ticket.status === "open").length;
+        const nextOpenCount = nextDashboard.tickets.filter((ticket) => ticket.status === "open").length;
+        if (currentOpenCount <= nextOpenCount) return nextDashboard;
+        const ticketsById = new Map(current.tickets.map((ticket) => [ticket.id, ticket]));
+        nextDashboard.tickets.forEach((ticket) => ticketsById.set(ticket.id, ticket));
+        return {
+          ...nextDashboard,
+          tickets: Array.from(ticketsById.values()),
+          open_pagination: current.open_pagination,
+        };
       });
       return true;
     } catch {
@@ -353,6 +368,34 @@ export default function DashboardPage() {
       return false;
     }
   }, [status]);
+
+  const loadMorePlatformTickets = useCallback(async () => {
+    const cursor = platformDashboard?.open_pagination?.next_cursor;
+    if (!cursor || loadingMorePlatformTickets) return;
+    setLoadingMorePlatformTickets(true);
+    try {
+      const result = await fetchPlatformDashboard(cursor);
+      if (result._status >= 400) return;
+      setPlatformDashboard((current) => {
+        if (!current) return current;
+        const ticketsById = new Map(current.tickets.map((ticket) => [ticket.id, ticket]));
+        (result.tickets || []).forEach((ticket) => ticketsById.set(ticket.id, ticket));
+        const tickets = Array.from(ticketsById.values()).sort((left, right) => {
+          if (left.status !== right.status) return left.status === "open" ? -1 : 1;
+          const updatedDifference = Date.parse(right.updated_at) - Date.parse(left.updated_at);
+          return updatedDifference || right.id.localeCompare(left.id);
+        });
+        return {
+          reportsInbox: result.reportsInbox ?? current.reportsInbox,
+          tickets,
+          open_pagination: result.open_pagination ?? null,
+          support_stats: result.support_stats ?? current.support_stats,
+        };
+      });
+    } finally {
+      setLoadingMorePlatformTickets(false);
+    }
+  }, [loadingMorePlatformTickets, platformDashboard?.open_pagination?.next_cursor]);
 
   const loadSupportPreview = useCallback(async () => {
     if (status === "loading" || isPlatformAdmin) {
@@ -1588,6 +1631,19 @@ export default function DashboardPage() {
               </div>
               );
             })}
+            {isPlatformAdmin && platformDashboard?.open_pagination?.has_more && !query && !platformTicketFilter && (
+              <div className="px-4 py-4 text-center">
+                <button
+                  type="button"
+                  disabled={loadingMorePlatformTickets}
+                  className="border-none bg-transparent text-[14px] font-medium cursor-pointer disabled:cursor-default disabled:opacity-60"
+                  style={{ color: "#007aff" }}
+                  onClick={() => void loadMorePlatformTickets()}
+                >
+                  {loadingMorePlatformTickets ? t("supportLoadingMore") : t("supportLoadMore")}
+                </button>
+              </div>
+            )}
           </section>
         )}
 

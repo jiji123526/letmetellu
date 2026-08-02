@@ -496,6 +496,8 @@ export const en: Record<LocaleKeys, string> = {
   supportStatsStale: "24h+ {count}",
   supportStatsCritical: "72h+ {count}",
   supportStatsOldest: "Oldest {duration}",
+  supportLoadMore: "Load older tickets",
+  supportLoadingMore: "Loading tickets…",
   supportUser: "User",
   supportAdmin: "Support",
   supportBot: "Guide",

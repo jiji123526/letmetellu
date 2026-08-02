@@ -494,6 +494,8 @@ export const ko = {
   supportStatsStale: "24시간+ {count}",
   supportStatsCritical: "72시간+ {count}",
   supportStatsOldest: "최장 {duration}",
+  supportLoadMore: "이전 문의 더 보기",
+  supportLoadingMore: "문의 불러오는 중…",
   supportUser: "사용자",
   supportAdmin: "운영팀",
   supportBot: "가이드",

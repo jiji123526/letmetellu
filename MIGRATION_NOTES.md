@@ -4,6 +4,30 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Cursor-paginated platform support inbox — 2026-08-02
+
+This frontend-and-Worker optimization bounds the expensive platform-admin support query while keeping inbox totals accurate.
+
+- The initial platform support dashboard now loads at most `40` open tickets plus the existing `30` recently closed tickets.
+- Older open tickets use a stable `(updated_at, id)` cursor and load in additional pages only when the operator selects **Load older tickets**.
+- The Worker accepts a bounded open-ticket page size with a hard maximum of `100`, preventing clients from restoring an unlimited query through URL parameters.
+- Dashboard counts are no longer derived from only the visible ticket page. A separate aggregate query calculates all open, waiting, unread, stale, and oldest-ticket totals across the complete open inbox.
+- The aggregate groups open-thread message timestamps once instead of running the full ticket-preview subqueries for every open row.
+- Regular 30-second dashboard refreshes retain already loaded older pages, so the visible list does not collapse back to the first page while an operator is working.
+
+Trade-offs and UX changes:
+
+- Platform operators initially see the newest 40 open tickets instead of every open ticket. Older items require an explicit **Load older tickets** action; normal users and channel admins are unaffected.
+- Filters operate on tickets currently loaded in the browser, while the badges above them continue to show exact totals for the whole inbox. An operator may need to load older pages to see every ticket matching a high total.
+- The aggregate query still scans message metadata for open support threads on each dashboard refresh. It is substantially more predictable than serializing every ticket, but very large support volume may eventually justify cached counters or a dedicated operational index.
+- Cursor ordering is stable for normal ISO timestamps and uses the ticket ID as a tie-breaker. A ticket updated while paging can move into a newer page; client-side ID deduplication prevents duplicate rows.
+
+Deployment notes:
+
+- no D1 schema migration is required;
+- deploy both the Worker and the Next.js frontend;
+- Vercel deploys only the frontend, so the Worker must still be deployed separately.
+
 ### Indexed media-key resolution fast path — 2026-08-02
 
 This Worker optimization reduces D1 reads on the most common protected-media path without introducing another ownership table.

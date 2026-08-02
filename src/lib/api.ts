@@ -154,6 +154,10 @@ export interface PlatformDashboardResponse {
   error?: string;
   reportsInbox: PlatformDashboardReportsInbox | null;
   tickets: PlatformDashboardTicketPreview[];
+  open_pagination?: {
+    has_more: boolean;
+    next_cursor: string | null;
+  } | null;
   support_stats?: PlatformDashboardSupportStats | null;
 }
 
@@ -1082,7 +1086,7 @@ export async function clearSupportSession(sessionId: string) {
   });
 }
 
-export async function fetchPlatformDashboard() {
+export async function fetchPlatformDashboard(openCursor?: string | null) {
   if (IS_MOCK) {
     const thread = getMockSupportThreadState();
     const openTickets = thread && thread.status === "open" ? [thread] : [];
@@ -1102,10 +1106,13 @@ export async function fetchPlatformDashboard() {
         stale_72h_count: openTickets.filter((item) => item.stale_level === "critical").length,
         oldest_open_duration_minutes: openTickets.reduce((max, item) => Math.max(max, item.open_duration_minutes), 0),
       },
+      open_pagination: { has_more: false, next_cursor: null },
       _status: 200,
     };
   }
-  return requestSupportJson<PlatformDashboardResponse>("/api/platform-admin/support?type=dashboard", {
+  const params = new URLSearchParams({ type: "dashboard" });
+  if (openCursor) params.set("open_cursor", openCursor);
+  return requestSupportJson<PlatformDashboardResponse>(`/api/platform-admin/support?${params.toString()}`, {
     cache: "no-store",
   });
 }
