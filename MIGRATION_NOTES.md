@@ -4,6 +4,30 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Bounded bidirectional chat history window — 2026-08-02
+
+This frontend optimization prevents very long historical browsing sessions from leaving every visited message mounted in the chat DOM.
+
+- Normal initial and context loads are unchanged, but incremental history browsing now keeps an approximately `300`-message mounted window.
+- When older pages push the window over the limit, the newest edge is released and the existing newer-message pagination remains available.
+- When browsing forward again, the oldest edge is released and the existing older-message pagination remains available.
+- Scroll restoration follows the actual DOM position of the boundary message instead of estimating from total scroll height, reducing jumps with mixed-height text, image, and widget bubbles.
+- If the oldest edge would cut a reply away from its parent, the required parent is retained. The `300` limit is therefore deliberately soft by a small number of parent messages.
+- Returning to the latest messages still uses the existing **latest messages** action and resets the context window to the current server page.
+
+Trade-offs and UX changes:
+
+- After traversing more than roughly 300 messages, messages beyond the opposite edge are removed from the DOM and must be fetched again if the user reverses direction far enough. This trades a small amount of repeat network traffic for bounded browser memory and rendering work.
+- The optimization is windowing rather than pixel-perfect row virtualization. It avoids the high-risk requirement to predict dynamic heights for images, widgets, edited captions, reactions, and replies, while still bounding the worst historical-session DOM growth.
+- A long reply chain can make the mounted count slightly exceed 300 because preserving reply context is preferred over displaying a reply as an unrelated top-level message.
+- Search or gallery jumps to an unloaded message continue to replace the current list with the server's small context window, so direct historical navigation remains available.
+
+Deployment notes:
+
+- no Worker or D1 migration is required;
+- deploy the Next.js frontend;
+- this change does not alter message retention on the server, only how much history one browser mounts at once.
+
 ### Cursor-paginated platform support inbox — 2026-08-02
 
 This frontend-and-Worker optimization bounds the expensive platform-admin support query while keeping inbox totals accurate.

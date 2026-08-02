@@ -145,6 +145,30 @@ interface RestrictedChannelSummaryItem {
 type ReportsOwnerFilter = "open" | "warned" | "frozen" | null;
 
 const LIVE_WARNING_THRESHOLDS_MS = [60 * 60 * 1000, 30 * 60 * 1000, 10 * 60 * 1000, 5 * 60 * 1000] as const;
+const MAX_MOUNTED_HISTORY_MESSAGES = 300;
+
+function trimMessageWindow(messages: Message[], edgeToKeep: "older" | "newer"): Message[] {
+  if (messages.length <= MAX_MOUNTED_HISTORY_MESSAGES) return messages;
+  const selected = edgeToKeep === "older"
+    ? messages.slice(0, MAX_MOUNTED_HISTORY_MESSAGES)
+    : messages.slice(-MAX_MOUNTED_HISTORY_MESSAGES);
+  if (edgeToKeep === "older") return selected;
+
+  // Keep a reply's parent mounted even when the chronological cut falls between
+  // them. The limit is intentionally soft by the number of required parents.
+  const selectedIds = new Set(selected.map((message) => message.id));
+  const missingParentIds = new Set(
+    selected
+      .map((message) => message.reply_to)
+      .filter((parentId): parentId is string => !!parentId && !selectedIds.has(parentId)),
+  );
+  if (missingParentIds.size === 0) return selected;
+  const parents = messages.filter((message) => missingParentIds.has(message.id));
+  return [...parents, ...selected].sort((left, right) => {
+    const timeDifference = (left.created_at || "").localeCompare(right.created_at || "");
+    return timeDifference || left.id.localeCompare(right.id);
+  });
+}
 
 function formatLiveThresholdLabel(locale: "ko" | "en", thresholdMs: number): string {
   if (locale === "ko") {
@@ -1770,20 +1794,27 @@ export function ChatView({ channelId }: { channelId: string }) {
       const oldest = messages[0];
       if (!oldest?.created_at) return;
       loadingMore.current = true;
-      const prevHeight = el.scrollHeight;
+      const anchorId = oldest.id;
+      const previousAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
       fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id }).then((data) => {
         if (data.messages && data.messages.length > 0) {
           if (data.messages.length < 50) hasMoreMessages.current = false;
           setMessages((prev) => {
-            // Merge avoiding duplicates
             const ids = new Set(prev.map((m) => m.id));
             const older = data.messages.filter((m: Message) => !ids.has(m.id));
-            return [...older, ...prev];
+            const combined = [...older, ...prev];
+            if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
+            historyModeRef.current = "context";
+            setHistoryMode("context");
+            hasMoreNewerMessages.current = true;
+            return trimMessageWindow(combined, "older");
           });
-          // Preserve scroll position
           requestAnimationFrame(() => {
-            if (el) el.scrollTop = el.scrollHeight - prevHeight;
+            const nextAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
+            if (previousAnchorTop !== null && nextAnchorTop !== null) {
+              el.scrollTop += nextAnchorTop - previousAnchorTop;
+            }
           });
         } else {
           hasMoreMessages.current = false;
@@ -1802,6 +1833,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       const newest = messages[messages.length - 1];
       if (!newest?.created_at) return;
       loadingMore.current = true;
+      const anchorId = newest.id;
+      const previousAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
       fetchMessagePage(fetchChannel, "after", { createdAt: newest.created_at, id: newest.id }).then((data) => {
         if (data.messages?.length) {
@@ -1809,9 +1842,18 @@ export function ChatView({ channelId }: { channelId: string }) {
           setMessages((prev) => {
             const byId = new Map(prev.map((message) => [message.id, message]));
             for (const message of data.messages as Message[]) byId.set(message.id, message);
-            return [...byId.values()].sort((left, right) =>
+            const combined = [...byId.values()].sort((left, right) =>
               (left.created_at || "").localeCompare(right.created_at || "")
             );
+            if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
+            hasMoreMessages.current = true;
+            return trimMessageWindow(combined, "newer");
+          });
+          requestAnimationFrame(() => {
+            const nextAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
+            if (previousAnchorTop !== null && nextAnchorTop !== null) {
+              el.scrollTop += nextAnchorTop - previousAnchorTop;
+            }
           });
         } else {
           hasMoreNewerMessages.current = false;
