@@ -82,8 +82,8 @@ export function DashboardHelpMenu({
         aria-label={t("dashboardHelp")}
         className="flex h-11 w-11 items-center justify-center rounded-full border-none"
         style={{
-          background: open ? "rgba(0,122,255,.88)" : "rgba(255,255,255,.9)",
-          color: open ? "#fff" : "var(--tint)",
+          background: open ? "var(--dashboard-help-active-bg)" : "var(--dashboard-help-bg)",
+          color: open ? "var(--dashboard-help-active-color)" : "var(--dashboard-help-color)",
           boxShadow: "0 12px 24px rgba(15,23,42,.14)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
