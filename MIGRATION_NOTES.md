@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Visibility-gated link preview loading — 2026-08-02
+
+This frontend-only optimization prevents the links panel from launching a burst of preview work whenever it opens.
+
+- Link cards now request Open Graph preview data only when they enter, or approach within `160px` of, the panel's visible scroll area.
+- Preview fetches are limited to at most three concurrent requests across open link panels.
+- Requests for the same URL share one in-flight promise and continue to reuse the existing in-memory result cache.
+- Preview failures are cached as an empty result for the current page session, avoiding repeated failed outbound requests.
+- Link navigation and indexed link pagination are unchanged.
+
+Trade-offs:
+
+- Cards farther down the panel initially show their URL fallback and fetch richer metadata only as the user scrolls toward them.
+- A slow preview among the three active slots can briefly delay later previews, but it no longer allows a 30-request burst against the Worker and external sites.
+- The cache remains process-local in the browser; reopening the app in a new tab can still request previews, while the existing Worker cache provides the shared one-hour layer.
+
+Deployment notes:
+
+- no D1 migration is required;
+- no Worker change is required;
+- deploy the Next.js frontend for this optimization.
+
 ### Live expiry sync for connected viewers — 2026-07-31
 
 This frontend follow-up closes the last obvious gap in live-session expiry behavior for people who are already inside the room.

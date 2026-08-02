@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, type RefObject } from "react";
 import { fetchLinks, fetchPreview } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 import { chatDateLabel } from "@/lib/chat-date";
@@ -21,6 +21,106 @@ interface LinksPanelProps {
 }
 
 const previewCache = new Map<string, { title?: string; image?: string; siteName?: string } | null>();
+const previewRequests = new Map<string, Promise<{ title?: string; image?: string; siteName?: string } | null>>();
+const previewQueue: Array<() => void> = [];
+const MAX_CONCURRENT_PREVIEWS = 3;
+let activePreviewRequests = 0;
+
+function drainPreviewQueue() {
+  while (activePreviewRequests < MAX_CONCURRENT_PREVIEWS && previewQueue.length > 0) {
+    activePreviewRequests += 1;
+    previewQueue.shift()?.();
+  }
+}
+
+function requestPreview(url: string) {
+  if (previewCache.has(url)) return Promise.resolve(previewCache.get(url) ?? null);
+  const pending = previewRequests.get(url);
+  if (pending) return pending;
+
+  const request = new Promise<{ title?: string; image?: string; siteName?: string } | null>((resolve) => {
+    previewQueue.push(() => {
+      fetchPreview(url)
+        .then((data) => data && (data.title || data.image)
+          ? { title: data.title, image: data.image, siteName: data.siteName }
+          : null)
+        .catch(() => null)
+        .then((preview) => {
+          previewCache.set(url, preview);
+          resolve(preview);
+        })
+        .finally(() => {
+          activePreviewRequests -= 1;
+          previewRequests.delete(url);
+          drainPreviewQueue();
+        });
+    });
+    drainPreviewQueue();
+  });
+  previewRequests.set(url, request);
+  return request;
+}
+
+function LinkPreviewCard({
+  link,
+  scrollRootRef,
+  onPreview,
+  onClick,
+}: {
+  link: LinkItem;
+  scrollRootRef: RefObject<HTMLDivElement | null>;
+  onPreview: (url: string, preview: LinkItem["preview"]) => void;
+  onClick: () => void;
+}) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (link.preview !== undefined) return;
+    const card = cardRef.current;
+    const root = scrollRootRef.current;
+    if (!card || !root) return;
+    let cancelled = false;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      void requestPreview(link.url).then((preview) => {
+        if (!cancelled) onPreview(link.url, preview);
+      });
+    }, { root, rootMargin: "160px 0px" });
+    observer.observe(card);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [link.preview, link.url, onPreview, scrollRootRef]);
+
+  return (
+    <div
+      ref={cardRef}
+      className="cursor-pointer"
+      style={{ border: "1px solid var(--hairline)", borderRadius: "12px", overflow: "hidden", transition: "background .15s" }}
+      onClick={onClick}
+    >
+      {link.preview && link.preview.image ? (
+        <img src={link.preview.image} alt="" style={{ width: "100%", maxHeight: "80px", objectFit: "cover", display: "block" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+      ) : null}
+      <div style={{ padding: "8px 10px" }}>
+        {link.preview?.siteName && (
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>{link.preview.siteName}</div>
+        )}
+        {link.preview?.title ? (
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 400, color: "var(--gray-text)", lineHeight: 1.3 }}>
+            {link.preview.title.length > 30 ? link.preview.title.slice(0, 30) + "…" : link.preview.title}
+          </div>
+        ) : (
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
+            {link.url.replace(/^https?:\/\//, "").slice(0, 25)}…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) {
   const { t, locale, timeZone } = useLocale();
@@ -67,26 +167,9 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
     });
   }, [channelId]);
 
-  // Fetch OG previews for visible links
-  useEffect(() => {
-    links.forEach((link, i) => {
-      if (link.preview !== undefined) return; // already fetched or failed
-
-      if (previewCache.has(link.url)) {
-        setLinks((prev) => prev.map((l, j) => j === i ? { ...l, preview: previewCache.get(l.url) } : l));
-        return;
-      }
-
-      fetchPreview(link.url).then((data) => {
-        const preview = data && (data.title || data.image) ? { title: data.title, image: data.image, siteName: data.siteName } : null;
-        previewCache.set(link.url, preview);
-        setLinks((prev) => prev.map((l) => l.url === link.url ? { ...l, preview } : l));
-      }).catch(() => {
-        previewCache.set(link.url, null);
-        setLinks((prev) => prev.map((l) => l.url === link.url ? { ...l, preview: null } : l));
-      });
-    });
-  }, [links.length]);
+  const applyPreview = useCallback((url: string, preview: LinkItem["preview"]) => {
+    setLinks((previous) => previous.map((link) => link.url === url ? { ...link, preview } : link));
+  }, []);
 
   // Load more on scroll
   const handleScroll = useCallback(() => {
@@ -161,10 +244,11 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
                         {dateLabel}
                       </div>
                     )] : []),
-                    <div
+                    <LinkPreviewCard
                       key={`${link.url}-${i}`}
-                      className="cursor-pointer"
-                      style={{ border: "1px solid var(--hairline)", borderRadius: "12px", overflow: "hidden", transition: "background .15s" }}
+                      link={link}
+                      scrollRootRef={scrollRef}
+                      onPreview={applyPreview}
                       onClick={() => {
                         if (onNavigate) {
                           onClose();
@@ -173,25 +257,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
                           window.open(link.url, "_blank");
                         }
                       }}
-                    >
-                      {link.preview && link.preview.image ? (
-                        <img src={link.preview.image} alt="" style={{ width: "100%", maxHeight: "80px", objectFit: "cover", display: "block" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      ) : null}
-                      <div style={{ padding: "8px 10px" }}>
-                        {link.preview?.siteName && (
-                          <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>{link.preview.siteName}</div>
-                        )}
-                        {link.preview?.title ? (
-                          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 400, color: "var(--gray-text)", lineHeight: 1.3 }}>
-                            {link.preview.title.length > 30 ? link.preview.title.slice(0, 30) + "…" : link.preview.title}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
-                            {link.url.replace(/^https?:\/\//, "").slice(0, 25)}…
-                          </div>
-                        )}
-                      </div>
-                    </div>,
+                    />,
                   ];
                 });
               })()}
