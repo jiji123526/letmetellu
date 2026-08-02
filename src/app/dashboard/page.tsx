@@ -237,7 +237,6 @@ export default function DashboardPage() {
   const submitLinkedChannelSearch = useCallback((value: string) => {
     const channelId = getChannelIdFromLink(value);
     if (!channelId) return false;
-    setLinkedChannel(null);
     setSubmittedLinkedChannelId(channelId);
     return true;
   }, []);
