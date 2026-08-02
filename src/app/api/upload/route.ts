@@ -34,6 +34,7 @@ export async function POST(request: Request) {
   const clientIp = forwardedFor?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "";
   const headers: Record<string, string> = {
     "Content-Type": contentType,
+    ...(contentLength > 0 ? { "Content-Length": String(contentLength) } : {}),
     ...(clientIp ? { "X-Client-IP": clientIp } : {}),
   };
 
@@ -51,12 +52,20 @@ export async function POST(request: Request) {
     headers["X-User-Id"] = session.user.id;
   }
 
-  const response = await fetch(`${workerUrl}/api/upload?channel=${encodeURIComponent(channelId)}&purpose=${encodeURIComponent(purpose)}`, {
+  if (!request.body) {
+    return NextResponse.json({ error: "missing body" }, { status: 400 });
+  }
+  const uploadRequest: RequestInit & { duplex: "half" } = {
     method: "POST",
     headers,
-    body: await request.arrayBuffer(),
+    body: request.body,
+    duplex: "half",
     cache: "no-store",
-  });
+  };
+  const response = await fetch(
+    `${workerUrl}/api/upload?channel=${encodeURIComponent(channelId)}&purpose=${encodeURIComponent(purpose)}`,
+    uploadRequest,
+  );
   const data = await response.json();
   return NextResponse.json(data, { status: response.status });
 }

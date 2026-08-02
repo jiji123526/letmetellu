@@ -47,6 +47,41 @@ type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "backgrou
 
 const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 const BACKGROUND_COLORS = ["#f2f2f7", "#eef5ff", "#f2efff", "#eef8f2", "#fff5e8", "#fff0f3", "#202124"];
+const BACKGROUND_IMAGE_MAX_DIMENSION = 1920;
+const BACKGROUND_IMAGE_COMPRESSION_THRESHOLD = 2 * 1024 * 1024;
+
+async function optimizeBackgroundImage(file: File): Promise<File> {
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("invalid background image"));
+      image.src = objectUrl;
+    });
+    const largestDimension = Math.max(image.naturalWidth, image.naturalHeight);
+    if (largestDimension <= BACKGROUND_IMAGE_MAX_DIMENSION && file.size <= BACKGROUND_IMAGE_COMPRESSION_THRESHOLD) {
+      return file;
+    }
+    const scale = Math.min(1, BACKGROUND_IMAGE_MAX_DIMENSION / largestDimension);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("background canvas unavailable");
+    context.drawImage(image, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.84));
+    if (!blob) throw new Error("background compression failed");
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "background"}.jpg`, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 function darkenColor(hex: string, amount: number): string {
   const num = parseInt(hex.slice(1), 16);
@@ -439,7 +474,7 @@ export function AdminPanel(props: AdminPanelProps) {
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   hidden
-                  onChange={(event) => {
+                  onChange={async (event) => {
                     const file = event.target.files?.[0];
                     event.target.value = "";
                     if (!file) return;
@@ -448,8 +483,13 @@ export function AdminPanel(props: AdminPanelProps) {
                       setBackgroundError(t("backgroundFileTooLarge"));
                       return;
                     }
-                    setBackgroundImageFile(file);
-                    setSelectedBackgroundImage(URL.createObjectURL(file));
+                    try {
+                      const optimizedFile = await optimizeBackgroundImage(file);
+                      setBackgroundImageFile(optimizedFile);
+                      setSelectedBackgroundImage(URL.createObjectURL(optimizedFile));
+                    } catch {
+                      setBackgroundError(t("backgroundUploadFailed"));
+                    }
                   }}
                 />
                 <label style={{ display: "block", fontSize: "13px", color: "var(--meta)", marginBottom: "14px" }}>

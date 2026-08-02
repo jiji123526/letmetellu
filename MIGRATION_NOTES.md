@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Streaming upload proxy and bounded background assets — 2026-08-02
+
+This frontend optimization removes an avoidable full-file copy in the Vercel upload proxy and reduces oversized static chat-background uploads.
+
+- The Next.js upload Route Handler now forwards the incoming Web `ReadableStream` to the Worker instead of first materializing the complete body with `request.arrayBuffer()`.
+- The validated original `Content-Length` is forwarded when present, allowing the Worker to reject known oversized uploads before reading them.
+- The Worker still performs its existing byte-by-byte 10 MB enforcement before writing to R2, so missing or forged length headers do not bypass the hard upload limit.
+- JPEG, PNG, and WebP chat backgrounds larger than `2 MB` or with a dimension above `1920px` are resized in the browser to fit within `1920 × 1920` and encoded as JPEG at quality `0.84` before upload.
+- Smaller background files remain byte-for-byte unchanged. Message images retain their existing `1200px` optimization, and animated GIF handling is unchanged.
+
+Trade-offs and UX changes:
+
+- Large background images upload faster and consume less R2 storage and delivery bandwidth, but JPEG conversion removes transparency and can introduce mild compression artifacts. The channel's configurable overlay and blur remain unchanged.
+- Background optimization adds a short client-side processing step before upload. On older phones this can briefly use CPU and memory, but avoids repeatedly transferring and decoding a much larger original on every channel visit.
+- Streaming removes the Next.js `arrayBuffer` copy, but the Worker intentionally retains its bounded buffer so it can enforce the actual 10 MB limit before committing an object. Fully direct-to-R2 streaming would require a separate signed-upload/finalization protocol to preserve this security guarantee.
+- This does not generate separate thumbnail objects. Existing message and gallery surfaces continue to use the optimized main image; dedicated thumbnails remain a possible later improvement if media traffic grows substantially.
+
+Deployment notes:
+
+- no D1 migration is required;
+- deploy the Next.js frontend;
+- no Worker deployment is required because the Worker's validation and R2 write path are unchanged.
+
 ### Bounded bidirectional chat history window — 2026-08-02
 
 This frontend optimization prevents very long historical browsing sessions from leaving every visited message mounted in the chat DOM.
