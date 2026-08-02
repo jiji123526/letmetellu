@@ -49,7 +49,7 @@ interface SupportDashboardPreview {
 
 interface DashboardListItem {
   id: string;
-  group: "reports" | "tickets" | "owned" | "joined" | "support-preview";
+  group: "reports" | "tickets" | "owned" | "joined" | "search-result" | "support-preview";
   kind: "channel" | "support";
   supportThreadId?: string;
   supportTopic?: string | null;
@@ -221,7 +221,7 @@ export default function DashboardPage() {
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean; width: number } | null>(null);
-  const suppressClickRef = useRef(false);
+  const suppressClickRef = useRef<string | null>(null);
   const channelLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copiedChannelId, setCopiedChannelId] = useState<string | null>(null);
@@ -624,7 +624,7 @@ export default function DashboardPage() {
       : [...ownedItems, ...fallbackOwnedItems, ...recentItems];
     if (!isPlatformAdmin && linkedChannel && !items.some((item) => item.id === linkedChannel.id)) {
       items.push({
-        group: "joined",
+        group: "search-result",
         kind: "channel",
         route: `/ch/${linkedChannel.id}`,
         id: linkedChannel.id,
@@ -1075,7 +1075,7 @@ export default function DashboardPage() {
       const start = swipeStartRef.current;
       if (!start || start.id !== channelId || start.moved) return;
       start.moved = true;
-      suppressClickRef.current = true;
+      suppressClickRef.current = channelId;
       if (navigator.vibrate) navigator.vibrate(20);
       void copyChannelLink(channelId);
     }, 550);
@@ -1098,7 +1098,7 @@ export default function DashboardPage() {
     clearChannelLongPress();
     const start = swipeStartRef.current;
     if (!start || start.id !== channelId) return;
-    suppressClickRef.current = suppressClickRef.current || start.moved;
+    if (start.moved) suppressClickRef.current = channelId;
     setSwipe((current) => ({
       id: current.id,
       offset: current.id === channelId && current.offset < -(start.width / 2) ? -start.width : 0,
@@ -1371,7 +1371,7 @@ export default function DashboardPage() {
               const showSectionLabel = (() => {
                 if (index > 0 && previousItem?.group === item.group) return false;
                 if (item.group === "reports" || item.group === "tickets") return true;
-                if (item.group === "support-preview") return false;
+                if (item.group === "support-preview" || item.group === "search-result") return false;
                 if (platformDashboard) return false;
                 return isLoggedIn && ownedChannelIds.size > 0;
               })();
@@ -1450,7 +1450,7 @@ export default function DashboardPage() {
                   onContextMenu={canCopyItem ? (event) => {
                     event.preventDefault();
                     clearChannelLongPress();
-                    suppressClickRef.current = true;
+                    suppressClickRef.current = item.id;
                     void copyChannelLink(item.id);
                   } : undefined}
                   onClick={() => {
@@ -1464,8 +1464,8 @@ export default function DashboardPage() {
                       });
                       return;
                     }
-                    if (suppressClickRef.current) {
-                      suppressClickRef.current = false;
+                    if (suppressClickRef.current === item.id) {
+                      suppressClickRef.current = null;
                       return;
                     }
                     if (swipe.id === item.id && swipe.offset < 0) {
