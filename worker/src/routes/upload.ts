@@ -193,8 +193,34 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
   let pendingTicket: { purpose: UploadPurpose; expires_at: string } | null = null;
 
   if (inferredChannelId) {
-    const [channelLookupResult, pendingTicketResult] = await env.DB.batch([
-      env.DB.prepare(
+    // Message and DM uploads already have a unique indexed key in
+    // upload_tickets. Resolve that first so the common media path needs only
+    // one narrow D1 read instead of a channel lookup plus a ticket lookup.
+    const ticket = await env.DB.prepare(
+      "SELECT channel_id, purpose, status, expires_at FROM upload_tickets WHERE key = ? LIMIT 1"
+    ).bind(decodedKey).first<{
+      channel_id: string;
+      purpose: UploadPurpose;
+      status: "pending" | "attached" | "cancelled";
+      expires_at: string;
+    }>();
+
+    if (ticket?.status === "pending") {
+      pendingTicket = { purpose: ticket.purpose, expires_at: ticket.expires_at };
+    } else if (ticket?.status === "attached") {
+      mediaRow = {
+        channel_id: ticket.channel_id,
+        source_type: ticket.purpose === "dm" ? "dm" : "message",
+      };
+    } else if (ticket?.status === "cancelled") {
+      return new Response("not found", { status: 404 });
+    }
+
+    // Channel assets intentionally do not use upload tickets. They are read
+    // far less often and are cached for much longer, so fall back to the
+    // channel row only when no message/DM ticket resolved the key.
+    if (!mediaRow && !pendingTicket) {
+      mediaRow = await env.DB.prepare(
         `SELECT id AS channel_id,
                 CASE
                   WHEN profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ? THEN 'channel-profile'
@@ -204,16 +230,12 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
          FROM channels
          WHERE id = ?
          LIMIT 1`
-      ).bind(mediaSuffix, mediaSuffix, mediaSuffix, mediaSuffix, inferredChannelId),
-      env.DB.prepare(
-        "SELECT purpose, expires_at FROM upload_tickets WHERE key = ? AND status = 'pending' LIMIT 1"
-      ).bind(decodedKey),
-    ]);
-    mediaRow = (channelLookupResult.results?.[0] as { channel_id: string; source_type: string } | undefined) || null;
-    pendingTicket = (pendingTicketResult.results?.[0] as { purpose: UploadPurpose; expires_at: string } | undefined) || null;
+      ).bind(mediaSuffix, mediaSuffix, mediaSuffix, mediaSuffix, inferredChannelId)
+        .first<{ channel_id: string; source_type: string }>();
+    }
   }
 
-  if (!mediaRow) {
+  if (!mediaRow && !pendingTicket) {
     // Legacy or malformed keys still fall back to the wider reverse lookup.
     const mediaLookupResults = await env.DB.batch([
       env.DB.prepare(

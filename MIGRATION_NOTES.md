@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Indexed media-key resolution fast path — 2026-08-02
+
+This Worker optimization reduces D1 reads on the most common protected-media path without introducing another ownership table.
+
+- Attached message and DM media now resolve directly through the existing unique `upload_tickets.key` index.
+- A normal message-image request now needs one narrow ticket lookup before token verification and R2 delivery, instead of batching a channel lookup together with a pending-ticket lookup on every request.
+- Pending tickets remain hidden until attachment, and cancelled tickets now return `404` immediately instead of falling through to the broad channel-key path.
+- Profile images and channel backgrounds continue to fall back to the channel row because channel assets intentionally do not create upload tickets.
+- Malformed and legacy object keys retain the older multi-table compatibility lookup.
+
+Trade-offs:
+
+- Channel profile/background reads without an upload ticket now perform their channel lookup after the key lookup, so an uncached channel asset can incur two sequential D1 reads. These assets are comparatively rare and profile images use long-lived immutable browser caching.
+- Attached upload-ticket rows must remain present for as long as their message or DM media exists. Existing delete paths already remove those rows together with their attachment.
+- Legacy objects do not receive the fast path until they are migrated to indexed keys; compatibility is preserved at the cost of their existing wider lookup.
+
+Deployment notes:
+
+- no new D1 migration is required because `upload_tickets.key` has been unique and indexed since migration `0016`;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line by itself.
+
 ### Visibility-gated link preview loading — 2026-08-02
 
 This frontend-only optimization prevents the links panel from launching a burst of preview work whenever it opens.
