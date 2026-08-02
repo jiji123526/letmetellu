@@ -5,7 +5,6 @@ import { isReportsChannel } from "../lib/special-channels";
 import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
 import { deleteMediaByUrl } from "../lib/media";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
-import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { syncMessageLink } from "../lib/message-links";
@@ -103,9 +102,10 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);
     const chatRoom = env.CHAT_ROOM.get(doId);
-    const messageRateLimitResponse = await chatRoom.fetch(new Request("http://internal/message-rate-limit", {
+    const messageRateLimitResponse = await chatRoom.fetch(new Request("http://internal/channel-rate-limit", {
       method: "POST",
       body: JSON.stringify({
+        scope: "message-send",
         subjectKey: `${requesterUid}:${requesterDeviceId || "owner"}`,
         limit: MESSAGE_RATE_LIMIT_MAX,
         windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
@@ -355,13 +355,21 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
 
-    const editRateLimit = await consumeDurableRateLimit({
-      env,
-      scope: "message-edit",
-      subjectKey: `${editParent}:${requesterUid}:${requesterDeviceId || "owner"}`,
-      limit: MESSAGE_RATE_LIMIT_MAX,
-      windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
-    });
+    const doId = env.CHAT_ROOM.idFromName(editParent);
+    const chatRoom = env.CHAT_ROOM.get(doId);
+    const editRateLimitResponse = await chatRoom.fetch(new Request("http://internal/channel-rate-limit", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: "message-edit",
+        subjectKey: `${requesterUid}:${requesterDeviceId || "owner"}`,
+        limit: MESSAGE_RATE_LIMIT_MAX,
+        windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
+      }),
+    }));
+    if (!editRateLimitResponse.ok) {
+      return Response.json({ error: "rate_limit_unavailable" }, { status: 503 });
+    }
+    const editRateLimit = await editRateLimitResponse.json() as { ok: boolean };
     if (!editRateLimit.ok) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
@@ -395,12 +403,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     await syncMessageLink(env, message_id as string, channel_id as string, msg.created_at, text);
 
     // Broadcast edit with payload
-    const broadcastChannelId = (channel_id as string).endsWith("_live")
-      ? (channel_id as string).replace(/_live$/, "")
-      : channel_id as string;
-    const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
-    const stub = env.CHAT_ROOM.get(doId);
-    await stub.fetch(new Request("http://internal/broadcast", {
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
       method: "POST",
       body: JSON.stringify({ type: "message-edited", message_id, text, edited: true }),
     }));

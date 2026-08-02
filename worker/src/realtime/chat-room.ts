@@ -52,12 +52,16 @@ export class ChatRoom {
     socket.serializeAttachment(connection);
   }
 
-  private async rateLimitStorageKey(subjectKey: string): Promise<string> {
+  private async rateLimitStorageKey(scope: string, subjectKey: string): Promise<string> {
+    // Preserve the already-deployed message-send key format so rollout neither
+    // resets active buckets nor strands a second record for every sender.
+    const isExistingMessageScope = scope === "message-send";
+    const keyMaterial = isExistingMessageScope ? subjectKey : `${scope}:${subjectKey}`;
     const digest = new Uint8Array(
-      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(subjectKey))
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyMaterial))
     );
     const digestHex = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return "message-rate:" + digestHex;
+    return (isExistingMessageScope ? "message-rate:" : "channel-rate:") + digestHex;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -149,15 +153,16 @@ export class ChatRoom {
       return new Response("ok");
     }
 
-    if (url.pathname.endsWith("/message-rate-limit")) {
-      const body = await request.json() as { subjectKey?: unknown; limit?: unknown; windowMs?: unknown };
+    if (url.pathname.endsWith("/channel-rate-limit")) {
+      const body = await request.json() as { scope?: unknown; subjectKey?: unknown; limit?: unknown; windowMs?: unknown };
+      const scope = typeof body.scope === "string" ? body.scope : "";
       const subjectKey = typeof body.subjectKey === "string" ? body.subjectKey : "";
       const limit = typeof body.limit === "number" ? Math.floor(body.limit) : 0;
       const windowMs = typeof body.windowMs === "number" ? Math.floor(body.windowMs) : 0;
-      if (!subjectKey || subjectKey.length > 512 || limit < 1 || limit > 100 || windowMs < 1_000 || windowMs > 60_000) {
+      if (!/^[a-z][a-z0-9-]{0,63}$/.test(scope) || !subjectKey || subjectKey.length > 512 || limit < 1 || limit > 100 || windowMs < 1_000 || windowMs > 60_000) {
         return Response.json({ error: "invalid rate limit request" }, { status: 400 });
       }
-      const storageKey = await this.rateLimitStorageKey(subjectKey);
+      const storageKey = await this.rateLimitStorageKey(scope, subjectKey);
       const nowMs = Date.now();
       const result = await this.state.storage.transaction(async (transaction) => {
         const previous = await transaction.get<ChannelRateLimitBucket>(storageKey) || null;

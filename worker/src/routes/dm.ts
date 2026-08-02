@@ -3,7 +3,6 @@ import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/
 import { isReportsChannel } from "../lib/special-channels";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation";
-import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
@@ -77,13 +76,21 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
 
-    const dmRateLimit = await consumeDurableRateLimit({
-      env,
-      scope: "dm-send",
-      subjectKey: `${parentChannelId}:${requesterUid}:${requesterDeviceId || "unknown"}`,
-      limit: DM_RATE_LIMIT_MAX,
-      windowMs: DM_RATE_LIMIT_WINDOW_MS,
-    });
+    const doId = env.CHAT_ROOM.idFromName(parentChannelId);
+    const chatRoom = env.CHAT_ROOM.get(doId);
+    const dmRateLimitResponse = await chatRoom.fetch(new Request("http://internal/channel-rate-limit", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: "dm-send",
+        subjectKey: `${requesterUid}:${requesterDeviceId}`,
+        limit: DM_RATE_LIMIT_MAX,
+        windowMs: DM_RATE_LIMIT_WINDOW_MS,
+      }),
+    }));
+    if (!dmRateLimitResponse.ok) {
+      return Response.json({ error: "rate_limit_unavailable" }, { status: 503 });
+    }
+    const dmRateLimit = await dmRateLimitResponse.json() as { ok: boolean };
     if (!dmRateLimit.ok) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
@@ -161,10 +168,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     ]);
 
     // Broadcast DM with payload — always use parent channel DO
-    const doId = env.CHAT_ROOM.idFromName(parentChannelId);
-    const stub = env.CHAT_ROOM.get(doId);
     const newDm = { id, uid: requesterUid, auth_uid: requesterUid, nick: nick || null, text: rawText, image: image || null, channel_id, created_at };
-    await stub.fetch(new Request("http://internal/broadcast", {
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
       method: "POST",
       body: JSON.stringify({ type: "dm-new", dm: newDm }),
     }));
