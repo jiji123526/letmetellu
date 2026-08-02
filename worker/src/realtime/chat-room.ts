@@ -2,6 +2,7 @@ import { Env } from "../types";
 import { verifyAdminWsToken, verifyRoomViewerWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
+import { advanceChannelRateLimit, type ChannelRateLimitBucket } from "../lib/channel-rate-limit";
 
 interface Connection {
   uid: string;
@@ -49,6 +50,14 @@ export class ChatRoom {
   private persistConnection(socket: WebSocket, connection: Connection): void {
     this.connections.set(socket, connection);
     socket.serializeAttachment(connection);
+  }
+
+  private async rateLimitStorageKey(subjectKey: string): Promise<string> {
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(subjectKey))
+    );
+    const digestHex = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return "message-rate:" + digestHex;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -138,6 +147,28 @@ export class ChatRoom {
       this.lastPresenceCount = -1;
       this.lastLiveCount = -1;
       return new Response("ok");
+    }
+
+    if (url.pathname.endsWith("/message-rate-limit")) {
+      const body = await request.json() as { subjectKey?: unknown; limit?: unknown; windowMs?: unknown };
+      const subjectKey = typeof body.subjectKey === "string" ? body.subjectKey : "";
+      const limit = typeof body.limit === "number" ? Math.floor(body.limit) : 0;
+      const windowMs = typeof body.windowMs === "number" ? Math.floor(body.windowMs) : 0;
+      if (!subjectKey || subjectKey.length > 512 || limit < 1 || limit > 100 || windowMs < 1_000 || windowMs > 60_000) {
+        return Response.json({ error: "invalid rate limit request" }, { status: 400 });
+      }
+      const storageKey = await this.rateLimitStorageKey(subjectKey);
+      const nowMs = Date.now();
+      const result = await this.state.storage.transaction(async (transaction) => {
+        const previous = await transaction.get<ChannelRateLimitBucket>(storageKey) || null;
+        const next = advanceChannelRateLimit(previous, nowMs, windowMs, limit);
+        await transaction.put(storageKey, {
+          windowStartMs: next.windowStartMs,
+          count: next.count,
+        } satisfies ChannelRateLimitBucket);
+        return next;
+      });
+      return Response.json({ ok: result.ok, count: result.count, resetAt: result.resetAt });
     }
 
     // Internal broadcast trigger (from Worker routes after D1 write)

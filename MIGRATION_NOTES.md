@@ -4,6 +4,37 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-local durable message rate limits — 2026-08-02
+
+This Worker optimization removes the D1 write/read/delete lifecycle previously performed for every new chat message.
+
+- New-message rate limits now run inside the parent channel's Durable Object, which already serializes that channel's real-time activity.
+- Each user/device pair maps to one SHA-256-keyed Durable Object storage record containing only the current aligned 10-second bucket and count.
+- The record is overwritten instead of inserting a new D1 row for every time window, and it remains valid across WebSocket hibernation or object eviction.
+- The existing `5` messages per `10` seconds rule and aligned-window behavior are unchanged.
+- Live and normal messages share the parent channel's limiter, matching the previous parent-channel D1 subject scope.
+- The message route fails closed with `503` if the internal limiter request cannot complete; it never writes a message without a successful limit decision.
+- Edit, reaction, support, authentication, and upload limits retain their existing D1-backed implementation because their traffic is lower or their scope is not naturally owned by one channel DO.
+
+Cost and storage impact:
+
+- A successful message no longer updates `durable_rate_limits`, reads the row back, maintains its D1 indexes, retains a per-window row for seven days, and later deletes that row.
+- The trade is one additional internal Durable Object request and one small DO storage overwrite per message. DO requests are inexpensive on the paid plan, and the fixed per-user record avoids unbounded per-window row growth.
+- Subject identifiers are SHA-256 hashed before becoming storage keys; raw UID/device combinations are not stored as Durable Object keys.
+
+Trade-offs and UX changes:
+
+- There is no intended user-visible change at normal send rates. The sixth message in the same aligned 10-second window is still rejected.
+- Rate-limit state now depends on the channel Durable Object. A temporary DO storage failure produces a send failure instead of falling back to an unprotected write.
+- Old `message-send` rows already present in D1 are not needed by the new path. Existing scheduled retention will remove them naturally, avoiding a destructive one-time cleanup.
+- Durable Object storage keeps one tiny record per user/device that has sent in a channel. At the expected 30 users per channel this is negligible, but a later retention alarm can prune very old subjects if channels accumulate extremely large historical audiences.
+
+Deployment notes:
+
+- no D1 schema or Durable Object namespace migration is required;
+- deploy the Worker separately from Vercel;
+- monitor message `429`/`503`, Durable Object requests, DO storage writes, and D1 `rows_written` after rollout.
+
 ### Hibernatable channel WebSockets — 2026-08-02
 
 This Worker optimization removes the largest avoidable Durable Object duration cost in idle chat rooms.

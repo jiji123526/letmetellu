@@ -101,13 +101,20 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
 
-    const messageRateLimit = await consumeDurableRateLimit({
-      env,
-      scope: "message-send",
-      subjectKey: `${parentChannelId}:${requesterUid}:${requesterDeviceId || "owner"}`,
-      limit: MESSAGE_RATE_LIMIT_MAX,
-      windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
-    });
+    const doId = env.CHAT_ROOM.idFromName(parentChannelId);
+    const chatRoom = env.CHAT_ROOM.get(doId);
+    const messageRateLimitResponse = await chatRoom.fetch(new Request("http://internal/message-rate-limit", {
+      method: "POST",
+      body: JSON.stringify({
+        subjectKey: `${requesterUid}:${requesterDeviceId || "owner"}`,
+        limit: MESSAGE_RATE_LIMIT_MAX,
+        windowMs: MESSAGE_RATE_LIMIT_WINDOW_MS,
+      }),
+    }));
+    if (!messageRateLimitResponse.ok) {
+      return Response.json({ error: "rate_limit_unavailable" }, { status: 503 });
+    }
+    const messageRateLimit = await messageRateLimitResponse.json() as { ok: boolean };
     if (!messageRateLimit.ok) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
@@ -188,20 +195,14 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     await env.DB.batch(stmts);
     await syncMessageLink(env, id, channel_id as string, created_at, text as string | undefined);
 
-    // Broadcast via Durable Object
-    // For live channels, only broadcast to the parent channel's DO (where clients connect)
-    const broadcastChannelId = (channel_id as string).endsWith("_live")
-      ? (channel_id as string).replace(/_live$/, "")
-      : channel_id as string;
+    // Broadcast through the same parent-channel Durable Object used above.
     const newMessage = {
       id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
       channel_id, image: image || null, reply_to: reply_to || null,
       report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
       deleted: 0, edited: 0, reactions: "{}", created_at,
     };
-    const doId = env.CHAT_ROOM.idFromName(broadcastChannelId);
-    const stub = env.CHAT_ROOM.get(doId);
-    await stub.fetch(new Request("http://internal/broadcast", {
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
       method: "POST",
       body: JSON.stringify({ type: "message-new", message: newMessage }),
     }));
