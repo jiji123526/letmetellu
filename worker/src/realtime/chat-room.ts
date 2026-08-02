@@ -11,12 +11,12 @@ interface Connection {
   viewerOverride: boolean;
   authorized: boolean;
   authAttempt: number;
+  inLive: boolean;
 }
 
 export class ChatRoom {
   private static readonly PRESENCE_BROADCAST_DEBOUNCE_MS = 150;
   private connections: Map<WebSocket, Connection> = new Map();
-  private liveViewers: Set<WebSocket> = new Set();
   private state: DurableObjectState;
   private env: Env;
   private currentPasscode: string | null = null;
@@ -29,6 +29,26 @@ export class ChatRoom {
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
+    for (const socket of state.getWebSockets()) {
+      const connection = socket.deserializeAttachment() as Connection | null;
+      if (connection) this.connections.set(socket, { ...connection, inLive: !!connection.inLive });
+    }
+  }
+
+  private async ensurePasscode(channelId: string): Promise<boolean> {
+    if (this.passcodeLoaded) return true;
+    const channel = await this.env.DB.prepare(
+      "SELECT passcode FROM channels WHERE id = ?"
+    ).bind(channelId).first() as { passcode: string | null } | null;
+    if (!channel) return false;
+    this.currentPasscode = channel.passcode;
+    this.passcodeLoaded = true;
+    return true;
+  }
+
+  private persistConnection(socket: WebSocket, connection: Connection): void {
+    this.connections.set(socket, connection);
+    socket.serializeAttachment(connection);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -39,21 +59,13 @@ export class ChatRoom {
       const channelId = url.pathname.split("/ws/")[1]?.split("/")[0] || "";
       if (!channelId) return new Response("missing channel", { status: 400 });
 
-      if (!this.passcodeLoaded) {
-        const channel = await this.env.DB.prepare(
-          "SELECT passcode FROM channels WHERE id = ?"
-        ).bind(channelId).first() as { passcode: string | null } | null;
-        if (!channel) return new Response("channel not found", { status: 404 });
-        this.currentPasscode = channel.passcode;
-        this.passcodeLoaded = true;
-      }
+      if (!await this.ensurePasscode(channelId)) return new Response("channel not found", { status: 404 });
 
       const pair = new WebSocketPair();
       const [client, server] = Object.values(pair);
 
-      server.accept();
       const uid = url.searchParams.get("uid") || "anon";
-      this.connections.set(server, {
+      const connection: Connection = {
         uid,
         channelId,
         joinedAt: Date.now(),
@@ -61,140 +73,14 @@ export class ChatRoom {
         viewerOverride: false,
         authorized: isReportsChannel(channelId, this.env) ? false : !this.currentPasscode,
         authAttempt: 0,
-      });
+        inLive: false,
+      };
+      server.serializeAttachment(connection);
+      this.state.acceptWebSocket(server);
+      this.connections.set(server, connection);
       if (!isReportsChannel(channelId, this.env) && !this.currentPasscode) {
         server.send(JSON.stringify({ type: "room-authenticated" }));
       }
-
-      server.addEventListener("message", async (event) => {
-        if (typeof event.data !== "string") return;
-        try {
-          const data = JSON.parse(event.data);
-          const conn = this.connections.get(server);
-          if (!conn) return;
-
-          if (data.type === "auth-room") {
-            const authAttempt = ++conn.authAttempt;
-            const expectedPasscode = this.currentPasscode;
-            const authResponse = (type: string) => JSON.stringify({
-              type,
-              requestId: typeof data.requestId === "string" ? data.requestId : undefined,
-            });
-            if (isReportsChannel(conn.channelId, this.env)) {
-              conn.authorized = conn.isAdmin;
-              server.send(authResponse(conn.isAdmin ? "room-authenticated" : "room-auth-required"));
-            } else if (conn.isAdmin) {
-              conn.authorized = true;
-              server.send(authResponse("room-authenticated"));
-            } else if (!this.currentPasscode) {
-              conn.authorized = true;
-              server.send(authResponse("room-authenticated"));
-            } else if (typeof data.token === "string" && data.token) {
-              const payload = await authorizeRoomToken(data.token, conn.channelId, this.currentPasscode, this.env);
-              // A newer token attempt or passcode change supersedes this
-              // asynchronous verification result.
-              if (
-                conn.authAttempt !== authAttempt
-                || this.currentPasscode !== expectedPasscode
-              ) return;
-              if (payload) {
-                conn.authorized = true;
-                server.send(authResponse("room-authenticated"));
-                this.queuePresenceBroadcast();
-              } else {
-                conn.authorized = false;
-                server.send(authResponse("room-auth-failed"));
-              }
-            } else {
-              conn.authorized = false;
-              server.send(authResponse("room-auth-required"));
-            }
-          }
-
-          if (data.type === "auth-viewer" && typeof data.token === "string") {
-            const payload = await verifyViewerWsToken(data.token, this.env);
-            const authResponse = JSON.stringify({
-              type: payload?.channel_id === conn.channelId && payload?.user_id ? "room-authenticated" : "room-auth-failed",
-              requestId: typeof data.requestId === "string" ? data.requestId : undefined,
-            });
-            if (payload?.channel_id === conn.channelId && await isReportsChannelOwner(payload.user_id, this.env)) {
-              conn.authAttempt++;
-              conn.uid = payload.user_id;
-              conn.viewerOverride = true;
-              conn.authorized = true;
-              server.send(authResponse);
-              this.queuePresenceBroadcast();
-            } else {
-              conn.viewerOverride = false;
-              conn.authorized = false;
-              server.send(authResponse);
-            }
-          }
-
-          if (data.type === "auth-room-viewer" && typeof data.token === "string") {
-            const payload = await verifyRoomViewerWsToken(data.token, this.env);
-            const authResponse = JSON.stringify({
-              type: payload?.channel_id === conn.channelId ? "room-authenticated" : "room-auth-failed",
-              requestId: typeof data.requestId === "string" ? data.requestId : undefined,
-            });
-            if (payload?.channel_id === conn.channelId) {
-              conn.authAttempt++;
-              conn.uid = payload.user_id;
-              conn.authorized = true;
-              server.send(authResponse);
-              this.queuePresenceBroadcast();
-            } else {
-              conn.authorized = false;
-              server.send(authResponse);
-            }
-          }
-
-          if (data.type === "emoji-fx" || data.type === "typing") {
-            if (conn.authorized) this.broadcast(event.data);
-          }
-          if (data.type === "join-live") {
-            if (!conn.authorized) return;
-            this.liveViewers.add(server);
-            this.queueLivePresenceBroadcast();
-          }
-          if (data.type === "leave-live") {
-            if (!conn.authorized) return;
-            this.liveViewers.delete(server);
-            this.queueLivePresenceBroadcast();
-          }
-          // Admin authentication via WebSocket message
-          if (data.type === "auth-admin" && typeof data.token === "string") {
-            const payload = await verifyAdminWsToken(data.token, this.env);
-            if (conn && payload?.channel_id === conn.channelId) {
-              // Invalidate any slower room-token verification that began before
-              // this admin token succeeded, so it cannot revoke admin access.
-              conn.authAttempt++;
-              conn.uid = payload.user_id;
-              conn.isAdmin = true;
-              conn.viewerOverride = false;
-              conn.authorized = true;
-              server.send(JSON.stringify({ type: "admin-authenticated" }));
-              this.queuePresenceBroadcast();
-            } else {
-              server.send(JSON.stringify({ type: "admin-auth-failed" }));
-            }
-          }
-        } catch {}
-      });
-
-      server.addEventListener("close", () => {
-        this.connections.delete(server);
-        this.liveViewers.delete(server);
-        this.queuePresenceBroadcast();
-        this.queueLivePresenceBroadcast();
-      });
-
-      server.addEventListener("error", () => {
-        this.connections.delete(server);
-        this.liveViewers.delete(server);
-        this.queuePresenceBroadcast();
-        this.queueLivePresenceBroadcast();
-      });
 
       this.queuePresenceBroadcast();
 
@@ -213,7 +99,10 @@ export class ChatRoom {
       this.passcodeLoaded = true;
       for (const [ws, connection] of this.connections) {
         connection.authAttempt++;
-        if (connection.isAdmin || connection.viewerOverride) continue;
+        if (connection.isAdmin || connection.viewerOverride) {
+          this.persistConnection(ws, connection);
+          continue;
+        }
         if (this.currentPasscode) {
           if (connection.authorized) {
             try {
@@ -221,13 +110,14 @@ export class ChatRoom {
             } catch {}
           }
           connection.authorized = false;
-          this.liveViewers.delete(ws);
+          connection.inLive = false;
         } else {
           connection.authorized = true;
           try {
             ws.send(JSON.stringify({ type: "room-access-opened" }));
           } catch {}
         }
+        this.persistConnection(ws, connection);
       }
       this.queuePresenceBroadcast();
       this.queueLivePresenceBroadcast();
@@ -243,7 +133,6 @@ export class ChatRoom {
         } catch {}
       }
       this.connections.clear();
-      this.liveViewers.clear();
       this.currentPasscode = null;
       this.passcodeLoaded = false;
       this.lastPresenceCount = -1;
@@ -269,10 +158,136 @@ export class ChatRoom {
     // Presence query
     if (url.pathname.endsWith("/presence")) {
       const count = [...this.connections.values()].filter((connection) => connection.authorized).length;
-      return Response.json({ count, liveCount: this.liveViewers.size });
+      return Response.json({ count, liveCount: this.liveViewerCount() });
     }
 
     return new Response("not found", { status: 404 });
+  }
+
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if (typeof message !== "string") return;
+    const connection = this.connections.get(socket)
+      || socket.deserializeAttachment() as Connection | null;
+    if (!connection) return;
+    this.connections.set(socket, connection);
+    try {
+      const data = JSON.parse(message) as Record<string, unknown>;
+      if (data.type === "auth-room") {
+        if (!await this.ensurePasscode(connection.channelId)) {
+          socket.close(1008, "channel not found");
+          return;
+        }
+        const authAttempt = ++connection.authAttempt;
+        const expectedPasscode = this.currentPasscode;
+        const authResponse = (type: string) => JSON.stringify({
+          type,
+          requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+        });
+        if (isReportsChannel(connection.channelId, this.env)) {
+          connection.authorized = connection.isAdmin;
+          socket.send(authResponse(connection.isAdmin ? "room-authenticated" : "room-auth-required"));
+        } else if (connection.isAdmin) {
+          connection.authorized = true;
+          socket.send(authResponse("room-authenticated"));
+        } else if (!this.currentPasscode) {
+          connection.authorized = true;
+          socket.send(authResponse("room-authenticated"));
+        } else if (typeof data.token === "string" && data.token) {
+          const payload = await authorizeRoomToken(data.token, connection.channelId, this.currentPasscode, this.env);
+          if (connection.authAttempt !== authAttempt || this.currentPasscode !== expectedPasscode) return;
+          connection.authorized = !!payload;
+          socket.send(authResponse(payload ? "room-authenticated" : "room-auth-failed"));
+        } else {
+          connection.authorized = false;
+          socket.send(authResponse("room-auth-required"));
+        }
+        this.queuePresenceBroadcast();
+      }
+
+      if (data.type === "auth-viewer" && typeof data.token === "string") {
+        const payload = await verifyViewerWsToken(data.token, this.env);
+        const valid = !!payload?.user_id
+          && payload.channel_id === connection.channelId
+          && await isReportsChannelOwner(payload.user_id, this.env);
+        if (valid && payload) {
+          connection.authAttempt++;
+          connection.uid = payload.user_id;
+          connection.viewerOverride = true;
+          connection.authorized = true;
+        } else {
+          connection.viewerOverride = false;
+          connection.authorized = false;
+        }
+        socket.send(JSON.stringify({
+          type: valid ? "room-authenticated" : "room-auth-failed",
+          requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+        }));
+        this.queuePresenceBroadcast();
+      }
+
+      if (data.type === "auth-room-viewer" && typeof data.token === "string") {
+        const payload = await verifyRoomViewerWsToken(data.token, this.env);
+        const valid = payload?.channel_id === connection.channelId;
+        if (valid && payload) {
+          connection.authAttempt++;
+          connection.uid = payload.user_id;
+          connection.authorized = true;
+        } else {
+          connection.authorized = false;
+        }
+        socket.send(JSON.stringify({
+          type: valid ? "room-authenticated" : "room-auth-failed",
+          requestId: typeof data.requestId === "string" ? data.requestId : undefined,
+        }));
+        this.queuePresenceBroadcast();
+      }
+
+      if ((data.type === "emoji-fx" || data.type === "typing") && connection.authorized) {
+        this.broadcast(message);
+      }
+      if (data.type === "join-live" && connection.authorized) {
+        connection.inLive = true;
+        this.queueLivePresenceBroadcast();
+      }
+      if (data.type === "leave-live" && connection.authorized) {
+        connection.inLive = false;
+        this.queueLivePresenceBroadcast();
+      }
+      if (data.type === "auth-admin" && typeof data.token === "string") {
+        const payload = await verifyAdminWsToken(data.token, this.env);
+        if (payload?.channel_id === connection.channelId) {
+          connection.authAttempt++;
+          connection.uid = payload.user_id;
+          connection.isAdmin = true;
+          connection.viewerOverride = false;
+          connection.authorized = true;
+          socket.send(JSON.stringify({ type: "admin-authenticated" }));
+          this.queuePresenceBroadcast();
+        } else {
+          socket.send(JSON.stringify({ type: "admin-auth-failed" }));
+        }
+      }
+    } catch {
+      return;
+    } finally {
+      this.persistConnection(socket, connection);
+    }
+  }
+
+  webSocketClose(socket: WebSocket): void {
+    this.connections.delete(socket);
+    this.queuePresenceBroadcast();
+    this.queueLivePresenceBroadcast();
+  }
+
+  webSocketError(socket: WebSocket): void {
+    this.connections.delete(socket);
+    this.queuePresenceBroadcast();
+    this.queueLivePresenceBroadcast();
+  }
+
+  private liveViewerCount(): number {
+    return [...this.connections.values()].filter((connection) => connection.authorized && connection.inLive).length;
   }
 
   private broadcast(message: string) {
@@ -282,7 +297,6 @@ export class ChatRoom {
         ws.send(message);
       } catch {
         this.connections.delete(ws);
-        this.liveViewers.delete(ws);
       }
     }
   }
@@ -305,7 +319,7 @@ export class ChatRoom {
 
   private broadcastPresenceNow() {
     const count = [...this.connections.values()].filter((connection) => connection.authorized).length;
-    const liveCount = this.liveViewers.size;
+    const liveCount = this.liveViewerCount();
     if (count === this.lastPresenceCount && liveCount === this.lastLiveCount) {
       return;
     }
@@ -315,7 +329,7 @@ export class ChatRoom {
   }
 
   private broadcastLivePresenceNow() {
-    const liveCount = this.liveViewers.size;
+    const liveCount = this.liveViewerCount();
     if (liveCount === this.lastLiveCount) {
       return;
     }
@@ -330,7 +344,6 @@ export class ChatRoom {
         ws.send(message);
       } catch {
         this.connections.delete(ws);
-        this.liveViewers.delete(ws);
       }
     }
   }

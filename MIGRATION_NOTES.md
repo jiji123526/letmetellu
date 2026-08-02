@@ -4,6 +4,32 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Hibernatable channel WebSockets — 2026-08-02
+
+This Worker optimization removes the largest avoidable Durable Object duration cost in idle chat rooms.
+
+- `ChatRoom` now accepts sockets with the Durable Object Hibernation WebSocket API instead of the standard in-memory `server.accept()` API.
+- Each socket serializes its channel, user, authorization, admin/viewer override, authentication-attempt, and live-session participation state into a WebSocket attachment.
+- When Cloudflare wakes a hibernated object, the constructor rebuilds the active connection map from `state.getWebSockets()` and those attachments.
+- WebSocket message, close, and error handling now use the Durable Object `webSocketMessage`, `webSocketClose`, and `webSocketError` handlers required by hibernation.
+- Passcode changes persist revoked/opened access state back to every affected attachment, so hibernation cannot restore stale room access.
+- Live presence no longer depends on a process-local `Set`; it is derived from the restored per-connection attachment state.
+- Admin-only DM broadcasts, general broadcasts, debounced presence updates, room tokens, reports-owner access, and admin authentication keep their existing behavior.
+
+Trade-offs and UX changes:
+
+- Connected clients should see no intentional UI change. Idle rooms can now sleep while WebSocket connections remain attached at Cloudflare's edge, substantially reducing billable Durable Object duration.
+- Hibernation clears process-local passcode cache state. The first authorization handled after a wake may perform one indexed D1 channel lookup and can be slightly slower; subsequent authorizations during that active lifetime reuse the cache.
+- Connection metadata must be serialized whenever authorization or live participation changes. These small attachment updates are necessary to prevent privilege or presence state from reverting after a wake.
+- Deploying a new Worker version can still cause clients to reconnect. The existing frontend reconnect and message re-sync paths remain the recovery mechanism.
+- The 150 ms presence debounce can keep an object active briefly after joins, leaves, or authorization changes, but it no longer remains active for the full idle lifetime of each socket.
+
+Deployment notes:
+
+- no D1 migration or Durable Object namespace migration is required;
+- deploy the Worker separately from Vercel;
+- monitor Durable Object duration, WebSocket reconnects, and authorization failures after rollout.
+
 ### Streaming upload proxy and bounded background assets — 2026-08-02
 
 This frontend optimization removes an avoidable full-file copy in the Vercel upload proxy and reduces oversized static chat-background uploads.
