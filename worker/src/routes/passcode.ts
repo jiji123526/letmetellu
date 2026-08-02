@@ -1,4 +1,4 @@
-import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable-rate-limit";
+import { hashRateLimitIdentifier } from "../lib/durable-rate-limit";
 import { invalidatePasscodeCache } from "../lib/validation";
 import { Env } from "../types";
 
@@ -177,28 +177,38 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
     return Response.json({ error: "missing fields" }, { status: 400 });
   }
 
-  const rateLimitSubject = await hashRateLimitIdentifier(
-    "passcode-verify",
-    `${channel_id}:${getPasscodeRequestIp(request)}`,
-    env,
-  );
-  const rateLimit = await consumeDurableRateLimit({
-    env,
-    scope: "passcode-verify",
-    subjectKey: rateLimitSubject,
-    limit: PASSCODE_VERIFY_LIMIT,
-    windowMs: PASSCODE_VERIFY_WINDOW_MS,
-  });
-  if (!rateLimit.ok) {
-    return Response.json({ error: "too_many_attempts" }, { status: 429 });
-  }
-
   // Get channel's stored passcode hash
   const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
     .bind(channel_id).first() as { passcode: string | null } | null;
 
   if (!channel) {
     return Response.json({ error: "channel not found" }, { status: 404 });
+  }
+
+  // Only existing channels receive a Durable Object rate-limit record. This
+  // prevents arbitrary channel IDs from being used to create unbounded objects.
+  const rateLimitSubject = await hashRateLimitIdentifier(
+    "passcode-verify",
+    `${channel_id}:${getPasscodeRequestIp(request)}`,
+    env,
+  );
+  const passcodeDoId = env.CHAT_ROOM.idFromName(channel_id);
+  const passcodeStub = env.CHAT_ROOM.get(passcodeDoId);
+  const rateLimitResponse = await passcodeStub.fetch(new Request("http://internal/channel-rate-limit", {
+    method: "POST",
+    body: JSON.stringify({
+      scope: "passcode-verify",
+      subjectKey: rateLimitSubject,
+      limit: PASSCODE_VERIFY_LIMIT,
+      windowMs: PASSCODE_VERIFY_WINDOW_MS,
+    }),
+  }));
+  if (!rateLimitResponse.ok) {
+    return Response.json({ error: "rate_limit_unavailable" }, { status: 503 });
+  }
+  const rateLimit = await rateLimitResponse.json() as { ok: boolean };
+  if (!rateLimit.ok) {
+    return Response.json({ error: "too_many_attempts" }, { status: 429 });
   }
 
   if (!channel.passcode) {
@@ -223,8 +233,6 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
     if (upgradeResult.meta.changes) {
       currentStoredHash = upgradedHash;
       invalidatePasscodeCache(channel_id);
-      const passcodeDoId = env.CHAT_ROOM.idFromName(channel_id);
-      const passcodeStub = env.CHAT_ROOM.get(passcodeDoId);
       await passcodeStub.fetch(new Request("http://internal/access-policy-changed", {
         method: "POST",
         body: JSON.stringify({ passcode: upgradedHash }),

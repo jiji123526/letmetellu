@@ -4,6 +4,35 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-local passcode verification limits — 2026-08-02
+
+This follow-up moves protected-room passcode attempt enforcement from the global D1 rate-limit table into the target channel's Durable Object.
+
+- The existing policy remains five verification attempts per IP and channel in each aligned one-minute window.
+- The request IP and channel are still HMAC-pseudonymized with the internal secret before the value reaches Durable Object storage.
+- The route first performs its required channel lookup and creates rate-limit state only for an existing channel. Random nonexistent slugs therefore cannot be used to create unbounded Durable Objects.
+- Durable Object storage updates are transactional and survive hibernation. Limiter failures return `503` and never fall through to passcode verification.
+- The same Durable Object stub is reused if a successful legacy passcode upgrade needs to notify connected clients.
+
+Cost and performance effect:
+
+- removes one D1 rate-limit upsert, one D1 count read, related index maintenance and later retention deletion from every passcode attempt;
+- retains the single channel lookup that is required to obtain the stored passcode hash;
+- replaces the removed D1 enforcement work with one channel-local Durable Object request and one small overwritten record.
+
+Trade-offs and UX:
+
+- valid, incorrect and excessive passcode behavior is unchanged; the sixth attempt in a one-minute window still receives `429`;
+- nonexistent channels now return `404` before consuming limiter storage. Channel existence is already exposed by the product's exact-address lookup, but this changes the internal operation order;
+- a Durable Object outage returns `503`, briefly preventing entry rather than weakening brute-force protection;
+- one small record remains per channel and historical IP pseudonym until a future alarm-based cleanup removes stale keys;
+- no D1 migration is required. Existing `passcode-verify` D1 rows expire through scheduled retention.
+
+Deployment notes:
+
+- deploy the Worker for this optimization;
+- no frontend deployment or D1 migration is required.
+
 ### Channel-local DM and edit rate limits — 2026-08-02
 
 This follow-up extends the channel Durable Object rate-limit path from new messages to the two remaining high-frequency channel mutations that previously wrote enforcement state to D1.
