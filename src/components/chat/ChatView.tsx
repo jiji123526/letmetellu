@@ -46,6 +46,7 @@ import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReportsSearch } from "./useChatReportsSearch";
 import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
 import { useChatMessageMutations } from "./useChatMessageMutations";
+import { useChatInteractions } from "./useChatInteractions";
 
 interface Channel {
   id: string;
@@ -89,14 +90,6 @@ interface InitData {
     status: "active" | "warned" | "suspended" | "frozen";
     petitionStatus: "none" | "open" | "accepted" | "rejected";
   };
-}
-
-interface ContextMenuState {
-  msg: Message;
-  isSent: boolean;
-  isOwn: boolean;
-  rect: DOMRect;
-  bubbleEl: HTMLElement;
 }
 
 function getInitialUid(): string {
@@ -170,15 +163,12 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [loading, setLoading] = useState(true);
   const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; passcodeHint?: string; notice?: string } | null>(null);
   const [uid, setUid] = useState(getInitialUid);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [historyMode, setHistoryMode] = useState<"latest" | "context">("latest");
   const [newerMessageCount, setNewerMessageCount] = useState(0);
   const [headerMenu, setHeaderMenu] = useState<DOMRect | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
-  const [fullViewImage, setFullViewImage] = useState<{ src: string; caption?: string; date?: string; msgId?: string; fromGallery?: boolean } | null>(null);
-  const [expandedPost, setExpandedPost] = useState<{ text: string; top: number; left: number; width: number; height: number } | null>(null);
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
   const [galleryHasMore, setGalleryHasMore] = useState(true);
@@ -225,7 +215,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
   });
-  const [emojiPicker, setEmojiPicker] = useState<{ msgId: string; rect: DOMRect } | null>(null);
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
@@ -241,15 +230,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRequestIdRef = useRef(0);
   const initialScrollDoneRef = useRef(false);
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
   const reactionFrameRef = useRef<number | null>(null);
-  const handleReactionRef = useRef<(messageId: string, emoji: string) => void>(() => {});
-  const handleLongPressRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
-  const handleTouchStartRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
-  const handleTouchEndRef = useRef<() => void>(() => {});
   const applyInitDataRef = useRef<(data: InitData) => void>(() => {});
 
   const processPendingPhoto = useCallback(async (file: File): Promise<PendingPhoto> => {
@@ -279,18 +263,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     return () => window.removeEventListener("anonymous-identity-changed", handleIdentityChanged);
   }, []);
 
-  const openExpandedPost = useCallback((text: string) => {
-    const rect = messagesContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setExpandedPost({
-      text,
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-    });
-  }, []);
-
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
   const effectiveAdmin = isAdmin && !adminViewAsUser;
   const {
@@ -313,6 +285,27 @@ export function ChatView({ channelId }: { channelId: string }) {
   } = useChatComposerState({
     textareaRef,
     processPhotoFile: processPendingPhoto,
+  });
+  const {
+    contextMenu,
+    fullViewImage,
+    expandedPost,
+    emojiPicker,
+    openExpandedPost,
+    closeExpandedPost,
+    openContextMenu,
+    closeContextMenu,
+    handleTouchStart,
+    handleTouchEnd,
+    openMessageImage,
+    openGalleryImage,
+    closeFullViewImage,
+    openEmojiPicker,
+    closeEmojiPicker,
+  } = useChatInteractions({
+    effectiveAdmin,
+    uid,
+    messagesContainerRef,
   });
 
   // Auto-reload when new version is deployed (only when user has no draft)
@@ -930,28 +923,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   }, [loading, passcodeGate]);
 
-  // Context menu handlers
-  const handleBubbleLongPress = (msg: Message, isSent: boolean, el: HTMLElement) => {
-    // Dismiss keyboard
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-    const rect = el.getBoundingClientRect();
-    const isOwn = effectiveAdmin ? !!msg.is_admin : msg.uid === uid;
-    setContextMenu({ msg, isSent, isOwn, rect, bubbleEl: el });
-  };
-
-  const handleTouchStart = (msg: Message, isSent: boolean, el: HTMLElement) => {
-    longPressTimer.current = setTimeout(() => {
-      handleBubbleLongPress(msg, isSent, el);
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
-
   // Effective admin state (false when viewing as user)
   const {
     ownerModerationBlocked,
@@ -1065,31 +1036,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
-  const handleMemoizedReaction = useCallback((messageId: string, emoji: string) => {
-    handleReactionRef.current(messageId, emoji);
-  }, []);
-  const handleMemoizedEmojiPicker = useCallback((messageId: string, rect: DOMRect) => {
-    setEmojiPicker({ msgId: messageId, rect });
-  }, []);
-  useEffect(() => {
-    handleReactionRef.current = handleReaction;
-    handleLongPressRef.current = handleBubbleLongPress;
-    handleTouchStartRef.current = handleTouchStart;
-    handleTouchEndRef.current = handleTouchEnd;
-  });
-  const handleMemoizedLongPress = useCallback((message: Message, isSent: boolean, element: HTMLElement) => {
-    handleLongPressRef.current(message, isSent, element);
-  }, []);
-  const handleMemoizedTouchStart = useCallback((message: Message, isSent: boolean, element: HTMLElement) => {
-    handleTouchStartRef.current(message, isSent, element);
-  }, []);
-  const handleMemoizedTouchEnd = useCallback(() => {
-    handleTouchEndRef.current();
-  }, []);
-  const handleOpenMessageImage = useCallback((message: Message) => {
-    if (!message.image) return;
-    setFullViewImage({ src: message.image, caption: message.text || undefined, date: message.created_at, msgId: message.id });
-  }, []);
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
     return (
@@ -1606,13 +1552,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           editedMessageLabel={t("edited")}
           locale={locale}
           timeZone={timeZone}
-          onLongPress={handleMemoizedLongPress}
-          onTouchStart={handleMemoizedTouchStart}
-          onTouchEnd={handleMemoizedTouchEnd}
-          onOpenImage={handleOpenMessageImage}
+          onLongPress={openContextMenu}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onOpenImage={openMessageImage}
           onExpand={openExpandedPost}
-          onReaction={handleMemoizedReaction}
-          onEmojiPicker={handleMemoizedEmojiPicker}
+          onReaction={handleReaction}
+          onEmojiPicker={openEmojiPicker}
         />
         <div ref={messagesEndRef} />
         </main>
@@ -1632,14 +1578,14 @@ export function ChatView({ channelId }: { channelId: string }) {
             backdropFilter: "blur(4px)",
             WebkitBackdropFilter: "blur(4px)",
           }}
-          onClick={() => setExpandedPost(null)}
+          onClick={closeExpandedPost}
         >
           <div
             style={{ background: "var(--bg)", borderRadius: "18px", maxWidth: "400px", width: "100%", maxHeight: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}
             onClick={(event) => event.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 16px", borderBottom: "1px solid var(--hairline)" }}>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={() => setExpandedPost(null)}>✕</button>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={closeExpandedPost}>✕</button>
             </div>
             <div style={{ padding: "16px", fontSize: "var(--bubble-font-size)", lineHeight: 1.6, color: "var(--gray-text)", overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
               {expandedPost.text}
@@ -1971,8 +1917,8 @@ export function ChatView({ channelId }: { channelId: string }) {
               || reportActionPendingId === contextMenu.msg.petition_meta?.petition_id
             )
           )}
-          onEmojiPicker={(msgId, rect) => setEmojiPicker({ msgId, rect })}
-          onClose={() => setContextMenu(null)}
+          onEmojiPicker={openEmojiPicker}
+          onClose={closeContextMenu}
           isMyMessage={contextMenu.isOwn}
         />
       )}
@@ -2086,7 +2032,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           }}
           onViewImage={(src, meta) => {
             const msg = messages.find((m) => m.id === meta.id);
-            setFullViewImage({ src, caption: msg?.text || undefined, date: meta.created_at, msgId: meta.id, fromGallery: true });
+            openGalleryImage(src, meta, msg?.text || undefined);
           }}
           onClose={() => setShowGallery(false)}
         />
@@ -2214,10 +2160,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         <EmojiPicker
           anchorRect={emojiPicker.rect}
           onSelect={(emoji) => {
-            handleReaction(emojiPicker.msgId, emoji);
-            setEmojiPicker(null);
+            void handleReaction(emojiPicker.msgId, emoji);
+            closeEmojiPicker();
           }}
-          onClose={() => setEmojiPicker(null)}
+          onClose={closeEmojiPicker}
         />
       )}
 
@@ -2358,7 +2304,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <div
           className="fixed inset-0 z-[120] flex flex-col items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
           style={{ background: "rgba(0,0,0,.85)" }}
-          onClick={() => setFullViewImage(null)}
+          onClick={closeFullViewImage}
         >
           <img
             src={fullViewImage.src}
@@ -2376,7 +2322,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                 <button
                   onClick={() => {
                     const msgId = fullViewImage.msgId!;
-                    setFullViewImage(null);
+                    closeFullViewImage();
                     setShowGallery(false);
                     setTimeout(() => scrollToMessage(msgId), 100);
                   }}

@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat interaction-state extraction from `ChatView` — 2026-08-03
+
+- Extracted context-menu state, long-press/touch handling, emoji-picker state, full-image viewer state, expanded-post state, and related local open/close handlers into `src/components/chat/useChatInteractions.ts`.
+- `ChatView` now consumes a dedicated interaction hook instead of carrying gesture timers, image-overlay state, context-menu state, and callback-ref indirection inline with unrelated chat and admin behavior.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat mutation extraction from `ChatView` — 2026-08-03
 
 - Extracted send flow, blocked-user petition send behavior, DM send branching, upload batching, reaction toggles, delete behavior, edit-save behavior, petition-state reset, and shared mutation error handling into `src/components/chat/useChatMessageMutations.ts`.
