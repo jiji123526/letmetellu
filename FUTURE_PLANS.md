@@ -31,7 +31,8 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Frontend maintainability
 
-- Continue separating `ChatView` policy logic from render wiring; the first shared action-rule extraction is in place, but search, report-inbox, and live-mode policy still sit in the main component.
+- Continue separating `ChatView` policy logic from render wiring; shared action rules and pure message utilities are now extracted, but search, report-inbox, and live-mode policy still sit in the main component.
+- The next low-risk extraction target is message text/embed rendering helpers so URL parsing and presentation logic stop expanding inside the main chat container.
 - Keep reducing `ContextMenu` and `ChatView` React/compiler lint debt before adding more admin chat controls.
 
 ### Email and account hardening

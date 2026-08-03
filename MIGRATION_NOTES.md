@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat message utility extraction from `ChatView` — 2026-08-03
+
+- Extracted pure message-history and formatting helpers into `src/components/chat/chatMessageUtils.ts` so `ChatView` no longer owns the mounted-history trimming, live countdown formatting, reaction parsing, inbox-line stripping, or server-snapshot merge logic inline.
+- The extracted snapshot merge keeps the existing behavior that preserves already loaded older history while still removing messages that disappear from the server's current snapshot window.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat action policy extraction and context-menu cleanup — 2026-08-03
 
 - Extracted shared chat action rules into a dedicated helper so fallback moderation-message detection and admin reply/block eligibility no longer live as repeated inline conditions inside `ChatView`.
