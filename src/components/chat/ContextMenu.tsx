@@ -32,7 +32,7 @@ interface ContextMenuProps {
   bubbleEl: HTMLElement;
   isAdmin: boolean;
   onReaction: (msgId: string, emoji: string) => void;
-  onReply: (msgId: string) => void;
+  onReply?: (msgId: string) => void;
   onReport?: (msgId: string) => void;
   onUnreport?: (msgId: string) => void;
   isReported?: boolean;
@@ -420,14 +420,15 @@ export function ContextMenu({
           </>
         ) : (
           <>
-            {/* Reply — always shown */}
-            <button style={actionItemStyle} onClick={() => { onReply(msg.id); onClose(); }}>
-              <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 4l-7 7 7 7" />
-                <path d="M2 11h14a4 4 0 0 1 4 4v4" />
-              </svg>
-              <span>{t("reply")}</span>
-            </button>
+            {onReply && (
+              <button style={actionItemStyle} onClick={() => { onReply(msg.id); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 4l-7 7 7 7" />
+                  <path d="M2 11h14a4 4 0 0 1 4 4v4" />
+                </svg>
+                <span>{t("reply")}</span>
+              </button>
+            )}
 
             {/* Admin viewing own: Edit + Delete */}
             {isAdmin && isMyMessage && onEdit && msg.text && (

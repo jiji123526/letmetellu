@@ -3403,7 +3403,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           bubbleEl={contextMenu.bubbleEl}
           isAdmin={effectiveAdmin}
           onReaction={handleReaction}
-          onReply={(msgId) => {
+          onReply={effectiveAdmin && (contextMenu.msg.dm || contextMenu.msg.protected_sender) ? undefined : (msgId) => {
             // Reply to top-level parent, not to a reply
             const msg = messages.find((m) => m.id === msgId);
             if (msg?.reply_to) {
