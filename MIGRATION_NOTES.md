@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Super-admin dashboard recovery and repeat warning controls — 2026-08-02
+
+- Qualified `support_messages.created_at` in the support dashboard rollup query. The previous unqualified column became ambiguous after joining `support_threads`, causing authenticated super-admin dashboard requests to fail with D1 `500` responses.
+- Dashboard failures at `5xx` no longer silently downgrade the super admin into the regular account view. The dashboard now shows an explicit retry state while `403/404` still identify ordinary accounts.
+- Open reports now offer a repeat-warning action while the channel is `warned` or `suspended`; only frozen channels hide the warning action.
+- The Worker rejects direct repeat-warning requests against resolved or dismissed reports, matching the UI's open-report rule.
+- No schema migration is required. Deploy both the Worker and Next.js frontend.
+
 ### Channel-local passcode verification limits — 2026-08-02
 
 This follow-up moves protected-room passcode attempt enforcement from the global D1 rate-limit table into the target channel's Durable Object.

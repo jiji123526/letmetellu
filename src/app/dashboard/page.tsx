@@ -208,6 +208,7 @@ export default function DashboardPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
+  const [platformDashboardError, setPlatformDashboardError] = useState(false);
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -230,7 +231,7 @@ export default function DashboardPage() {
   const linkedChannelId = submittedLinkedChannelId;
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
-  const isPlatformAdmin = !!platformDashboard;
+  const isPlatformAdmin = !!platformDashboard || platformDashboardError;
   const togglePlatformTicketFilter = useCallback((nextFilter: Exclude<PlatformTicketFilter, null>) => {
     skipNextListAnimationRef.current = true;
     setPlatformTicketFilter((current) => current === nextFilter ? null : nextFilter);
@@ -335,13 +336,20 @@ export default function DashboardPage() {
   const loadPlatformDashboard = useCallback(async (): Promise<boolean> => {
     if (status !== "authenticated") {
       setPlatformDashboard(null);
+      setPlatformDashboardError(false);
       return false;
     }
     try {
       const result = await fetchPlatformDashboard();
-      if (result._status === 403 || result._status === 404 || result._status >= 400) {
+      if (result._status === 403 || result._status === 404) {
         setPlatformDashboard(null);
+        setPlatformDashboardError(false);
         return false;
+      }
+      if (result._status >= 400) {
+        setPlatformDashboard(null);
+        setPlatformDashboardError(true);
+        return true;
       }
       const nextDashboard: PlatformDashboardResponse = {
         reportsInbox: result.reportsInbox ?? null,
@@ -349,6 +357,7 @@ export default function DashboardPage() {
         open_pagination: result.open_pagination ?? null,
         support_stats: result.support_stats ?? null,
       };
+      setPlatformDashboardError(false);
       setPlatformDashboard((current) => {
         if (!current) return nextDashboard;
         const currentOpenCount = current.tickets.filter((ticket) => ticket.status === "open").length;
@@ -365,7 +374,8 @@ export default function DashboardPage() {
       return true;
     } catch {
       setPlatformDashboard(null);
-      return false;
+      setPlatformDashboardError(true);
+      return true;
     }
   }, [status]);
 
@@ -1383,7 +1393,22 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {empty ? (
+        {platformDashboardError ? (
+          <section className="px-8 py-24 text-center">
+            <h2 className="m-0 text-[19px] font-semibold">{t("dashboardPlatformLoadFailed")}</h2>
+            <p className="mt-2 mb-5 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>
+              {t("dashboardPlatformLoadFailedDesc")}
+            </p>
+            <button
+              type="button"
+              className="border-none bg-transparent cursor-pointer text-[15px] font-medium"
+              style={{ color: "#007aff" }}
+              onClick={() => void loadPlatformDashboard()}
+            >
+              {t("dashboardRetry")}
+            </button>
+          </section>
+        ) : empty ? (
           <section className="px-8 py-24 text-center" style={{ paddingBottom: `calc(6rem + ${listBottomPadding})` }}>
             <div className="mx-auto mb-4 flex items-center justify-center">
               <ThemeLogo alt="" width={72} height={72} className="h-[72px] w-[72px]" />

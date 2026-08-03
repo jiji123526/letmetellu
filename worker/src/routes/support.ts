@@ -1161,8 +1161,8 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
     WITH message_rollup AS (
       SELECT
         thread_id,
-        MAX(CASE WHEN sender_role = 'user' THEN created_at END) AS last_user_message_at,
-        MAX(CASE WHEN sender_role = 'platform_admin' THEN created_at END) AS last_admin_message_at
+        MAX(CASE WHEN sender_role = 'user' THEN support_messages.created_at END) AS last_user_message_at,
+        MAX(CASE WHEN sender_role = 'platform_admin' THEN support_messages.created_at END) AS last_admin_message_at
       FROM support_messages
       INNER JOIN support_threads open_threads ON open_threads.id = support_messages.thread_id AND open_threads.status = 'open'
       GROUP BY thread_id

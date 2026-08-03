@@ -273,9 +273,9 @@ export function ContextMenu({
       >
         {isReportInboxMessage ? (
           <>
-            {isOpenReport && onReportAction && msg.report_meta?.moderation_status === "active" && (
+            {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
               <ActionButton
-                label={t("warnOwner")}
+                label={msg.report_meta?.moderation_status === "active" ? t("warnOwner") : t("warnOwnerAgain")}
                 disabled={reportActionPending}
                 onClick={() => onReportAction("warn_owner")}
                 icon={(

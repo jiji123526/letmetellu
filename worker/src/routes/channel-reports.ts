@@ -633,6 +633,9 @@ async function handleModerationAction(input: {
   const ownerLocale = await getUserLocale(existing.channel_owner_uid, input.env);
 
   if (input.action === "warn_owner") {
+    if (existing.status !== "open") {
+      return Response.json({ error: "report_already_processed" }, { status: 409 });
+    }
     const warnedAt = new Date().toISOString();
     const nextStatus = moderation.status === "active" ? "warned" : moderation.status;
     const warnedReportCount = Math.max(moderation.warned_report_count, await countOpenChannelReports(existing.channel_id, input.env));
