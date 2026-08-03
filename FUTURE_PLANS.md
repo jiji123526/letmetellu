@@ -31,9 +31,9 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Frontend maintainability
 
-- Continue separating `ChatView` policy logic from render wiring; shared action rules, pure message utilities, message text/embed rendering, row-level presentation, message-derivation selectors, history navigation, moderation state, live-session state, reports/search state, composer local state, chat mutations, interaction state, admin/channel shell actions, and channel-settings callbacks are now extracted, but the remaining dialog/live-shell wiring and a few residual inline action callsites still sit in the main component.
-- The next low-risk extraction target is the remaining dialog/shell domain so live start/end popups, moderation petition dialog gating, support/owner-channel/settings shell closures, and the last small inline action callsites stop living in `ChatView`.
-- Keep reducing `ContextMenu` and `ChatView` React/compiler lint debt before adding more admin chat controls.
+- Continue separating `ChatView` policy logic from render wiring; shared action rules, pure message utilities, message text/embed rendering, row-level presentation, message-derivation selectors, history navigation, moderation state, live-session state, reports/search state, composer local state, chat mutations, interaction state, admin/channel shell actions, channel-settings callbacks, overlay rendering, overlay callbacks, and context-menu action policy are now extracted.
+- The next low-risk extraction target is reducing the remaining prop surface between `ChatView` and the overlay/context-menu layers, then peeling off one more focused orchestration domain such as live-entry/loading transitions or reports-inbox shell policy.
+- Keep reducing `ContextMenu`, `ChatView`, and overlay prop-surface React/compiler lint debt before adding more admin chat controls.
 
 ### Email and account hardening
 

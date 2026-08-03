@@ -35,6 +35,7 @@ import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
 import { useChatChannelSettings } from "./useChatChannelSettings";
 import { ChatViewOverlays } from "./ChatViewOverlays";
 import { useChatContextMenuActions } from "./useChatContextMenuActions";
+import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 
 interface Channel {
   id: string;
@@ -1157,6 +1158,38 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
+  const overlayCallbacks = useChatOverlayCallbacks({
+    channelId,
+    messages,
+    photoInputRef,
+    submittingModerationPetition,
+    openGalleryImage,
+    closeLinks,
+    scrollToMessage,
+    handleReaction,
+    closeEmojiPicker,
+    setDmMode,
+    setPlusMenu,
+    startLiveLocally,
+    setMessages,
+    setDmMessages,
+    setActiveNotice,
+    setBanner,
+    liveStartedBannerText: t("liveStarted"),
+    syncLiveSessionDetails,
+    setShowLiveTitlePrompt,
+    setShowEndLiveConfirm,
+    endLiveSessionLocally,
+    loadNormalChannelData,
+    setShowLiveEnded,
+    enterLiveMode,
+    loadLiveChannelData,
+    dismissLivePopup,
+    setShowModerationPetitionDialog,
+    closeFullViewImage,
+    closeGallery,
+  });
+
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
     return (
@@ -1981,23 +2014,15 @@ export function ChatView({ channelId }: { channelId: string }) {
         onChannelReportSubmit={handleChannelReportSubmit}
         onCloseChannelReportDialog={closeChannelReportDialog}
         onModerationPetitionSubmit={handleModerationPetitionSubmit}
-        onCloseModerationPetitionDialog={() => {
-          if (!submittingModerationPetition) setShowModerationPetitionDialog(false);
-        }}
+        onCloseModerationPetitionDialog={overlayCallbacks.closeModerationPetitionDialog}
         onCloseOwnerChannels={closeOwnerChannels}
         onViewerColorChange={handleViewerColorChange}
         onSettingsAdmin={effectiveAdmin && !ownerModerationBlocked ? openAdminPanel : undefined}
         onCloseSettings={closeSettings}
         onLoadMoreGallery={loadMoreGallery}
-        onViewGalleryImage={(src, meta) => {
-          const msg = messages.find((m) => m.id === meta.id);
-          openGalleryImage(src, meta, msg?.text || undefined);
-        }}
+        onViewGalleryImage={overlayCallbacks.viewGalleryImage}
         onCloseGallery={closeGallery}
-        onNavigateFromLinks={(msgId) => {
-          closeLinks();
-          setTimeout(() => scrollToMessage(msgId), 100);
-        }}
+        onNavigateFromLinks={overlayCallbacks.navigateFromLinks}
         onCloseLinks={closeLinks}
         onToggleView={handleToggleView}
         onPetitionToggle={handlePetitionToggle}
@@ -2012,60 +2037,29 @@ export function ChatView({ channelId }: { channelId: string }) {
         onWelcomeChange={handleWelcomeChange}
         onUnblock={handleUnblock}
         onCloseAdminPanel={closeAdminPanel}
-        onEmojiSelect={(emoji, messageId) => {
-          void handleReaction(messageId, emoji);
-          closeEmojiPicker();
-        }}
+        onEmojiSelect={overlayCallbacks.handleOverlayEmojiSelect}
         onCloseEmojiPicker={closeEmojiPicker}
-        onPlusPhoto={() => photoInputRef.current?.click()}
-        onPlusDmToggle={() => setDmMode(!dmMode)}
+        onPlusPhoto={overlayCallbacks.openPlusPhotoPicker}
+        onPlusDmToggle={overlayCallbacks.togglePlusDmMode}
         onFreezeToggle={canUseAdminMutations ? handleAdminFreezeToggle : undefined}
         onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
         onPlusNotice={canUseAdminMutations ? openNoticeEdit : undefined}
         onPlusEmojiPreset={openEmojiPreset}
         onReportFilterSelect={toggleReportsOwnerFilter}
-        onClosePlusMenu={() => setPlusMenu(null)}
-        onLiveStart={async (title) => {
-          startLiveLocally(title);
-          setMessages([]);
-          setDmMessages([]);
-          setActiveNotice("");
-          setBanner({ text: t("liveStarted"), color: "#c0392b" });
-          setTimeout(() => setBanner(null), 3000);
-          const res = await adminAction("start-live", channelId, { title }) as any;
-          syncLiveSessionDetails({
-            sessionId: typeof res?.sessionId === "string" ? res.sessionId : "",
-            expiresAt: typeof res?.live?.expiresAt === "string" ? res.live.expiresAt : null,
-          });
-        }}
-        onCloseLiveTitlePrompt={() => setShowLiveTitlePrompt(false)}
-        onConfirmEndLive={async () => {
-          setShowEndLiveConfirm(false);
-          endLiveSessionLocally({ clearSeen: true });
-          await adminAction("end-live", channelId);
-          void loadNormalChannelData().catch(() => {});
-          setShowLiveEnded(true);
-        }}
-        onCancelEndLive={() => setShowEndLiveConfirm(false)}
-        onCloseLiveEnded={() => {
-          setShowLiveEnded(false);
-          void loadNormalChannelData().catch(() => {});
-        }}
-        onJoinLivePopup={() => {
-          enterLiveMode({ markCurrentSessionSeen: true });
-          void loadLiveChannelData().catch(() => {});
-        }}
-        onDismissLivePopup={dismissLivePopup}
+        onClosePlusMenu={overlayCallbacks.closePlusMenu}
+        onLiveStart={overlayCallbacks.startLiveFromPrompt}
+        onCloseLiveTitlePrompt={overlayCallbacks.closeLiveTitlePrompt}
+        onConfirmEndLive={overlayCallbacks.confirmEndLive}
+        onCancelEndLive={overlayCallbacks.cancelEndLive}
+        onCloseLiveEnded={overlayCallbacks.closeLiveEnded}
+        onJoinLivePopup={overlayCallbacks.joinLivePopup}
+        onDismissLivePopup={overlayCallbacks.dismissLivePopup}
         onCloseEmojiPreset={closeEmojiPreset}
         onNoticeEditSave={handleNoticeEditSave}
         onCloseNoticeEdit={closeNoticeEdit}
         onCloseNotice={closeNotice}
         onCloseFullViewImage={closeFullViewImage}
-        onJumpFromGalleryImage={(msgId) => {
-          closeFullViewImage();
-          closeGallery();
-          setTimeout(() => scrollToMessage(msgId), 100);
-        }}
+        onJumpFromGalleryImage={overlayCallbacks.jumpFromGalleryImage}
       />
     </div>
   );

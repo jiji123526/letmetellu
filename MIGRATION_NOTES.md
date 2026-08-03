@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat overlay callback extraction from `ChatView` — 2026-08-03
+
+- Extracted the remaining overlay event bundle into `src/components/chat/useChatOverlayCallbacks.ts`, covering live start/end prompt behavior, gallery image expansion, links-panel navigation jumps, emoji-picker selection, plus-menu photo/DM toggles, moderation-petition dialog close gating, live popup entry, and gallery-image jump-back behavior.
+- `ChatView` now feeds `ChatViewOverlays` through a dedicated callback hook instead of inlining another large cluster of shell and live-session closures in the overlay prop block.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat context-menu action extraction from `ChatView` — 2026-08-03
 
 - Extracted reply targeting, report/unreport wiring, owner edit open, admin delete-with-replies behavior, block/unblock behavior, and report/petition moderation action routing into `src/components/chat/useChatContextMenuActions.ts`.
