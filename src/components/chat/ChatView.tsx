@@ -9,30 +9,16 @@ import { useLocale } from "@/hooks/useLocale";
 import { ContextMenu } from "./ContextMenu";
 import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
-import { WelcomePopup } from "./WelcomePopup";
-import { HeaderMenu } from "./HeaderMenu";
-import { ChannelReportDialog } from "./ChannelReportDialog";
-import { ModerationPetitionDialog } from "./ModerationPetitionDialog";
-import { SettingsPanel } from "./SettingsPanel";
-import { NoticePanel } from "./NoticePanel";
-import { EmojiPicker } from "./EmojiPicker";
-import { GalleryPanel } from "./GalleryPanel";
-import { LinksPanel } from "./LinksPanel";
-import { PlusMenu } from "./PlusMenu";
 import { EditDialog } from "./EditDialog";
-import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePrompt, LiveCountdownBanner } from "./LiveMode";
+import { LiveJoinBanner, LiveExitBanner, LiveCountdownBanner } from "./LiveMode";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
 import { SearchBar } from "./SearchBar";
-import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
-import { AdminPanel } from "../admin/AdminPanel";
+import { EmojiBar, spawnEmoji } from "./EmojiBar";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MessageList } from "./ChatMessageList";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
-import { chatDateLabel } from "@/lib/chat-date";
 import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
-import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
@@ -48,6 +34,7 @@ import { useChatMessageMutations } from "./useChatMessageMutations";
 import { useChatInteractions } from "./useChatInteractions";
 import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
 import { useChatChannelSettings } from "./useChatChannelSettings";
+import { ChatViewOverlays } from "./ChatViewOverlays";
 
 interface Channel {
   id: string;
@@ -1966,278 +1953,155 @@ export function ChatView({ channelId }: { channelId: string }) {
         />
       )}
 
-      {/* Welcome Popup */}
-      <WelcomePopup
+      <ChatViewOverlays
         channelId={channelId}
+        channelName={channel?.name || ""}
+        channelProfileImage={channel?.profile_image || null}
+        channelNotice={channel?.notice || "[]"}
         bubbleColor={bubbleColor}
-        profileImage={channel?.profile_image}
-        customConfig={welcomeConfig}
-      />
-
-      {/* Header Menu */}
-      {headerMenu && (
-        <HeaderMenu
-          anchorRect={headerMenu}
-          onSettings={openSettings}
-          onGallery={openGallery}
-          onLinks={openLinks}
-          onReportChannel={!isAdmin ? openChannelReportDialog : undefined}
-          onClose={closeHeaderMenu}
-        />
-      )}
-
-      {showChannelReportDialog && (
-        <ChannelReportDialog
-          channelName={channel?.name || channelId}
-          submitting={submittingChannelReport}
-          onSubmit={handleChannelReportSubmit}
-          onClose={closeChannelReportDialog}
-        />
-      )}
-
-      {showModerationPetitionDialog && (
-        <ModerationPetitionDialog
-          submitting={submittingModerationPetition}
-          onSubmit={handleModerationPetitionSubmit}
-          onClose={() => {
-            if (!submittingModerationPetition) setShowModerationPetitionDialog(false);
-          }}
-        />
-      )}
-
-      {showOwnerChannels && (
-        <OwnerChannelsPopup
-          currentChannelId={channelId}
-          bubbleColor={bubbleColor}
-          onClose={closeOwnerChannels}
-        />
-      )}
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <SettingsPanel
-          channelId={channelId}
-          currentColor={bubbleColor}
-          onColorChange={handleViewerColorChange}
-          onAdmin={effectiveAdmin && !ownerModerationBlocked ? () => {
-            openAdminPanel();
-          } : undefined}
-          onClose={closeSettings}
-        />
-      )}
-
-      {/* Gallery Panel */}
-      {showGallery && (
-        <GalleryPanel
-          items={galleryItems}
-          hasMore={galleryHasMore}
-          onLoadMore={loadMoreGallery}
-          onViewImage={(src, meta) => {
-            const msg = messages.find((m) => m.id === meta.id);
-            openGalleryImage(src, meta, msg?.text || undefined);
-          }}
-          onClose={closeGallery}
-        />
-      )}
-
-      {/* Links Panel */}
-      {showLinks && (
-        <LinksPanel
-          channelId={inLiveModeRef.current ? `${channelId}_live` : channelId}
-          onNavigate={(msgId) => { closeLinks(); setTimeout(() => scrollToMessage(msgId), 100); }}
-          onClose={closeLinks}
-        />
-      )}
-
-      {/* Admin Panel */}
-      {showAdminPanel && (
-        <AdminPanel
-          channelId={channelId}
-          channelName={channel?.name || ""}
-          profileImage={channel?.profile_image || null}
-          currentColor={bubbleColor}
-          backgroundType={channel?.background_type || "default"}
-          backgroundColor={channel?.background_color || null}
-          backgroundImage={channel?.background_image || null}
-          backgroundOverlay={channel?.background_overlay ?? 14}
-          backgroundBlur={channel?.background_blur === 1}
-          passcodeHint={channel?.passcode_hint || ""}
-          petitionEnabled={petitionEnabled}
-          dmEnabled={dmEnabled}
-          showOnProfile={channel?.show_on_profile === 1}
-          notice={channel?.notice || "[]"}
-          welcomeConfig={welcomeConfig}
-          blockedUsers={blockedUsers}
-          onToggleView={handleToggleView}
-          onPetitionToggle={handlePetitionToggle}
-          onDmToggle={handleDmSettingsToggle}
-          onShowOnProfileToggle={handleShowOnProfileToggle}
-          onColorChange={handleColorChange}
-          onBackgroundChange={handleBackgroundChange}
-          onNameChange={handleNameChange}
-          onProfileImageChange={handleProfileImageChange}
-          onPasscodeChange={handlePasscodeChange}
-          onNoticeChange={handleRulesNoticeChange}
-          onWelcomeChange={handleWelcomeChange}
-          onUnblock={handleUnblock}
-          onClose={closeAdminPanel}
-        />
-      )}
-
-      {/* Emoji Picker */}
-      {emojiPicker && (
-        <EmojiPicker
-          anchorRect={emojiPicker.rect}
-          onSelect={(emoji) => {
-            void handleReaction(emojiPicker.msgId, emoji);
-            closeEmojiPicker();
-          }}
-          onClose={closeEmojiPicker}
-        />
-      )}
-
-      {/* Plus Menu */}
-      {plusMenu && (
-        <PlusMenu
-          anchorRect={plusMenu}
-          dmMode={dmMode}
-          dmEnabled={dmEnabled}
-          isAdmin={effectiveAdmin}
-          isFrozen={!!channel?.is_frozen}
-          liveActive={liveActive}
-          inLiveMode={inLiveMode}
-          onPhoto={() => photoInputRef.current?.click()}
-          onDmToggle={() => setDmMode(!dmMode)}
-          onFreezeToggle={canUseAdminMutations ? handleAdminFreezeToggle : undefined}
-          onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
-          onNotice={canUseAdminMutations ? openNoticeEdit : undefined}
-          onEmojiPreset={openEmojiPreset}
-          reportFilter={reportsOwnerFilter}
-          onReportFilterSelect={isReportsOwnerView ? toggleReportsOwnerFilter : undefined}
-          onClose={() => setPlusMenu(null)}
-        />
-      )}
-
-      {/* Live Title Prompt */}
-      {showLiveTitlePrompt && (
-        <LiveTitlePrompt
-          onStart={async (title) => {
-            startLiveLocally(title);
-            setMessages([]);
-            setDmMessages([]);
-            setActiveNotice("");
-            setBanner({ text: t("liveStarted"), color: "#c0392b" });
-            setTimeout(() => setBanner(null), 3000);
-            const res = await adminAction("start-live", channelId, { title }) as any;
-            syncLiveSessionDetails({
-              sessionId: typeof res?.sessionId === "string" ? res.sessionId : "",
-              expiresAt: typeof res?.live?.expiresAt === "string" ? res.live.expiresAt : null,
-            });
-          }}
-          onCancel={() => setShowLiveTitlePrompt(false)}
-        />
-      )}
-
-      {/* End Live Confirm */}
-      {showEndLiveConfirm && (
-        <ConfirmDialog
-          title={t("liveEndTitle")}
-          message={t("liveEndMessage")}
-          confirmLabel={t("liveEndBtn")}
-          confirmColor="#c0392b"
-          onConfirm={async () => {
-            setShowEndLiveConfirm(false);
-            endLiveSessionLocally({ clearSeen: true });
-            await adminAction("end-live", channelId);
-            void loadNormalChannelData().catch(() => {});
-            setShowLiveEnded(true);
-          }}
-          onCancel={() => setShowEndLiveConfirm(false)}
-        />
-      )}
-
-      {/* Live Ended Popup (shown to non-admin when kicked from live) */}
-      {showLiveEnded && (
-        <LiveEndedPopup onClose={() => {
+        welcomeConfig={welcomeConfig}
+        activeNotice={activeNotice}
+        locale={locale}
+        timeZone={timeZone}
+        effectiveAdmin={effectiveAdmin}
+        showModerationPetitionDialog={showModerationPetitionDialog}
+        submittingModerationPetition={submittingModerationPetition}
+        headerMenu={headerMenu}
+        showChannelReportDialog={showChannelReportDialog}
+        submittingChannelReport={submittingChannelReport}
+        showOwnerChannels={showOwnerChannels}
+        showSettings={showSettings}
+        showGallery={showGallery}
+        galleryItems={galleryItems}
+        galleryHasMore={galleryHasMore}
+        showLinks={showLinks}
+        linksChannelId={inLiveModeRef.current ? `${channelId}_live` : channelId}
+        showAdminPanel={showAdminPanel}
+        petitionEnabled={petitionEnabled}
+        dmEnabled={dmEnabled}
+        blockedUsers={blockedUsers}
+        emojiPicker={emojiPicker}
+        plusMenu={plusMenu}
+        dmMode={dmMode}
+        isFrozen={!!channel?.is_frozen}
+        liveActive={liveActive}
+        inLiveMode={inLiveMode}
+        reportsOwnerFilter={reportsOwnerFilter}
+        isReportsOwnerView={isReportsOwnerView}
+        showLiveTitlePrompt={showLiveTitlePrompt}
+        showEndLiveConfirm={showEndLiveConfirm}
+        liveEndTitle={t("liveEndTitle")}
+        liveEndMessage={t("liveEndMessage")}
+        liveEndConfirmLabel={t("liveEndBtn")}
+        showLiveEnded={showLiveEnded}
+        showLivePopup={showLivePopup}
+        liveTitle={liveTitle}
+        showEmojiPreset={showEmojiPreset}
+        showNoticeEdit={showNoticeEdit}
+        showNotice={showNotice}
+        fullViewImage={fullViewImage}
+        currentColor={bubbleColor}
+        backgroundType={channel?.background_type || "default"}
+        backgroundColor={channel?.background_color || null}
+        backgroundImage={channel?.background_image || null}
+        backgroundOverlay={channel?.background_overlay ?? 14}
+        backgroundBlur={channel?.background_blur === 1}
+        passcodeHint={channel?.passcode_hint || ""}
+        showOnProfile={channel?.show_on_profile === 1}
+        onHeaderSettings={openSettings}
+        onHeaderGallery={openGallery}
+        onHeaderLinks={openLinks}
+        onHeaderReportChannel={!isAdmin ? openChannelReportDialog : undefined}
+        onCloseHeaderMenu={closeHeaderMenu}
+        onChannelReportSubmit={handleChannelReportSubmit}
+        onCloseChannelReportDialog={closeChannelReportDialog}
+        onModerationPetitionSubmit={handleModerationPetitionSubmit}
+        onCloseModerationPetitionDialog={() => {
+          if (!submittingModerationPetition) setShowModerationPetitionDialog(false);
+        }}
+        onCloseOwnerChannels={closeOwnerChannels}
+        onViewerColorChange={handleViewerColorChange}
+        onSettingsAdmin={effectiveAdmin && !ownerModerationBlocked ? openAdminPanel : undefined}
+        onCloseSettings={closeSettings}
+        onLoadMoreGallery={loadMoreGallery}
+        onViewGalleryImage={(src, meta) => {
+          const msg = messages.find((m) => m.id === meta.id);
+          openGalleryImage(src, meta, msg?.text || undefined);
+        }}
+        onCloseGallery={closeGallery}
+        onNavigateFromLinks={(msgId) => {
+          closeLinks();
+          setTimeout(() => scrollToMessage(msgId), 100);
+        }}
+        onCloseLinks={closeLinks}
+        onToggleView={handleToggleView}
+        onPetitionToggle={handlePetitionToggle}
+        onDmToggle={handleDmSettingsToggle}
+        onShowOnProfileToggle={handleShowOnProfileToggle}
+        onColorChange={handleColorChange}
+        onBackgroundChange={handleBackgroundChange}
+        onNameChange={handleNameChange}
+        onProfileImageChange={handleProfileImageChange}
+        onPasscodeChange={handlePasscodeChange}
+        onRulesNoticeChange={handleRulesNoticeChange}
+        onWelcomeChange={handleWelcomeChange}
+        onUnblock={handleUnblock}
+        onCloseAdminPanel={closeAdminPanel}
+        onEmojiSelect={(emoji, messageId) => {
+          void handleReaction(messageId, emoji);
+          closeEmojiPicker();
+        }}
+        onCloseEmojiPicker={closeEmojiPicker}
+        onPlusPhoto={() => photoInputRef.current?.click()}
+        onPlusDmToggle={() => setDmMode(!dmMode)}
+        onFreezeToggle={canUseAdminMutations ? handleAdminFreezeToggle : undefined}
+        onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
+        onPlusNotice={canUseAdminMutations ? openNoticeEdit : undefined}
+        onPlusEmojiPreset={openEmojiPreset}
+        onReportFilterSelect={toggleReportsOwnerFilter}
+        onClosePlusMenu={() => setPlusMenu(null)}
+        onLiveStart={async (title) => {
+          startLiveLocally(title);
+          setMessages([]);
+          setDmMessages([]);
+          setActiveNotice("");
+          setBanner({ text: t("liveStarted"), color: "#c0392b" });
+          setTimeout(() => setBanner(null), 3000);
+          const res = await adminAction("start-live", channelId, { title }) as any;
+          syncLiveSessionDetails({
+            sessionId: typeof res?.sessionId === "string" ? res.sessionId : "",
+            expiresAt: typeof res?.live?.expiresAt === "string" ? res.live.expiresAt : null,
+          });
+        }}
+        onCloseLiveTitlePrompt={() => setShowLiveTitlePrompt(false)}
+        onConfirmEndLive={async () => {
+          setShowEndLiveConfirm(false);
+          endLiveSessionLocally({ clearSeen: true });
+          await adminAction("end-live", channelId);
+          void loadNormalChannelData().catch(() => {});
+          setShowLiveEnded(true);
+        }}
+        onCancelEndLive={() => setShowEndLiveConfirm(false)}
+        onCloseLiveEnded={() => {
           setShowLiveEnded(false);
           void loadNormalChannelData().catch(() => {});
-        }} />
-      )}
-
-      {/* Live Started Popup (shown to non-admin when live starts) */}
-      {showLivePopup && (
-        <LivePopup
-          title={liveTitle}
-          onJoin={() => {
-            enterLiveMode({ markCurrentSessionSeen: true });
-            void loadLiveChannelData().catch(() => {});
-          }}
-          onDismiss={dismissLivePopup}
-        />
-      )}
-
-      {/* Emoji Preset Panel */}
-      {showEmojiPreset && (
-        <EmojiPresetPanel
-          channelId={channelId}
-          onClose={closeEmojiPreset}
-        />
-      )}
-
-      {/* Notice Edit Dialog */}
-      {showNoticeEdit && (
-        <NoticeEditDialog
-          currentTitle={(() => { try { const p = JSON.parse(activeNotice); return p.title || activeNotice; } catch { return activeNotice; } })()}
-          currentBody={(() => { try { const p = JSON.parse(activeNotice); return p.body || ""; } catch { return ""; } })()}
-          onSave={handleNoticeEditSave}
-          onClose={closeNoticeEdit}
-        />
-      )}
-
-      {/* Notice Panel */}
-      {showNotice && (
-        <NoticePanel
-          notice={(() => { try { return JSON.parse(channel?.notice || "[]"); } catch { return []; } })()}
-          onClose={closeNotice}
-        />
-      )}
-
-      {/* Full view image overlay */}
-      {fullViewImage && (
-        <div
-          className="fixed inset-0 z-[120] flex flex-col items-center justify-center cursor-pointer animate-[ctxFade_0.2s_ease]"
-          style={{ background: "rgba(0,0,0,.85)" }}
-          onClick={closeFullViewImage}
-        >
-          <img
-            src={fullViewImage.src}
-            alt=""
-            style={{ maxWidth: "90%", maxHeight: "70%", objectFit: "contain", borderRadius: "8px" }}
-          />
-          {(fullViewImage.caption || fullViewImage.date) && (
-            <div style={{ textAlign: "center", padding: "12px" }} onClick={(e) => e.stopPropagation()}>
-              {fullViewImage.caption && (
-                <div style={{ color: "#fff", fontSize: "var(--bubble-font-size, 15px)", marginBottom: "8px", textShadow: "0 1px 4px rgba(0,0,0,.5)" }}>
-                  {fullViewImage.caption}
-                </div>
-              )}
-              {fullViewImage.date && fullViewImage.msgId && fullViewImage.fromGallery && (
-                <button
-                  onClick={() => {
-                    const msgId = fullViewImage.msgId!;
-                    closeFullViewImage();
-                    closeGallery();
-                    setTimeout(() => scrollToMessage(msgId), 100);
-                  }}
-                  style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.3)", color: "#fff", fontSize: "calc(var(--bubble-font-size) - 2px)", padding: "6px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}
-                >
-                  {chatDateLabel(fullViewImage.date!, locale, timeZone)} →
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+        }}
+        onJoinLivePopup={() => {
+          enterLiveMode({ markCurrentSessionSeen: true });
+          void loadLiveChannelData().catch(() => {});
+        }}
+        onDismissLivePopup={dismissLivePopup}
+        onCloseEmojiPreset={closeEmojiPreset}
+        onNoticeEditSave={handleNoticeEditSave}
+        onCloseNoticeEdit={closeNoticeEdit}
+        onCloseNotice={closeNotice}
+        onCloseFullViewImage={closeFullViewImage}
+        onJumpFromGalleryImage={(msgId) => {
+          closeFullViewImage();
+          closeGallery();
+          setTimeout(() => scrollToMessage(msgId), 100);
+        }}
+      />
     </div>
   );
 }
