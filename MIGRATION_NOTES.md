@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat message content extraction from `ChatView` — 2026-08-03
+
+- Extracted linkification, inline media retry/open behavior, and text-plus-embed bubble rendering into `src/components/chat/ChatMessageContent.tsx`.
+- `ChatView` now imports a small message-content surface instead of carrying the URL parsing, long-text expansion, and embed-hiding state inline inside the main container file.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat message utility extraction from `ChatView` — 2026-08-03
 
 - Extracted pure message-history and formatting helpers into `src/components/chat/chatMessageUtils.ts` so `ChatView` no longer owns the mounted-history trimming, live countdown formatting, reaction parsing, inbox-line stripping, or server-snapshot merge logic inline.
