@@ -45,6 +45,7 @@ import {
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReportsSearch } from "./useChatReportsSearch";
+import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
 
 interface Channel {
   id: string;
@@ -166,12 +167,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
   const [viewerBlocked, setViewerBlocked] = useState(false);
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; passcodeHint?: string; notice?: string } | null>(null);
   const [uid, setUid] = useState(getInitialUid);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [historyMode, setHistoryMode] = useState<"latest" | "context">("latest");
   const [newerMessageCount, setNewerMessageCount] = useState(0);
@@ -227,7 +226,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     return localStorage.getItem(`bubbleColor_${channelId}`);
   });
   const [emojiPicker, setEmojiPicker] = useState<{ msgId: string; rect: DOMRect } | null>(null);
-  const [editingMsg, setEditingMsg] = useState<{ id: string; text: string } | null>(null);
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
@@ -239,7 +237,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("petitionSent") || "";
   });
-  const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
   useEffect(() => {
     setViewerAccess("standard");
   }, [channelId]);
@@ -258,6 +255,18 @@ export function ChatView({ channelId }: { channelId: string }) {
   const handleTouchStartRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
   const handleTouchEndRef = useRef<() => void>(() => {});
   const applyInitDataRef = useRef<(data: InitData) => void>(() => {});
+
+  const processPendingPhoto = useCallback(async (file: File): Promise<PendingPhoto> => {
+    if (file.type === "image/gif") {
+      const previewUrl = URL.createObjectURL(file);
+      const dims = await getImageDimensions(file);
+      return { blob: file, previewUrl, width: dims.width, height: dims.height };
+    }
+
+    const { blob, width, height } = await compressImage(file, 1200, 0.8);
+    const previewUrl = URL.createObjectURL(blob);
+    return { blob, previewUrl, width, height };
+  }, []);
 
   useEffect(() => () => {
     if (reactionFrameRef.current !== null) {
@@ -287,6 +296,28 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, []);
 
   const { connected, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
+  const effectiveAdmin = isAdmin && !adminViewAsUser;
+  const {
+    input,
+    replyingTo,
+    editingMsg,
+    pendingPhotos,
+    setReplyingTo,
+    setPendingPhotos,
+    handleInputChange,
+    resetInput,
+    restoreInput,
+    focusTextarea,
+    clearReplyingTo,
+    openEditDialog,
+    closeEditDialog,
+    handlePhotoSelect,
+    removePendingPhoto,
+    consumeComposerState,
+  } = useChatComposerState({
+    textareaRef,
+    processPhotoFile: processPendingPhoto,
+  });
 
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
@@ -303,7 +334,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     const normalData = await fetchInit(channelId) as InitData;
     applyInitDataRef.current(normalData);
   }, [channelId]);
-  const effectiveAdmin = isAdmin && !adminViewAsUser;
 
   const {
     liveActive,
@@ -904,14 +934,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   }, [loading, passcodeGate]);
 
-  // Auto-resize textarea
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    const el = e.target;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 80) + "px";
-  };
-
   const handleSend = async () => {
     const text = input.trim();
     if ((!text && pendingPhotos.length === 0) || ownerModerationBlocked || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
@@ -946,8 +968,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         return;
       }
       // Send one-time petition DM
-      setInput("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      resetInput();
       const blockEntry = blockedUsers.find((b) => b.uid === uid);
       const reason = blockEntry?.reason ? `\n[${t("blockReason")}: "${blockEntry.reason}"]` : "";
       const petitionText = `[${t("petitionPrefix")}] ${text}${reason}`;
@@ -957,7 +978,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         channel_id: inLiveMode ? `${channelId}_live` : channelId,
       });
       if (!result?.ok) {
-        setInput(text);
+        restoreInput(text);
         showMutationError(result?.error);
         return;
       }
@@ -969,20 +990,16 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
 
     // Send photos + text
-    const photos = [...pendingPhotos];
-    setPendingPhotos([]);
-    const savedReplyTo = replyingTo?.id;
-    setReplyingTo(null);
+    const { photos, replyToId: savedReplyTo } = consumeComposerState();
 
     // DM mode
     if (dmMode) {
-      setInput("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      resetInput();
       setDmMode(false);
       const dmChannelId = inLiveMode ? `${channelId}_live` : channelId;
       const dmUpload = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId, "dm") : null;
       if (photos.length > 0 && !dmUpload) {
-        setInput(text);
+        restoreInput(text);
         setDmMode(true);
         setPendingPhotos(photos);
         showMutationError("upload_failed");
@@ -996,7 +1013,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         upload_id: dmUpload?.uploadId,
       });
       if (!result?.ok) {
-        setInput(text);
+        restoreInput(text);
         setDmMode(true);
         setPendingPhotos(photos);
         showMutationError(result?.error);
@@ -1057,8 +1074,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           URL.revokeObjectURL(photos[index].previewUrl);
           // The first successful photo already delivered the caption.
           if (index === 0) {
-            setInput("");
-            if (textareaRef.current) textareaRef.current.style.height = "auto";
+            resetInput();
           }
         }
       }
@@ -1072,8 +1088,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       showMutationError(sendError);
     } else {
       // DO broadcasts message-changed → refetch shows each sent message.
-      setInput("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      resetInput();
     }
   };
 
@@ -1270,37 +1285,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       setGalleryItems((prev) => prev.filter((item) => item.id !== msgId));
       deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
     }
-  };
-
-  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const newPhotos: typeof pendingPhotos = [];
-    for (const file of Array.from(files)) {
-      if (file.type === "image/gif") {
-        const previewUrl = URL.createObjectURL(file);
-        const dims = await getImageDimensions(file);
-        newPhotos.push({ blob: file, previewUrl, width: dims.width, height: dims.height });
-      } else {
-        const { blob, width, height } = await compressImage(file, 1200, 0.8);
-        const previewUrl = URL.createObjectURL(blob);
-        newPhotos.push({ blob, previewUrl, width, height });
-      }
-    }
-    setPendingPhotos((prev) => [...prev, ...newPhotos]);
-    // Reset input
-    e.target.value = "";
-    textareaRef.current?.focus();
-  };
-
-  const removePendingPhoto = (idx: number) => {
-    setPendingPhotos((prev) => {
-      const updated = [...prev];
-      URL.revokeObjectURL(updated[idx].previewUrl);
-      updated.splice(idx, 1);
-      return updated;
-    });
   };
 
   const handleMemoizedReaction = useCallback((messageId: string, emoji: string) => {
@@ -1912,7 +1896,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       )}
 
       {/* Reply bar */}
-      <ReplyBar replyingTo={replyingTo} onClose={() => setReplyingTo(null)} />
+      <ReplyBar replyingTo={replyingTo} onClose={clearReplyingTo} />
 
       {/* Photo preview */}
       {pendingPhotos.length > 0 && (
@@ -2137,7 +2121,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             } else if (msg) {
               setReplyingTo(msg);
             }
-            textareaRef.current?.focus();
+            focusTextarea();
           }}
           onReport={!effectiveAdmin && !contextMenu.isOwn ? () => {
             reportMessage(contextMenu.msg);
@@ -2173,7 +2157,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           } : undefined}
           onEdit={contextMenu.isOwn && !ownerModerationBlocked ? (msgId) => {
             const msg = messages.find((m) => m.id === msgId);
-            if (msg) setEditingMsg({ id: msg.id, text: msg.text });
+            if (msg) openEditDialog(msg);
           } : undefined}
           onBlock={canUseAdminMutations && !contextMenu.isOwn && canBlockMessage(contextMenu.msg) ? (targetMsg) => {
             const blockUid = targetMsg.uid;
@@ -2521,7 +2505,7 @@ export function ChatView({ channelId }: { channelId: string }) {
               setTimeout(() => setBanner(null), 3000);
             });
           }}
-          onClose={() => setEditingMsg(null)}
+          onClose={closeEditDialog}
         />
       )}
 

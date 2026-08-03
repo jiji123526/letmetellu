@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat composer-state extraction from `ChatView` — 2026-08-03
+
+- Extracted draft input state, reply target state, edit-dialog draft state, pending-photo lifecycle, textarea auto-resize behavior, and related local composer handlers into `src/components/chat/useChatComposerState.ts`.
+- `ChatView` now consumes a focused composer-state hook while still keeping the actual send, edit, delete, and reaction mutation pipeline inline for a later lower-noise extraction.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat reports/search extraction from `ChatView` — 2026-08-03
 
 - Extracted reports-inbox filter state, search-panel state, locally tracked reported-message ids, report/unreport actions, and the selector-backed derived report/search message collections into `src/components/chat/useChatReportsSearch.ts`.
