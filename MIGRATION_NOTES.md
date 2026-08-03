@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat context-menu action extraction from `ChatView` — 2026-08-03
+
+- Extracted reply targeting, report/unreport wiring, owner edit open, admin delete-with-replies behavior, block/unblock behavior, and report/petition moderation action routing into `src/components/chat/useChatContextMenuActions.ts`.
+- `ChatView` now passes a compact derived action set into `ContextMenu` instead of carrying the remaining policy-heavy inline callback block at the menu callsite.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
+### Chat overlay stack extraction from `ChatView` — 2026-08-03
+
+- Extracted the bottom-of-page shell and dialog stack into `src/components/chat/ChatViewOverlays.tsx`, covering the welcome popup, header menu, channel report dialog, moderation petition dialog, owner-channels popup, settings, gallery, links, admin panel, emoji picker, plus menu, live popups, notice editors, and full-image overlay.
+- `ChatView` now keeps the overlay state and business callbacks while delegating the overlay render surface to one focused component instead of mixing that shell with message list and composer rendering.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
+### Inline chat edit panel visibility update — 2026-08-03
+
+- The message edit surface now opens inline directly below the search bar instead of as a centered modal overlay.
+- `src/components/chat/EditDialog.tsx` now supports an inline presentation mode, and `ChatView` renders the active edit panel near the top of the page so edit state is immediately visible while reviewing message history.
+- This is a frontend-only UX change with no schema or Worker deployment requirement.
+
 ### Chat channel-settings callback extraction from `ChatView` — 2026-08-03
 
 - Extracted the remaining settings/admin callback cluster into `src/components/chat/useChatChannelSettings.ts`, covering viewer color preference changes, admin profile/background/name/profile-image updates, petition and DM toggles, profile visibility updates, rules/welcome updates, passcode-hint updates, unblock actions, and notice-edit save behavior.

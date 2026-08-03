@@ -20,7 +20,6 @@ import { MessageList } from "./ChatMessageList";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
-import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import {
@@ -35,6 +34,7 @@ import { useChatInteractions } from "./useChatInteractions";
 import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
 import { useChatChannelSettings } from "./useChatChannelSettings";
 import { ChatViewOverlays } from "./ChatViewOverlays";
+import { useChatContextMenuActions } from "./useChatContextMenuActions";
 
 interface Channel {
   id: string;
@@ -1124,6 +1124,38 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
+  const contextMenuActions = useChatContextMenuActions({
+    channelId,
+    inLiveMode,
+    effectiveAdmin,
+    ownerModerationBlocked,
+    canUseAdminMutations,
+    contextMenu,
+    messages,
+    dmMessages,
+    blockedUsers,
+    reportActionPendingId,
+    setReplyingTo,
+    focusTextarea,
+    reportMessage,
+    unreportMessage,
+    isMessageReported,
+    handleDelete,
+    setMessages,
+    setDmMessages,
+    setBanner,
+    setBlockedUsers,
+    openEditDialog,
+    handleReportAction,
+    handlePetitionAction,
+    text: {
+      deleteLabel: t("delete"),
+      anonLabel: t("anon"),
+      anonBlockedLabel: t("anonBlocked"),
+      anonUnblockedLabel: t("anonUnblocked"),
+    },
+  });
+
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
     return (
@@ -1866,87 +1898,18 @@ export function ChatView({ channelId }: { channelId: string }) {
           bubbleEl={contextMenu.bubbleEl}
           isAdmin={effectiveAdmin}
           onReaction={handleReaction}
-          onReply={!canReplyToMessage(contextMenu.msg, effectiveAdmin) ? undefined : (msgId) => {
-            // Reply to top-level parent, not to a reply
-            const msg = messages.find((m) => m.id === msgId);
-            if (msg?.reply_to) {
-              const parent = messages.find((m) => m.id === msg.reply_to);
-              if (parent) { setReplyingTo(parent); } else { setReplyingTo(msg); }
-            } else if (msg) {
-              setReplyingTo(msg);
-            }
-            focusTextarea();
-          }}
-          onReport={!effectiveAdmin && !contextMenu.isOwn ? () => {
-            reportMessage(contextMenu.msg);
-          } : undefined}
-          onUnreport={!effectiveAdmin && !contextMenu.isOwn ? () => {
-            unreportMessage(contextMenu.msg);
-          } : undefined}
-          isReported={isMessageReported(contextMenu.msg.id)}
-          onDelete={contextMenu.isOwn && !ownerModerationBlocked ? handleDelete : undefined}
-          onDeleteWithReplies={canUseAdminMutations && !contextMenu.isOwn ? (msgId) => {
-            const targetMsg = messages.find((m) => m.id === msgId);
-            const idsToDelete = new Set([msgId]);
-
-            // If deleting a report message, also delete the reported message + its replies
-            if (targetMsg?.report && targetMsg.reported_msg_id) {
-              idsToDelete.add(targetMsg.reported_msg_id);
-              messages.forEach((m) => { if (m.reply_to === targetMsg.reported_msg_id) idsToDelete.add(m.id); });
-            }
-
-            // Also delete replies of the target message
-            messages.forEach((m) => { if (m.reply_to === msgId) idsToDelete.add(m.id); });
-
-            setMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
-            // Delete via admin endpoint
-            idsToDelete.forEach((id) => {
-              const msg = messages.find((m) => m.id === id) || dmMessages.find((m) => m.id === id);
-              if (msg?.dm) adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: id });
-              else adminAction("delete-message", inLiveMode ? `${channelId}_live` : channelId, { message_id: id });
-            });
-            setDmMessages((prev) => prev.filter((m) => !idsToDelete.has(m.id)));
-            setBanner({ text: t("delete"), color: "#d32f2f" });
-            setTimeout(() => setBanner(null), 3000);
-          } : undefined}
-          onEdit={contextMenu.isOwn && !ownerModerationBlocked ? (msgId) => {
-            const msg = messages.find((m) => m.id === msgId);
-            if (msg) openEditDialog(msg);
-          } : undefined}
-          onBlock={canUseAdminMutations && !contextMenu.isOwn && canBlockMessage(contextMenu.msg) ? (targetMsg) => {
-            const blockUid = targetMsg.uid;
-            const isBlocked = blockedUsers.some((b) => b.uid === blockUid);
-            if (isBlocked) {
-              adminAction("unblock", channelId, { uid: blockUid });
-              setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
-              setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonUnblocked")}`, color: "#2a9d4e" });
-            } else {
-              const reason = targetMsg.text?.slice(0, 50) || "";
-              adminAction("block", channelId, {
-                message_id: targetMsg.id,
-                message_kind: targetMsg.dm ? "dm" : "message",
-                reason,
-              });
-              setBlockedUsers((prev) => [...prev, { uid: blockUid, reason }]);
-              setBanner({ text: `${t("anon")}#${blockUid.slice(-4)} ${t("anonBlocked")}`, color: "#d32f2f" });
-            }
-            setTimeout(() => setBanner(null), 3000);
-          } : undefined}
-          isBlockedUser={blockedUsers.some((b) => b.uid === contextMenu.msg.uid)}
-          onReportAction={canUseAdminMutations && contextMenu.msg.report_meta ? (action) => {
-            void handleReportAction(contextMenu.msg.report_meta!, action);
-          } : undefined}
-          onPetitionAction={canUseAdminMutations && contextMenu.msg.petition_meta ? (action) => {
-            void handlePetitionAction(contextMenu.msg.petition_meta!, action);
-          } : undefined}
-          reportActionPending={Boolean(
-            canUseAdminMutations
-            && reportActionPendingId
-            && (
-              reportActionPendingId === contextMenu.msg.report_meta?.report_id
-              || reportActionPendingId === contextMenu.msg.petition_meta?.petition_id
-            )
-          )}
+          onReply={contextMenuActions.onReply}
+          onReport={contextMenuActions.onReport}
+          onUnreport={contextMenuActions.onUnreport}
+          isReported={contextMenuActions.isReported}
+          onDelete={contextMenuActions.onDelete}
+          onDeleteWithReplies={contextMenuActions.onDeleteWithReplies}
+          onEdit={contextMenuActions.onEdit}
+          onBlock={contextMenuActions.onBlock}
+          isBlockedUser={contextMenuActions.isBlockedUser}
+          onReportAction={contextMenuActions.onReportAction}
+          onPetitionAction={contextMenuActions.onPetitionAction}
+          reportActionPending={contextMenuActions.reportActionPending}
           onEmojiPicker={openEmojiPicker}
           onClose={closeContextMenu}
           isMyMessage={contextMenu.isOwn}
