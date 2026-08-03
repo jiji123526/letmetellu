@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat message selector extraction from `ChatView` — 2026-08-03
+
+- Extracted message-display derivation into `src/components/chat/chatMessageSelectors.ts`, moving admin/user message selection, reports-inbox filtering, restricted-channel rollups, reported-target collection, and reply threading out of `ChatView`.
+- `ChatView` now reads one memoized derived chat-collections object instead of maintaining several adjacent selector-style `useMemo` blocks inline.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat message row/list extraction from `ChatView` — 2026-08-03
 
 - Extracted row-level chat presentation into `src/components/chat/ChatMessageList.tsx`, moving bubble styling, reply layout, reaction badge placement, moderation-inbox row treatment, and per-day separators out of `ChatView`.
