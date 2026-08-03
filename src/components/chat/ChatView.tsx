@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, adminAction, fetchMessages } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, fetchInit, fetchOwnerChannels, getStoredUid, adminAction, fetchMessages } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -31,7 +31,7 @@ import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MessageList } from "./ChatMessageList";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { chatDateLabel } from "@/lib/chat-date";
-import { recordAccountRecentChannel, setAccountChannelColor } from "@/lib/account-recent-channels";
+import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
@@ -47,6 +47,7 @@ import { useChatComposerState, type PendingPhoto } from "./useChatComposerState"
 import { useChatMessageMutations } from "./useChatMessageMutations";
 import { useChatInteractions } from "./useChatInteractions";
 import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
+import { useChatChannelSettings } from "./useChatChannelSettings";
 
 interface Channel {
   id: string;
@@ -575,6 +576,53 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [channelId, applyInitData]);
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
+  const {
+    handleViewerColorChange,
+    handleToggleView,
+    handlePetitionToggle,
+    handleDmToggle: handleDmSettingsToggle,
+    handleShowOnProfileToggle,
+    handleColorChange,
+    handleBackgroundChange,
+    handleNameChange,
+    handleProfileImageChange,
+    handlePasscodeChange,
+    handleNoticeChange: handleRulesNoticeChange,
+    handleWelcomeChange,
+    handleUnblock,
+    handleNoticeEditSave,
+  } = useChatChannelSettings({
+    channelId,
+    bubbleColor,
+    inLiveMode,
+    isLoggedIn,
+    petitionEnabled,
+    dmEnabled,
+    setAdminViewAsUser,
+    setPetitionEnabled,
+    setDmEnabled,
+    setActiveNotice,
+    setWelcomeConfig,
+    setBlockedUsers,
+    setLocalBubbleColor,
+    setChannel,
+    setBanner,
+    text: {
+      petitionAllowed: t("petitionAllowed"),
+      petitionBlocked: t("petitionBlocked"),
+      dmAllowed: t("dmAllowed"),
+      dmBlocked: t("dmBlocked"),
+      channelShownOnProfile: t("channelShownOnProfile"),
+      channelHiddenFromProfile: t("channelHiddenFromProfile"),
+      backgroundChanged: t("backgroundChanged"),
+      nameChanged: t("nameChanged"),
+      profileChanged: t("profileChanged"),
+      rulesChanged: t("rulesChanged"),
+      welcomeChanged: t("welcomeChanged"),
+      chatUnfrozen: t("chatUnfrozen"),
+      noticePosted: t("noticePosted"),
+    },
+  });
 
   // Sync bubble color to CSS variable so var(--bubble-sent) works everywhere
   useEffect(() => {
@@ -1957,17 +2005,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <SettingsPanel
           channelId={channelId}
           currentColor={bubbleColor}
-          onColorChange={(color) => {
-            setLocalBubbleColor(color);
-            localStorage.setItem(`bubbleColor_${channelId}`, color);
-            if (isLoggedIn) {
-              void setAccountChannelColor(channelId, color).catch(() => {
-                // Keep the selected color locally and retry on the next change.
-              });
-            } else {
-              updateRecentChannelAppearance(channelId, { bubbleColor: color });
-            }
-          }}
+          onColorChange={handleViewerColorChange}
           onAdmin={effectiveAdmin && !ownerModerationBlocked ? () => {
             openAdminPanel();
           } : undefined}
@@ -2017,91 +2055,18 @@ export function ChatView({ channelId }: { channelId: string }) {
           notice={channel?.notice || "[]"}
           welcomeConfig={welcomeConfig}
           blockedUsers={blockedUsers}
-          onToggleView={() => setAdminViewAsUser(true)}
-          onPetitionToggle={() => {
-            const newVal = !petitionEnabled;
-            setPetitionEnabled(newVal);
-            adminAction("set-petition", channelId, { enabled: newVal });
-            setBanner({ text: newVal ? t("petitionAllowed") : t("petitionBlocked"), color: newVal ? "#2a9d4e" : "#c0392b" });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onDmToggle={() => {
-            const newVal = !dmEnabled;
-            setDmEnabled(newVal);
-            adminAction("set-dm", channelId, { enabled: newVal });
-            setBanner({ text: newVal ? t("dmAllowed") : t("dmBlocked"), color: newVal ? "#2a9d4e" : "#c0392b" });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onShowOnProfileToggle={(visible) => {
-            setChannel((prev) => prev ? { ...prev, show_on_profile: visible ? 1 : 0 } : null);
-            adminAction("update-profile", channelId, { show_on_profile: visible });
-            setBanner({ text: visible ? t("channelShownOnProfile") : t("channelHiddenFromProfile"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 2500);
-          }}
-          onColorChange={(color) => {
-            setLocalBubbleColor(color);
-            setChannel((prev) => prev ? { ...prev, bubble_color: color } : null);
-            localStorage.setItem(`bubbleColor_${channelId}`, color);
-            document.documentElement.style.setProperty("--bubble-sent", color);
-            if (isLoggedIn) {
-              void setAccountChannelColor(channelId, color).catch(() => {
-                // Channel color still updates even if personal sync is temporarily unavailable.
-              });
-            } else {
-              updateRecentChannelAppearance(channelId, { bubbleColor: color });
-            }
-            adminAction("update-profile", channelId, { bubble_color: color });
-          }}
-          onBackgroundChange={(background) => {
-            const decoratedBackgroundImage = decorateProtectedMediaUrl(background.background_image) || background.background_image;
-            setChannel((prev) => prev ? {
-              ...prev,
-              ...background,
-              background_image: decoratedBackgroundImage,
-            } : null);
-            void adminAction("update-profile", channelId, background);
-            setBanner({ text: t("backgroundChanged"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 2500);
-          }}
-          onNameChange={(name) => {
-            setChannel((prev) => prev ? { ...prev, name } : null);
-            updateRecentChannelAppearance(channelId, { name });
-            adminAction("update-profile", channelId, { name });
-            setBanner({ text: t("nameChanged"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onProfileImageChange={(url) => {
-            const decoratedUrl = decorateMediaUrl(url) || url;
-            setChannel((prev) => prev ? { ...prev, profile_image: decoratedUrl } : null);
-            updateRecentChannelAppearance(channelId, { profileImage: decoratedUrl });
-            adminAction("update-profile", channelId, { profile_image: url });
-            setBanner({ text: t("profileChanged"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onPasscodeChange={(hasPasscode, hint) => {
-            setChannel((prev) => prev ? { ...prev, passcode_hint: hasPasscode ? hint || null : null } : null);
-            updateRecentChannelAppearance(channelId, { hasPasscode });
-          }}
-          onNoticeChange={(noticeStr) => {
-            setChannel((prev) => prev ? { ...prev, notice: noticeStr } : null);
-            adminAction("set-rules", channelId, { rules: noticeStr });
-            setBanner({ text: t("rulesChanged"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onWelcomeChange={(config) => {
-            const decoratedConfig = decorateWelcomeConfig(config) || config;
-            setWelcomeConfig(decoratedConfig);
-            localStorage.setItem(`welcomeConfig_${channelId}`, decoratedConfig);
-            adminAction("set-welcome", channelId, { config });
-            setBanner({ text: t("welcomeChanged"), color: bubbleColor });
-            setTimeout(() => setBanner(null), 3000);
-          }}
-          onUnblock={(blockUid) => {
-            adminAction("unblock", channelId, { uid: blockUid });
-            setBlockedUsers((prev) => prev.filter((b) => b.uid !== blockUid));
-            setBanner({ text: t("chatUnfrozen"), color: "#2a9d4e" });
-            setTimeout(() => setBanner(null), 3000);
-          }}
+          onToggleView={handleToggleView}
+          onPetitionToggle={handlePetitionToggle}
+          onDmToggle={handleDmSettingsToggle}
+          onShowOnProfileToggle={handleShowOnProfileToggle}
+          onColorChange={handleColorChange}
+          onBackgroundChange={handleBackgroundChange}
+          onNameChange={handleNameChange}
+          onProfileImageChange={handleProfileImageChange}
+          onPasscodeChange={handlePasscodeChange}
+          onNoticeChange={handleRulesNoticeChange}
+          onWelcomeChange={handleWelcomeChange}
+          onUnblock={handleUnblock}
           onClose={closeAdminPanel}
         />
       )}
@@ -2222,22 +2187,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <NoticeEditDialog
           currentTitle={(() => { try { const p = JSON.parse(activeNotice); return p.title || activeNotice; } catch { return activeNotice; } })()}
           currentBody={(() => { try { const p = JSON.parse(activeNotice); return p.body || ""; } catch { return ""; } })()}
-          onSave={(title, body) => {
-            if (!title) {
-              setActiveNotice("");
-              localStorage.removeItem(`activeNotice_${channelId}`);
-              adminAction("set-notice", inLiveMode ? `${channelId}_live` : channelId, { text: "" });
-              setBanner({ text: t("noticePosted"), color: "var(--meta)" });
-            } else {
-              const notice = body ? JSON.stringify({ title, body }) : title;
-              setActiveNotice(notice);
-              localStorage.setItem(`activeNotice_${channelId}`, notice);
-              localStorage.removeItem(`noticeDismissed_${channelId}`);
-              adminAction("set-notice", inLiveMode ? `${channelId}_live` : channelId, { text: notice });
-              setBanner({ text: t("noticePosted"), color: bubbleColor });
-            }
-            setTimeout(() => setBanner(null), 3000);
-          }}
+          onSave={handleNoticeEditSave}
           onClose={closeNoticeEdit}
         />
       )}

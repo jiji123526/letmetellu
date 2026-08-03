@@ -1,0 +1,243 @@
+"use client";
+
+import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { adminAction, decorateMediaUrl, decorateProtectedMediaUrl, decorateWelcomeConfig } from "@/lib/api";
+import { updateRecentChannelAppearance } from "@/lib/recent-channels";
+import { setAccountChannelColor } from "@/lib/account-recent-channels";
+
+interface BannerState {
+  text: string;
+  color: string;
+}
+
+interface BackgroundUpdate {
+  background_type?: "default" | "color" | "image";
+  background_color?: string | null;
+  background_image?: string | null;
+  background_overlay?: number;
+  background_blur?: number;
+}
+
+interface ChannelSettingsState {
+  name: string;
+  profile_image: string | null;
+  bubble_color: string;
+  notice: string;
+  passcode_hint?: string | null;
+  show_on_profile?: number;
+  background_type?: "default" | "color" | "image";
+  background_color?: string | null;
+  background_image?: string | null;
+  background_overlay?: number;
+  background_blur?: number;
+}
+
+interface UseChatChannelSettingsArgs<TChannel extends ChannelSettingsState> {
+  channelId: string;
+  bubbleColor: string;
+  inLiveMode: boolean;
+  isLoggedIn: boolean;
+  petitionEnabled: boolean;
+  dmEnabled: boolean;
+  setAdminViewAsUser: Dispatch<SetStateAction<boolean>>;
+  setPetitionEnabled: Dispatch<SetStateAction<boolean>>;
+  setDmEnabled: Dispatch<SetStateAction<boolean>>;
+  setActiveNotice: Dispatch<SetStateAction<string>>;
+  setWelcomeConfig: Dispatch<SetStateAction<string>>;
+  setBlockedUsers: Dispatch<SetStateAction<{ uid: string; reason: string }[]>>;
+  setLocalBubbleColor: Dispatch<SetStateAction<string | null>>;
+  setChannel: Dispatch<SetStateAction<TChannel | null>>;
+  setBanner: Dispatch<SetStateAction<BannerState | null>>;
+  text: {
+    petitionAllowed: string;
+    petitionBlocked: string;
+    dmAllowed: string;
+    dmBlocked: string;
+    channelShownOnProfile: string;
+    channelHiddenFromProfile: string;
+    backgroundChanged: string;
+    nameChanged: string;
+    profileChanged: string;
+    rulesChanged: string;
+    welcomeChanged: string;
+    chatUnfrozen: string;
+    noticePosted: string;
+  };
+}
+
+interface UseChatChannelSettingsResult {
+  handleViewerColorChange: (color: string) => void;
+  handleToggleView: () => void;
+  handlePetitionToggle: () => void;
+  handleDmToggle: () => void;
+  handleShowOnProfileToggle: (visible: boolean) => void;
+  handleColorChange: (color: string) => void;
+  handleBackgroundChange: (background: BackgroundUpdate) => void;
+  handleNameChange: (name: string) => void;
+  handleProfileImageChange: (url: string) => void;
+  handlePasscodeChange: (hasPasscode: boolean, hint?: string) => void;
+  handleNoticeChange: (noticeStr: string) => void;
+  handleWelcomeChange: (config: string) => void;
+  handleUnblock: (blockedUid: string) => void;
+  handleNoticeEditSave: (title: string, body: string) => void;
+}
+
+export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
+  channelId,
+  bubbleColor,
+  inLiveMode,
+  isLoggedIn,
+  petitionEnabled,
+  dmEnabled,
+  setAdminViewAsUser,
+  setPetitionEnabled,
+  setDmEnabled,
+  setActiveNotice,
+  setWelcomeConfig,
+  setBlockedUsers,
+  setLocalBubbleColor,
+  setChannel,
+  setBanner,
+  text,
+}: UseChatChannelSettingsArgs<TChannel>): UseChatChannelSettingsResult {
+  const flashBanner = useCallback((message: string, color: string, durationMs = 3000) => {
+    setBanner({ text: message, color });
+    setTimeout(() => setBanner(null), durationMs);
+  }, [setBanner]);
+
+  const handleToggleView = useCallback(() => {
+    setAdminViewAsUser(true);
+  }, [setAdminViewAsUser]);
+
+  const handleViewerColorChange = useCallback((color: string) => {
+    setLocalBubbleColor(color);
+    localStorage.setItem(`bubbleColor_${channelId}`, color);
+    if (isLoggedIn) {
+      void setAccountChannelColor(channelId, color).catch(() => {
+        // Keep the selected color locally and retry on the next change.
+      });
+    } else {
+      updateRecentChannelAppearance(channelId, { bubbleColor: color });
+    }
+  }, [channelId, isLoggedIn, setLocalBubbleColor]);
+
+  const handlePetitionToggle = useCallback(() => {
+    const nextValue = !petitionEnabled;
+    setPetitionEnabled(nextValue);
+    adminAction("set-petition", channelId, { enabled: nextValue });
+    flashBanner(nextValue ? text.petitionAllowed : text.petitionBlocked, nextValue ? "#2a9d4e" : "#c0392b");
+  }, [channelId, flashBanner, petitionEnabled, setPetitionEnabled, text.petitionAllowed, text.petitionBlocked]);
+
+  const handleDmToggle = useCallback(() => {
+    const nextValue = !dmEnabled;
+    setDmEnabled(nextValue);
+    adminAction("set-dm", channelId, { enabled: nextValue });
+    flashBanner(nextValue ? text.dmAllowed : text.dmBlocked, nextValue ? "#2a9d4e" : "#c0392b");
+  }, [channelId, dmEnabled, flashBanner, setDmEnabled, text.dmAllowed, text.dmBlocked]);
+
+  const handleShowOnProfileToggle = useCallback((visible: boolean) => {
+    setChannel((previous) => previous ? { ...previous, show_on_profile: visible ? 1 : 0 } : null);
+    adminAction("update-profile", channelId, { show_on_profile: visible });
+    flashBanner(visible ? text.channelShownOnProfile : text.channelHiddenFromProfile, bubbleColor, 2500);
+  }, [bubbleColor, channelId, flashBanner, setChannel, text.channelHiddenFromProfile, text.channelShownOnProfile]);
+
+  const handleColorChange = useCallback((color: string) => {
+    setLocalBubbleColor(color);
+    setChannel((previous) => previous ? { ...previous, bubble_color: color } : null);
+    localStorage.setItem(`bubbleColor_${channelId}`, color);
+    document.documentElement.style.setProperty("--bubble-sent", color);
+    if (isLoggedIn) {
+      void setAccountChannelColor(channelId, color).catch(() => {
+        // Channel color still updates even if personal sync is temporarily unavailable.
+      });
+    } else {
+      updateRecentChannelAppearance(channelId, { bubbleColor: color });
+    }
+    adminAction("update-profile", channelId, { bubble_color: color });
+  }, [channelId, isLoggedIn, setChannel, setLocalBubbleColor]);
+
+  const handleBackgroundChange = useCallback((background: BackgroundUpdate) => {
+    const decoratedBackgroundImage = decorateProtectedMediaUrl(background.background_image) || background.background_image;
+    setChannel((previous) => previous ? {
+      ...previous,
+      ...background,
+      background_image: decoratedBackgroundImage,
+    } : null);
+    void adminAction("update-profile", channelId, background as Record<string, unknown>);
+    flashBanner(text.backgroundChanged, bubbleColor, 2500);
+  }, [bubbleColor, channelId, flashBanner, setChannel, text.backgroundChanged]);
+
+  const handleNameChange = useCallback((name: string) => {
+    setChannel((previous) => previous ? { ...previous, name } : null);
+    updateRecentChannelAppearance(channelId, { name });
+    adminAction("update-profile", channelId, { name });
+    flashBanner(text.nameChanged, bubbleColor);
+  }, [bubbleColor, channelId, flashBanner, setChannel, text.nameChanged]);
+
+  const handleProfileImageChange = useCallback((url: string) => {
+    const decoratedUrl = decorateMediaUrl(url) || url;
+    setChannel((previous) => previous ? { ...previous, profile_image: decoratedUrl } : null);
+    updateRecentChannelAppearance(channelId, { profileImage: decoratedUrl });
+    adminAction("update-profile", channelId, { profile_image: url });
+    flashBanner(text.profileChanged, bubbleColor);
+  }, [bubbleColor, channelId, flashBanner, setChannel, text.profileChanged]);
+
+  const handlePasscodeChange = useCallback((hasPasscode: boolean, hint?: string) => {
+    setChannel((previous) => previous ? { ...previous, passcode_hint: hasPasscode ? hint || null : null } : null);
+    updateRecentChannelAppearance(channelId, { hasPasscode });
+  }, [channelId, setChannel]);
+
+  const handleNoticeChange = useCallback((noticeStr: string) => {
+    setChannel((previous) => previous ? { ...previous, notice: noticeStr } : null);
+    adminAction("set-rules", channelId, { rules: noticeStr });
+    flashBanner(text.rulesChanged, bubbleColor);
+  }, [bubbleColor, channelId, flashBanner, setChannel, text.rulesChanged]);
+
+  const handleWelcomeChange = useCallback((config: string) => {
+    const decoratedConfig = decorateWelcomeConfig(config) || config;
+    setWelcomeConfig(decoratedConfig);
+    localStorage.setItem(`welcomeConfig_${channelId}`, decoratedConfig);
+    adminAction("set-welcome", channelId, { config });
+    flashBanner(text.welcomeChanged, bubbleColor);
+  }, [bubbleColor, channelId, flashBanner, setWelcomeConfig, text.welcomeChanged]);
+
+  const handleUnblock = useCallback((blockedUid: string) => {
+    adminAction("unblock", channelId, { uid: blockedUid });
+    setBlockedUsers((previous) => previous.filter((blockedUser) => blockedUser.uid !== blockedUid));
+    flashBanner(text.chatUnfrozen, "#2a9d4e");
+  }, [channelId, flashBanner, setBlockedUsers, text.chatUnfrozen]);
+
+  const handleNoticeEditSave = useCallback((title: string, body: string) => {
+    if (!title) {
+      setActiveNotice("");
+      localStorage.removeItem(`activeNotice_${channelId}`);
+      adminAction("set-notice", inLiveMode ? `${channelId}_live` : channelId, { text: "" });
+      flashBanner(text.noticePosted, "var(--meta)");
+      return;
+    }
+
+    const notice = body ? JSON.stringify({ title, body }) : title;
+    setActiveNotice(notice);
+    localStorage.setItem(`activeNotice_${channelId}`, notice);
+    localStorage.removeItem(`noticeDismissed_${channelId}`);
+    adminAction("set-notice", inLiveMode ? `${channelId}_live` : channelId, { text: notice });
+    flashBanner(text.noticePosted, bubbleColor);
+  }, [bubbleColor, channelId, flashBanner, inLiveMode, setActiveNotice, text.noticePosted]);
+
+  return {
+    handleViewerColorChange,
+    handleToggleView,
+    handlePetitionToggle,
+    handleDmToggle,
+    handleShowOnProfileToggle,
+    handleColorChange,
+    handleBackgroundChange,
+    handleNameChange,
+    handleProfileImageChange,
+    handlePasscodeChange,
+    handleNoticeChange,
+    handleWelcomeChange,
+    handleUnblock,
+    handleNoticeEditSave,
+  };
+}

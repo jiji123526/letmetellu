@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat channel-settings callback extraction from `ChatView` — 2026-08-03
+
+- Extracted the remaining settings/admin callback cluster into `src/components/chat/useChatChannelSettings.ts`, covering viewer color preference changes, admin profile/background/name/profile-image updates, petition and DM toggles, profile visibility updates, rules/welcome updates, passcode-hint updates, unblock actions, and notice-edit save behavior.
+- `ChatView` now consumes a dedicated settings callback hook instead of carrying the admin panel and notice-edit mutation callbacks inline beside unrelated chat rendering and realtime wiring.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat admin/channel action extraction from `ChatView` — 2026-08-03
 
 - Extracted admin/channel shell state and handlers into `src/components/chat/useChatAdminChannelActions.ts`, covering header-menu state, settings/notice/gallery/links/admin/owner-channel/report-dialog panel state, gallery entry/load-more behavior, channel sharing, channel reporting, admin freeze toggling, and live-start/end prompt entry wiring.
