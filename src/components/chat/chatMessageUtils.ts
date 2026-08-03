@@ -21,7 +21,7 @@ export interface ChatMessageSnapshot {
 }
 
 export const LIVE_WARNING_THRESHOLDS_MS = [60 * 60 * 1000, 30 * 60 * 1000, 10 * 60 * 1000, 5 * 60 * 1000] as const;
-const MAX_MOUNTED_HISTORY_MESSAGES = 300;
+export const MAX_MOUNTED_HISTORY_MESSAGES = 300;
 
 export function trimMessageWindow<T extends Pick<ChatMessageSnapshot, "id" | "reply_to" | "created_at">>(
   messages: T[],

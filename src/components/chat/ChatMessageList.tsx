@@ -1,0 +1,377 @@
+"use client";
+
+import React from "react";
+import { chatDateKey, chatDateLabel } from "@/lib/chat-date";
+import { ReactionBadge } from "./ReactionBadge";
+import { MemoizedMessageTextWithEmbeds, MessageImage } from "./ChatMessageContent";
+import { isInboxModerationMessage } from "./messageActionRules";
+import { stripInboxChannelLine } from "./chatMessageUtils";
+import type { Message } from "./chatTypes";
+
+interface MessageRowProps {
+  msg: Message;
+  isReply: boolean;
+  parentIsAdmin: boolean | null;
+  effectiveAdmin: boolean;
+  uid: string;
+  authUserId?: string | null;
+  bubbleColor: string;
+  isReported: boolean;
+  isReportedTarget: boolean;
+  isBlockedSender: boolean;
+  searchQuery: string;
+  isSearchMatch: boolean;
+  isActiveMatch: boolean;
+  deletedMessageLabel: string;
+  editedMessageLabel: string;
+  onLongPress: (msg: Message, isSent: boolean, el: HTMLElement) => void;
+  onTouchStart: (msg: Message, isSent: boolean, el: HTMLElement) => void;
+  onTouchEnd: () => void;
+  onOpenImage: (msg: Message) => void;
+  onExpand: (text: string) => void;
+  onReaction: (messageId: string, emoji: string) => void;
+  onEmojiPicker: (messageId: string, rect: DOMRect) => void;
+}
+
+interface MessageListProps {
+  threadedMessages: { topLevel: Message[]; repliesMap: Record<string, Message[]> };
+  effectiveAdmin: boolean;
+  uid: string;
+  authUserId?: string | null;
+  bubbleColor: string;
+  reportedMsgIds: Set<string>;
+  reportedTargetIds: Set<string>;
+  blockedUidSet: Set<string>;
+  searchQuery: string;
+  searchResultIdSet: Set<string>;
+  activeSearchId: string | null;
+  deletedMessageLabel: string;
+  editedMessageLabel: string;
+  locale: "ko" | "en";
+  timeZone: string;
+  onLongPress: MessageRowProps["onLongPress"];
+  onTouchStart: MessageRowProps["onTouchStart"];
+  onTouchEnd: MessageRowProps["onTouchEnd"];
+  onOpenImage: MessageRowProps["onOpenImage"];
+  onExpand: MessageRowProps["onExpand"];
+  onReaction: MessageRowProps["onReaction"];
+  onEmojiPicker: MessageRowProps["onEmojiPicker"];
+}
+
+const MessageRow = React.memo(function MessageRow({
+  msg,
+  isReply,
+  parentIsAdmin,
+  effectiveAdmin,
+  uid,
+  authUserId,
+  bubbleColor,
+  isReported,
+  isReportedTarget,
+  isBlockedSender,
+  searchQuery,
+  isSearchMatch,
+  isActiveMatch,
+  deletedMessageLabel,
+  editedMessageLabel,
+  onLongPress,
+  onTouchStart,
+  onTouchEnd,
+  onOpenImage,
+  onExpand,
+  onReaction,
+  onEmojiPicker,
+}: MessageRowProps) {
+  const parentIsSent = parentIsAdmin !== null
+    ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
+    : false;
+  const isReportInboxMessage = !!msg.report_meta;
+  const isPetitionInboxMessage = !!msg.petition_meta;
+  const isFallbackInboxMessage = isInboxModerationMessage(msg);
+  const isInboxMessage = isReportInboxMessage || isPetitionInboxMessage;
+  const isSent = isReply
+    ? parentIsSent
+    : (isInboxMessage || isFallbackInboxMessage)
+      ? false
+      : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
+  const reportMeta = msg.report_meta;
+  const petitionMeta = msg.petition_meta;
+  const inboxChannel = reportMeta
+    ? {
+        channelId: reportMeta.channel_id,
+        channelName: reportMeta.channel_name,
+      }
+    : petitionMeta
+      ? {
+          channelId: petitionMeta.channel_id,
+          channelName: petitionMeta.channel_name,
+        }
+      : null;
+  const reportBubbleStyle = reportMeta?.status === "resolved"
+    ? { background: "#dff6e8", color: "#14532d", borderColor: "#71c08d" }
+    : reportMeta?.status === "dismissed"
+      ? { background: "#f7ead7", color: "#7a4d12", borderColor: "#d6a15c" }
+      : reportMeta
+        ? { background: "#eef2ff", color: "#243b6b", borderColor: "#aab8eb" }
+        : null;
+  const petitionBubbleStyle = petitionMeta?.status === "accepted"
+    ? { background: "#dff6e8", color: "#14532d", borderColor: "#71c08d" }
+    : petitionMeta?.status === "rejected"
+      ? { background: "#f9e2e2", color: "#7f1d1d", borderColor: "#df8f8f" }
+      : petitionMeta
+        ? { background: "#eef6ff", color: "#1d4f77", borderColor: "#9cc4ea" }
+        : null;
+  const inboxBubbleStyle = reportBubbleStyle || petitionBubbleStyle;
+
+  const bubble = (
+    <div
+      data-bubble
+      className="relative max-w-full break-words whitespace-pre-wrap select-none"
+      style={{
+        padding: msg.image
+          ? "4px 4px 0"
+          : "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)",
+        fontSize: "var(--bubble-font-size)",
+        lineHeight: 1.38,
+        overflowWrap: "anywhere",
+        width: hasNativeEmbed ? "100%" : undefined,
+        borderRadius: !isReply
+          ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
+          : "20px",
+        background: inboxBubbleStyle?.background || (msg.report
+          ? "#ffeaea"
+          : isReported || (effectiveAdmin && !msg.report && isReportedTarget)
+            ? "#ffe0e0"
+            : msg.dm
+              ? (isMine ? "#7b3fa0" : "#ddc8ed")
+              : isMine ? bubbleColor : "var(--gray-bubble)"),
+        color: inboxBubbleStyle?.color || (msg.report
+          ? "#c00"
+          : isReported || isReportedTarget
+            ? "#a00"
+            : msg.dm
+              ? (isMine ? "#fff" : "#5a1580")
+              : isMine ? "#fff" : "var(--gray-text)"),
+        border: inboxBubbleStyle ? `1px solid ${inboxBubbleStyle.borderColor}` : "none",
+        cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
+        opacity: isReported ? 0.6 : (effectiveAdmin && isBlockedSender) ? 0.4 : undefined,
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        if (!msg.deleted || effectiveAdmin) onLongPress(msg, isSent, event.currentTarget);
+      }}
+      onClick={() => {
+        if (!msg.report || !msg.reported_msg_id || !effectiveAdmin) return;
+        const element = document.getElementById(`msg-${msg.reported_msg_id}`);
+        if (!element) return;
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        const targetBubble = element.querySelector("[data-bubble]") as HTMLElement | null;
+        if (!targetBubble) return;
+        targetBubble.style.boxShadow = "0 0 0 2px #ff1744 inset";
+        targetBubble.style.transition = "box-shadow 0.8s ease-out";
+        setTimeout(() => { targetBubble.style.boxShadow = "none"; }, 100);
+        setTimeout(() => { targetBubble.style.boxShadow = ""; targetBubble.style.transition = ""; }, 1000);
+      }}
+      onTouchStart={(event) => {
+        if (!msg.deleted) onTouchStart(msg, isSent, event.currentTarget);
+      }}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchEnd}
+    >
+      {msg.deleted ? (
+        <span style={{ fontStyle: "italic", opacity: 0.5 }}>{deletedMessageLabel}</span>
+      ) : (
+        <>
+          {inboxChannel && (
+            <div style={{ marginBottom: msg.image || msg.text ? "6px" : 0 }}>
+              <span>채널: </span>
+              <a
+                href={`/ch/${encodeURIComponent(inboxChannel.channelId)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                style={{
+                  color: "var(--bubble-sent, #3b8df0)",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "2px",
+                }}
+              >
+                {inboxChannel.channelName} (/ch/{inboxChannel.channelId})
+              </a>
+            </div>
+          )}
+          {msg.image && <MessageImage src={msg.image} onOpen={() => onOpenImage(msg)} />}
+          {msg.text && (
+            <MemoizedMessageTextWithEmbeds
+              key={`${msg.id}:${msg.text}:${msg.report_meta?.channel_id || msg.petition_meta?.channel_id || ""}`}
+              text={isInboxMessage ? stripInboxChannelLine(msg.text) : msg.text}
+              image={!!msg.image}
+              isMine={isMine}
+              searchQuery={searchQuery}
+              isSearchMatch={isSearchMatch}
+              isActiveMatch={isActiveMatch}
+              showEmbeds={!msg.report && !msg.image && !isInboxMessage}
+              editedLabel={msg.image && msg.edited ? editedMessageLabel : undefined}
+              onExpand={onExpand}
+            />
+          )}
+          {!!msg.edited && !(msg.image && msg.text) && (
+            <span
+              style={{
+                display: msg.image ? "block" : undefined,
+                padding: msg.image
+                  ? "calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824)"
+                  : undefined,
+                fontSize: "calc(var(--bubble-font-size) - 6px)",
+                opacity: 0.6,
+                fontStyle: "italic",
+                marginLeft: msg.image ? 0 : "4px",
+              }}
+            >
+              {editedMessageLabel}
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  const replyArrow = isReply ? (
+    <span className="flex items-center" style={{ color: "var(--meta)", opacity: 0.7, marginTop: "8px", transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)" }}>
+      <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
+        <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  ) : null;
+
+  return (
+    <div
+      id={`msg-${msg.id}`}
+      className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
+      style={{
+        paddingTop: "calc(var(--bubble-font-size) * 0.18)",
+        paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
+        paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
+      }}
+    >
+      <div
+        className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
+        style={{
+          maxWidth: hasNativeEmbed
+            ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
+            : isReply ? "85%" : "74%",
+        }}
+      >
+        {isReply ? (
+          <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
+            {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
+          </div>
+        ) : bubble}
+        <ReactionBadge
+          messageId={msg.id}
+          reactions={msg.reactions}
+          myUid={effectiveAdmin && authUserId ? authUserId : uid}
+          isSent={isSent}
+          isReply={isReply}
+          onReaction={onReaction}
+          onEmojiPicker={onEmojiPicker}
+        />
+      </div>
+    </div>
+  );
+});
+
+export const MessageList = React.memo(function MessageList({
+  threadedMessages,
+  effectiveAdmin,
+  uid,
+  authUserId,
+  bubbleColor,
+  reportedMsgIds,
+  reportedTargetIds,
+  blockedUidSet,
+  searchQuery,
+  searchResultIdSet,
+  activeSearchId,
+  deletedMessageLabel,
+  editedMessageLabel,
+  locale,
+  timeZone,
+  onLongPress,
+  onTouchStart,
+  onTouchEnd,
+  onOpenImage,
+  onExpand,
+  onReaction,
+  onEmojiPicker,
+}: MessageListProps) {
+  const commonProps = {
+    effectiveAdmin,
+    uid,
+    authUserId,
+    bubbleColor,
+    deletedMessageLabel,
+    editedMessageLabel,
+    onLongPress,
+    onTouchStart,
+    onTouchEnd,
+    onOpenImage,
+    onExpand,
+    onReaction,
+    onEmojiPicker,
+  };
+
+  return threadedMessages.topLevel.flatMap((message, messageIndex) => {
+    const previousMessage = threadedMessages.topLevel[messageIndex - 1];
+    const currentDateKey = chatDateKey(message.created_at, timeZone);
+    const showDate = Boolean(currentDateKey) && (
+      !previousMessage || chatDateKey(previousMessage.created_at, timeZone) !== currentDateKey
+    );
+    const rows: React.ReactElement[] = [
+      ...(showDate ? [
+        <div
+          key={`date-${message.id}`}
+          className="self-center"
+          style={{ color: "var(--meta)", fontSize: "calc(var(--bubble-font-size, 17px) - 4px)", fontWeight: 400, margin: "16px 0 8px", letterSpacing: ".1px" }}
+        >
+          {chatDateLabel(message.created_at, locale, timeZone)}
+        </div>,
+      ] : []),
+      <MessageRow
+        key={message.id}
+        {...commonProps}
+        msg={message}
+        isReply={false}
+        parentIsAdmin={null}
+        isReported={reportedMsgIds.has(message.id)}
+        isReportedTarget={reportedTargetIds.has(message.id)}
+        isBlockedSender={blockedUidSet.has(message.uid)}
+        searchQuery={searchQuery}
+        isSearchMatch={searchResultIdSet.has(message.id)}
+        isActiveMatch={message.id === activeSearchId}
+      />,
+    ];
+
+    for (const reply of threadedMessages.repliesMap[message.id] || []) {
+      rows.push(
+        <MessageRow
+          key={reply.id}
+          {...commonProps}
+          msg={reply}
+          isReply
+          parentIsAdmin={!!message.is_admin}
+          isReported={reportedMsgIds.has(reply.id)}
+          isReportedTarget={reportedTargetIds.has(reply.id)}
+          isBlockedSender={blockedUidSet.has(reply.uid)}
+          searchQuery={searchQuery}
+          isSearchMatch={searchResultIdSet.has(reply.id)}
+          isActiveMatch={reply.id === activeSearchId}
+        />,
+      );
+    }
+
+    return rows;
+  });
+});

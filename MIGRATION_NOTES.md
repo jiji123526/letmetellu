@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat message row/list extraction from `ChatView` — 2026-08-03
+
+- Extracted row-level chat presentation into `src/components/chat/ChatMessageList.tsx`, moving bubble styling, reply layout, reaction badge placement, moderation-inbox row treatment, and per-day separators out of `ChatView`.
+- Added `src/components/chat/chatTypes.ts` so the shared message, report, and petition shapes no longer need to be redeclared inside the main chat container as more submodules are extracted.
+- Exported the mounted-history limit from `chatMessageUtils` because `ChatView` still owns the scrolling/pagination policy that uses the same bound.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat message content extraction from `ChatView` — 2026-08-03
 
 - Extracted linkification, inline media retry/open behavior, and text-plus-embed bubble rendering into `src/components/chat/ChatMessageContent.tsx`.
