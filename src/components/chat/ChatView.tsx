@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchGallery, submitChannelReport } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, adminAction, fetchMessages, fetchGallery, submitChannelReport } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -40,12 +40,12 @@ import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import {
   mergeServerMessageSnapshot,
-  parseReactions,
 } from "./chatMessageUtils";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReportsSearch } from "./useChatReportsSearch";
 import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
+import { useChatMessageMutations } from "./useChatMessageMutations";
 
 interface Channel {
   id: string;
@@ -233,10 +233,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
-  const [petitionSentUid, setPetitionSentUid] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("petitionSent") || "";
-  });
   useEffect(() => {
     setViewerAccess("standard");
   }, [channelId]);
@@ -934,174 +930,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     });
   }, [loading, passcodeGate]);
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if ((!text && pendingPhotos.length === 0) || ownerModerationBlocked || (channel?.is_frozen && !effectiveAdmin && !dmMode)) return;
-
-    const showMutationError = (error?: string) => {
-      if (error === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
-      else if (error === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
-      else if (error === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
-      else if (error === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
-      else if (error === "petition_exists") {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("petitionSent", uid);
-        }
-        setPetitionSentUid(uid);
-        setBanner({ text: t("petitionExists"), color: "#d32f2f" });
-      }
-      else if (error === "owner_suspended") {
-        refreshOwnerModeration();
-        setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
-      }
-      else if (error === "channel frozen") setBanner({ text: viewerModerationStatus === "frozen" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
-      else if (error === "dm_disabled") setBanner({ text: t("dmDisabledMessage"), color: "#d32f2f" });
-      else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
-      setTimeout(() => setBanner(null), 3000);
-    };
-
-    // Blocked user handling
-    if (isUserBlocked) {
-      if (hasPetitioned || !petitionEnabled) {
-        setBanner({ text: t("blocked"), color: "#d32f2f" });
-        setTimeout(() => setBanner(null), 3000);
-        return;
-      }
-      // Send one-time petition DM
-      resetInput();
-      const blockEntry = blockedUsers.find((b) => b.uid === uid);
-      const reason = blockEntry?.reason ? `\n[${t("blockReason")}: "${blockEntry.reason}"]` : "";
-      const petitionText = `[${t("petitionPrefix")}] ${text}${reason}`;
-      const result = await sendDm({
-        uid,
-        text: petitionText,
-        channel_id: inLiveMode ? `${channelId}_live` : channelId,
-      });
-      if (!result?.ok) {
-        restoreInput(text);
-        showMutationError(result?.error);
-        return;
-      }
-      localStorage.setItem("petitionSent", uid);
-      setPetitionSentUid(uid);
-      setBanner({ text: t("petitionSent"), color: "#d32f2f" });
-      setTimeout(() => setBanner(null), 3000);
-      return;
-    }
-
-    // Send photos + text
-    const { photos, replyToId: savedReplyTo } = consumeComposerState();
-
-    // DM mode
-    if (dmMode) {
-      resetInput();
-      setDmMode(false);
-      const dmChannelId = inLiveMode ? `${channelId}_live` : channelId;
-      const dmUpload = photos.length > 0 ? await uploadImage(photos[0].blob, dmChannelId, "dm") : null;
-      if (photos.length > 0 && !dmUpload) {
-        restoreInput(text);
-        setDmMode(true);
-        setPendingPhotos(photos);
-        showMutationError("upload_failed");
-        return;
-      }
-      const result = await sendDm({
-        uid,
-        text,
-        channel_id: dmChannelId,
-        image: dmUpload?.url,
-        upload_id: dmUpload?.uploadId,
-      });
-      if (!result?.ok) {
-        restoreInput(text);
-        setDmMode(true);
-        setPendingPhotos(photos);
-        showMutationError(result?.error);
-        return;
-      }
-      setBanner({ text: t("sentToAdmin"), color: "#7b3fa0" });
-      setTimeout(() => setBanner(null), 3000);
-      return;
-    }
-
-    // Dismiss keyboard after send (except in live mode where keyboard stays)
-    if (!inLiveMode && textareaRef.current) textareaRef.current.blur();
-
-    const activeChannelId = inLiveMode ? `${channelId}_live` : channelId;
-
-    const sender = effectiveAdmin && authUserId ? sendMessageAsAdmin : sendMessageApi;
-    const senderUid = effectiveAdmin && authUserId ? authUserId : uid;
-    let sendError: string | undefined;
-    let unsentPhotos: typeof photos = [];
-
-    try {
-      if (photos.length === 0) {
-        const result = await sender({
-          uid: senderUid,
-          text,
-          channel_id: activeChannelId,
-          reply_to: savedReplyTo,
-        });
-        sendError = result.error;
-      } else {
-        // Caption stays on the first image, while every image in a reply batch
-        // remains attached to the same parent message.
-        for (let index = 0; index < photos.length; index += 1) {
-          const upload = effectiveAdmin && authUserId
-            ? await uploadAdminImage(photos[index].blob, activeChannelId, "message")
-            : await uploadImage(photos[index].blob, activeChannelId, "message");
-          if (!upload) {
-            sendError = "upload_failed";
-            unsentPhotos = photos.slice(index);
-            break;
-          }
-
-          const result = await sender({
-            uid: senderUid,
-            text: index === 0 ? text : "",
-            channel_id: activeChannelId,
-            image: upload.url,
-            upload_id: upload.uploadId,
-            reply_to: savedReplyTo,
-          });
-
-          if (result.error) {
-            sendError = result.error;
-            unsentPhotos = photos.slice(index);
-            break;
-          }
-
-          URL.revokeObjectURL(photos[index].previewUrl);
-          // The first successful photo already delivered the caption.
-          if (index === 0) {
-            resetInput();
-          }
-        }
-      }
-    } catch {
-      sendError = "network_error";
-      unsentPhotos = photos;
-    }
-
-    if (sendError) {
-      if (unsentPhotos.length > 0) setPendingPhotos(unsentPhotos);
-      showMutationError(sendError);
-    } else {
-      // DO broadcasts message-changed → refetch shows each sent message.
-      resetInput();
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Desktop: Enter sends, Shift+Enter adds new line
-    // Mobile: Enter adds new line naturally, user taps send button
-    const isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    if (e.key === "Enter" && !e.shiftKey && !isMobile && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   // Context menu handlers
   const handleBubbleLongPress = (msg: Message, isSent: boolean, el: HTMLElement) => {
     // Dismiss keyboard
@@ -1121,65 +949,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
-    }
-  };
-
-  const handleReaction = async (msgId: string, emoji: string) => {
-    const activeChannelId = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    const reactionUid = effectiveAdmin && authUserId ? authUserId : uid;
-
-    // Optimistic reaction update
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== msgId) return m;
-        const reactions = parseReactions(m.reactions);
-        const key = `${reactionUid}_${Date.now()}`;
-        // Check if user already reacted with this emoji
-        const existingKey = Object.entries(reactions).find(
-          ([k, v]) => k.startsWith(`${reactionUid}_`) && v === emoji
-        )?.[0];
-        if (existingKey) {
-          delete reactions[existingKey]; // toggle off
-        } else {
-          reactions[key] = emoji; // add
-        }
-        return { ...m, reactions: JSON.stringify(reactions) };
-      })
-    );
-
-    try {
-      const toggle = effectiveAdmin && authUserId ? toggleReactionAsAdmin : toggleReaction;
-      const result = await toggle({
-        uid: reactionUid,
-        message_id: msgId,
-        channel_id: activeChannelId,
-        emoji,
-      });
-
-      if (result.error) throw new Error(result.error);
-
-      // Reconcile the optimistic key with the server's canonical reaction map.
-      if (result.reactions) {
-        setMessages((prev) => prev.map((message) =>
-          message.id === msgId
-            ? { ...message, reactions: JSON.stringify(result.reactions) }
-            : message
-        ));
-      }
-    } catch (error) {
-      // A failed optimistic update must not remain visible only to this client.
-      fetchMessages(activeChannelId).then((data) => {
-        if (data.messages) {
-          setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
-        }
-      }).catch(() => {});
-      if (error instanceof Error && error.message === "owner_suspended") {
-        refreshOwnerModeration();
-        setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
-      } else {
-        setBanner({ text: t("sendFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 3000);
     }
   };
 
@@ -1241,51 +1010,60 @@ export function ChatView({ channelId }: { channelId: string }) {
     viewerBlocked
     || blockedUsers.some((b) => b.uid === uid)
   );
-  const hasPetitioned = petitionSentUid === uid;
-  // Reset petition status when unblocked (gives another chance on re-block)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isUserBlocked && hasPetitioned) {
-      localStorage.removeItem("petitionSent");
-      setPetitionSentUid("");
-    }
-  }, [hasPetitioned, isUserBlocked]);
-
-  const handleDelete = (msgId: string) => {
-    if (ownerModerationBlocked) {
-      setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
-      setTimeout(() => setBanner(null), 3000);
-      return;
-    }
-    // Check if this message has replies (if so, soft delete; otherwise hard delete)
-    const replyIds = messages.filter((m) => m.reply_to === msgId).map((m) => m.id);
-    const hasReplies = replyIds.length > 0;
-    if (effectiveAdmin) {
-      // Admin: always remove from view immediately
-      setMessages((prev) => prev.filter((m) => m.id !== msgId && m.reply_to !== msgId));
-      const deletedIds = new Set([msgId, ...replyIds]);
-      setGalleryItems((prev) => prev.filter((item) => !deletedIds.has(item.id)));
-      const msg = messages.find((m) => m.id === msgId) || dmMessages.find((m) => m.id === msgId);
-      if (msg?.dm) {
-        adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: msgId });
-        setDmMessages((prev) => prev.filter((m) => m.id !== msgId));
-      } else {
-        adminAction("delete-message", inLiveMode ? `${channelId}_live` : channelId, { message_id: msgId });
-      }
-    } else if (hasReplies) {
-      // Non-admin with replies: soft delete
-      setMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, text: t("deletedMessage"), image: null, deleted: true } as Message : m))
-      );
-      setGalleryItems((prev) => prev.filter((item) => item.id !== msgId));
-      deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: true });
-    } else {
-      // Non-admin no replies: hard delete
-      setMessages((prev) => prev.filter((m) => m.id !== msgId));
-      setGalleryItems((prev) => prev.filter((item) => item.id !== msgId));
-      deleteMessage({ uid, message_id: msgId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
-    }
-  };
+  const {
+    hasPetitioned,
+    handleSend,
+    handleKeyDown,
+    handleReaction,
+    handleDelete,
+    handleEditSave,
+  } = useChatMessageMutations({
+    channelId,
+    uid,
+    authUserId,
+    effectiveAdmin,
+    dmMode,
+    inLiveMode,
+    input,
+    pendingPhotos,
+    messages,
+    dmMessages,
+    blockedUsers,
+    petitionEnabled,
+    ownerModerationBlocked,
+    viewerModerationStatus,
+    channelFrozen: !!channel?.is_frozen,
+    isUserBlocked,
+    setDmMode,
+    setPendingPhotos,
+    setMessages,
+    setDmMessages,
+    setGalleryItems,
+    setBanner,
+    refreshOwnerModeration,
+    textareaRef,
+    inLiveModeRef,
+    resetInput,
+    restoreInput,
+    consumeComposerState,
+    text: {
+      messageTooLong: t("messageTooLong"),
+      bannedWord: t("bannedWord"),
+      rateLimited: t("rateLimited"),
+      blocked: t("blocked"),
+      petitionExists: t("petitionExists"),
+      ownerSuspendedBanner: t("ownerSuspendedBanner"),
+      moderationFrozenBanner: t("moderationFrozenBanner"),
+      chatFrozen: t("chatFrozen"),
+      dmDisabledMessage: t("dmDisabledMessage"),
+      sendFailed: t("sendFailed"),
+      blockReason: t("blockReason"),
+      petitionPrefix: t("petitionPrefix"),
+      petitionSent: t("petitionSent"),
+      sentToAdmin: t("sentToAdmin"),
+      deletedMessage: t("deletedMessage"),
+    },
+  });
 
   const handleMemoizedReaction = useCallback((messageId: string, emoji: string) => {
     handleReactionRef.current(messageId, emoji);
@@ -2470,40 +2248,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <EditDialog
           currentText={editingMsg.text}
           onSave={(newText) => {
-            const targetMessageId = editingMsg.id;
-            void editMessageApi({
-              uid: effectiveAdmin && authUserId ? authUserId : uid,
-              message_id: targetMessageId,
-              channel_id: inLiveMode ? `${channelId}_live` : channelId,
-              text: newText,
-              admin: effectiveAdmin && !!authUserId,
-            }).then((result: { ok?: boolean; error?: string }) => {
-              if (result?.ok) {
-                setMessages((prev) =>
-                  prev.map((m) => (
-                    m.id === targetMessageId
-                      ? { ...m, text: newText, edited: true } as Message
-                      : m
-                  ))
-                );
-                return;
-              }
-              const editError = result?.error;
-              if (editError === "message_too_long") setBanner({ text: t("messageTooLong"), color: "#d32f2f" });
-              else if (editError === "banned_word") setBanner({ text: t("bannedWord"), color: "#d32f2f" });
-              else if (editError === "rate_limited") setBanner({ text: t("rateLimited"), color: "#d32f2f" });
-              else if (editError === "blocked") setBanner({ text: t("blocked"), color: "#d32f2f" });
-              else if (editError === "owner_suspended") {
-                refreshOwnerModeration();
-                setBanner({ text: t("ownerSuspendedBanner"), color: "#8b5cf6" });
-              }
-              else if (editError === "channel frozen") setBanner({ text: viewerModerationStatus === "frozen" ? t("moderationFrozenBanner") : t("chatFrozen"), color: "#4a4d8f" });
-              else setBanner({ text: t("sendFailed"), color: "#d32f2f" });
-              setTimeout(() => setBanner(null), 3000);
-            }).catch(() => {
-              setBanner({ text: t("sendFailed"), color: "#d32f2f" });
-              setTimeout(() => setBanner(null), 3000);
-            });
+            void handleEditSave(editingMsg.id, newText);
           }}
           onClose={closeEditDialog}
         />

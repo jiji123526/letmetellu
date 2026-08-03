@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat mutation extraction from `ChatView` — 2026-08-03
+
+- Extracted send flow, blocked-user petition send behavior, DM send branching, upload batching, reaction toggles, delete behavior, edit-save behavior, petition-state reset, and shared mutation error handling into `src/components/chat/useChatMessageMutations.ts`.
+- `ChatView` now consumes a dedicated mutation hook instead of carrying the core message action pipeline inline beside unrelated rendering, realtime, and modal state.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat composer-state extraction from `ChatView` — 2026-08-03
 
 - Extracted draft input state, reply target state, edit-dialog draft state, pending-photo lifecycle, textarea auto-resize behavior, and related local composer handlers into `src/components/chat/useChatComposerState.ts`.

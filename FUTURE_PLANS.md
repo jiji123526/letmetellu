@@ -31,8 +31,8 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Frontend maintainability
 
-- Continue separating `ChatView` policy logic from render wiring; shared action rules, pure message utilities, message text/embed rendering, row-level presentation, message-derivation selectors, history navigation, moderation state, live-session state, reports/search state, and composer local state are now extracted, but the send/mutation pipeline and remaining overlay state still sit in the main component.
-- The next low-risk extraction target is the chat mutation domain so send flow, blocked-user petition send behavior, DM send branching, upload batching, edit/delete/reaction mutations, and related error mapping stop living inline in `ChatView`.
+- Continue separating `ChatView` policy logic from render wiring; shared action rules, pure message utilities, message text/embed rendering, row-level presentation, message-derivation selectors, history navigation, moderation state, live-session state, reports/search state, composer local state, and chat mutations are now extracted, but the interaction/overlay state and some admin/channel actions still sit in the main component.
+- The next low-risk extraction target is the interaction-state domain so context-menu state, long-press/touch handling, emoji picker state, expanded-post/full-image state, and related open/close wiring stop living inline in `ChatView`.
 - Keep reducing `ContextMenu` and `ChatView` React/compiler lint debt before adding more admin chat controls.
 
 ### Email and account hardening
