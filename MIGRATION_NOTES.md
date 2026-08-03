@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat live-session extraction from `ChatView` — 2026-08-03
+
+- Extracted live-mode session state, countdown banners, expiry retry handling, popup visibility, live local-storage sync, and emoji-preset hydration into `src/components/chat/useChatLiveSession.ts`.
+- `ChatView` now keeps the surrounding fetch/apply orchestration while delegating live-mode state transitions and timer policy to a dedicated hook instead of carrying that session logic inline beside unrelated chat behavior.
+- The admin live toggle now routes through the existing end-live confirmation flow instead of locally flipping state without confirming the server action.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat moderation domain extraction from `ChatView` — 2026-08-03
 
 - Extracted owner-freeze state, viewer moderation gating, report/petition action handlers, moderation petition submission, and pending moderation-action state into `src/components/chat/useChatModeration.ts`.

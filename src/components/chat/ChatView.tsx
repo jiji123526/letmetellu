@@ -43,13 +43,11 @@ import {
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import {
-  LIVE_WARNING_THRESHOLDS_MS,
-  formatLiveCountdownClock,
-  formatLiveThresholdLabel,
   mergeServerMessageSnapshot,
   parseReactions,
 } from "./chatMessageUtils";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
+import { useChatLiveSession } from "./useChatLiveSession";
 
 interface Channel {
   id: string;
@@ -204,14 +202,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   });
   const isAdmin = isOwner || manualAdmin;
   const [adminViewAsUser, setAdminViewAsUser] = useState(false);
-  const [liveActive, setLiveActive] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(`liveActive_${channelId}`) === "true";
-  });
-  const [inLiveMode, setInLiveMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(`inLiveMode_${channelId}`) === "true";
-  });
 
   useEffect(() => {
     if (!channel?.id) return;
@@ -225,23 +215,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       .catch(() => { if (active) setOwnerChannelCount(0); });
     return () => { active = false; };
   }, [channel?.id, channel?.show_on_profile, channelId]);
-  const [liveTitle, setLiveTitle] = useState(() => {
-    if (typeof window === "undefined") return t("liveTitle");
-    return localStorage.getItem(`liveTitle_${channelId}`) || t("liveTitle");
-  });
-  const [liveSessionId, setLiveSessionId] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem(`liveSession_${channelId}`) || "";
-  });
-  const [liveExpiresAt, setLiveExpiresAt] = useState<string | null>(null);
-  const [liveTimeLeftMs, setLiveTimeLeftMs] = useState<number | null>(null);
-  const [liveCountdownNotice, setLiveCountdownNotice] = useState<string | null>(null);
-  const [showLivePopup, setShowLivePopup] = useState(false);
-  const [showLiveEnded, setShowLiveEnded] = useState(false);
-  const [showLiveTitlePrompt, setShowLiveTitlePrompt] = useState(false);
-  const [showEndLiveConfirm, setShowEndLiveConfirm] = useState(false);
   const [showEmojiPreset, setShowEmojiPreset] = useState(false);
-  const [emojiPresets, setEmojiPresets] = useState<string[] | null>(null);
   const [showNoticeEdit, setShowNoticeEdit] = useState(false);
   const [activeNotice, setActiveNotice] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -297,20 +271,11 @@ export function ChatView({ channelId }: { channelId: string }) {
   const handleLongPressRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
   const handleTouchStartRef = useRef<(msg: Message, isSent: boolean, el: HTMLElement) => void>(() => {});
   const handleTouchEndRef = useRef<() => void>(() => {});
-  const liveCountdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const liveExpiryRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const liveExpiryCheckInFlightRef = useRef(false);
-  const previousLiveTimeLeftRef = useRef<number | null>(null);
+  const applyInitDataRef = useRef<(data: InitData) => void>(() => {});
 
   useEffect(() => () => {
     if (reactionFrameRef.current !== null) {
       cancelAnimationFrame(reactionFrameRef.current);
-    }
-    if (liveCountdownTimeoutRef.current) {
-      clearTimeout(liveCountdownTimeoutRef.current);
-    }
-    if (liveExpiryRetryTimerRef.current) {
-      clearTimeout(liveExpiryRetryTimerRef.current);
     }
   }, []);
 
@@ -340,14 +305,56 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
 
-  // Notify DO of live mode join/leave for viewer count
-  useEffect(() => {
-    if (inLiveMode) {
-      send({ type: "join-live" });
-    } else {
-      send({ type: "leave-live" });
-    }
-  }, [inLiveMode, send]);
+  const handleLiveModePresenceChange = useCallback((nextInLiveMode: boolean) => {
+    send({ type: nextInLiveMode ? "join-live" : "leave-live" });
+  }, [send]);
+
+  const fetchLiveState = useCallback(() => {
+    return fetchInit(`${channelId}_live`) as Promise<InitData>;
+  }, [channelId]);
+
+  const handleExpiredLiveEnded = useCallback(async () => {
+    const normalData = await fetchInit(channelId) as InitData;
+    applyInitDataRef.current(normalData);
+  }, [channelId]);
+
+  const {
+    liveActive,
+    inLiveMode,
+    liveTitle,
+    liveCountdownNotice,
+    showLivePopup,
+    showLiveEnded,
+    showLiveTitlePrompt,
+    showEndLiveConfirm,
+    emojiPresets,
+    liveLastMinuteBannerText,
+    liveLastMinuteLabel,
+    inLiveModeRef,
+    setShowLiveEnded,
+    setShowLiveTitlePrompt,
+    setShowEndLiveConfirm,
+    applyLiveSnapshot,
+    applyEmojiPresetsSnapshot,
+    enterLiveMode,
+    exitLiveMode,
+    startLiveLocally,
+    syncLiveSessionDetails,
+    endLiveSessionLocally,
+    handleLiveStartedEvent,
+    dismissLivePopup,
+  } = useChatLiveSession({
+    channelId,
+    locale,
+    texts: {
+      liveTitle: t("liveTitle"),
+      liveCountdownBanner: t("liveCountdownBanner"),
+      liveCountdownLabel: t("liveCountdownLabel"),
+    },
+    fetchLiveState,
+    onExpiredLiveEnded: handleExpiredLiveEnded,
+    onLiveModePresenceChange: handleLiveModePresenceChange,
+  });
 
   const applyInitData = useCallback((data: InitData) => {
     if (typeof data.anonymousUid === "string" && data.anonymousUid) {
@@ -400,55 +407,24 @@ export function ChatView({ channelId }: { channelId: string }) {
       setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
     }
 
-    if (data.emojiPresets) {
-      localStorage.setItem(`liveEmojis_${channelId}_live`, data.emojiPresets);
-      try {
-        setEmojiPresets(JSON.parse(data.emojiPresets));
-      } catch {
-        setEmojiPresets(null);
-      }
-    } else {
-      localStorage.removeItem(`liveEmojis_${channelId}_live`);
-      setEmojiPresets(null);
-    }
+    applyEmojiPresetsSnapshot(data.emojiPresets);
+    applyLiveSnapshot(data.live);
+  }, [applyEmojiPresetsSnapshot, applyLiveSnapshot, channelId, isLoggedIn, t]);
 
-    if (data.live?.active) {
-      const title = data.live.title || t("liveTitle");
-      const sessionId = data.live.sessionId || "";
-      setLiveActive(true);
-      setLiveTitle(title);
-      setLiveSessionId(sessionId);
-      setLiveExpiresAt(data.live.expiresAt || null);
-      localStorage.setItem(`liveActive_${channelId}`, "true");
-      localStorage.setItem(`liveTitle_${channelId}`, title);
-      if (sessionId) {
-        localStorage.setItem(`liveSession_${channelId}`, sessionId);
-      } else {
-        localStorage.removeItem(`liveSession_${channelId}`);
-      }
-    } else {
-      setLiveActive(false);
-      setLiveTitle(t("liveTitle"));
-      setLiveSessionId("");
-      setLiveExpiresAt(null);
-      setLiveTimeLeftMs(null);
-      setLiveCountdownNotice(null);
-      if (liveCountdownTimeoutRef.current) {
-        clearTimeout(liveCountdownTimeoutRef.current);
-        liveCountdownTimeoutRef.current = null;
-      }
-      if (liveExpiryRetryTimerRef.current) {
-        clearTimeout(liveExpiryRetryTimerRef.current);
-        liveExpiryRetryTimerRef.current = null;
-      }
-      liveExpiryCheckInFlightRef.current = false;
-      setInLiveMode(false);
-      localStorage.setItem(`liveActive_${channelId}`, "false");
-      localStorage.setItem(`inLiveMode_${channelId}`, "false");
-      localStorage.removeItem(`liveTitle_${channelId}`);
-      localStorage.removeItem(`liveSession_${channelId}`);
-    }
-  }, [channelId, isLoggedIn, t]);
+  applyInitDataRef.current = applyInitData;
+
+  const loadNormalChannelData = useCallback(async () => {
+    const data = await fetchInit(channelId) as InitData;
+    applyInitData(data);
+  }, [applyInitData, channelId]);
+
+  const loadLiveChannelData = useCallback(async () => {
+    setMessages([]);
+    setDmMessages([]);
+    setActiveNotice("");
+    const data = await fetchInit(`${channelId}_live`) as InitData;
+    applyInitData(data);
+  }, [applyInitData, channelId]);
 
   const refreshOwnerModeration = useCallback(() => {
     if (!isOwner) return;
@@ -506,135 +482,10 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
 
-  useEffect(() => {
-    previousLiveTimeLeftRef.current = null;
-    if (liveCountdownTimeoutRef.current) {
-      clearTimeout(liveCountdownTimeoutRef.current);
-      liveCountdownTimeoutRef.current = null;
-    }
-    if (liveExpiryRetryTimerRef.current) {
-      clearTimeout(liveExpiryRetryTimerRef.current);
-      liveExpiryRetryTimerRef.current = null;
-    }
-    liveExpiryCheckInFlightRef.current = false;
-    setLiveCountdownNotice(null);
-  }, [liveSessionId]);
-
-  useEffect(() => {
-    if (!liveActive || !liveExpiresAt || !inLiveMode) {
-      setLiveTimeLeftMs(null);
-      return;
-    }
-    const updateTimeLeft = () => {
-      const expiresAtMs = Date.parse(liveExpiresAt);
-      if (!Number.isFinite(expiresAtMs)) {
-        setLiveTimeLeftMs(null);
-        return;
-      }
-      setLiveTimeLeftMs(Math.max(0, expiresAtMs - Date.now()));
-    };
-    updateTimeLeft();
-    const intervalId = window.setInterval(updateTimeLeft, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [inLiveMode, liveActive, liveExpiresAt]);
-
-  useEffect(() => {
-    if (!liveActive || !inLiveMode || liveTimeLeftMs === null) {
-      previousLiveTimeLeftRef.current = null;
-      return;
-    }
-
-    const previous = previousLiveTimeLeftRef.current;
-    for (const thresholdMs of LIVE_WARNING_THRESHOLDS_MS) {
-      if (previous !== null && previous > thresholdMs && liveTimeLeftMs <= thresholdMs) {
-        const nextNotice = t("liveCountdownBanner").replace("{time}", formatLiveThresholdLabel(locale, thresholdMs));
-        if (liveCountdownTimeoutRef.current) {
-          clearTimeout(liveCountdownTimeoutRef.current);
-        }
-        setLiveCountdownNotice(nextNotice);
-        liveCountdownTimeoutRef.current = setTimeout(() => {
-          setLiveCountdownNotice((current) => current === nextNotice ? null : current);
-          liveCountdownTimeoutRef.current = null;
-        }, 3000);
-      }
-    }
-    previousLiveTimeLeftRef.current = liveTimeLeftMs;
-  }, [inLiveMode, liveActive, liveTimeLeftMs, locale, t]);
-
-  const liveLastMinuteBannerText = useMemo(() => {
-    if (!liveActive || !inLiveMode || liveTimeLeftMs === null || liveTimeLeftMs > 60 * 1000) return null;
-    return t("liveCountdownBanner").replace("{time}", formatLiveCountdownClock(liveTimeLeftMs));
-  }, [inLiveMode, liveActive, liveTimeLeftMs, t]);
-
-  const liveLastMinuteLabel = useMemo(() => {
-    if (!liveActive || !inLiveMode || liveTimeLeftMs === null || liveTimeLeftMs > 60 * 1000) return null;
-    return t("liveCountdownLabel").replace("{time}", formatLiveCountdownClock(liveTimeLeftMs));
-  }, [inLiveMode, liveActive, liveTimeLeftMs, t]);
-
-  const attemptLiveExpirySync = useCallback(async () => {
-    if (liveExpiryCheckInFlightRef.current) return;
-    liveExpiryCheckInFlightRef.current = true;
-    try {
-      const liveData = await fetchInit(`${channelId}_live`) as InitData;
-      if (liveData.live?.active) {
-        if (liveData.live.expiresAt && liveData.live.expiresAt !== liveExpiresAt) {
-          setLiveExpiresAt(liveData.live.expiresAt);
-        }
-        return;
-      }
-
-      if (inLiveModeRef.current) {
-        setInLiveMode(false);
-        localStorage.setItem(`inLiveMode_${channelId}`, "false");
-        setShowLiveEnded(true);
-      }
-
-      const normalData = await fetchInit(channelId) as InitData;
-      applyInitData(normalData);
-    } catch {
-      // Retry on the next poll while the local timer remains at zero.
-    } finally {
-      liveExpiryCheckInFlightRef.current = false;
-    }
-  }, [applyInitData, channelId, liveExpiresAt]);
-
-  useEffect(() => {
-    if (!liveActive || !inLiveMode || !liveExpiresAt || liveTimeLeftMs === null || liveTimeLeftMs > 0) {
-      if (liveExpiryRetryTimerRef.current) {
-        clearTimeout(liveExpiryRetryTimerRef.current);
-        liveExpiryRetryTimerRef.current = null;
-      }
-      return;
-    }
-
-    let cancelled = false;
-
-    const runCheck = async () => {
-      await attemptLiveExpirySync();
-      if (cancelled) return;
-      if (!inLiveModeRef.current || !liveActive) return;
-      liveExpiryRetryTimerRef.current = setTimeout(runCheck, 5000);
-    };
-
-    void runCheck();
-
-    return () => {
-      cancelled = true;
-      if (liveExpiryRetryTimerRef.current) {
-        clearTimeout(liveExpiryRetryTimerRef.current);
-        liveExpiryRetryTimerRef.current = null;
-      }
-    };
-  }, [attemptLiveExpirySync, inLiveMode, liveActive, liveExpiresAt, liveTimeLeftMs]);
-
   // Sync bubble color to CSS variable so var(--bubble-sent) works everywhere
   useEffect(() => {
     document.documentElement.style.setProperty("--bubble-sent", bubbleColor);
   }, [bubbleColor]);
-
-  // Track inLiveMode in a ref so the subscribe callback always has the latest value
-  const inLiveModeRef = useRef(inLiveMode);
-  useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
   const {
     historyModeRef,
     isNearBottomRef,
@@ -936,57 +787,20 @@ export function ChatView({ channelId }: { channelId: string }) {
         setDmEnabled(!!event.enabled);
       }
       if (event.type === "live-ended") {
-        localStorage.setItem(`liveActive_${channelId}`, "false");
-        localStorage.removeItem(`liveSeen_${channelId}`);
-        localStorage.removeItem(`liveTitle_${channelId}`);
-        localStorage.removeItem(`liveSession_${channelId}`);
-        setLiveActive(false);
-        setLiveTitle(t("liveTitle"));
-        setLiveSessionId("");
-        setLiveExpiresAt(null);
-        setLiveTimeLeftMs(null);
-        setLiveCountdownNotice(null);
-        if (liveCountdownTimeoutRef.current) {
-          clearTimeout(liveCountdownTimeoutRef.current);
-          liveCountdownTimeoutRef.current = null;
-        }
-        if (liveExpiryRetryTimerRef.current) {
-          clearTimeout(liveExpiryRetryTimerRef.current);
-          liveExpiryRetryTimerRef.current = null;
-        }
-        liveExpiryCheckInFlightRef.current = false;
-        if (inLiveModeRef.current) {
-          setInLiveMode(false);
-          localStorage.setItem(`inLiveMode_${channelId}`, "false");
-          setShowLiveEnded(true);
-          // Refetch normal channel state (messages, DMs, notice, freeze state)
-          fetchInit(channelId).then((data) => {
-            setChannel(data.channel);
-            setMessages(data.messages);
-            setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
-            setActiveNotice(data.bannerNotice || "");
-            setViewerModerationStatus(data.viewerModerationStatus ?? null);
-          }).catch(() => {});
+        const wasInLiveMode = endLiveSessionLocally({
+          clearSeen: true,
+          showEndedPopup: inLiveModeRef.current,
+        });
+        if (wasInLiveMode) {
+          void loadNormalChannelData().catch(() => {});
         }
       }
       if (event.type === "live-started") {
-        const sessionId = (event.sessionId as string) || "";
-        setLiveActive(true);
-        setLiveTitle((event.title as string) || t("liveTitle"));
-        setLiveSessionId(sessionId);
-        setLiveExpiresAt(typeof event.expiresAt === "string" ? event.expiresAt : null);
-        localStorage.setItem(`liveActive_${channelId}`, "true");
-        localStorage.setItem(`liveTitle_${channelId}`, (event.title as string) || t("liveTitle"));
-        localStorage.setItem(`liveSession_${channelId}`, sessionId);
-        // Show popup only if not already in live mode and haven't dismissed this session
-        if (!inLiveModeRef.current) {
-          const seen = localStorage.getItem(`liveSeen_${channelId}`);
-          if (seen === sessionId) {
-            // Already dismissed — just show banner (handled by liveActive + !inLiveMode in render)
-          } else {
-            setShowLivePopup(true);
-          }
-        }
+        handleLiveStartedEvent({
+          title: typeof event.title === "string" ? event.title : undefined,
+          sessionId: typeof event.sessionId === "string" ? event.sessionId : "",
+          expiresAt: typeof event.expiresAt === "string" ? event.expiresAt : null,
+        });
       }
       if (event.type === "notice-changed") {
         const isLiveNotice = !!event.live;
@@ -1006,11 +820,32 @@ export function ChatView({ channelId }: { channelId: string }) {
         setShowChannelDeleted(true);
       }
       if (event.type === "emoji-presets-changed") {
-        localStorage.setItem(`liveEmojis_${channelId}_live`, event.emojis as string);
-        try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
+        applyEmojiPresetsSnapshot(typeof event.emojis === "string" ? event.emojis : null);
       }
     });
-  }, [subscribe, channelId, send, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner, refreshOwnerModeration, historyModeRef, isNearBottomRef]);
+  }, [
+    subscribe,
+    channelId,
+    send,
+    isOwner,
+    isAdmin,
+    isLoggedIn,
+    uid,
+    t,
+    channel,
+    applyInitData,
+    localBubbleColor,
+    showPasscodeGate,
+    clearRoomAccessBanner,
+    refreshOwnerModeration,
+    historyModeRef,
+    isNearBottomRef,
+    endLiveSessionLocally,
+    loadNormalChannelData,
+    handleLiveStartedEvent,
+    applyEmojiPresetsSnapshot,
+    inLiveModeRef,
+  ]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1507,8 +1342,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           // A passcode unlock always enters the normal channel first. Live
           // availability is synchronized by applyInitData and the user can
           // explicitly enter live mode from its join banner.
-          setInLiveMode(false);
-          localStorage.setItem(`inLiveMode_${channelId}`, "false");
+          exitLiveMode();
           setLoading(true);
           setPasscodeGate(null);
           const requestId = ++initRequestIdRef.current;
@@ -1594,11 +1428,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const handleAdminLiveToggle = () => {
     if (liveActive) {
-      setLiveActive(false);
-      setInLiveMode(false);
-      fetchInit(channelId).then((data) => { setMessages(data.messages); });
-      setBanner({ text: t("liveEnded"), color: "#c0392b" });
-      setTimeout(() => setBanner(null), 3000);
+      setShowEndLiveConfirm(true);
       return;
     }
 
@@ -1809,7 +1639,10 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       {/* Live banners */}
       {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => { setInLiveMode(true); localStorage.setItem(`inLiveMode_${channelId}`, "true"); localStorage.removeItem(`noticeDismissed_${channelId}_live`); setMessages([]); setDmMessages([]); setActiveNotice(""); fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); setLiveExpiresAt(data.live?.expiresAt || null); }).catch(() => {}); }} />
+        <LiveJoinBanner title={liveTitle} onJoin={() => {
+          enterLiveMode();
+          void loadLiveChannelData().catch(() => {});
+        }} />
       )}
       {inLiveMode && (
         <LiveExitBanner
@@ -1822,15 +1655,8 @@ export function ChatView({ channelId }: { channelId: string }) {
               setShowEndLiveConfirm(true);
             } else {
               // Non-admin just leaves live mode (live continues for others)
-              setInLiveMode(false);
-              localStorage.setItem(`inLiveMode_${channelId}`, "false");
-              // Refetch normal channel state (messages, notice, freeze)
-              fetchInit(channelId).then((data) => {
-                setChannel(data.channel);
-                setMessages(data.messages);
-                setActiveNotice(data.bannerNotice || "");
-                setViewerModerationStatus(data.viewerModerationStatus ?? null);
-              });
+              exitLiveMode();
+              void loadNormalChannelData().catch(() => {});
             }
           }}
         />
@@ -2730,27 +2556,17 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showLiveTitlePrompt && (
         <LiveTitlePrompt
           onStart={async (title) => {
-            setShowLiveTitlePrompt(false);
-            setLiveTitle(title);
-            setLiveActive(true);
-            setInLiveMode(true);
+            startLiveLocally(title);
             setMessages([]);
             setDmMessages([]);
             setActiveNotice("");
-            localStorage.setItem(`liveActive_${channelId}`, "true");
-            localStorage.setItem(`inLiveMode_${channelId}`, "true");
-            localStorage.removeItem(`noticeDismissed_${channelId}_live`);
-            localStorage.setItem(`liveTitle_${channelId}`, title);
             setBanner({ text: t("liveStarted"), color: "#c0392b" });
             setTimeout(() => setBanner(null), 3000);
             const res = await adminAction("start-live", channelId, { title }) as any;
-            if (res?.sessionId) {
-              setLiveSessionId(res.sessionId);
-              localStorage.setItem(`liveSession_${channelId}`, res.sessionId);
-            }
-            if (typeof res?.live?.expiresAt === "string") {
-              setLiveExpiresAt(res.live.expiresAt);
-            }
+            syncLiveSessionDetails({
+              sessionId: typeof res?.sessionId === "string" ? res.sessionId : "",
+              expiresAt: typeof res?.live?.expiresAt === "string" ? res.live.expiresAt : null,
+            });
           }}
           onCancel={() => setShowLiveTitlePrompt(false)}
         />
@@ -2765,34 +2581,9 @@ export function ChatView({ channelId }: { channelId: string }) {
           confirmColor="#c0392b"
           onConfirm={async () => {
             setShowEndLiveConfirm(false);
-            setLiveActive(false);
-            setInLiveMode(false);
-            localStorage.setItem(`liveActive_${channelId}`, "false");
-            localStorage.setItem(`inLiveMode_${channelId}`, "false");
-            localStorage.removeItem(`liveSeen_${channelId}`);
-            localStorage.removeItem(`liveTitle_${channelId}`);
-            localStorage.removeItem(`liveSession_${channelId}`);
-            setLiveTitle(t("liveTitle"));
-            setLiveSessionId("");
-            setLiveExpiresAt(null);
-            setLiveTimeLeftMs(null);
-            setLiveCountdownNotice(null);
-            if (liveCountdownTimeoutRef.current) {
-              clearTimeout(liveCountdownTimeoutRef.current);
-              liveCountdownTimeoutRef.current = null;
-            }
-            if (liveExpiryRetryTimerRef.current) {
-              clearTimeout(liveExpiryRetryTimerRef.current);
-              liveExpiryRetryTimerRef.current = null;
-            }
-            liveExpiryCheckInFlightRef.current = false;
+            endLiveSessionLocally({ clearSeen: true });
             await adminAction("end-live", channelId);
-            fetchInit(channelId).then((data) => {
-              setChannel(data.channel);
-              setMessages(data.messages);
-              setDmMessages(data.dm ? data.dm.map((d: any) => ({ ...d, dm: true })) : []);
-              setActiveNotice(data.bannerNotice || "");
-            });
+            void loadNormalChannelData().catch(() => {});
             setShowLiveEnded(true);
           }}
           onCancel={() => setShowEndLiveConfirm(false)}
@@ -2803,7 +2594,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showLiveEnded && (
         <LiveEndedPopup onClose={() => {
           setShowLiveEnded(false);
-          fetchInit(channelId).then((data) => { setMessages(data.messages); });
+          void loadNormalChannelData().catch(() => {});
         }} />
       )}
 
@@ -2812,21 +2603,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         <LivePopup
           title={liveTitle}
           onJoin={() => {
-            setShowLivePopup(false);
-            setInLiveMode(true);
-            localStorage.setItem(`inLiveMode_${channelId}`, "true");
-            localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
-            localStorage.removeItem(`noticeDismissed_${channelId}_live`);
-            setMessages([]);
-            setDmMessages([]);
-            setActiveNotice("");
-            fetchInit(`${channelId}_live`).then((data) => { setMessages(data.messages); if (data.dm) setDmMessages(data.dm.map((d: any) => ({ ...d, dm: true }))); if (data.bannerNotice) setActiveNotice(data.bannerNotice); if (data.channel) setChannel((prev) => prev ? { ...prev, is_frozen: data.channel.is_frozen ?? 0 } : prev); setViewerModerationStatus(data.viewerModerationStatus ?? null); setLiveExpiresAt(data.live?.expiresAt || null); }).catch(() => {});
+            enterLiveMode({ markCurrentSessionSeen: true });
+            void loadLiveChannelData().catch(() => {});
           }}
-          onDismiss={() => {
-            setShowLivePopup(false);
-            // Mark as seen so banner shows instead of popup next time
-            localStorage.setItem(`liveSeen_${channelId}`, liveSessionId);
-          }}
+          onDismiss={dismissLivePopup}
         />
       )}
 
