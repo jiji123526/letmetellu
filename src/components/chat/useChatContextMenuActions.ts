@@ -28,6 +28,7 @@ interface ContextMenuText {
   anonLabel: string;
   anonBlockedLabel: string;
   anonUnblockedLabel: string;
+  reportDismissedBanner: string;
 }
 
 interface UseChatContextMenuActionsArgs {
@@ -73,6 +74,7 @@ interface UseChatContextMenuActionsResult {
   onEdit?: (msgId: string) => void;
   onBlock?: (message: { id: string; uid: string; text: string; dm?: boolean }) => void;
   isBlockedUser: boolean;
+  onDismissReportMessage?: (msgId: string) => void;
   onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
   reportActionPending: boolean;
@@ -166,6 +168,22 @@ export function useChatContextMenuActions({
     }
   }, [messages, openEditDialog]);
 
+  const onDismissReportMessage = useCallback((msgId: string) => {
+    const idsToDelete = new Set([msgId]);
+    messages.forEach((message) => {
+      if (message.reply_to === msgId) {
+        idsToDelete.add(message.id);
+      }
+    });
+
+    setMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
+
+    const channelKey = inLiveMode ? `${channelId}_live` : channelId;
+    void adminAction("delete-message", channelKey, { message_id: msgId });
+
+    flashBanner(text.reportDismissedBanner, "var(--meta)");
+  }, [channelId, flashBanner, inLiveMode, messages, setMessages, text.reportDismissedBanner]);
+
   const onBlock = useCallback((targetMessage: { id: string; uid: string; text: string; dm?: boolean }) => {
     const blockUid = targetMessage.uid;
     const blocked = blockedUsers.some((entry) => entry.uid === blockUid);
@@ -213,6 +231,7 @@ export function useChatContextMenuActions({
   const canDeleteWithReplies = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn);
   const canEdit = Boolean(contextMenu?.isOwn && !ownerModerationBlocked);
   const canBlock = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn && canBlockMessage(contextMenu.msg));
+  const canDismissReportMessage = Boolean(contextMenu && canUseAdminMutations && contextMenu.msg.report && contextMenu.msg.reported_msg_id);
   const canModerateReport = Boolean(contextMenu?.msg.report_meta && canUseAdminMutations);
   const canModeratePetition = Boolean(contextMenu?.msg.petition_meta && canUseAdminMutations);
   const isBlockedUser = Boolean(contextMenu && blockedUsers.some((entry) => entry.uid === contextMenu.msg.uid));
@@ -237,6 +256,7 @@ export function useChatContextMenuActions({
     onEdit: canEdit ? onEdit : undefined,
     onBlock: canBlock ? onBlock : undefined,
     isBlockedUser,
+    onDismissReportMessage: canDismissReportMessage ? onDismissReportMessage : undefined,
     onReportAction: canModerateReport ? onReportAction : undefined,
     onPetitionAction: canModeratePetition ? onPetitionAction : undefined,
     reportActionPending,

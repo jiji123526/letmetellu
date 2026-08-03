@@ -29,6 +29,8 @@ interface ContextMenuProps {
     text: string;
     is_admin: number;
     dm?: boolean;
+    report?: number;
+    reported_msg_id?: string | null;
     protected_sender?: boolean;
     report_meta?: {
       report_id: string;
@@ -57,6 +59,7 @@ interface ContextMenuProps {
   onEdit?: (msgId: string) => void;
   onBlock?: (msg: { id: string; uid: string; text: string; dm?: boolean }) => void;
   isBlockedUser?: boolean;
+  onDismissReportMessage?: (msgId: string) => void;
   onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
   reportActionPending?: boolean;
@@ -113,6 +116,7 @@ export function ContextMenu({
   onEdit,
   onBlock,
   isBlockedUser,
+  onDismissReportMessage,
   onReportAction,
   onPetitionAction,
   reportActionPending,
@@ -203,6 +207,7 @@ export function ContextMenu({
 
   const isReportInboxMessage = isAdmin && !!msg.report_meta;
   const isPetitionInboxMessage = isAdmin && !!msg.petition_meta;
+  const isAdminReportRelayMessage = isAdmin && !msg.report_meta && !msg.petition_meta && !!msg.report && !!msg.reported_msg_id;
   const isOpenReport = msg.report_meta?.status === "open";
   const isOpenPetition = msg.petition_meta?.status === "open";
   const useScrollableActionList = isReportInboxMessage || isPetitionInboxMessage;
@@ -215,7 +220,7 @@ export function ContextMenu({
       onClick={onClose}
     >
       {/* Reaction bar */}
-      {!isReportInboxMessage && !isPetitionInboxMessage && (
+      {!isReportInboxMessage && !isPetitionInboxMessage && !isAdminReportRelayMessage && (
         <div
           className="absolute flex animate-[ctxPop_0.2s_ease]"
           style={{
@@ -289,7 +294,25 @@ export function ContextMenu({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {isReportInboxMessage ? (
+        {isAdminReportRelayMessage ? (
+          <>
+            {onDismissReportMessage && (
+              <ContextMenuActionButton
+                label={t("dismissReport")}
+                color="#8e8e93"
+                borderBottom={false}
+                disabled={reportActionPending}
+                onClick={() => onDismissReportMessage(msg.id)}
+                onClose={onClose}
+                icon={(
+                  <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                )}
+              />
+            )}
+          </>
+        ) : isReportInboxMessage ? (
           <>
             {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
               <ContextMenuActionButton

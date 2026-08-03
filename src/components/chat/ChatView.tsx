@@ -1153,6 +1153,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       anonLabel: t("anon"),
       anonBlockedLabel: t("anonBlocked"),
       anonUnblockedLabel: t("anonUnblocked"),
+      reportDismissedBanner: t("reportDismissedBanner"),
     },
   });
 
@@ -1907,6 +1908,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           onEdit={contextMenuActions.onEdit}
           onBlock={contextMenuActions.onBlock}
           isBlockedUser={contextMenuActions.isBlockedUser}
+          onDismissReportMessage={contextMenuActions.onDismissReportMessage}
           onReportAction={contextMenuActions.onReportAction}
           onPetitionAction={contextMenuActions.onPetitionAction}
           reportActionPending={contextMenuActions.reportActionPending}
