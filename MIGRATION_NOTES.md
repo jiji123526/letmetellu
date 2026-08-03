@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat moderation domain extraction from `ChatView` — 2026-08-03
+
+- Extracted owner-freeze state, viewer moderation gating, report/petition action handlers, moderation petition submission, and pending moderation-action state into `src/components/chat/useChatModeration.ts`.
+- `ChatView` now consumes a dedicated moderation hook instead of carrying the report/petition mutation flow and owner moderation banner logic inline.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat history navigation extraction from `ChatView` — 2026-08-03
 
 - Extracted top/bottom history paging, bounded-window coordination, latest reset, and direct message-jump behavior into `src/components/chat/useChatHistoryNavigation.ts`.

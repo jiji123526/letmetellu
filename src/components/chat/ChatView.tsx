@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchGallery, submitChannelReport, actOnChannelReport, submitModerationPetition } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchGallery, submitChannelReport } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -41,6 +41,7 @@ import {
   type ReportsOwnerFilter,
 } from "./chatMessageSelectors";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
+import { useChatModeration } from "./useChatModeration";
 import {
   LIVE_WARNING_THRESHOLDS_MS,
   formatLiveCountdownClock,
@@ -267,8 +268,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
-  const [submittingModerationPetition, setSubmittingModerationPetition] = useState(false);
-  const [reportActionPendingId, setReportActionPendingId] = useState<string | null>(null);
   const [petitionSentUid, setPetitionSentUid] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("petitionSent") || "";
@@ -1314,20 +1313,57 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   // Effective admin state (false when viewing as user)
   const effectiveAdmin = isAdmin && !adminViewAsUser;
-  const ownerModerationBlocked = isOwner && ownerModeration?.status === "frozen";
-  const viewerModerationBlocked = !isOwner
-    && !effectiveAdmin
-    && !dmMode
-    && !!channel?.is_frozen
-    && viewerModerationStatus === "frozen";
-  const canUseAdminMutations = effectiveAdmin && !ownerModerationBlocked;
-  const ownerPetitionStatus = ownerModeration?.petitionStatus || "none";
-  const ownerCanSubmitPetition = ownerModerationBlocked && ownerPetitionStatus === "none";
-  const ownerModerationBannerText = ownerPetitionStatus === "open"
-    ? t("ownerSuspendedPetitionOpen")
-    : ownerPetitionStatus === "rejected"
-      ? t("ownerSuspendedPetitionRejected")
-      : t("ownerSuspendedBanner");
+  const {
+    ownerModerationBlocked,
+    viewerModerationBlocked,
+    canUseAdminMutations,
+    ownerCanSubmitPetition,
+    ownerModerationBannerText,
+    reportActionPendingId,
+    submittingModerationPetition,
+    handleReportAction,
+    handlePetitionAction,
+    handleModerationPetitionSubmit,
+  } = useChatModeration({
+    channelId,
+    isOwner,
+    effectiveAdmin,
+    dmMode,
+    channelFrozen: !!channel?.is_frozen,
+    viewerModerationStatus,
+    ownerModeration,
+    setOwnerModeration,
+    setMessages,
+    setBanner,
+    setShowModerationPetitionDialog,
+    refreshOwnerModeration,
+    text: {
+      ownerSuspendedPetitionOpen: t("ownerSuspendedPetitionOpen"),
+      ownerSuspendedPetitionRejected: t("ownerSuspendedPetitionRejected"),
+      ownerSuspendedBanner: t("ownerSuspendedBanner"),
+      reportResolvedBanner: t("reportResolvedBanner"),
+      reportDismissedBanner: t("reportDismissedBanner"),
+      warnOwnerSentBanner: t("warnOwnerSentBanner"),
+      channelFrozenByModerationBanner: t("channelFrozenByModerationBanner"),
+      channelUnfrozenByModerationBanner: t("channelUnfrozenByModerationBanner"),
+      channelDeletedByModerationBanner: t("channelDeletedByModerationBanner"),
+      reportAlreadyProcessed: t("reportAlreadyProcessed"),
+      channelAlreadyFrozen: t("channelAlreadyFrozen"),
+      channelNotFrozen: t("channelNotFrozen"),
+      freezeBeforeDelete: t("freezeBeforeDelete"),
+      petitionPendingReview: t("petitionPendingReview"),
+      reportActionFailed: t("reportActionFailed"),
+      petitionAccepted: t("petitionAccepted"),
+      petitionRejected: t("petitionRejected"),
+      petitionAlreadyProcessed: t("petitionAlreadyProcessed"),
+      petitionActionFailed: t("petitionActionFailed"),
+      moderationPetitionSubmitted: t("moderationPetitionSubmitted"),
+      petitionExists: t("petitionExists"),
+      petitionUnavailable: t("petitionUnavailable"),
+      petitionRequired: t("petitionRequired"),
+      moderationPetitionFailed: t("moderationPetitionFailed"),
+    },
+  });
   const {
     isReportsOwnerView,
     restrictedChannels,
@@ -1457,155 +1493,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!message.image) return;
     setFullViewImage({ src: message.image, caption: message.text || undefined, date: message.created_at, msgId: message.id });
   }, []);
-  const patchReportMessage = useCallback((reportId: string, update: (message: Message) => Message) => {
-    setMessages((previous) => previous.map((message) => {
-      if (message.report_meta?.report_id !== reportId) return message;
-      return update(message);
-    }));
-  }, []);
-  const patchPetitionMessage = useCallback((petitionId: string, update: (message: Message) => Message) => {
-    setMessages((previous) => previous.map((message) => {
-      if (message.petition_meta?.petition_id !== petitionId) return message;
-      return update(message);
-    }));
-  }, []);
-  const handleReportAction = useCallback(async (
-    report: ReportMeta,
-    action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss",
-  ) => {
-    if (reportActionPendingId) return;
-    setReportActionPendingId(report.report_id);
-    try {
-      const result = await actOnChannelReport({
-        report_id: report.report_id,
-        action,
-      }) as {
-        ok?: boolean;
-        error?: string;
-        report?: ReportMeta;
-        message_text?: string;
-        deleted_channel_id?: string;
-      };
-
-      if (result?.ok && result.report) {
-        patchReportMessage(report.report_id, (message) => ({
-          ...message,
-          text: result.message_text || message.text,
-          edited: true,
-          report_meta: result.report,
-        }));
-        const reportActionBanner = {
-          resolve: { text: t("reportResolvedBanner"), color: "#2a9d4e" },
-          dismiss: { text: t("reportDismissedBanner"), color: "var(--meta)" },
-          warn_owner: { text: t("warnOwnerSentBanner"), color: "#b26a00" },
-          freeze_channel: { text: t("channelFrozenByModerationBanner"), color: "#8b5cf6" },
-          unfreeze_channel: { text: t("channelUnfrozenByModerationBanner"), color: "#2a9d4e" },
-          delete_channel: { text: t("channelDeletedByModerationBanner"), color: "#d32f2f" },
-        } as const;
-        setBanner(reportActionBanner[action]);
-      } else if (result?.ok && action === "delete_channel") {
-        patchReportMessage(report.report_id, (message) => ({
-          ...message,
-          text: result.message_text || message.text,
-          edited: true,
-          report_meta: message.report_meta
-            ? { ...message.report_meta, status: "resolved", moderation_status: "frozen" }
-            : message.report_meta,
-        }));
-        setBanner({ text: t("channelDeletedByModerationBanner"), color: "#d32f2f" });
-      } else if (result?.error === "report_already_processed") {
-        setBanner({ text: t("reportAlreadyProcessed"), color: "var(--meta)" });
-      } else if (result?.error === "channel_already_frozen") {
-        setBanner({ text: t("channelAlreadyFrozen"), color: "var(--meta)" });
-      } else if (result?.error === "channel_not_frozen") {
-        setBanner({ text: t("channelNotFrozen"), color: "var(--meta)" });
-      } else if (result?.error === "freeze_required_before_delete") {
-        setBanner({ text: t("freezeBeforeDelete"), color: "var(--meta)" });
-      } else if (result?.error === "petition_pending") {
-        setBanner({ text: t("petitionPendingReview"), color: "var(--meta)" });
-      } else {
-        setBanner({ text: t("reportActionFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 3000);
-    } finally {
-      setReportActionPendingId(null);
-    }
-  }, [patchReportMessage, reportActionPendingId, t]);
-  const handlePetitionAction = useCallback(async (
-    petition: PetitionMeta,
-    action: "accept_petition" | "reject_petition" | "unfreeze_channel",
-  ) => {
-    if (reportActionPendingId) return;
-    setReportActionPendingId(petition.petition_id);
-    try {
-      const result = await actOnChannelReport({
-        petition_id: petition.petition_id,
-        action,
-      }) as {
-        ok?: boolean;
-        error?: string;
-        petition?: PetitionMeta;
-        message_text?: string;
-      };
-
-      if (result?.ok && result.petition) {
-        patchPetitionMessage(petition.petition_id, (message) => ({
-          ...message,
-          text: result.message_text || message.text,
-          edited: true,
-          petition_meta: result.petition,
-        }));
-        setBanner({
-          text: action === "accept_petition"
-            ? t("petitionAccepted")
-            : action === "reject_petition"
-              ? t("petitionRejected")
-              : t("channelUnfrozenByModerationBanner"),
-          color: action === "accept_petition" || action === "unfreeze_channel" ? "#2a9d4e" : "#d32f2f",
-        });
-      } else if (result?.error === "petition_already_processed") {
-        setBanner({ text: t("petitionAlreadyProcessed"), color: "var(--meta)" });
-      } else if (result?.error === "channel_not_frozen") {
-        setBanner({ text: t("channelNotFrozen"), color: "var(--meta)" });
-      } else {
-        setBanner({ text: t("petitionActionFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 3000);
-    } finally {
-      setReportActionPendingId(null);
-    }
-  }, [patchPetitionMessage, reportActionPendingId, t]);
-  const handleModerationPetitionSubmit = useCallback(async (text: string) => {
-    if (submittingModerationPetition) return;
-    setSubmittingModerationPetition(true);
-    try {
-      const result = await submitModerationPetition(channelId, text.trim()) as { ok?: boolean; error?: string };
-      if (result?.ok) {
-        setOwnerModeration((previous) => previous
-          ? { ...previous, status: "frozen", petitionStatus: "open" }
-          : { status: "frozen", petitionStatus: "open" });
-        setShowModerationPetitionDialog(false);
-        setBanner({ text: t("moderationPetitionSubmitted"), color: "#2a9d4e" });
-      } else if (result?.error === "petition_exists") {
-        setOwnerModeration((previous) => previous
-          ? { ...previous, status: "frozen", petitionStatus: "open" }
-          : previous);
-        setShowModerationPetitionDialog(false);
-        setBanner({ text: t("petitionExists"), color: "var(--meta)" });
-      } else if (result?.error === "petition_unavailable") {
-        refreshOwnerModeration();
-        setBanner({ text: t("petitionUnavailable"), color: "var(--meta)" });
-      } else if (result?.error === "petition_required") {
-        setBanner({ text: t("petitionRequired"), color: "#d32f2f" });
-      } else {
-        setBanner({ text: t("moderationPetitionFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 3000);
-    } finally {
-      setSubmittingModerationPetition(false);
-    }
-  }, [channelId, refreshOwnerModeration, submittingModerationPetition, t]);
-
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
     return (
