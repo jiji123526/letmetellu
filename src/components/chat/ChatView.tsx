@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, adminAction, fetchMessages, fetchGallery, submitChannelReport } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, adminAction, fetchMessages } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -24,7 +24,6 @@ import { LivePopup, LiveEndedPopup, LiveJoinBanner, LiveExitBanner, LiveTitlePro
 import { ConfirmDialog } from "./ConfirmDialog";
 import { NoticeEditDialog } from "./NoticeEditDialog";
 import { NoticeBanner } from "./NoticeBanner";
-import { UserGuidePanel } from "./UserGuidePanel";
 import { SearchBar } from "./SearchBar";
 import { EmojiBar, spawnEmoji, EmojiPresetPanel } from "./EmojiBar";
 import { AdminPanel } from "../admin/AdminPanel";
@@ -47,6 +46,7 @@ import { useChatReportsSearch } from "./useChatReportsSearch";
 import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
 import { useChatMessageMutations } from "./useChatMessageMutations";
 import { useChatInteractions } from "./useChatInteractions";
+import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
 
 interface Channel {
   id: string;
@@ -166,16 +166,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [historyMode, setHistoryMode] = useState<"latest" | "context">("latest");
   const [newerMessageCount, setNewerMessageCount] = useState(0);
-  const [headerMenu, setHeaderMenu] = useState<DOMRect | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showNotice, setShowNotice] = useState(false);
-  const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
   const [galleryHasMore, setGalleryHasMore] = useState(true);
   const galleryLoading = useRef(false);
-  const [showLinks, setShowLinks] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [showOwnerChannels, setShowOwnerChannels] = useState(false);
   const [showChannelDeleted, setShowChannelDeleted] = useState(false);
   const [ownerChannelCount, setOwnerChannelCount] = useState(0);
   const { isOwner, isLoggedIn, userId: authUserId } = useAuth(channel?.owner_uid);
@@ -199,8 +192,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       .catch(() => { if (active) setOwnerChannelCount(0); });
     return () => { active = false; };
   }, [channel?.id, channel?.show_on_profile, channelId]);
-  const [showEmojiPreset, setShowEmojiPreset] = useState(false);
-  const [showNoticeEdit, setShowNoticeEdit] = useState(false);
   const [activeNotice, setActiveNotice] = useState(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(`activeNotice_${channelId}`) || "";
@@ -218,10 +209,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
-  const [showChannelReportDialog, setShowChannelReportDialog] = useState(false);
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
-  const [showUserGuide, setShowUserGuide] = useState(false);
-  const [submittingChannelReport, setSubmittingChannelReport] = useState(false);
   useEffect(() => {
     setViewerAccess("standard");
   }, [channelId]);
@@ -360,6 +348,71 @@ export function ChatView({ channelId }: { channelId: string }) {
     fetchLiveState,
     onExpiredLiveEnded: handleExpiredLiveEnded,
     onLiveModePresenceChange: handleLiveModePresenceChange,
+  });
+  const {
+    headerMenu,
+    showSettings,
+    showNotice,
+    showGallery,
+    showLinks,
+    showAdminPanel,
+    showOwnerChannels,
+    showChannelReportDialog,
+    showNoticeEdit,
+    showEmojiPreset,
+    submittingChannelReport,
+    openHeaderMenu,
+    closeHeaderMenu,
+    openSettings,
+    closeSettings,
+    openNotice,
+    closeNotice,
+    openLinks,
+    closeLinks,
+    openAdminPanel,
+    closeAdminPanel,
+    openOwnerChannels,
+    closeOwnerChannels,
+    openChannelReportDialog,
+    closeChannelReportDialog,
+    openNoticeEdit,
+    closeNoticeEdit,
+    openEmojiPreset,
+    closeEmojiPreset,
+    openGallery,
+    closeGallery,
+    loadMoreGallery,
+    handleAdminFreezeToggle,
+    handleAdminLiveToggle,
+    handleShareChannel,
+    handleChannelReportSubmit,
+  } = useChatAdminChannelActions({
+    channelId,
+    channel,
+    channelName: channel?.name,
+    ownerChannelCount,
+    inLiveMode,
+    liveActive,
+    bubbleColor: localBubbleColor || channel?.bubble_color || "#3b8df0",
+    galleryItems,
+    galleryHasMore,
+    galleryLoadingRef: galleryLoading,
+    setChannel,
+    setBanner,
+    setGalleryItems,
+    setGalleryHasMore,
+    onOpenLiveTitlePrompt: () => setShowLiveTitlePrompt(true),
+    onOpenEndLiveConfirm: () => setShowEndLiveConfirm(true),
+    text: {
+      chatUnfrozen: t("chatUnfrozen"),
+      chatFrozen: t("chatFrozen"),
+      channelLinkCopied: t("channelLinkCopied"),
+      channelShareFailed: t("channelShareFailed"),
+      channelReported: t("channelReported"),
+      reportAlreadySubmitted: t("reportAlreadySubmitted"),
+      reportOwnerCannot: t("reportOwnerCannot"),
+      reportChannelFailed: t("reportChannelFailed"),
+    },
   });
   const {
     showSearch,
@@ -1121,77 +1174,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   }
 
   const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");
-  const handleAdminFreezeToggle = () => {
-    if (channel?.is_frozen) {
-      setChannel((prev) => prev ? { ...prev, is_frozen: 0 } : null);
-      adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: false });
-      setBanner({ text: t("chatUnfrozen"), color: bubbleColor });
-    } else {
-      setChannel((prev) => prev ? { ...prev, is_frozen: 1 } : null);
-      adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: true });
-      setBanner({ text: t("chatFrozen"), color: "#4a4d8f" });
-    }
-    setTimeout(() => setBanner(null), 3000);
-  };
-
-  const handleAdminLiveToggle = () => {
-    if (liveActive) {
-      setShowEndLiveConfirm(true);
-      return;
-    }
-
-    setShowLiveTitlePrompt(true);
-  };
-
-  const handleShareChannel = async () => {
-    const url = `${window.location.origin}/ch/${encodeURIComponent(channelId)}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: channel?.name || channelId, url });
-        return;
-      }
-      await navigator.clipboard.writeText(url);
-      setBanner({ text: t("channelLinkCopied"), color: bubbleColor });
-      setTimeout(() => setBanner(null), 2500);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      try {
-        await navigator.clipboard.writeText(url);
-        setBanner({ text: t("channelLinkCopied"), color: bubbleColor });
-      } catch {
-        setBanner({ text: t("channelShareFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 2500);
-    }
-  };
-
-  const handleChannelReportSubmit = async (reason: string, details: string) => {
-    if (submittingChannelReport) return;
-    setSubmittingChannelReport(true);
-    try {
-      const result = await submitChannelReport({
-        channel_id: channelId,
-        reason,
-        details,
-      }) as { ok?: boolean; error?: string; _status?: number };
-
-      if (result?.ok) {
-        setShowChannelReportDialog(false);
-        setBanner({ text: t("channelReported"), color: "#d32f2f" });
-      } else if (result?.error === "report_exists" || result?._status === 409) {
-        setShowChannelReportDialog(false);
-        setBanner({ text: t("reportAlreadySubmitted"), color: "var(--meta)" });
-      } else if (result?.error === "channel_owner_cannot_report") {
-        setShowChannelReportDialog(false);
-        setBanner({ text: t("reportOwnerCannot"), color: "#d32f2f" });
-      } else {
-        setBanner({ text: t("reportChannelFailed"), color: "#d32f2f" });
-      }
-      setTimeout(() => setBanner(null), 3000);
-    } finally {
-      setSubmittingChannelReport(false);
-    }
-  };
 
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
@@ -1229,7 +1211,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             type="button"
             className="absolute left-[50px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
             style={{ color: bubbleColor }}
-            onClick={() => setShowNotice(true)}
+            onClick={openNotice}
             aria-label={t("rules")}
           >
             <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
@@ -1247,7 +1229,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             className="rounded-full overflow-hidden relative top-[3px] border-none p-0"
             aria-label={t("dashboardOwnerChannels")}
             style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", cursor: ownerChannelCount >= 2 ? "pointer" : "default" }}
-            onClick={() => { if (ownerChannelCount >= 2) setShowOwnerChannels(true); }}
+            onClick={openOwnerChannels}
           >
             {channel?.profile_image ? (
               <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
@@ -1292,7 +1274,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <button
           className="absolute right-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
           style={{ color: bubbleColor }}
-          onClick={(e) => setHeaderMenu(e.currentTarget.getBoundingClientRect())}
+          onClick={(e) => openHeaderMenu(e.currentTarget.getBoundingClientRect())}
         >
           <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
             <circle cx="12" cy="5" r="1.8" fill="currentColor" />
@@ -1935,27 +1917,12 @@ export function ChatView({ channelId }: { channelId: string }) {
       {headerMenu && (
         <HeaderMenu
           anchorRect={headerMenu}
-          onSettings={() => setShowSettings(true)}
-          onGallery={() => {
-            setShowGallery(true);
-            setGalleryItems([]);
-            setGalleryHasMore(true);
-            const fetchChannel = inLiveMode ? `${channelId}_live` : channelId;
-            fetchGallery(fetchChannel).then((data) => {
-              if (data.gallery) {
-                setGalleryItems(data.gallery);
-                if (data.gallery.length < 50) setGalleryHasMore(false);
-              }
-            });
-          }}
-          onLinks={() => setShowLinks(true)}
-          onReportChannel={!isAdmin ? () => setShowChannelReportDialog(true) : undefined}
-          onClose={() => setHeaderMenu(null)}
+          onSettings={openSettings}
+          onGallery={openGallery}
+          onLinks={openLinks}
+          onReportChannel={!isAdmin ? openChannelReportDialog : undefined}
+          onClose={closeHeaderMenu}
         />
-      )}
-
-      {showUserGuide && (
-        <UserGuidePanel onClose={() => setShowUserGuide(false)} />
       )}
 
       {showChannelReportDialog && (
@@ -1963,9 +1930,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           channelName={channel?.name || channelId}
           submitting={submittingChannelReport}
           onSubmit={handleChannelReportSubmit}
-          onClose={() => {
-            if (!submittingChannelReport) setShowChannelReportDialog(false);
-          }}
+          onClose={closeChannelReportDialog}
         />
       )}
 
@@ -1983,7 +1948,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <OwnerChannelsPopup
           currentChannelId={channelId}
           bubbleColor={bubbleColor}
-          onClose={() => setShowOwnerChannels(false)}
+          onClose={closeOwnerChannels}
         />
       )}
 
@@ -2004,10 +1969,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             }
           }}
           onAdmin={effectiveAdmin && !ownerModerationBlocked ? () => {
-            setShowSettings(false);
-            setShowAdminPanel(true);
+            openAdminPanel();
           } : undefined}
-          onClose={() => setShowSettings(false)}
+          onClose={closeSettings}
         />
       )}
 
@@ -2016,25 +1980,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         <GalleryPanel
           items={galleryItems}
           hasMore={galleryHasMore}
-          onLoadMore={() => {
-            if (galleryLoading.current || !galleryHasMore || galleryItems.length === 0) return;
-            galleryLoading.current = true;
-            const oldest = galleryItems[galleryItems.length - 1];
-            const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-            fetchGallery(fetchChannel, oldest.created_at).then((data) => {
-              if (data.gallery && data.gallery.length > 0) {
-                setGalleryItems((prev) => [...prev, ...data.gallery]);
-                if (data.gallery.length < 50) setGalleryHasMore(false);
-              } else {
-                setGalleryHasMore(false);
-              }
-            }).finally(() => { galleryLoading.current = false; });
-          }}
+          onLoadMore={loadMoreGallery}
           onViewImage={(src, meta) => {
             const msg = messages.find((m) => m.id === meta.id);
             openGalleryImage(src, meta, msg?.text || undefined);
           }}
-          onClose={() => setShowGallery(false)}
+          onClose={closeGallery}
         />
       )}
 
@@ -2042,8 +1993,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showLinks && (
         <LinksPanel
           channelId={inLiveModeRef.current ? `${channelId}_live` : channelId}
-          onNavigate={(msgId) => { setShowLinks(false); setTimeout(() => scrollToMessage(msgId), 100); }}
-          onClose={() => setShowLinks(false)}
+          onNavigate={(msgId) => { closeLinks(); setTimeout(() => scrollToMessage(msgId), 100); }}
+          onClose={closeLinks}
         />
       )}
 
@@ -2151,7 +2102,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             setBanner({ text: t("chatUnfrozen"), color: "#2a9d4e" });
             setTimeout(() => setBanner(null), 3000);
           }}
-          onClose={() => setShowAdminPanel(false)}
+          onClose={closeAdminPanel}
         />
       )}
 
@@ -2181,8 +2132,8 @@ export function ChatView({ channelId }: { channelId: string }) {
           onDmToggle={() => setDmMode(!dmMode)}
           onFreezeToggle={canUseAdminMutations ? handleAdminFreezeToggle : undefined}
           onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
-          onNotice={canUseAdminMutations ? () => setShowNoticeEdit(true) : undefined}
-          onEmojiPreset={() => setShowEmojiPreset(true)}
+          onNotice={canUseAdminMutations ? openNoticeEdit : undefined}
+          onEmojiPreset={openEmojiPreset}
           reportFilter={reportsOwnerFilter}
           onReportFilterSelect={isReportsOwnerView ? toggleReportsOwnerFilter : undefined}
           onClose={() => setPlusMenu(null)}
@@ -2262,7 +2213,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showEmojiPreset && (
         <EmojiPresetPanel
           channelId={channelId}
-          onClose={() => setShowEmojiPreset(false)}
+          onClose={closeEmojiPreset}
         />
       )}
 
@@ -2287,7 +2238,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             }
             setTimeout(() => setBanner(null), 3000);
           }}
-          onClose={() => setShowNoticeEdit(false)}
+          onClose={closeNoticeEdit}
         />
       )}
 
@@ -2295,7 +2246,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       {showNotice && (
         <NoticePanel
           notice={(() => { try { return JSON.parse(channel?.notice || "[]"); } catch { return []; } })()}
-          onClose={() => setShowNotice(false)}
+          onClose={closeNotice}
         />
       )}
 
@@ -2323,7 +2274,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                   onClick={() => {
                     const msgId = fullViewImage.msgId!;
                     closeFullViewImage();
-                    setShowGallery(false);
+                    closeGallery();
                     setTimeout(() => scrollToMessage(msgId), 100);
                   }}
                   style={{ background: "rgba(255,255,255,.2)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.3)", color: "#fff", fontSize: "calc(var(--bubble-font-size) - 2px)", padding: "6px 14px", borderRadius: "20px", cursor: "pointer", fontFamily: "inherit", lineHeight: 1 }}

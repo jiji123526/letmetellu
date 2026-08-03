@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat admin/channel action extraction from `ChatView` — 2026-08-03
+
+- Extracted admin/channel shell state and handlers into `src/components/chat/useChatAdminChannelActions.ts`, covering header-menu state, settings/notice/gallery/links/admin/owner-channel/report-dialog panel state, gallery entry/load-more behavior, channel sharing, channel reporting, admin freeze toggling, and live-start/end prompt entry wiring.
+- `ChatView` now consumes a dedicated admin/channel action hook instead of mixing panel visibility state, banner-heavy local admin actions, and gallery-entry fetch logic inline with chat rendering and realtime behavior.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat interaction-state extraction from `ChatView` — 2026-08-03
 
 - Extracted context-menu state, long-press/touch handling, emoji-picker state, full-image viewer state, expanded-post state, and related local open/close handlers into `src/components/chat/useChatInteractions.ts`.
