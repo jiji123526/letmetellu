@@ -1346,6 +1346,19 @@ export function ChatView({ channelId }: { channelId: string }) {
         />
       )}
 
+      {editingMsg && (
+        <div className="flex-none px-4 pt-3">
+          <EditDialog
+            inline
+            currentText={editingMsg.text}
+            onSave={(newText) => {
+              void handleEditSave(editingMsg.id, newText);
+            }}
+            onClose={closeEditDialog}
+          />
+        </div>
+      )}
+
       {/* Admin return banner */}
       {isAdmin && adminViewAsUser && (
         <div
@@ -2102,17 +2115,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           reportFilter={reportsOwnerFilter}
           onReportFilterSelect={isReportsOwnerView ? toggleReportsOwnerFilter : undefined}
           onClose={() => setPlusMenu(null)}
-        />
-      )}
-
-      {/* Edit Dialog */}
-      {editingMsg && (
-        <EditDialog
-          currentText={editingMsg.text}
-          onSave={(newText) => {
-            void handleEditSave(editingMsg.id, newText);
-          }}
-          onClose={closeEditDialog}
         />
       )}
 
