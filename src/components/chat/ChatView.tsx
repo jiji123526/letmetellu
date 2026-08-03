@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchMessagePage, fetchMessageContext, fetchGallery, submitChannelReport, actOnChannelReport, submitModerationPetition } from "@/lib/api";
+import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, decorateWelcomeConfig, fetchInit, fetchOwnerChannels, getStoredUid, sendMessage as sendMessageApi, sendMessageAsAdmin, deleteMessage, editMessageApi, adminAction, toggleReaction, toggleReactionAsAdmin, sendDm, uploadAdminImage, uploadImage, fetchMessages, fetchGallery, submitChannelReport, actOnChannelReport, submitModerationPetition } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -40,14 +40,13 @@ import {
   deriveChatMessageCollections,
   type ReportsOwnerFilter,
 } from "./chatMessageSelectors";
+import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import {
   LIVE_WARNING_THRESHOLDS_MS,
-  MAX_MOUNTED_HISTORY_MESSAGES,
   formatLiveCountdownClock,
   formatLiveThresholdLabel,
   mergeServerMessageSnapshot,
   parseReactions,
-  trimMessageWindow,
 } from "./chatMessageUtils";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 
@@ -288,7 +287,6 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const isNearBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -638,8 +636,25 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Track inLiveMode in a ref so the subscribe callback always has the latest value
   const inLiveModeRef = useRef(inLiveMode);
   useEffect(() => { inLiveModeRef.current = inLiveMode; }, [inLiveMode]);
-  const historyModeRef = useRef(historyMode);
-  useEffect(() => { historyModeRef.current = historyMode; }, [historyMode]);
+  const {
+    historyModeRef,
+    isNearBottomRef,
+    handleScroll,
+    scrollToBottom,
+    scrollToMessage,
+  } = useChatHistoryNavigation({
+    channelId,
+    messages,
+    historyMode,
+    messagesContainerRef,
+    messagesEndRef,
+    inLiveModeRef,
+    setMessages,
+    setHistoryMode,
+    setNewerMessageCount,
+    setShowScrollBtn,
+    setBanner,
+  });
 
   // Debounce not needed — local patching handles most events, reconnect does full refetch
 
@@ -996,7 +1011,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         try { setEmojiPresets(JSON.parse(event.emojis as string)); } catch {}
       }
     });
-  }, [subscribe, channelId, send, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner, refreshOwnerModeration]);
+  }, [subscribe, channelId, send, isOwner, isAdmin, isLoggedIn, uid, t, channel, applyInitData, localBubbleColor, showPasscodeGate, clearRoomAccessBanner, refreshOwnerModeration, historyModeRef, isNearBottomRef]);
 
   // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
   useEffect(() => {
@@ -1017,7 +1032,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
-  }, [channelId, connected]);
+  }, [channelId, connected, historyModeRef]);
 
   // Position the initial channel view at the latest message once. Subsequent
   // message mutations (new/edit/delete/reaction/refetch) preserve scroll.
@@ -1032,159 +1047,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     });
   }, [loading, passcodeGate]);
-
-  // Scroll detection for scroll-to-bottom button
-  const loadingMore = useRef(false);
-  const hasMoreMessages = useRef(true);
-  const hasMoreNewerMessages = useRef(false);
-
-  const handleScroll = useCallback(() => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    isNearBottomRef.current = distanceFromBottom <= 120;
-    setShowScrollBtn(distanceFromBottom > 200);
-
-    // Load older messages when scrolled to top
-    if (el.scrollTop < 50 && !loadingMore.current && hasMoreMessages.current && messages.length > 0) {
-      const oldest = messages[0];
-      if (!oldest?.created_at) return;
-      loadingMore.current = true;
-      const anchorId = oldest.id;
-      const previousAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
-      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-      fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id }).then((data) => {
-        if (data.messages && data.messages.length > 0) {
-          if (data.messages.length < 50) hasMoreMessages.current = false;
-          setMessages((prev) => {
-            const ids = new Set(prev.map((m) => m.id));
-            const older = data.messages.filter((m: Message) => !ids.has(m.id));
-            const combined = [...older, ...prev];
-            if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
-            historyModeRef.current = "context";
-            setHistoryMode("context");
-            hasMoreNewerMessages.current = true;
-            return trimMessageWindow(combined, "older");
-          });
-          requestAnimationFrame(() => {
-            const nextAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
-            if (previousAnchorTop !== null && nextAnchorTop !== null) {
-              el.scrollTop += nextAnchorTop - previousAnchorTop;
-            }
-          });
-        } else {
-          hasMoreMessages.current = false;
-        }
-      }).finally(() => { loadingMore.current = false; });
-    }
-
-    // Context windows can also grow toward newer messages.
-    if (
-      historyModeRef.current === "context"
-      && distanceFromBottom < 50
-      && !loadingMore.current
-      && hasMoreNewerMessages.current
-      && messages.length > 0
-    ) {
-      const newest = messages[messages.length - 1];
-      if (!newest?.created_at) return;
-      loadingMore.current = true;
-      const anchorId = newest.id;
-      const previousAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
-      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-      fetchMessagePage(fetchChannel, "after", { createdAt: newest.created_at, id: newest.id }).then((data) => {
-        if (data.messages?.length) {
-          if (data.messages.length < 50) hasMoreNewerMessages.current = false;
-          setMessages((prev) => {
-            const byId = new Map(prev.map((message) => [message.id, message]));
-            for (const message of data.messages as Message[]) byId.set(message.id, message);
-            const combined = [...byId.values()].sort((left, right) =>
-              (left.created_at || "").localeCompare(right.created_at || "")
-            );
-            if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
-            hasMoreMessages.current = true;
-            return trimMessageWindow(combined, "newer");
-          });
-          requestAnimationFrame(() => {
-            const nextAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
-            if (previousAnchorTop !== null && nextAnchorTop !== null) {
-              el.scrollTop += nextAnchorTop - previousAnchorTop;
-            }
-          });
-        } else {
-          hasMoreNewerMessages.current = false;
-        }
-      }).finally(() => { loadingMore.current = false; });
-    }
-  }, [messages, channelId]);
-
-  const returnToLatest = useCallback(async () => {
-    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    try {
-      const data = await fetchMessages(fetchChannel);
-      setMessages(data.messages || []);
-      historyModeRef.current = "latest";
-      setHistoryMode("latest");
-      setNewerMessageCount(0);
-      hasMoreNewerMessages.current = false;
-      hasMoreMessages.current = (data.messages?.length || 0) >= 50;
-      isNearBottomRef.current = true;
-      requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      });
-    } catch {
-      setBanner({ text: "Failed to load latest messages", color: "#d32f2f" });
-      setTimeout(() => setBanner(null), 2000);
-    }
-  }, [channelId]);
-
-  const scrollToBottom = () => {
-    if (historyModeRef.current === "context") {
-      void returnToLatest();
-      return;
-    }
-    isNearBottomRef.current = true;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    setShowScrollBtn(false);
-  };
-
-  // Scroll to a specific message by ID. If it is not mounted, fetch only a
-  // small context window around that message instead of walking all history.
-  const scrollToMessage = useCallback(async (msgId: string) => {
-    // Try to find it in current DOM
-    let el = document.getElementById(`msg-${msgId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .2s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 800); }
-      return;
-    }
-
-    // Not loaded — fetch the target and 25 messages on either side in one request.
-    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    try {
-      const data = await fetchMessageContext(fetchChannel, msgId);
-      if (!data.messages?.some((message: Message) => message.id === msgId)) {
-        throw new Error("message not found");
-      }
-      setMessages(data.messages as Message[]);
-      historyModeRef.current = "context";
-      setHistoryMode("context");
-      setNewerMessageCount(0);
-      hasMoreMessages.current = data.has_older !== false;
-      hasMoreNewerMessages.current = data.has_newer !== false;
-      await new Promise((r) => setTimeout(r, 100));
-      el = document.getElementById(`msg-${msgId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        const bubble = el.querySelector("[data-bubble]") as HTMLElement | null; if (bubble) { bubble.style.transition = "box-shadow .2s"; bubble.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)"; setTimeout(() => { bubble.style.boxShadow = ""; }, 800); }
-        return;
-      }
-      throw new Error("message did not render");
-    } catch {
-      setBanner({ text: "Message not found", color: "var(--meta)" });
-      setTimeout(() => setBanner(null), 2000);
-    }
-  }, [channelId]);
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

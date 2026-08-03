@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat history navigation extraction from `ChatView` — 2026-08-03
+
+- Extracted top/bottom history paging, bounded-window coordination, latest reset, and direct message-jump behavior into `src/components/chat/useChatHistoryNavigation.ts`.
+- `ChatView` now consumes a dedicated history controller hook instead of carrying the scroll-triggered pagination state machine inline beside unrelated realtime and admin behaviors.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat message selector extraction from `ChatView` — 2026-08-03
 
 - Extracted message-display derivation into `src/components/chat/chatMessageSelectors.ts`, moving admin/user message selection, reports-inbox filtering, restricted-channel rollups, reported-target collection, and reply threading out of `ChatView`.
