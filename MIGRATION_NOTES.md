@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat reports/search extraction from `ChatView` — 2026-08-03
+
+- Extracted reports-inbox filter state, search-panel state, locally tracked reported-message ids, report/unreport actions, and the selector-backed derived report/search message collections into `src/components/chat/useChatReportsSearch.ts`.
+- `ChatView` now consumes one reports/search hook instead of mixing search UI state, reports-owner filter toggles, local report persistence, and message-collection derivation inline with unrelated realtime and composer behavior.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat live-session extraction from `ChatView` — 2026-08-03
 
 - Extracted live-mode session state, countdown banners, expiry retry handling, popup visibility, live local-storage sync, and emoji-preset hydration into `src/components/chat/useChatLiveSession.ts`.

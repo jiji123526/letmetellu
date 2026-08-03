@@ -36,10 +36,6 @@ import { recordAccountRecentChannel, setAccountChannelColor } from "@/lib/accoun
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
-import {
-  deriveChatMessageCollections,
-  type ReportsOwnerFilter,
-} from "./chatMessageSelectors";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import {
@@ -48,6 +44,7 @@ import {
 } from "./chatMessageUtils";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
+import { useChatReportsSearch } from "./useChatReportsSearch";
 
 interface Channel {
   id: string;
@@ -181,10 +178,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [headerMenu, setHeaderMenu] = useState<DOMRect | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
   const [fullViewImage, setFullViewImage] = useState<{ src: string; caption?: string; date?: string; msgId?: string; fromGallery?: boolean } | null>(null);
   const [expandedPost, setExpandedPost] = useState<{ text: string; top: number; left: number; width: number; height: number } | null>(null);
-  const [searchState, setSearchState] = useState<{ query: string; activeId: string | null; resultIds: string[] }>({ query: "", activeId: null, resultIds: [] });
   const [showGallery, setShowGallery] = useState(false);
   const [galleryItems, setGalleryItems] = useState<{ id: string; image: string; created_at: string }[]>([]);
   const [galleryHasMore, setGalleryHasMore] = useState(true);
@@ -227,8 +222,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
   const [viewerModerationStatus, setViewerModerationStatus] = useState<InitData["viewerModerationStatus"]>(null);
   const [viewerAccess, setViewerAccess] = useState<InitData["viewerAccess"]>("standard");
-  const [isReportsChannelView, setIsReportsChannelView] = useState(false);
-  const [reportsOwnerFilter, setReportsOwnerFilter] = useState<ReportsOwnerFilter>(null);
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem(`bubbleColor_${channelId}`);
@@ -247,15 +240,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     return localStorage.getItem("petitionSent") || "";
   });
   const [pendingPhotos, setPendingPhotos] = useState<{ blob: Blob; previewUrl: string; width: number; height: number }[]>([]);
-  const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try { return new Set(JSON.parse(localStorage.getItem("reportedMsgIds") || "[]")); } catch { return new Set(); }
-  });
-
   useEffect(() => {
     setViewerAccess("standard");
-    setIsReportsChannelView(false);
-    setReportsOwnerFilter(null);
   }, [channelId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -317,6 +303,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     const normalData = await fetchInit(channelId) as InitData;
     applyInitDataRef.current(normalData);
   }, [channelId]);
+  const effectiveAdmin = isAdmin && !adminViewAsUser;
 
   const {
     liveActive,
@@ -354,6 +341,41 @@ export function ChatView({ channelId }: { channelId: string }) {
     fetchLiveState,
     onExpiredLiveEnded: handleExpiredLiveEnded,
     onLiveModePresenceChange: handleLiveModePresenceChange,
+  });
+  const {
+    showSearch,
+    searchState,
+    searchResultIdSet,
+    reportsOwnerFilter,
+    reportedMsgIds,
+    isReportsOwnerView,
+    restrictedChannels,
+    blockedUidSet,
+    reportedTargetIds,
+    threadedMessages,
+    toggleSearch,
+    closeSearch,
+    setSearchState,
+    setReportsChannelView,
+    toggleReportsOwnerFilter,
+    reportMessage,
+    unreportMessage,
+    isMessageReported,
+  } = useChatReportsSearch({
+    channelId,
+    uid,
+    inLiveMode,
+    messages,
+    dmMessages,
+    blockedUsers,
+    effectiveAdmin,
+    setMessages,
+    setBanner,
+    text: {
+      reportPrefix: t("reportPrefix"),
+      reported: t("reported"),
+      unreported: t("unreported"),
+    },
   });
 
   const applyInitData = useCallback((data: InitData) => {
@@ -396,7 +418,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setViewerBlocked(data.viewerBlocked ?? false);
     setViewerModerationStatus(data.viewerModerationStatus ?? null);
     setViewerAccess(data.viewerAccess ?? "standard");
-    setIsReportsChannelView(Boolean(data.isReportsChannel));
+    setReportsChannelView(Boolean(data.isReportsChannel));
     setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     setActiveNotice(data.bannerNotice || "");
     setWelcomeConfig(data.welcomeConfig || "");
@@ -409,7 +431,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
     applyEmojiPresetsSnapshot(data.emojiPresets);
     applyLiveSnapshot(data.live);
-  }, [applyEmojiPresetsSnapshot, applyLiveSnapshot, channelId, isLoggedIn, t]);
+  }, [applyEmojiPresetsSnapshot, applyLiveSnapshot, channelId, isLoggedIn, setReportsChannelView, t]);
 
   applyInitDataRef.current = applyInitData;
 
@@ -1147,7 +1169,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   };
 
   // Effective admin state (false when viewing as user)
-  const effectiveAdmin = isAdmin && !adminViewAsUser;
   const {
     ownerModerationBlocked,
     viewerModerationBlocked,
@@ -1199,27 +1220,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       moderationPetitionFailed: t("moderationPetitionFailed"),
     },
   });
-  const {
-    isReportsOwnerView,
-    restrictedChannels,
-    blockedUidSet,
-    reportedTargetIds,
-    threadedMessages,
-  } = useMemo(
-    () => deriveChatMessageCollections({
-      messages,
-      dmMessages,
-      blockedUsers,
-      effectiveAdmin,
-      isReportsChannelView,
-      reportsOwnerFilter,
-    }),
-    [blockedUsers, dmMessages, effectiveAdmin, isReportsChannelView, messages, reportsOwnerFilter],
-  );
-  const searchResultIdSet = useMemo(
-    () => new Set(searchState.resultIds),
-    [searchState.resultIds],
-  );
 
   // Check if current user is blocked
   const isUserBlocked = !effectiveAdmin && (
@@ -1573,7 +1573,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         <button
           className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
           style={{ color: bubbleColor }}
-          onClick={() => setShowSearch(!showSearch)}
+          onClick={toggleSearch}
         >
           <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
             <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -1604,7 +1604,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
           }}
           onSearchState={setSearchState}
-          onClose={() => setShowSearch(false)}
+          onClose={closeSearch}
         />
       )}
 
@@ -2140,37 +2140,12 @@ export function ChatView({ channelId }: { channelId: string }) {
             textareaRef.current?.focus();
           }}
           onReport={!effectiveAdmin && !contextMenu.isOwn ? () => {
-            const msgId = contextMenu.msg.id;
-            const msgText = contextMenu.msg.text;
-            setReportedMsgIds((prev) => {
-              const next = new Set(prev);
-              next.add(msgId);
-              localStorage.setItem("reportedMsgIds", JSON.stringify([...next]));
-              return next;
-            });
-            const preview = msgText.length > 50 ? msgText.slice(0, 50) + "…" : msgText;
-            sendMessageApi({ uid, text: `${t("reportPrefix")}: "${preview}"`, channel_id: channelId, report: true, reported_msg_id: msgId } as any);
-            setBanner({ text: t("reported"), color: "#d32f2f" });
-            setTimeout(() => setBanner(null), 3000);
+            reportMessage(contextMenu.msg);
           } : undefined}
           onUnreport={!effectiveAdmin && !contextMenu.isOwn ? () => {
-            const msgId = contextMenu.msg.id;
-            setReportedMsgIds((prev) => {
-              const next = new Set(prev);
-              next.delete(msgId);
-              localStorage.setItem("reportedMsgIds", JSON.stringify([...next]));
-              return next;
-            });
-            // Find and delete the report message from D1
-            const reportMsg = messages.find((m) => m.report && m.reported_msg_id === msgId && m.uid === uid);
-            if (reportMsg) {
-              deleteMessage({ uid, message_id: reportMsg.id, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
-              setMessages((prev) => prev.filter((m) => m.id !== reportMsg.id));
-            }
-            setBanner({ text: t("unreported"), color: "var(--meta)" });
-            setTimeout(() => setBanner(null), 3000);
+            unreportMessage(contextMenu.msg);
           } : undefined}
-          isReported={reportedMsgIds.has(contextMenu.msg.id)}
+          isReported={isMessageReported(contextMenu.msg.id)}
           onDelete={contextMenu.isOwn && !ownerModerationBlocked ? handleDelete : undefined}
           onDeleteWithReplies={canUseAdminMutations && !contextMenu.isOwn ? (msgId) => {
             const targetMsg = messages.find((m) => m.id === msgId);
@@ -2501,9 +2476,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           onNotice={canUseAdminMutations ? () => setShowNoticeEdit(true) : undefined}
           onEmojiPreset={() => setShowEmojiPreset(true)}
           reportFilter={reportsOwnerFilter}
-          onReportFilterSelect={isReportsOwnerView ? (filter) => {
-            setReportsOwnerFilter((current) => current === filter ? null : filter);
-          } : undefined}
+          onReportFilterSelect={isReportsOwnerView ? toggleReportsOwnerFilter : undefined}
           onClose={() => setPlusMenu(null)}
         />
       )}
