@@ -3,9 +3,24 @@ import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityT
 import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
-import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
+
+function markProtectedSenders<T extends { uid?: string | null; auth_uid?: string | null }>(rows: T[], protectedUid: string | null): Array<T & { protected_sender?: boolean }> {
+  if (!protectedUid) {
+    return rows.map((row) => (
+      row.uid === "system-moderation"
+        ? { ...row, protected_sender: true }
+        : row
+    )) as Array<T & { protected_sender?: boolean }>;
+  }
+  return rows.map((row) => (
+    row.uid === "system-moderation" || row.uid === protectedUid || row.auth_uid === protectedUid
+      ? { ...row, protected_sender: true }
+      : row
+  ));
+}
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -195,22 +210,25 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const ownerModeration = isOwner
     ? await getChannelModeration(parentChannelId, env)
     : null;
+  const reportsOwnerId = await getReportsChannelOwnerId(env);
   const reportsOwnerLocale = isOwner
     ? await getUserLocale(trustedUserId, env)
     : "ko";
   const messages = isReportsChannel(parentChannelId, env) && isOwner
     ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env, reportsOwnerLocale)
     : rawMessages;
+  const protectedMessages = markProtectedSenders(messages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
+  const protectedDmMessages = markProtectedSenders(dmMessages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
 
   return Response.json({
     channel: safeChannel,
     hasPasscode: Boolean((channel as any).passcode),
     passcodeHint: (channel as any).passcode_hint || "",
-    messages,
+    messages: protectedMessages,
     blocked,
     viewerBlocked,
     viewerModerationStatus,
-    dm: dmMessages || [],
+    dm: protectedDmMessages || [],
     adminDataStatus,
     viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
     isReportsChannel: isReportsChannel(parentChannelId, env),

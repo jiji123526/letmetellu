@@ -41,6 +41,7 @@ import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local
 interface Message {
   id: string;
   uid: string;
+  auth_uid?: string | null;
   nick: string | null;
   text: string;
   is_admin: number;
@@ -56,6 +57,7 @@ interface Message {
   reported_msg_id?: string;
   report_meta?: ReportMeta;
   petition_meta?: PetitionMeta;
+  protected_sender?: boolean;
 }
 
 interface ReportMeta {
@@ -244,6 +246,7 @@ function parseReactions(reactionsStr: string): Record<string, string> {
 function messagesEqual(left: Message, right: Message): boolean {
   return left.id === right.id
     && left.uid === right.uid
+    && left.auth_uid === right.auth_uid
     && left.nick === right.nick
     && left.text === right.text
     && left.is_admin === right.is_admin
@@ -257,6 +260,7 @@ function messagesEqual(left: Message, right: Message): boolean {
     && left.edited === right.edited
     && left.report === right.report
     && left.reported_msg_id === right.reported_msg_id
+    && left.protected_sender === right.protected_sender
     && JSON.stringify(left.report_meta || null) === JSON.stringify(right.report_meta || null)
     && JSON.stringify(left.petition_meta || null) === JSON.stringify(right.petition_meta || null);
 }
@@ -3471,7 +3475,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             const msg = messages.find((m) => m.id === msgId);
             if (msg) setEditingMsg({ id: msg.id, text: msg.text });
           } : undefined}
-          onBlock={canUseAdminMutations && !contextMenu.isOwn ? (targetMsg) => {
+          onBlock={canUseAdminMutations && !contextMenu.isOwn && !contextMenu.msg.protected_sender ? (targetMsg) => {
             const blockUid = targetMsg.uid;
             const isBlocked = blockedUsers.some((b) => b.uid === blockUid);
             if (isBlocked) {

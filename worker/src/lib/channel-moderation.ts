@@ -208,14 +208,28 @@ export async function sendOwnerModerationNotice(input: {
   const channelId = getParentChannelId(input.channelId);
   const createdAt = new Date().toISOString();
   const id = crypto.randomUUID();
-  const nick = input.nick || "운영팀";
+  const reportsChannelId = getReportsChannelId(input.env);
+  const platformAdmin = reportsChannelId
+    ? await input.env.DB.prepare(`
+      SELECT channels.owner_uid AS uid, users.name AS name
+      FROM channels
+      LEFT JOIN users ON users.id = channels.owner_uid
+      WHERE channels.id = ?
+      LIMIT 1
+    `).bind(reportsChannelId).first<{ uid: string; name: string | null }>()
+    : null;
+  const senderUid = platformAdmin?.uid || "system-moderation";
+  const senderAuthUid = platformAdmin?.uid || null;
+  const nick = input.nick || platformAdmin?.name?.trim() || "운영팀";
+  const protectedSender = Boolean(platformAdmin?.uid) || senderUid === "system-moderation";
 
   await input.env.DB.prepare(`
     INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id, created_at)
-    VALUES (?, ?, NULL, ?, ?, NULL, ?, ?)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
   `).bind(
     id,
-    "system-moderation",
+    senderUid,
+    senderAuthUid,
     nick,
     input.text,
     channelId,
@@ -230,13 +244,14 @@ export async function sendOwnerModerationNotice(input: {
       type: "dm-new",
       dm: {
         id,
-        uid: "system-moderation",
-        auth_uid: null,
+        uid: senderUid,
+        auth_uid: senderAuthUid,
         nick,
         text: input.text,
         image: null,
         channel_id: channelId,
         created_at: createdAt,
+        protected_sender: protectedSender,
       },
     }),
   }));

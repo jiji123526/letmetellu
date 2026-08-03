@@ -2,10 +2,22 @@ import { Env } from "../types";
 import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
 import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
 import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
+import { getReportsChannelOwnerId } from "../lib/special-channels";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
+
+async function isProtectedAdminSender(input: {
+  env: Env;
+  uid: string | null;
+  authUid: string | null;
+}): Promise<boolean> {
+  if (input.uid === "system-moderation") return true;
+  const reportsOwnerId = await getReportsChannelOwnerId(input.env);
+  if (!reportsOwnerId) return false;
+  return input.uid === reportsOwnerId || input.authUid === reportsOwnerId;
+}
 
 function formatModerationPetitionMessage(input: {
   petitionId: string;
@@ -272,6 +284,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const messageId = typeof payload?.message_id === "string" ? payload.message_id : "";
       const messageKind = payload?.message_kind === "dm" ? "dm" : "message";
       let uid = typeof payload?.uid === "string" ? payload.uid : "";
+      let authUid: string | null = null;
       let deviceId: string | null = typeof payload?.device_id === "string" && payload.device_id
         ? await hashBlockedDeviceId(payload.device_id, env)
         : null;
@@ -290,21 +303,26 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           const liveChannelId = `${channel_id}_live`;
           const fallbackRow = messageKind === "dm"
             ? await env.DB.prepare(
-              "SELECT uid FROM dm WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
-            ).bind(messageId, channel_id, liveChannelId).first<{ uid: string }>()
+              "SELECT uid, auth_uid FROM dm WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
+            ).bind(messageId, channel_id, liveChannelId).first<{ uid: string; auth_uid: string | null }>()
             : await env.DB.prepare(
-              "SELECT uid FROM messages WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
-            ).bind(messageId, channel_id, liveChannelId).first<{ uid: string }>();
+              "SELECT uid, auth_uid FROM messages WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
+            ).bind(messageId, channel_id, liveChannelId).first<{ uid: string; auth_uid: string | null }>();
           if (!fallbackRow?.uid) {
             return Response.json({ error: "identity_not_found" }, { status: 404 });
           }
           uid = fallbackRow.uid;
+          authUid = fallbackRow.auth_uid || null;
           deviceId = null;
         }
       }
 
       if (!uid) {
         return Response.json({ error: "missing required fields" }, { status: 400 });
+      }
+
+      if (await isProtectedAdminSender({ env, uid, authUid })) {
+        return Response.json({ error: "cannot_block_platform_admin" }, { status: 403 });
       }
 
       await env.DB.batch([

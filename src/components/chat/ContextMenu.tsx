@@ -9,9 +9,11 @@ interface ContextMenuProps {
   msg: {
     id: string;
     uid: string;
+    auth_uid?: string | null;
     text: string;
     is_admin: number;
     dm?: boolean;
+    protected_sender?: boolean;
     report_meta?: {
       report_id: string;
       channel_url: string;
@@ -457,7 +459,7 @@ export function ContextMenu({
               </button>
             )}
 
-            {isAdmin && !isMyMessage && onBlock && (
+            {isAdmin && !isMyMessage && onBlock && !msg.protected_sender && (
               <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
