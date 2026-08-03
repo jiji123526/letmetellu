@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Stable super-admin support thread scrolling — 2026-08-02
+
+- The super-admin 1:1 support panel no longer replaces its message state when a poll returns an identical ordered message list.
+- Polling, read-marker updates and metadata refreshes no longer force the transcript to the bottom.
+- Initial entry still opens at the latest message. A genuinely new last message follows automatically only when the operator was already near the bottom; reading older content is no longer interrupted.
+- The polling effect no longer treats its Effect Event callback as a changing dependency, which previously recreated timers and produced a rapid thread/session request storm.
+- Concurrent focus, visibility and interval refreshes now share one in-flight load, and network failures are handled instead of surfacing as unhandled promise rejections.
+- This is a frontend-only change with no schema or Worker deployment requirement.
+
 ### Super-admin dashboard recovery and repeat warning controls — 2026-08-02
 
 - Qualified `support_messages.created_at` in the support dashboard rollup query. The previous unqualified column became ambiguous after joining `support_threads`, causing authenticated super-admin dashboard requests to fail with D1 `500` responses.

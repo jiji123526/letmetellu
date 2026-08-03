@@ -46,6 +46,18 @@ function readFirstUserText(transcript: SupportTranscriptEvent[]): string {
     .find(Boolean) || "";
 }
 
+function supportMessagesEqual(left: SupportMessage[], right: SupportMessage[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((message, index) => {
+    const next = right[index];
+    return !!next
+      && message.id === next.id
+      && message.text === next.text
+      && message.sender_role === next.sender_role
+      && message.created_at === next.created_at;
+  });
+}
+
 export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   const router = useRouter();
   const { t } = useLocale();
@@ -57,8 +69,12 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const hasCompletedInitialLoadRef = useRef(false);
+  const shouldFollowMessagesRef = useRef(true);
+  const lastRenderedMessageIdRef = useRef<string | null>(null);
+  const loadThreadInFlightRef = useRef<Promise<void> | null>(null);
 
-  async function loadThread() {
+  async function performLoadThread() {
     const threadResult = await fetchPlatformSupportThread(threadId);
     if (threadResult._status === 403) {
       setError(t("supportNoAccess"));
@@ -71,8 +87,14 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
       return;
     }
 
+    const scrollElement = messagesRef.current;
+    shouldFollowMessagesRef.current = !hasCompletedInitialLoadRef.current
+      || !scrollElement
+      || scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight <= 96;
+
     setThreadDetail(threadResult.thread);
-    setMessages(threadResult.messages || []);
+    const nextMessages = threadResult.messages || [];
+    setMessages((current) => supportMessagesEqual(current, nextMessages) ? current : nextMessages);
 
     if (threadResult.thread.source_session_id) {
       const sessionResult = await fetchPlatformSupportSession(threadResult.thread.source_session_id);
@@ -91,6 +113,23 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
 
     setError("");
     setLoading(false);
+    hasCompletedInitialLoadRef.current = true;
+  }
+
+  function loadThread(): Promise<void> {
+    if (loadThreadInFlightRef.current) return loadThreadInFlightRef.current;
+    const request = performLoadThread()
+      .catch(() => {
+        setError(t("sendFailed"));
+        setLoading(false);
+      })
+      .finally(() => {
+        if (loadThreadInFlightRef.current === request) {
+          loadThreadInFlightRef.current = null;
+        }
+      });
+    loadThreadInFlightRef.current = request;
+    return request;
   }
 
   const loadThreadEffect = useEffectEvent(() => {
@@ -116,13 +155,23 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
       window.removeEventListener("focus", refreshThread);
       document.removeEventListener("visibilitychange", refreshThread);
     };
-  }, [threadId, loadThreadEffect]);
+  }, [threadId]);
 
   useEffect(() => {
+    if (loading) return;
     const element = messagesRef.current;
     if (!element) return;
-    element.scrollTop = element.scrollHeight;
-  }, [messages, sessionDetail?.transcript.length, threadDetail?.updated_at]);
+    const lastMessageId = messages.at(-1)?.id || null;
+    const isInitialPosition = lastRenderedMessageIdRef.current === null;
+    const hasNewLastMessage = lastMessageId !== lastRenderedMessageIdRef.current;
+    lastRenderedMessageIdRef.current = lastMessageId;
+    if (!isInitialPosition && (!hasNewLastMessage || !shouldFollowMessagesRef.current)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      element.scrollTop = element.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, messages]);
 
   useEffect(() => {
     if (!threadDetail?.id || !threadDetail.unread_for_admin) return;
