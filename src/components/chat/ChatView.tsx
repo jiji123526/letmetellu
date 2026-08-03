@@ -37,6 +37,7 @@ import { chatDateKey, chatDateLabel } from "@/lib/chat-date";
 import { recordAccountRecentChannel, setAccountChannelColor } from "@/lib/account-recent-channels";
 import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
+import { canBlockMessage, canReplyToMessage, isInboxModerationMessage } from "./messageActionRules";
 
 interface Message {
   id: string;
@@ -538,20 +539,6 @@ function stripInboxChannelLine(text: string): string {
     .join("\n");
 }
 
-function looksLikeInboxModerationMessage(message: Message): boolean {
-  if (message.report_meta || message.petition_meta) return true;
-  if (!message.is_admin || message.image) return false;
-  const nick = message.nick || "";
-  if (nick === "신고함" || nick === "Reports" || nick === "이의 제기" || nick === "Appeal") {
-    return true;
-  }
-  const text = message.text || "";
-  return text.startsWith("🚨 채널 신고")
-    || text.startsWith("🚨 Channel report")
-    || text.startsWith("📝 채널 이의 제기")
-    || text.startsWith("📝 Channel appeal");
-}
-
 interface MessageRowProps {
   msg: Message;
   isReply: boolean;
@@ -605,7 +592,7 @@ const MessageRow = React.memo(function MessageRow({
     : false;
   const isReportInboxMessage = !!msg.report_meta;
   const isPetitionInboxMessage = !!msg.petition_meta;
-  const isFallbackInboxMessage = looksLikeInboxModerationMessage(msg);
+  const isFallbackInboxMessage = isInboxModerationMessage(msg);
   const isInboxMessage = isReportInboxMessage || isPetitionInboxMessage;
   const isSent = isReply
     ? parentIsSent
@@ -3403,7 +3390,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           bubbleEl={contextMenu.bubbleEl}
           isAdmin={effectiveAdmin}
           onReaction={handleReaction}
-          onReply={effectiveAdmin && (contextMenu.msg.dm || contextMenu.msg.protected_sender) ? undefined : (msgId) => {
+          onReply={!canReplyToMessage(contextMenu.msg, effectiveAdmin) ? undefined : (msgId) => {
             // Reply to top-level parent, not to a reply
             const msg = messages.find((m) => m.id === msgId);
             if (msg?.reply_to) {
@@ -3475,7 +3462,7 @@ export function ChatView({ channelId }: { channelId: string }) {
             const msg = messages.find((m) => m.id === msgId);
             if (msg) setEditingMsg({ id: msg.id, text: msg.text });
           } : undefined}
-          onBlock={canUseAdminMutations && !contextMenu.isOwn && !contextMenu.msg.protected_sender ? (targetMsg) => {
+          onBlock={canUseAdminMutations && !contextMenu.isOwn && canBlockMessage(contextMenu.msg) ? (targetMsg) => {
             const blockUid = targetMsg.uid;
             const isBlocked = blockedUsers.some((b) => b.uid === blockUid);
             if (isBlocked) {

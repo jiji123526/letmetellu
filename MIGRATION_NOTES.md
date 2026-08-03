@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat action policy extraction and context-menu cleanup — 2026-08-03
+
+- Extracted shared chat action rules into a dedicated helper so fallback moderation-message detection and admin reply/block eligibility no longer live as repeated inline conditions inside `ChatView`.
+- Admin reply suppression for owner DMs and protected moderation notices now flows through those shared rules instead of one-off ternaries at the menu callsite.
+- `ContextMenu` now uses a static reusable action-button component rather than creating it during render, reducing one of the local React/compiler maintenance hazards in that file.
+- Bubble highlight styling in `ContextMenu` now applies through a local element ref path instead of mutating the incoming prop object directly.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Stable super-admin support thread scrolling — 2026-08-02
 
 - The super-admin 1:1 support panel no longer replaces its message state when a poll returns an identical ordered message list.

@@ -11,6 +11,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 3. Operator efficiency improvements for support and moderation.
 4. Durable abuse controls beyond the current first pass.
 5. Email and credential-path production hardening.
+6. Continue extracting `ChatView` action/state policy into small shared modules before taking on larger chat-surface UI changes.
 
 ## Remaining Ship Work
 
@@ -27,6 +28,11 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Track moderation action volume, report volume and petition outcomes.
 - Track upload failures, preview failures and WebSocket auth failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
+
+### Frontend maintainability
+
+- Continue separating `ChatView` policy logic from render wiring; the first shared action-rule extraction is in place, but search, report-inbox, and live-mode policy still sit in the main component.
+- Keep reducing `ContextMenu` and `ChatView` React/compiler lint debt before adding more admin chat controls.
 
 ### Email and account hardening
 

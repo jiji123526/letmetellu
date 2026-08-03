@@ -4,6 +4,22 @@ import { useEffect, useRef } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 const REACTIONS = ["👍", "👎", "🫪", "❓"];
+const ACTION_ITEM_STYLE: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  width: "100%",
+  border: "none",
+  background: "none",
+  color: "var(--gray-text)",
+  fontSize: "var(--bubble-font-size, 17px)",
+  fontFamily: "inherit",
+  padding: "13px 16px",
+  cursor: "pointer",
+  borderBottom: "0.5px solid var(--hairline)",
+  textAlign: "left",
+  lineHeight: 1,
+};
 
 interface ContextMenuProps {
   msg: {
@@ -49,6 +65,38 @@ interface ContextMenuProps {
   isMyMessage: boolean;
 }
 
+function ContextMenuActionButton({
+  label,
+  color,
+  borderBottom = true,
+  disabled = false,
+  onClick,
+  onClose,
+  icon,
+}: {
+  label: string;
+  color?: string;
+  borderBottom?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  onClose: () => void;
+  icon: React.ReactNode;
+}) {
+  return (
+    <button
+      style={{ ...ACTION_ITEM_STYLE, ...(borderBottom ? null : { borderBottom: "none" }) }}
+      disabled={disabled}
+      onClick={() => {
+        onClick();
+        onClose();
+      }}
+    >
+      {icon}
+      <span style={{ color: color || "var(--gray-text)", opacity: disabled ? 0.65 : 1 }}>{label}</span>
+    </button>
+  );
+}
+
 export function ContextMenu({
   msg,
   isSent,
@@ -73,6 +121,7 @@ export function ContextMenu({
   isMyMessage,
 }: ContextMenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const bubbleNodeRef = useRef<HTMLElement | null>(null);
   const { t } = useLocale();
 
   // Calculate positioning first
@@ -114,82 +163,49 @@ export function ContextMenu({
   const maxActionHeight = Math.max(120, composerTop - actionY - gap);
 
   useEffect(() => {
+    bubbleNodeRef.current = bubbleEl;
+    const bubbleNode = bubbleNodeRef.current;
+    if (!bubbleNode) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      if (bubbleNodeRef.current === bubbleNode) {
+        bubbleNodeRef.current = null;
+      }
+    };
+  }, [bubbleEl, onClose]);
 
   // Elevate the bubble above the overlay
   useEffect(() => {
-    bubbleEl.style.position = "relative";
-    bubbleEl.style.zIndex = "101";
-    bubbleEl.style.boxShadow = "0 4px 20px rgba(0,0,0,.15)";
-    bubbleEl.style.filter = "brightness(1.2)";
+    bubbleNodeRef.current = bubbleEl;
+    const bubbleNode = bubbleNodeRef.current;
+    if (!bubbleNode) return;
+    bubbleNode.style.position = "relative";
+    bubbleNode.style.zIndex = "101";
+    bubbleNode.style.boxShadow = "0 4px 20px rgba(0,0,0,.15)";
+    bubbleNode.style.filter = "brightness(1.2)";
     if (bubbleShift > 0) {
-      bubbleEl.style.transition = "transform .2s ease";
-      bubbleEl.style.transform = `translateY(-${bubbleShift}px)`;
+      bubbleNode.style.transition = "transform .2s ease";
+      bubbleNode.style.transform = `translateY(-${bubbleShift}px)`;
     }
     return () => {
-      bubbleEl.style.position = "";
-      bubbleEl.style.zIndex = "";
-      bubbleEl.style.boxShadow = "";
-      bubbleEl.style.filter = "";
-      bubbleEl.style.transform = "";
-      bubbleEl.style.transition = "";
+      bubbleNode.style.position = "";
+      bubbleNode.style.zIndex = "";
+      bubbleNode.style.boxShadow = "";
+      bubbleNode.style.filter = "";
+      bubbleNode.style.transform = "";
+      bubbleNode.style.transition = "";
     };
-  });
+  }, [bubbleEl, bubbleShift]);
 
-  const actionItemStyle: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    width: "100%",
-    border: "none",
-    background: "none",
-    color: "var(--gray-text)",
-    fontSize: "var(--bubble-font-size, 17px)",
-    fontFamily: "inherit",
-    padding: "13px 16px",
-    cursor: "pointer",
-    borderBottom: "0.5px solid var(--hairline)",
-    textAlign: "left" as const,
-    lineHeight: 1,
-  };
   const isReportInboxMessage = isAdmin && !!msg.report_meta;
   const isPetitionInboxMessage = isAdmin && !!msg.petition_meta;
   const isOpenReport = msg.report_meta?.status === "open";
   const isOpenPetition = msg.petition_meta?.status === "open";
   const useScrollableActionList = isReportInboxMessage || isPetitionInboxMessage;
-
-  const ActionButton = ({
-    label,
-    color,
-    borderBottom = true,
-    disabled = false,
-    onClick,
-    icon,
-  }: {
-    label: string;
-    color?: string;
-    borderBottom?: boolean;
-    disabled?: boolean;
-    onClick: () => void;
-    icon: React.ReactNode;
-  }) => (
-    <button
-      style={{ ...actionItemStyle, ...(borderBottom ? null : { borderBottom: "none" }) }}
-      disabled={disabled}
-      onClick={() => {
-        onClick();
-        onClose();
-      }}
-    >
-      {icon}
-      <span style={{ color: color || "var(--gray-text)", opacity: disabled ? 0.65 : 1 }}>{label}</span>
-    </button>
-  );
 
   return (
     <div
@@ -276,10 +292,11 @@ export function ContextMenu({
         {isReportInboxMessage ? (
           <>
             {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={msg.report_meta?.moderation_status === "active" ? t("warnOwner") : t("warnOwnerAgain")}
                 disabled={reportActionPending}
                 onClick={() => onReportAction("warn_owner")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#b26a00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 9v4" />
@@ -290,11 +307,12 @@ export function ContextMenu({
               />
             )}
             {isOpenReport && onReportAction && msg.report_meta?.moderation_status !== "frozen" && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("freezeReportedChannel")}
                 color="#8b5cf6"
                 disabled={reportActionPending}
                 onClick={() => onReportAction("freeze_channel")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 3v18" />
@@ -305,11 +323,12 @@ export function ContextMenu({
               />
             )}
             {onReportAction && msg.report_meta?.moderation_status === "frozen" && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("unfreezeReportedChannel")}
                 color="#2a9d4e"
                 disabled={reportActionPending}
                 onClick={() => onReportAction("unfreeze_channel")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M4 12h16" />
@@ -320,11 +339,12 @@ export function ContextMenu({
               />
             )}
             {onReportAction && msg.report_meta?.moderation_status === "frozen" && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("deleteReportedChannel")}
                 color="#d32f2f"
                 disabled={reportActionPending}
                 onClick={() => onReportAction("delete_channel")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18" />
@@ -335,11 +355,12 @@ export function ContextMenu({
               />
             )}
             {isOpenReport && onReportAction && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("resolveReport")}
                 color="#2a9d4e"
                 disabled={reportActionPending}
                 onClick={() => onReportAction("resolve")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6 9 17l-5-5" />
@@ -348,12 +369,13 @@ export function ContextMenu({
               />
             )}
             {isOpenReport && onReportAction && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("dismissReport")}
                 color="#8e8e93"
                 borderBottom={false}
                 disabled={reportActionPending}
                 onClick={() => onReportAction("dismiss")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round">
                     <path d="M18 6 6 18M6 6l12 12" />
@@ -362,7 +384,7 @@ export function ContextMenu({
               />
             )}
             {!isOpenReport && (
-              <div style={{ ...actionItemStyle, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
+              <div style={{ ...ACTION_ITEM_STYLE, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
                 <span>{msg.report_meta?.status === "resolved" ? t("reportStatusResolved") : t("reportStatusDismissed")}</span>
               </div>
             )}
@@ -370,11 +392,12 @@ export function ContextMenu({
         ) : isPetitionInboxMessage ? (
           <>
             {isOpenPetition && onPetitionAction && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("acceptPetition")}
                 color="#2a9d4e"
                 disabled={reportActionPending}
                 onClick={() => onPetitionAction("accept_petition")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6 9 17l-5-5" />
@@ -383,12 +406,13 @@ export function ContextMenu({
               />
             )}
             {isOpenPetition && onPetitionAction && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("rejectPetition")}
                 color="#d32f2f"
                 borderBottom={false}
                 disabled={reportActionPending}
                 onClick={() => onPetitionAction("reject_petition")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
                     <path d="M18 6 6 18M6 6l12 12" />
@@ -397,12 +421,13 @@ export function ContextMenu({
               />
             )}
             {!isOpenPetition && msg.petition_meta?.status === "rejected" && onPetitionAction && (
-              <ActionButton
+              <ContextMenuActionButton
                 label={t("unfreezeReportedChannel")}
                 color="#2a9d4e"
                 borderBottom={false}
                 disabled={reportActionPending}
                 onClick={() => onPetitionAction("unfreeze_channel")}
+                onClose={onClose}
                 icon={(
                   <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#2a9d4e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M4 12h16" />
@@ -413,7 +438,7 @@ export function ContextMenu({
               />
             )}
             {!isOpenPetition && msg.petition_meta?.status !== "rejected" && (
-              <div style={{ ...actionItemStyle, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
+              <div style={{ ...ACTION_ITEM_STYLE, borderBottom: "none", cursor: "default", color: "var(--meta)" }}>
                 <span>{msg.petition_meta?.status === "accepted" ? t("petitionAccepted") : t("petitionRejected")}</span>
               </div>
             )}
@@ -421,7 +446,7 @@ export function ContextMenu({
         ) : (
           <>
             {onReply && (
-              <button style={actionItemStyle} onClick={() => { onReply(msg.id); onClose(); }}>
+              <button style={ACTION_ITEM_STYLE} onClick={() => { onReply(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 4l-7 7 7 7" />
                   <path d="M2 11h14a4 4 0 0 1 4 4v4" />
@@ -432,7 +457,7 @@ export function ContextMenu({
 
             {/* Admin viewing own: Edit + Delete */}
             {isAdmin && isMyMessage && onEdit && msg.text && (
-              <button style={actionItemStyle} onClick={() => { onEdit(msg.id); onClose(); }}>
+              <button style={ACTION_ITEM_STYLE} onClick={() => { onEdit(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -442,7 +467,7 @@ export function ContextMenu({
             )}
 
             {isAdmin && isMyMessage && onDelete && (
-              <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
+              <button style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                 </svg>
@@ -452,7 +477,7 @@ export function ContextMenu({
 
             {/* Admin viewing others: Delete (with replies) + Block */}
             {isAdmin && !isMyMessage && onDeleteWithReplies && (
-              <button style={{ ...actionItemStyle, color: "#d32f2f" }} onClick={() => { onDeleteWithReplies(msg.id); onClose(); }}>
+              <button style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f" }} onClick={() => { onDeleteWithReplies(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                 </svg>
@@ -461,7 +486,7 @@ export function ContextMenu({
             )}
 
             {isAdmin && !isMyMessage && onBlock && !msg.protected_sender && (
-              <button style={{ ...actionItemStyle, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg); onClose(); }}>
+              <button style={{ ...ACTION_ITEM_STYLE, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M4.93 4.93l14.14 14.14" />
@@ -472,7 +497,7 @@ export function ContextMenu({
 
             {/* Non-admin viewing own: Edit + Delete */}
             {!isAdmin && isMyMessage && onEdit && msg.text && (
-              <button style={actionItemStyle} onClick={() => { onEdit(msg.id); onClose(); }}>
+              <button style={ACTION_ITEM_STYLE} onClick={() => { onEdit(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
@@ -482,7 +507,7 @@ export function ContextMenu({
             )}
 
             {!isAdmin && isMyMessage && onDelete && (
-              <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
+              <button style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onDelete(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2" strokeLinecap="round">
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                 </svg>
@@ -492,7 +517,7 @@ export function ContextMenu({
 
             {/* Non-admin viewing others: Report / Unreport */}
             {!isAdmin && !isMyMessage && !msg.is_admin && isReported && onUnreport && (
-              <button style={{ ...actionItemStyle, borderBottom: "none" }} onClick={() => { onUnreport(msg.id); onClose(); }}>
+              <button style={{ ...ACTION_ITEM_STYLE, borderBottom: "none" }} onClick={() => { onUnreport(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 4l-7 7 7 7" />
                   <path d="M2 11h20" />
@@ -501,7 +526,7 @@ export function ContextMenu({
               </button>
             )}
             {!isAdmin && !isMyMessage && !msg.is_admin && !isReported && onReport && (
-              <button style={{ ...actionItemStyle, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onReport(msg.id); onClose(); }}>
+              <button style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f", borderBottom: "none" }} onClick={() => { onReport(msg.id); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="#d32f2f" strokeWidth="2">
                   <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                   <path d="M4 22V15" strokeLinecap="round" />
