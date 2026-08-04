@@ -136,21 +136,21 @@ function LinkPreviewCard({
       }}
       onClick={onClick}
     >
-      {link.preview === undefined ? (
-        <div
-          className="animate-pulse"
-          style={{ width: "100%", aspectRatio: "1.91 / 1", background: "var(--gray-bubble)" }}
-          aria-hidden="true"
-        />
-      ) : link.preview?.image ? (
-        <img
-          src={link.preview.image}
-          alt=""
-          style={{ width: "100%", aspectRatio: "1.91 / 1", objectFit: "cover", display: "block", background: "var(--gray-bubble)" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      ) : null}
-      <div style={{ padding: "7px 8px", minWidth: 0 }}>
+      <div
+        className={link.preview === undefined ? "animate-pulse" : undefined}
+        style={{ position: "relative", width: "100%", paddingTop: "52.36%", background: "var(--gray-bubble)", overflow: "hidden" }}
+        aria-hidden="true"
+      >
+        {link.preview?.image ? (
+          <img
+            src={link.preview.image}
+            alt=""
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        ) : null}
+      </div>
+      <div style={{ padding: "7px 8px", minWidth: 0, minHeight: "38px", boxSizing: "border-box" }}>
         <div style={{ fontSize: "calc(var(--bubble-font-size) - 7px)", color: "var(--meta)", marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {link.preview?.siteName || hostname}
         </div>
