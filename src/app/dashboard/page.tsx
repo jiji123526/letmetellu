@@ -220,6 +220,7 @@ export default function DashboardPage() {
   const channelItemRefs = useRef(new Map<string, HTMLDivElement>());
   const previousItemPositionsRef = useRef(new Map<string, number>());
   const skipNextListAnimationRef = useRef(false);
+  const loadChannelsInFlightRef = useRef<Promise<void> | null>(null);
   const loadPlatformDashboardInFlightRef = useRef<Promise<boolean> | null>(null);
   const loadSupportPreviewInFlightRef = useRef<Promise<void> | null>(null);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
@@ -269,13 +270,22 @@ export default function DashboardPage() {
     return () => window.removeEventListener("resize", syncViewportHeight);
   }, []);
 
-  const loadChannels = useCallback(async () => {
-    const response = await fetch("/api/user", { cache: "no-store" });
-    const data = await response.json() as { channels?: Channel[] };
-    setChannels((data.channels || []).map((channel) => ({
-      ...channel,
-      profile_image: decorateMediaUrl(channel.profile_image),
-    })));
+  const loadChannels = useCallback((): Promise<void> => {
+    if (loadChannelsInFlightRef.current) return loadChannelsInFlightRef.current;
+    const request = (async () => {
+      const response = await fetch("/api/user", { cache: "no-store" });
+      const data = await response.json() as { channels?: Channel[] };
+      setChannels((data.channels || []).map((channel) => ({
+        ...channel,
+        profile_image: decorateMediaUrl(channel.profile_image),
+      })));
+    })().finally(() => {
+      if (loadChannelsInFlightRef.current === request) {
+        loadChannelsInFlightRef.current = null;
+      }
+    });
+    loadChannelsInFlightRef.current = request;
+    return request;
   }, []);
 
   const loadLocalRecentChannels = useCallback(async () => {
@@ -1031,7 +1041,9 @@ export default function DashboardPage() {
       } else {
         recentIds.forEach(removeRecentChannel);
       }
-      await loadChannels();
+      if (ownedIds.length > 0) {
+        await loadChannels();
+      }
       if (status === "authenticated" && session?.user?.id) {
         await loadAccountRecentChannels(session.user.id);
       } else {

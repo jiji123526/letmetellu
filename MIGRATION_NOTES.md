@@ -461,6 +461,25 @@ Deployment notes:
 - deploy the Worker for this optimization;
 - no Next.js frontend deploy is required for this line.
 
+### Dashboard owned-channel load coalescing — 2026-08-04
+
+This frontend-and-Worker optimization reduces repeated owned-channel dashboard work without changing the visible dashboard model.
+
+- The dashboard `loadChannels` path now reuses one in-flight `/api/user` request instead of launching duplicate owned-channel reloads when multiple UI actions ask for the same refresh.
+- Removing only recent channels from the dashboard no longer forces an unnecessary owned-channel reload.
+- The Worker `readUserState` query now scopes message activity aggregation to the current owner's channels and joins live-state rows in one pass, instead of running per-channel correlated lookups for `last_message_at` and live status.
+
+Trade-offs:
+
+- Concurrent dashboard refresh triggers now wait on one shared owned-channel request, so a second trigger will not force an immediate duplicate fetch.
+- The Worker query is more complex than before, but it does less repeated work on the common success path and keeps the response shape unchanged.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for the `readUserState` query change;
+- deploy the Next.js frontend for the dashboard request-coalescing change.
+
 ### Dashboard refresh request coalescing — 2026-08-04
 
 This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.
