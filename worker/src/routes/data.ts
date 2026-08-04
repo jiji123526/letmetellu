@@ -178,7 +178,12 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     case "gallery": {
       const cursor = url.searchParams.get("cursor");
       let query = `
-        SELECT g.*
+        SELECT
+          m.id AS id,
+          g.image,
+          g.auth_uid,
+          g.channel_id,
+          g.created_at
         FROM gallery g
         INNER JOIN messages m ON m.gallery_id = g.id AND m.channel_id = g.channel_id
         WHERE g.channel_id = ? AND m.deleted = 0

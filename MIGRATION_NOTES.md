@@ -16,6 +16,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Recorded the pre-import D1 Time Travel bookmark as `00000428-00000002-000050bd-d66ae8b227b23b5034bba30a25893377`. The successful import completed at bookmark `0000042b-0000007f-000050bd-4480ca41fb5dbec420debb701969e06a`.
 - Added `scripts/prepare-legacy-main-migration.mjs` as a credential-free, auditable preparation tool. It fetches paginated Supabase rows, validates reply/gallery references, downloads and hashes media, pseudonymizes legacy actors, and produces D1 SQL plus a media manifest in a caller-selected output directory.
 - Corrected the gallery panel lookup to join through `messages.gallery_id` instead of assuming gallery and message primary keys are identical. This keeps ordinary uploads working and makes imported gallery identifiers visible without rewriting production history.
+- Gallery API responses now expose the associated message ID as the item `id`, rather than the gallery-row ID, so opening an imported photo and navigating back to its historical message works even when the two IDs differ.
 - Changed link-preview caching so transient fetch failures are not cached for the entire browser session; reopening the panel can retry while successful previews remain cached.
 - Changed oversized preview handling to read and parse only the first 512 KB of HTML instead of rejecting a page solely because its full `Content-Length` is larger. This preserves the response-size and memory bound while allowing metadata from large article pages such as Posty to render.
 
