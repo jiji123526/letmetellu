@@ -5,8 +5,19 @@ import { getWebSocketUrl } from "@/lib/api";
 
 type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 
-const RECONNECT_DELAY_MS = 2000;
+const RECONNECT_BASE_DELAY_MS = 2000;
+const RECONNECT_MAX_DELAY_MS = 30 * 1000;
+const RECONNECT_JITTER_RATIO = 0.25;
 const HIDDEN_SOCKET_SLEEP_MS = 90 * 1000;
+
+function reconnectDelay(attempt: number) {
+  const exponentialDelay = Math.min(
+    RECONNECT_MAX_DELAY_MS,
+    RECONNECT_BASE_DELAY_MS * (2 ** attempt),
+  );
+  const jitter = 1 + ((Math.random() * 2 - 1) * RECONNECT_JITTER_RATIO);
+  return Math.round(exponentialDelay * jitter);
+}
 
 export function useRealtime(channelId: string | null, uid: string) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -16,6 +27,8 @@ export function useRealtime(channelId: string | null, uid: string) {
   const [presence, setPresence] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const connectRef = useRef<() => void>(() => {});
   const sleepTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestRoomAuthRequest = useRef<string | null>(null);
   const mountedRef = useRef(false);
@@ -104,6 +117,7 @@ export function useRealtime(channelId: string | null, uid: string) {
     const notifySynchronized = () => {
       if (synchronized) return;
       synchronized = true;
+      reconnectAttemptRef.current = 0;
       handlersRef.current.forEach((handler) => handler({ type: "reconnected" }));
     };
 
@@ -172,7 +186,9 @@ export function useRealtime(channelId: string | null, uid: string) {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
       }
-      reconnectTimeout.current = setTimeout(connect, RECONNECT_DELAY_MS);
+      const delay = reconnectDelay(reconnectAttemptRef.current);
+      reconnectAttemptRef.current += 1;
+      reconnectTimeout.current = setTimeout(() => connectRef.current(), delay);
     };
 
     ws.onerror = () => {
@@ -181,9 +197,11 @@ export function useRealtime(channelId: string | null, uid: string) {
   }, [channelId, uid, clearReconnectTimeout, requestSocketAuthorization]);
 
   useEffect(() => {
+    connectRef.current = connect;
     mountedRef.current = true;
-    connect();
+    const initialConnectTimer = setTimeout(() => connectRef.current(), 0);
     return () => {
+      clearTimeout(initialConnectTimer);
       mountedRef.current = false;
       clearReconnectTimeout();
       clearSleepTimeout();
@@ -213,6 +231,7 @@ export function useRealtime(channelId: string | null, uid: string) {
       clearSleepTimeout();
       if (sleepingRef.current) {
         sleepingRef.current = false;
+        reconnectAttemptRef.current = 0;
       }
       const socket = wsRef.current;
       if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {

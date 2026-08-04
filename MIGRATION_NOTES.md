@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Jittered WebSocket reconnect backoff — 2026-08-04
+
+- Replaced the fixed two-second chat WebSocket reconnect loop with exponential delays starting near two seconds and capped near thirty seconds.
+- Added 25% per-client jitter so browsers disconnected by the same outage do not all request a new socket and `/api/ws-token` at the same instant.
+- Reset the retry counter only after room synchronization succeeds. Returning from the intentional hidden-tab sleep also starts a fresh retry sequence.
+- Existing hidden-tab suspension, single-pending-timer protection and room authorization behavior remain unchanged.
+
+Trade-offs:
+
+- A prolonged outage no longer produces a synchronized reconnect wave, reducing pressure on Vercel, the Worker and channel Durable Objects during recovery.
+- Reconnection after repeated failures can take up to roughly 22.5–37.5 seconds because of the cap and jitter, so a recovered chat may remain disconnected slightly longer than with the previous fixed two-second retry.
+- The delay returns to the initial range as soon as a connection completes room synchronization; normal navigation and wake-from-background behavior are not intentionally slowed.
+
 ### CSP limited-beta posture documentation — 2026-08-04
 
 - Documented that production CSP currently retains `script-src 'unsafe-inline'` while still restricting other resource classes and supported external origins.

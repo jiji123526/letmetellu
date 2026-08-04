@@ -46,6 +46,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 ### Monitoring and alerts
 
 - Establish normal production baselines for the existing super-admin health card, then calibrate its `5xx`, exception and `429` thresholds.
+- Track WebSocket disconnect, reconnect-attempt and authorization-failure counts so the jittered exponential reconnect policy can be calibrated from production recovery behavior.
 - Add external alert delivery for degraded or critical health only after threshold calibration, with a documented operator response and escalation path.
 - Add bounded summaries for moderation action volume, report volume, petition outcomes and support queue age; the underlying audit records already exist, but these trends are not yet presented.
 - Add explicit operational-event coverage for upload failures, preview failures and WebSocket authorization/origin failures.
