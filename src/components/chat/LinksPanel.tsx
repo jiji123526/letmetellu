@@ -76,6 +76,10 @@ function LinkPreviewCard({
   onClick: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  let hostname = link.url;
+  try {
+    hostname = new URL(link.url).hostname.replace(/^www\./, "");
+  } catch {}
 
   useEffect(() => {
     if (link.preview !== undefined) return;
@@ -101,23 +105,36 @@ function LinkPreviewCard({
     <div
       ref={cardRef}
       className="cursor-pointer"
-      style={{ border: "1px solid var(--hairline)", borderRadius: "12px", overflow: "hidden", transition: "background .15s" }}
+      style={{
+        width: "100%",
+        minWidth: 0,
+        border: "1px solid var(--hairline)",
+        borderRadius: "12px",
+        overflow: "hidden",
+        transition: "background .15s",
+        background: "var(--card)",
+      }}
       onClick={onClick}
     >
       {link.preview && link.preview.image ? (
-        <img src={link.preview.image} alt="" style={{ width: "100%", maxHeight: "80px", objectFit: "cover", display: "block" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        <img
+          src={link.preview.image}
+          alt=""
+          style={{ width: "100%", aspectRatio: "1.91 / 1", objectFit: "cover", display: "block", background: "var(--gray-bubble)" }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
       ) : null}
-      <div style={{ padding: "8px 10px" }}>
-        {link.preview?.siteName && (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>{link.preview.siteName}</div>
-        )}
+      <div style={{ padding: "10px 12px", minWidth: 0 }}>
+        <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+          {link.preview?.siteName || hostname}
+        </div>
         {link.preview?.title ? (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", fontWeight: 400, color: "var(--gray-text)", lineHeight: 1.3 }}>
-            {link.preview.title.length > 30 ? link.preview.title.slice(0, 30) + "…" : link.preview.title}
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", fontWeight: 500, color: "var(--gray-text)", lineHeight: 1.35, overflowWrap: "anywhere" }}>
+            {link.preview.title.length > 80 ? link.preview.title.slice(0, 80) + "…" : link.preview.title}
           </div>
         ) : (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", wordBreak: "break-all", lineHeight: 1.3 }}>
-            {link.url.replace(/^https?:\/\//, "").slice(0, 25)}…
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", overflowWrap: "anywhere", lineHeight: 1.35 }}>
+            {link.url.replace(/^https?:\/\//, "")}
           </div>
         )}
       </div>
@@ -228,7 +245,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
         </div>
 
         {/* Links grid */}
-        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", alignContent: "start" }}>
+        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "10px", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "10px", alignContent: "start" }}>
           {loading ? (
             <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>{t("loading")}</div>
           ) : links.length === 0 ? (
