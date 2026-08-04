@@ -75,7 +75,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Move Resend out of sandbox mode with a verified sending domain.
 - Validate the legacy SHA-256 to PBKDF2 upgrade path end to end in production-like conditions.
-- Continue normal dependency upgrades without using `npm audit fix --force`.
+- The beta dependency pass is currently clean under both production-only and full `npm audit`; repeat the audit before broader releases and continue normal upgrades without `npm audit fix --force`.
 
 ## Guided Support Follow-up
 

@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Next.js 16.3 security update — 2026-08-04
+
+- Updated `next` and `eslint-config-next` from `16.2.11` to `16.3.0` before beta release.
+- The resolved dependency tree now uses `postcss 8.5.23` and `sharp 0.35.3`, removing the production advisories previously reported through the Next.js dependency chain.
+- Applied the compatible non-force audit fix for the remaining development-only `brace-expansion` advisory.
+- Both `npm audit --omit=dev` and the full `npm audit` now report zero known vulnerabilities.
+
+Trade-offs:
+
+- The framework patch/minor update changes the build dependency graph and should receive focused smoke testing for image rendering, authentication callbacks, dashboard routes and server API handlers.
+- No application API, schema or user-facing behavior was intentionally changed by this dependency-only update.
+- Future advisories can change the audit result even without a code change, so the audit should be repeated before broader releases rather than treated as a permanent guarantee.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend after the production build passes.
+
 ### Super-admin operational health card — 2026-08-04
 
 - Added a localized service-health card to the super-admin dashboard with healthy, degraded and critical states, recent 15-minute `5xx`, exception, `429` and `403` counts, and up to three 24-hour problem routes.
