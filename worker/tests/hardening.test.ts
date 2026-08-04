@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
+import { matchesImageSignature } from "../src/lib/image-signature.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 
 function expectPreviewError(fn: () => unknown, message: string): void {
@@ -73,4 +74,22 @@ test("upload access and quota checks stay ahead of request-body consumption", ()
   assert.ok(identityCheck > handlerStart, "upload handler should validate actor identity");
   assert.ok(quotaCheck > identityCheck, "upload handler should enforce quota after identity validation");
   assert.ok(bodyRead > quotaCheck, "upload body must not be consumed before access and quota checks");
+});
+
+test("matchesImageSignature accepts supported image headers", () => {
+  assert.equal(matchesImageSignature("image/jpeg", new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), true);
+  assert.equal(matchesImageSignature("image/png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), true);
+  assert.equal(matchesImageSignature("image/gif", new TextEncoder().encode("GIF87a")), true);
+  assert.equal(matchesImageSignature("image/gif", new TextEncoder().encode("GIF89a")), true);
+  assert.equal(matchesImageSignature("image/webp", new Uint8Array([
+    0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+  ])), true);
+});
+
+test("matchesImageSignature rejects mismatched, truncated and unsupported content", () => {
+  const pngHeader = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.equal(matchesImageSignature("image/jpeg", pngHeader), false);
+  assert.equal(matchesImageSignature("image/png", pngHeader.subarray(0, 4)), false);
+  assert.equal(matchesImageSignature("image/gif", new TextEncoder().encode("<html>")), false);
+  assert.equal(matchesImageSignature("application/octet-stream", pngHeader), false);
 });

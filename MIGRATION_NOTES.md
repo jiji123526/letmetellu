@@ -4,6 +4,25 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Uploaded-image signature validation — 2026-08-04
+
+- The Worker now compares the first bytes of JPEG, PNG, GIF and WebP uploads with the declared `Content-Type` before writing the object to R2.
+- Empty, truncated, unsupported or header-mismatched bodies return `400 invalid file type` and do not consume R2 storage.
+- GIF87a and GIF89a signatures are both accepted; the file body is not transformed, so animated GIF behavior is unchanged.
+- Added focused tests for every supported signature plus mismatched and truncated inputs.
+
+Trade-offs:
+
+- This is a lightweight file-signature check, not a complete image decoder or malware scanner. A file with a valid header but malformed later bytes can still pass.
+- Rare nonstandard files that browsers label as one format while their bytes use another are now rejected instead of being stored as broken media.
+- Signature collection is capped at 12 bytes and reuses the existing upload stream, so it does not add another full-file read or meaningful memory overhead.
+
+Deployment notes:
+
+- no D1 migration is required;
+- deploy the Worker for this validation change;
+- no Next.js frontend deployment is required.
+
 ### Pre-body upload authorization and quota checks — 2026-08-04
 
 - Message and DM uploads now complete channel passcode authorization, signed actor validation and the existing upload quota checks before the Worker consumes the request body.

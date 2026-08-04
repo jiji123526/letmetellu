@@ -3,6 +3,7 @@ import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
+import { matchesImageSignature } from "../lib/image-signature";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -150,6 +151,8 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   // Read body with size enforcement (in case Content-Length is spoofed)
   const chunks: Uint8Array[] = [];
+  const signatureBytes = new Uint8Array(12);
+  let signatureLength = 0;
   let totalSize = 0;
   const reader = request.body.getReader();
   while (true) {
@@ -160,7 +163,16 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
       reader.cancel();
       return Response.json({ error: "file too large" }, { status: 413 });
     }
+    if (signatureLength < signatureBytes.length) {
+      const prefixLength = Math.min(value.byteLength, signatureBytes.length - signatureLength);
+      signatureBytes.set(value.subarray(0, prefixLength), signatureLength);
+      signatureLength += prefixLength;
+    }
     chunks.push(value);
+  }
+
+  if (!matchesImageSignature(contentType, signatureBytes.subarray(0, signatureLength))) {
+    return Response.json({ error: "invalid file type" }, { status: 400 });
   }
 
   const blob = new Blob(chunks, { type: contentType });

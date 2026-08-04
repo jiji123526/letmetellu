@@ -21,7 +21,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Expand durable rate limits to broader cross-channel abuse patterns, not just per-route throttles.
 - Add stronger report-target and evidence validation for direct API callers.
 - Upload access and existing ticket-quota checks now run before request-body consumption. If operational metrics show repeated authorized requests that fail before ticket creation, add a separate low-cost upload-attempt limiter rather than lowering successful-upload quotas.
-- Keep tightening upload validation toward stricter decoded-type checks.
+- Basic JPEG, PNG, GIF and WebP signatures are now checked before R2 writes. Consider full image decoding or malware scanning only if production abuse or a future image-processing pipeline justifies the extra CPU and implementation cost.
 - If the platform later exposes safe DNS or IP verification primitives, strengthen preview destination validation beyond hostname rules.
 
 ### Rewarded media credits
