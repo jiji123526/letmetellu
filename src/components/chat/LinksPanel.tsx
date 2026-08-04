@@ -11,6 +11,7 @@ interface LinkItem {
   url: string;
   msgId: string;
   date: string;
+  isLegacy: boolean;
   preview?: { title?: string; image?: string; siteName?: string } | null;
 }
 
@@ -127,11 +128,11 @@ function LinkPreviewCard({
       className="cursor-pointer"
       style={{
         width: "100%",
-        height: "104px",
-        minHeight: "104px",
+        height: link.isLegacy ? "104px" : undefined,
+        minHeight: link.isLegacy ? "104px" : undefined,
         minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
+        display: link.isLegacy ? "flex" : undefined,
+        flexDirection: link.isLegacy ? "column" : undefined,
         border: "1px solid var(--hairline)",
         borderRadius: "12px",
         overflow: "hidden",
@@ -140,21 +141,43 @@ function LinkPreviewCard({
       }}
       onClick={onClick}
     >
-      <div
-        className={link.preview === undefined ? "animate-pulse" : undefined}
-        style={{ position: "relative", width: "100%", height: "58px", minHeight: "58px", flexShrink: 0, background: "var(--gray-bubble)", overflow: "hidden" }}
-        aria-hidden="true"
-      >
-        {link.preview?.image ? (
-          <img
-            src={link.preview.image}
-            alt=""
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
-        ) : null}
-      </div>
-      <div style={{ height: "46px", minHeight: "46px", padding: "7px 8px", minWidth: 0, boxSizing: "border-box", overflow: "hidden" }}>
+      {link.isLegacy ? (
+        <div
+          className={link.preview === undefined ? "animate-pulse" : undefined}
+          style={{ position: "relative", width: "100%", height: "58px", minHeight: "58px", flexShrink: 0, background: "var(--gray-bubble)", overflow: "hidden" }}
+          aria-hidden="true"
+        >
+          {link.preview?.image ? (
+            <img
+              src={link.preview.image}
+              alt=""
+              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : null}
+        </div>
+      ) : link.preview === undefined ? (
+        <div
+          className="animate-pulse"
+          style={{ width: "100%", aspectRatio: "1.91 / 1", background: "var(--gray-bubble)" }}
+          aria-hidden="true"
+        />
+      ) : link.preview?.image ? (
+        <img
+          src={link.preview.image}
+          alt=""
+          style={{ width: "100%", aspectRatio: "1.91 / 1", objectFit: "cover", display: "block", background: "var(--gray-bubble)" }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      ) : null}
+      <div style={{
+        height: link.isLegacy ? "46px" : undefined,
+        minHeight: link.isLegacy ? "46px" : undefined,
+        padding: "7px 8px",
+        minWidth: 0,
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}>
         <div style={{ fontSize: "calc(var(--bubble-font-size) - 7px)", color: "var(--meta)", marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {link.preview?.siteName || hostname}
         </div>
@@ -189,7 +212,12 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
         if (matches) {
           matches.forEach((url) => {
             const fullUrl = url.startsWith("http") ? url : `https://${url}`;
-            found.push({ url: fullUrl, msgId: m.id, date: m.created_at });
+            found.push({
+              url: fullUrl,
+              msgId: m.id,
+              date: m.created_at,
+              isLegacy: m.id.startsWith("legacy-main-message-"),
+            });
           });
         }
       }
