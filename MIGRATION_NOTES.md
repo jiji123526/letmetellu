@@ -441,6 +441,26 @@ Deployment notes:
 - deploy the Worker for this optimization;
 - no Next.js frontend deploy is required for this line.
 
+### Parallel support detail reloads — 2026-08-04
+
+This Worker-only optimization trims more avoidable latency from support mutation and detail endpoints without changing their response shapes.
+
+- Escalated support-thread creation now reloads the created thread row and its message list in parallel.
+- Guided support-session answers now reload the updated session row and transcript in parallel after the session state write.
+- Platform-admin support detail endpoints now load thread plus messages, and session plus transcript, in parallel.
+- User-driven support-thread close now reuses the thread row it already loaded for ownership checks instead of fetching the same row again inside the close helper.
+
+Trade-offs:
+
+- A few endpoints now issue small parallel read bursts against D1 instead of strictly sequential reads.
+- Thread-detail and session-detail requests may perform one harmless extra lookup on the associated messages or transcript even when the parent row is missing, in exchange for lower latency on the common success path.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line.
+
 ### Dashboard refresh request coalescing — 2026-08-04
 
 This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.

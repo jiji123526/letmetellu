@@ -620,8 +620,10 @@ async function createEscalatedSupportThread(input: {
     },
   });
 
-  const thread = await fetchSupportThreadById(threadId, input.env);
-  const messages = await fetchSupportMessages(threadId, input.env);
+  const [thread, messages] = await Promise.all([
+    fetchSupportThreadById(threadId, input.env),
+    fetchSupportMessages(threadId, input.env),
+  ]);
   return Response.json({
     thread: thread ? serializeThread(thread, input.locale) : null,
     messages,
@@ -847,8 +849,10 @@ async function handleSupportAnswerSession(body: JsonObject, subjectId: string, l
     session.id,
   ).run();
 
-  const updatedSession = await fetchSupportSessionById(session.id, env);
-  const transcript = await fetchSupportSessionEvents(session.id, env);
+  const [updatedSession, transcript] = await Promise.all([
+    fetchSupportSessionById(session.id, env),
+    fetchSupportSessionEvents(session.id, env),
+  ]);
   return Response.json({
     thread: null,
     messages: [],
@@ -995,8 +999,9 @@ async function closeSupportThreadRecord(
   actorUserId: string,
   actorRole: "user" | "platform_admin",
   env: Env,
+  existingThread?: SupportThreadRow | null,
 ): Promise<Response> {
-  const thread = await fetchSupportThreadById(threadId, env);
+  const thread = existingThread ?? await fetchSupportThreadById(threadId, env);
   if (!thread || thread.status !== "open") {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
@@ -1043,7 +1048,7 @@ async function handleUserSupportCloseThread(body: JsonObject, subjectId: string,
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
 
-  return closeSupportThreadRecord(threadId, subjectId, "user", env);
+  return closeSupportThreadRecord(threadId, subjectId, "user", env, thread);
 }
 
 async function handleUserSupportMarkThreadRead(body: JsonObject, subjectId: string, env: Env): Promise<Response> {
@@ -1227,11 +1232,13 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
 }
 
 async function fetchPlatformSupportThreadDetail(threadId: string, locale: UserLocale, env: Env): Promise<Response> {
-  const thread = await fetchSupportThreadById(threadId, env);
+  const [thread, messages] = await Promise.all([
+    fetchSupportThreadById(threadId, env),
+    fetchSupportMessages(threadId, env),
+  ]);
   if (!thread) {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
-  const messages = await fetchSupportMessages(threadId, env);
   return Response.json({
     thread: serializeThread(thread, locale),
     messages,
@@ -1239,11 +1246,13 @@ async function fetchPlatformSupportThreadDetail(threadId: string, locale: UserLo
 }
 
 async function fetchPlatformSupportSessionDetail(sessionId: string, locale: UserLocale, env: Env): Promise<Response> {
-  const session = await fetchSupportSessionById(sessionId, env);
+  const [session, transcript] = await Promise.all([
+    fetchSupportSessionById(sessionId, env),
+    fetchSupportSessionEvents(sessionId, env),
+  ]);
   if (!session) {
     return Response.json({ error: "session_not_found" }, { status: 404 });
   }
-  const transcript = await fetchSupportSessionEvents(sessionId, env);
   const currentNode = getSupportNode(session.current_node_id, locale);
   return Response.json({
     session: serializeSession(session, locale),
