@@ -422,6 +422,25 @@ Deployment notes:
 - deploy the Worker for this optimization;
 - no Next.js frontend deploy is required for this line.
 
+### Parallel user-support state reads — 2026-08-04
+
+This Worker-only optimization reduces support-panel latency by collapsing independent D1 reads in the user support flow.
+
+- `buildUserSupportState` now loads platform-admin status, open session and open thread in parallel, then loads transcript and thread messages in parallel when both are needed.
+- `handleSupportStartSession` now parallelizes the existing-thread and existing-session lookup, and also parallelizes follow-up transcript, session and message reads when resuming or creating a support session.
+- Response payloads, support-session behavior and support-thread behavior are unchanged.
+
+Trade-offs:
+
+- This increases concurrent D1 read pressure slightly during support-panel loads, but replaces longer sequential latency on the same request path.
+- The change stays intentionally narrow: it does not redesign the API shape or merge the support-session and support-thread tables.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line.
+
 ### Dashboard refresh request coalescing — 2026-08-04
 
 This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.

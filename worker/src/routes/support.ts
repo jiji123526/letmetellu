@@ -632,16 +632,21 @@ async function createEscalatedSupportThread(input: {
 }
 
 async function buildUserSupportState(subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
-  const platformAdmin = isAnonymousSupportSubjectId(subjectId) ? false : await isReportsChannelOwner(subjectId, env);
-  const openSession = await fetchOpenSupportSessionForUser(subjectId, env);
-  const openThread = await fetchOpenSupportThreadForUser(subjectId, env);
+  const [platformAdmin, openSession, openThread] = await Promise.all([
+    isAnonymousSupportSubjectId(subjectId) ? Promise.resolve(false) : isReportsChannelOwner(subjectId, env),
+    fetchOpenSupportSessionForUser(subjectId, env),
+    fetchOpenSupportThreadForUser(subjectId, env),
+  ]);
   if (openSession) {
-    const transcript = await fetchSupportSessionEvents(openSession.id, env);
+    const [transcript, messages] = await Promise.all([
+      fetchSupportSessionEvents(openSession.id, env),
+      openThread ? fetchSupportMessages(openThread.id, env) : Promise.resolve<SupportMessageRow[]>([]),
+    ]);
     const currentNode = getSupportNode(openSession.current_node_id, locale);
     return Response.json({
       platformAdmin,
       thread: openThread ? serializeThread(openThread, locale) : null,
-      messages: openThread ? await fetchSupportMessages(openThread.id, env) : [],
+      messages,
       session: serializeSession(openSession, locale),
       transcript,
       currentNode: serializeNode(currentNode),
@@ -693,13 +698,18 @@ async function handleSupportStartSession(subjectId: string, locale: UserLocale, 
   });
   if (rateLimited) return rateLimited;
 
-  const existingThread = await fetchOpenSupportThreadForUser(subjectId, env);
-  const existingSession = await fetchOpenSupportSessionForUser(subjectId, env);
+  const [existingThread, existingSession] = await Promise.all([
+    fetchOpenSupportThreadForUser(subjectId, env),
+    fetchOpenSupportSessionForUser(subjectId, env),
+  ]);
   if (existingSession) {
-    const transcript = await fetchSupportSessionEvents(existingSession.id, env);
+    const [transcript, messages] = await Promise.all([
+      fetchSupportSessionEvents(existingSession.id, env),
+      existingThread ? fetchSupportMessages(existingThread.id, env) : Promise.resolve<SupportMessageRow[]>([]),
+    ]);
     return Response.json({
       thread: existingThread ? serializeThread(existingThread, locale) : null,
-      messages: existingThread ? await fetchSupportMessages(existingThread.id, env) : [],
+      messages,
       session: serializeSession(existingSession, locale),
       transcript,
       currentNode: serializeNode(getSupportNode(existingSession.current_node_id, locale)),
@@ -721,11 +731,14 @@ async function handleSupportStartSession(subjectId: string, locale: UserLocale, 
     messages: buildSupportFlow(locale).start.messages,
   });
 
-  const session = await fetchSupportSessionById(sessionId, env);
-  const transcript = await fetchSupportSessionEvents(sessionId, env);
+  const [session, transcript, messages] = await Promise.all([
+    fetchSupportSessionById(sessionId, env),
+    fetchSupportSessionEvents(sessionId, env),
+    existingThread ? fetchSupportMessages(existingThread.id, env) : Promise.resolve<SupportMessageRow[]>([]),
+  ]);
   return Response.json({
     thread: existingThread ? serializeThread(existingThread, locale) : null,
-    messages: existingThread ? await fetchSupportMessages(existingThread.id, env) : [],
+    messages,
     session: session ? serializeSession(session, locale) : null,
     transcript,
     currentNode: serializeNode(getSupportNode("start", locale)),
