@@ -7,10 +7,12 @@ const copy = {
   ko: {
     privacy: "개인정보처리방침",
     terms: "서비스 이용약관",
+    support: "이용 문의",
   },
   en: {
     privacy: "Privacy Policy",
     terms: "Terms of Service",
+    support: "Support",
   },
 } as const;
 
@@ -27,6 +29,10 @@ export function LegalFooter() {
         <span aria-hidden="true" style={{ color: "var(--meta)", opacity: 0.45 }}>·</span>
         <Link href="/terms" className="no-underline transition-opacity hover:opacity-100" style={{ color: "var(--meta)", opacity: 0.82 }}>
           {text.terms}
+        </Link>
+        <span aria-hidden="true" style={{ color: "var(--meta)", opacity: 0.45 }}>·</span>
+        <Link href="/support" className="no-underline transition-opacity hover:opacity-100" style={{ color: "var(--meta)", opacity: 0.82 }}>
+          {text.support}
         </Link>
       </div>
     </footer>
