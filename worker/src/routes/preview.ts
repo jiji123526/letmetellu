@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable-rate-limit";
 import { assertAllowedPreviewUrl, PreviewError } from "../lib/preview-policy";
+import { parsePreviewMetadata } from "../lib/preview-metadata";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
 const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
@@ -8,6 +9,7 @@ const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
 const PREVIEW_CACHE_TTL_SECONDS = 60 * 60;
+const PREVIEW_CACHE_VERSION = "v2";
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -120,7 +122,7 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
     return Response.json({ error: "invalid url" }, { status: 400 });
   }
 
-  const cacheKey = new Request(new URL(`/__preview_cache?url=${encodeURIComponent(rawUrl)}`, request.url).toString(), {
+  const cacheKey = new Request(new URL(`/__preview_cache/${PREVIEW_CACHE_VERSION}?url=${encodeURIComponent(rawUrl)}`, request.url).toString(), {
     method: "GET",
   });
   const cached = await caches.default.match(cacheKey);
@@ -176,27 +178,18 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
 
     const html = await readResponseTextWithLimit(response);
 
-    const getMetaContent = (property: string): string => {
-      const match = html.match(new RegExp(`<meta[^>]*property=["']${property}["'][^>]*content=["']([^"']*)["']`, "i"))
-        || html.match(new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*property=["']${property}["']`, "i"))
-        || html.match(new RegExp(`<meta[^>]*name=["']${property}["'][^>]*content=["']([^"']*)["']`, "i"));
-      return match ? match[1] : "";
-    };
-
-    const title = getMetaContent("og:title") || getMetaContent("twitter:title") || "";
-    const description = getMetaContent("og:description") || getMetaContent("twitter:description") || "";
-    const image = getMetaContent("og:image") || getMetaContent("twitter:image") || "";
-    let video = getMetaContent("og:video") || getMetaContent("og:video:url") || getMetaContent("twitter:player:stream") || "";
-    const siteName = getMetaContent("og:site_name") || "";
+    const metadata = parsePreviewMetadata(html, response.url || fetchUrl.toString());
 
     if (previewUrl.toString().match(/https?:\/\/(twitter\.com|x\.com)\//)) {
-      video = "";
+      metadata.video = "";
     }
 
-    const previewResponse = Response.json({ title, description, image, video, siteName, url: rawUrl }, {
+    const previewResponse = Response.json({ ...metadata, url: rawUrl }, {
       headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` },
     });
-    await caches.default.put(cacheKey, previewResponse.clone());
+    if (metadata.title || metadata.image) {
+      await caches.default.put(cacheKey, previewResponse.clone());
+    }
     return previewResponse;
   } catch (error) {
     if (error instanceof PreviewError) {

@@ -5,6 +5,7 @@ import test from "node:test";
 import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
 import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
+import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 
 function expectPreviewError(fn: () => unknown, message: string): void {
@@ -62,6 +63,37 @@ test("assertAllowedPreviewUrl rejects malformed or unsafe URLs", () => {
   expectPreviewError(() => assertAllowedPreviewUrl("https://user:pass@example.com"), "credentials not allowed");
   expectPreviewError(() => assertAllowedPreviewUrl("https://127.0.0.1/admin"), "blocked preview host");
   expectPreviewError(() => assertAllowedPreviewUrl("https://[::1]/"), "blocked preview host");
+});
+
+test("preview metadata supports standard title fallback and relative images", () => {
+  assert.deepEqual(parsePreviewMetadata(`
+    <html>
+      <head>
+        <title>Legacy &amp; Article</title>
+        <meta name="description" content="Older page description">
+        <meta property="og:image" content="/images/card.jpg">
+      </head>
+    </html>
+  `, "https://www.example.com/posts/1"), {
+    title: "Legacy & Article",
+    description: "Older page description",
+    image: "https://www.example.com/images/card.jpg",
+    video: "",
+    siteName: "example.com",
+  });
+});
+
+test("preview metadata prefers Open Graph values", () => {
+  const metadata = parsePreviewMetadata(`
+    <title>Document title</title>
+    <meta content="Open Graph title" property="og:title">
+    <meta property="og:site_name" content="Example News">
+    <meta property="og:video" content="https://cdn.example.com/video.mp4">
+  `, "https://example.com/story");
+
+  assert.equal(metadata.title, "Open Graph title");
+  assert.equal(metadata.siteName, "Example News");
+  assert.equal(metadata.video, "https://cdn.example.com/video.mp4");
 });
 
 test("upload access and quota checks stay ahead of request-body consumption", () => {

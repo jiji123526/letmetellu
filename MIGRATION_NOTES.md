@@ -19,6 +19,8 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Gallery API responses now expose the associated message ID as the item `id`, rather than the gallery-row ID, so opening an imported photo and navigating back to its historical message works even when the two IDs differ.
 - Changed link-preview caching so transient fetch failures are not cached for the entire browser session; reopening the panel can retry while successful previews remain cached.
 - Changed oversized preview handling to read and parse only the first 512 KB of HTML instead of rejecting a page solely because its full `Content-Length` is larger. This preserves the response-size and memory bound while allowing metadata from large article pages such as Posty to render.
+- Versioned the Worker preview cache after the parser change and stopped caching responses with neither a title nor an image, so previously cached empty results cannot keep migrated links in the URL-only fallback state.
+- Added standard document-title and description fallbacks plus relative image/video URL resolution for older pages that do not expose complete Open Graph metadata.
 
 Trade-offs:
 
