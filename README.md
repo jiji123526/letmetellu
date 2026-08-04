@@ -115,6 +115,30 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - IP-based abuse controls use HMAC-hashed identifiers rather than raw IP storage.
 - Moderation actions are recorded in append-only audit logs, and the Worker records lightweight operational failure events for abuse and reliability monitoring.
 
+### Content Security Policy
+
+The production app sends a CSP that restricts scripts, frames, connections,
+images and other resources to the application plus the explicitly supported
+external widget origins. The current `script-src` still contains
+`'unsafe-inline'`, so CSP is an additional containment layer rather than a
+complete fallback against every script-injection bug.
+
+This is an accepted limited-beta trade-off, not evidence of an active XSS
+vulnerability. Removing it safely requires coordinated application changes:
+
+1. replace the pre-hydration theme bootstrap with a request-scoped nonce flow;
+2. remove the generic arbitrary-HTML contract from reusable dialogs and render
+   structured React content instead;
+3. preserve only the exact external script/frame origins required by supported
+   X/Twitter, Instagram and other embeds;
+4. verify dark-mode startup, authentication, dashboard, chat, dialogs and
+   widgets under the production response headers before enforcing the stricter
+   policy.
+
+Do not remove `'unsafe-inline'` as an isolated header edit. That can block
+required startup code, cause a light-theme flash and break embedded widgets or
+dialog content without improving the underlying rendering contracts.
+
 ## Local Development
 
 Requirements:

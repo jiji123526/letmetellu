@@ -38,6 +38,11 @@ The domain, Worker CORS, Auth.js callback generation and production Resend sende
 5. Confirm the super-admin health card is usable and keep `wrangler tail` available for the first beta sessions.
 6. The audited pre-beta test-data cleanup is complete; keep future destructive maintenance exact-ID scoped, precondition checked and temporary.
 
+Accepted limited-beta security trade-off:
+
+- The production CSP still permits `script-src 'unsafe-inline'`. No active XSS is known, but this weakens CSP as a fallback containment layer if a separate injection bug exists. Keep normal input/rendering protections in place, monitor browser errors, and complete the nonce/dialog-contract migration before a broad public launch.
+- Do not remove `'unsafe-inline'` during release preparation without testing theme startup, auth, chat dialogs and external widgets under the stricter policy.
+
 ## Pre-deploy checks
 
 1. Confirm the working tree contains only the intended release changes.
@@ -197,3 +202,4 @@ Public launch should wait until:
 - regression coverage exists for support/report/dashboard state sync;
 - operational-health thresholds are calibrated and operators have either external alerts or an explicit manual response procedure;
 - production signup verification, password reset and legacy password upgrades have been rehearsed and are monitored.
+- the nonce-based CSP migration has been validated or the remaining `'unsafe-inline'` risk has received an explicit public-launch security review.

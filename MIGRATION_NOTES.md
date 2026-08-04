@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### CSP limited-beta posture documentation — 2026-08-04
+
+- Documented that production CSP currently retains `script-src 'unsafe-inline'` while still restricting other resource classes and supported external origins.
+- Classified this as a defense-in-depth limitation rather than a confirmed active XSS vulnerability; normal React escaping, input validation and constrained embed paths remain the primary protections.
+- Recorded the safe hardening sequence: request-scoped nonce support for the theme bootstrap, structured dialog content instead of a generic arbitrary-HTML contract, exact widget origin review, then focused preview/report-only and production-header validation.
+
+Trade-offs:
+
+- Keeping `'unsafe-inline'` avoids breaking pre-hydration theme behavior, Auth.js/Next.js startup assumptions, dialogs and external widgets during limited beta, but reduces CSP's ability to contain a future script-injection defect.
+- Removing it as a header-only edit can produce a light-theme flash or block required scripts and widgets. The application contracts must change before enforcement.
+- Limited beta can proceed with direct monitoring and constrained users; broad public launch should include the nonce migration or an explicit security review of the remaining exception.
+
 ### WebSocket origin enforcement — 2026-08-04
 
 - Added exact-match `Origin` validation at the Worker boundary before browser WebSocket upgrades can reach a chat-room Durable Object.

@@ -23,7 +23,8 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Confirm Google Cloud has both `https://yapndot.com/api/auth/callback/google-login` and `https://yapndot.com/api/auth/callback/google-signup`; retain the matching legacy Vercel callbacks only during rollback readiness.
 - Smoke-test signup verification, password reset, Google signup/login, normal login, channel links, uploads and realtime chat from the canonical hostname.
 - After smoke tests and rollback readiness are complete, narrow production Worker CORS to `https://yapndot.com`. Remove the legacy Vercel hostname, remove `www` after its permanent apex redirect is confirmed, and move localhost to development-only Wrangler configuration.
-- Plan a separate CSP hardening change to remove `script-src 'unsafe-inline'`. First replace the inline theme bootstrap with nonce-based handling and remove the generic arbitrary-HTML contract from `ConfirmDialog`; this is higher risk than the origin-policy fix and should ship with focused UI and production-header verification.
+- Plan a separate CSP hardening change to remove `script-src 'unsafe-inline'`. Treat the current setting as an accepted limited-beta defense-in-depth gap, not as evidence of a known exploitable XSS. First replace the inline theme bootstrap with request-scoped nonce handling, remove the generic arbitrary-HTML contract from `ConfirmDialog`, and preserve only the exact script/frame origins needed by supported widgets.
+- Roll out the stricter CSP in report-only or focused preview validation first, then verify dark-mode startup, authentication, dashboard, chat, dialogs, X/Twitter and Instagram widgets, and the final production response headers before enforcement. Do not remove `'unsafe-inline'` as a header-only change.
 
 ### Abuse controls
 
