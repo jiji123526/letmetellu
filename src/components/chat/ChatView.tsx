@@ -7,8 +7,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { useLocale } from "@/hooks/useLocale";
 import { ContextMenu } from "./ContextMenu";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { PasscodeOverlay } from "./PasscodeOverlay";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
@@ -28,6 +26,12 @@ import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 import { ChatViewTopChrome } from "./ChatViewTopChrome";
 import { ChatViewMessagePane } from "./ChatViewMessagePane";
 import { ChatViewBottomShell } from "./ChatViewBottomShell";
+import {
+  ChatViewDeletedState,
+  ChatViewExpandedPostOverlay,
+  ChatViewLoadingState,
+  ChatViewPasscodeGate,
+} from "./ChatViewStateScreens";
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
 
@@ -63,34 +67,6 @@ function getImageDimensions(file: File): Promise<{ width: number; height: number
     };
     img.src = URL.createObjectURL(file);
   });
-}
-
-// Skeleton loading
-function SkeletonLoading() {
-  const rows = [
-    { side: "recv", width: "25%" }, { side: "recv", width: "45%" },
-    { side: "sent", width: "35%" }, { side: "recv", width: "40%" },
-    { side: "sent", width: "25%" }, { side: "sent", width: "55%" },
-    { side: "recv", width: "30%" }, { side: "sent", width: "40%" },
-    { side: "recv", width: "55%" }, { side: "sent", width: "25%" },
-  ];
-  return (
-    <div className="flex flex-col gap-[3px] p-3 animate-pulse">
-      {rows.map((row, i) => (
-        <div key={i} className={`flex ${row.side === "sent" ? "justify-end" : "justify-start"}`}>
-          <div
-            className="rounded-[18px]"
-            style={{
-              width: row.width,
-              height: "calc(var(--bubble-font-size) * 1.38 + 20px)",
-              background: row.side === "sent" ? "var(--bubble-sent)" : "var(--gray-bubble)",
-              opacity: row.side === "sent" ? 0.5 : 1,
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ChatView({ channelId }: { channelId: string }) {
@@ -750,13 +726,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Passcode gate — show overlay if channel requires passcode
   if (passcodeGate && !isOwner) {
     return (
-      <PasscodeOverlay
+      <ChatViewPasscodeGate
         channelId={channelId}
-        channelName={passcodeGate.name}
-        profileImage={passcodeGate.profile_image}
-        bubbleColor={passcodeGate.bubble_color || "#3b8df0"}
-        passcodeHint={passcodeGate.passcodeHint}
-        notice={passcodeGate.notice}
+        passcodeGate={passcodeGate}
         onSuccess={() => {
           // A passcode unlock always enters the normal channel first. Live
           // availability is synchronized by applyInitData and the user can
@@ -791,44 +763,20 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   if (showChannelDeleted) {
     return (
-      <div className="h-dvh max-w-[480px] mx-auto relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
-        <ConfirmDialog
-          title={t("channelDeletedTitle")}
-          message={t("channelDeletedMessage")}
-          confirmLabel={t("goToDashboard")}
-          onConfirm={() => {
-            if (!isLoggedIn) removeRecentChannel(channelId);
-            window.location.href = "/dashboard";
-          }}
-          onCancel={() => {}}
-          showCancel={false}
-          closeOnBackdrop={false}
-        />
-      </div>
+      <ChatViewDeletedState
+        title={t("channelDeletedTitle")}
+        message={t("channelDeletedMessage")}
+        confirmLabel={t("goToDashboard")}
+        onConfirm={() => {
+          if (!isLoggedIn) removeRecentChannel(channelId);
+          window.location.href = "/dashboard";
+        }}
+      />
     );
   }
 
   if (loading) {
-    return (
-      <div className="h-dvh max-w-[480px] mx-auto flex flex-col md:border-x" style={{ background: "var(--bg)", borderColor: "var(--hairline)" }}>
-        <header
-          className="flex items-center px-4 border-b relative"
-          style={{
-            background: "var(--header-bg)",
-            backdropFilter: "saturate(180%) blur(20px)",
-            WebkitBackdropFilter: "saturate(180%) blur(20px)",
-            borderColor: "var(--hairline)",
-            padding: "10px 16px",
-          }}
-        >
-          <div className="flex-1 flex flex-col items-center gap-[6px]">
-            <div className="rounded-full" style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", background: "var(--gray-bubble)" }} />
-            <div className="h-3 w-16 rounded" style={{ background: "var(--gray-bubble)" }} />
-          </div>
-        </header>
-        <div className="flex-1 overflow-hidden"><SkeletonLoading /></div>
-      </div>
-    );
+    return <ChatViewLoadingState />;
   }
 
   const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");
@@ -937,35 +885,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         onEmojiPicker={openEmojiPicker}
       />
 
-      {/* Long-message reader, constrained to the visible chat field. */}
-      {expandedPost && (
-        <div
-          className="fixed z-[500] flex items-center justify-center"
-          style={{
-            top: expandedPost.top,
-            left: expandedPost.left,
-            width: expandedPost.width,
-            height: expandedPost.height,
-            padding: "12px",
-            background: "rgba(0,0,0,0.42)",
-            backdropFilter: "blur(4px)",
-            WebkitBackdropFilter: "blur(4px)",
-          }}
-          onClick={closeExpandedPost}
-        >
-          <div
-            style={{ background: "var(--bg)", borderRadius: "18px", maxWidth: "400px", width: "100%", maxHeight: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 16px", borderBottom: "1px solid var(--hairline)" }}>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={closeExpandedPost}>✕</button>
-            </div>
-            <div style={{ padding: "16px", fontSize: "var(--bubble-font-size)", lineHeight: 1.6, color: "var(--gray-text)", overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-              {expandedPost.text}
-            </div>
-          </div>
-        </div>
-      )}
+      <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
 
       <ChatViewBottomShell
         channelId={channelId}

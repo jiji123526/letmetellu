@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat state-screen extraction from `ChatView` — 2026-08-04
+
+- Extracted non-main-view chat surfaces into `src/components/chat/ChatViewStateScreens.tsx`, covering the passcode gate wrapper, deleted-channel confirmation state, loading skeleton state, and expanded-post reader overlay.
+- `ChatView` now keeps the passcode-unlock recovery callback and route decisions while delegating those conditional screens and overlay surfaces to one focused presentation module instead of rendering them inline beside the main chat layout.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat bottom-shell extraction from `ChatView` — 2026-08-04
 
 - Extracted the post-message shell into `src/components/chat/ChatViewBottomShell.tsx`, covering the scroll-to-latest CTA, toast banner, reply bar, pending-photo tray, moderation banners, and composer footer with live emoji broadcast entry.

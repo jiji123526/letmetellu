@@ -19,7 +19,7 @@ interface FullViewImageState {
   fromGallery?: boolean;
 }
 
-interface ExpandedPostState {
+export interface ExpandedPostState {
   text: string;
   top: number;
   left: number;
