@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
-import { createUploadTicket, cleanupExpiredUploadTickets, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
+import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -145,8 +145,6 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     if (!ownerUpload && !anonymousPayload) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
-
-    await cleanupExpiredUploadTickets(env);
 
     ipHash = await hashUploadIp(getUploadRequestIp(request), env);
     const quota = await enforceUploadQuota({

@@ -22,6 +22,17 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Keep tightening upload validation toward stricter decoded-type checks.
 - If the platform later exposes safe DNS or IP verification primitives, strengthen preview destination validation beyond hostname rules.
 
+### Rewarded media credits
+
+- If the product adds "watch an ad to unlock 5 media sends", treat it as a server-enforced media-credit system rather than a frontend-only toggle.
+- Define the unit clearly before implementation. The safest definition is `5` image attachments, not `5` message composer opens or one-time upload permission.
+- Persist credits durably in D1 against the signed actor identity used for chat writes: authenticated user ID when logged in, otherwise the anonymous UID plus device-bound identity path already used by chat enforcement.
+- Verify rewarded-ad completion on the server before granting credits. Do not trust a client callback alone, and do not ship the feature until a web-capable rewarded-ad provider and verification flow are confirmed.
+- Enforce credit consumption in the Worker when a message or DM image attachment is successfully committed, not only when a blob upload starts. Uploads can fail or remain unattached, while message and DM attachment already pass through durable upload-ticket validation.
+- Start with normal channel messages only. Leave DMs, live chat and any moderation/report-only channels out of scope until the base reward and deduction path is stable.
+- Add explicit product limits before launch: stacking policy, expiry window, daily cap, behavior when a queued multi-image send exceeds remaining credits, and whether failed sends should refund the unused credit.
+- Add audit and monitoring for reward grants, reward verification failures, credit consumption, suspicious repeat claims and upload/send mismatch rates before exposing the feature broadly.
+
 ### Monitoring and alerts
 
 - Add dashboards or alerts for `403`, `429` and `5xx` rates.

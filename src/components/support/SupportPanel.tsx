@@ -14,6 +14,7 @@ import {
   type SupportStateResponse,
   type SupportTranscriptEvent,
 } from "@/lib/api";
+import { useForegroundPolling } from "@/hooks/useForegroundPolling";
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
 
@@ -49,6 +50,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const closingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
+  const loadStateInFlightRef = useRef<Promise<void> | null>(null);
   const openThreadId = supportState.thread?.id ?? null;
   const hasActiveTicket = !!supportState.thread;
   const hasGuidedSession = !!supportState.session;
@@ -75,7 +77,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
     }));
   }
 
-  async function loadState(autoStartWhenEmpty: boolean) {
+  async function performLoadState(autoStartWhenEmpty: boolean) {
     const result = await fetchSupportState();
     if (closingRef.current) {
       setLoading(false);
@@ -127,8 +129,27 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
     setLoading(false);
   }
 
+  function loadState(autoStartWhenEmpty: boolean): Promise<void> {
+    if (loadStateInFlightRef.current) return loadStateInFlightRef.current;
+    const request = performLoadState(autoStartWhenEmpty)
+      .catch(() => {
+        setError(t("sendFailed"));
+        setLoading(false);
+      })
+      .finally(() => {
+        if (loadStateInFlightRef.current === request) {
+          loadStateInFlightRef.current = null;
+        }
+      });
+    loadStateInFlightRef.current = request;
+    return request;
+  }
+
   const loadStateEffect = useEffectEvent((autoStartWhenEmpty: boolean) => {
     void loadState(autoStartWhenEmpty);
+  });
+  const refreshThreadEffect = useEffectEvent(() => {
+    void loadState(false);
   });
 
   useEffect(() => {
@@ -149,23 +170,11 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
     sessionIdRef.current = supportState.session?.id ?? null;
   }, [supportState.session?.id]);
 
-  useEffect(() => {
-    if (!openThreadId) return;
-    const refreshThread = () => {
-      if (document.visibilityState !== "visible") return;
-      loadStateEffect(false);
-    };
-    const timer = window.setInterval(() => {
-      refreshThread();
-    }, SUPPORT_THREAD_POLL_MS);
-    window.addEventListener("focus", refreshThread);
-    document.addEventListener("visibilitychange", refreshThread);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshThread);
-      document.removeEventListener("visibilitychange", refreshThread);
-    };
-  }, [openThreadId, loadStateEffect]);
+  useForegroundPolling({
+    enabled: Boolean(openThreadId),
+    pollMs: SUPPORT_THREAD_POLL_MS,
+    onRefresh: refreshThreadEffect,
+  });
 
   useEffect(() => {
     if (!showThreadView || loading) return;

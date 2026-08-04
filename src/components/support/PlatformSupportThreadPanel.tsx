@@ -13,6 +13,7 @@ import {
   type SupportTranscriptEvent,
   type SupportThreadState,
 } from "@/lib/api";
+import { useForegroundPolling } from "@/hooks/useForegroundPolling";
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
 
@@ -136,26 +137,12 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
     void loadThread();
   });
 
-  useEffect(() => {
-    const refreshThread = () => {
-      if (document.visibilityState !== "visible") return;
-      loadThreadEffect();
-    };
-    const initialTimer = window.setTimeout(() => {
-      refreshThread();
-    }, 0);
-    const timer = window.setInterval(() => {
-      refreshThread();
-    }, PLATFORM_SUPPORT_THREAD_POLL_MS);
-    window.addEventListener("focus", refreshThread);
-    document.addEventListener("visibilitychange", refreshThread);
-    return () => {
-      window.clearTimeout(initialTimer);
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refreshThread);
-      document.removeEventListener("visibilitychange", refreshThread);
-    };
-  }, [threadId]);
+  useForegroundPolling({
+    enabled: Boolean(threadId),
+    pollMs: PLATFORM_SUPPORT_THREAD_POLL_MS,
+    runImmediately: true,
+    onRefresh: loadThreadEffect,
+  });
 
   useEffect(() => {
     if (loading) return;

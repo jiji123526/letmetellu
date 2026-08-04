@@ -384,6 +384,64 @@ Deployment notes:
 - deploy the Worker for this optimization;
 - no Next.js frontend deploy is required for this line by itself.
 
+### Shared support foreground polling — 2026-08-04
+
+This frontend-only optimization removes duplicated support-thread polling policy and adds missing in-flight request coalescing to the user support panel.
+
+- A new shared foreground-polling hook now owns the interval, focus and visibility refresh behavior used by both support thread panels.
+- The user-facing `SupportPanel` now reuses one in-flight `fetchSupportState` request instead of allowing overlapping thread refreshes.
+- The platform-admin `PlatformSupportThreadPanel` keeps its existing in-flight protection and now uses the same shared polling hook for the refresh schedule.
+
+Trade-offs:
+
+- Refresh behavior is intentionally unchanged, so this does not reduce the polling cadence by itself; it reduces duplicated logic and concurrent duplicate requests.
+- A slow support-thread refresh now blocks overlapping refresh triggers until that request settles, which is preferable to stacking the same request repeatedly.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- no Worker deploy is required for this optimization;
+- deploy the Next.js frontend for this line.
+
+### Dashboard refresh request coalescing — 2026-08-04
+
+This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.
+
+- `loadPlatformDashboard` now reuses one in-flight promise across initial load, interval polling, focus refresh and `support-ticket-changed` refreshes.
+- `loadSupportPreview` now does the same for guest and non-admin dashboard refreshes.
+- The refresh cadence and existing state-merging behavior are unchanged; only concurrent duplicate requests are collapsed.
+
+Trade-offs:
+
+- When one dashboard request is already in progress, later refresh triggers now wait for that same request to settle instead of launching a second fetch immediately.
+- This favors steadier network and Worker load over the small chance that two back-to-back refresh triggers might otherwise observe slightly different data.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- no Worker deploy is required for this optimization;
+- deploy the Next.js frontend for this line.
+
+### Scheduled upload-ticket cleanup only — 2026-08-04
+
+This Worker-only optimization removes abandoned upload-ticket cleanup from the synchronous upload request path.
+
+- Non-channel-asset uploads no longer call `cleanupExpiredUploadTickets` before quota enforcement and ticket creation.
+- Expired pending upload tickets are still ignored by quota checks because those queries already require `expires_at > now`.
+- R2 object deletion for abandoned pending uploads now relies on the existing hourly Worker scheduled-maintenance sweep instead of charging that cost to unrelated uploads.
+- Upload behavior, quota rules and upload-ticket issuance are otherwise unchanged.
+
+Trade-offs:
+
+- Unattached expired media can remain in R2 until the next scheduled maintenance window instead of being deleted by the next user's upload request.
+- The cleanup cadence is now bounded by the Worker cron schedule, so storage reclamation is slightly less immediate but normal upload latency is more predictable.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line.
+
 ### Visibility-gated link preview loading — 2026-08-02
 
 This frontend-only optimization prevents the links panel from launching a burst of preview work whenever it opens.
@@ -856,7 +914,7 @@ Adds durable upload tracking for chat and DM media:
 - `upload_tickets` records the uploaded R2 key, target channel, uploader
   identity, IP hash, purpose and expiry.
 - Pending message and DM uploads expire automatically and are deleted from R2
-  on the next upload cleanup pass if they were never attached.
+  on the next scheduled upload cleanup pass if they were never attached.
 - Worker routes now use the table for per-channel durable upload quotas and to
   prove that a message or DM image was created by the same anonymous or owner
   identity that is attaching it.

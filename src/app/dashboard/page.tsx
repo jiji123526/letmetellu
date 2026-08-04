@@ -220,6 +220,8 @@ export default function DashboardPage() {
   const channelItemRefs = useRef(new Map<string, HTMLDivElement>());
   const previousItemPositionsRef = useRef(new Map<string, number>());
   const skipNextListAnimationRef = useRef(false);
+  const loadPlatformDashboardInFlightRef = useRef<Promise<boolean> | null>(null);
+  const loadSupportPreviewInFlightRef = useRef<Promise<void> | null>(null);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean; width: number } | null>(null);
@@ -333,50 +335,59 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const loadPlatformDashboard = useCallback(async (): Promise<boolean> => {
-    if (status !== "authenticated") {
-      setPlatformDashboard(null);
-      setPlatformDashboardError(false);
-      return false;
-    }
-    try {
-      const result = await fetchPlatformDashboard();
-      if (result._status === 403 || result._status === 404) {
+  const loadPlatformDashboard = useCallback((): Promise<boolean> => {
+    if (loadPlatformDashboardInFlightRef.current) return loadPlatformDashboardInFlightRef.current;
+    const request = (async (): Promise<boolean> => {
+      if (status !== "authenticated") {
         setPlatformDashboard(null);
         setPlatformDashboardError(false);
         return false;
       }
-      if (result._status >= 400) {
+      try {
+        const result = await fetchPlatformDashboard();
+        if (result._status === 403 || result._status === 404) {
+          setPlatformDashboard(null);
+          setPlatformDashboardError(false);
+          return false;
+        }
+        if (result._status >= 400) {
+          setPlatformDashboard(null);
+          setPlatformDashboardError(true);
+          return true;
+        }
+        const nextDashboard: PlatformDashboardResponse = {
+          reportsInbox: result.reportsInbox ?? null,
+          tickets: result.tickets || [],
+          open_pagination: result.open_pagination ?? null,
+          support_stats: result.support_stats ?? null,
+        };
+        setPlatformDashboardError(false);
+        setPlatformDashboard((current) => {
+          if (!current) return nextDashboard;
+          const currentOpenCount = current.tickets.filter((ticket) => ticket.status === "open").length;
+          const nextOpenCount = nextDashboard.tickets.filter((ticket) => ticket.status === "open").length;
+          if (currentOpenCount <= nextOpenCount) return nextDashboard;
+          const ticketsById = new Map(current.tickets.map((ticket) => [ticket.id, ticket]));
+          nextDashboard.tickets.forEach((ticket) => ticketsById.set(ticket.id, ticket));
+          return {
+            ...nextDashboard,
+            tickets: Array.from(ticketsById.values()),
+            open_pagination: current.open_pagination,
+          };
+        });
+        return true;
+      } catch {
         setPlatformDashboard(null);
         setPlatformDashboardError(true);
         return true;
       }
-      const nextDashboard: PlatformDashboardResponse = {
-        reportsInbox: result.reportsInbox ?? null,
-        tickets: result.tickets || [],
-        open_pagination: result.open_pagination ?? null,
-        support_stats: result.support_stats ?? null,
-      };
-      setPlatformDashboardError(false);
-      setPlatformDashboard((current) => {
-        if (!current) return nextDashboard;
-        const currentOpenCount = current.tickets.filter((ticket) => ticket.status === "open").length;
-        const nextOpenCount = nextDashboard.tickets.filter((ticket) => ticket.status === "open").length;
-        if (currentOpenCount <= nextOpenCount) return nextDashboard;
-        const ticketsById = new Map(current.tickets.map((ticket) => [ticket.id, ticket]));
-        nextDashboard.tickets.forEach((ticket) => ticketsById.set(ticket.id, ticket));
-        return {
-          ...nextDashboard,
-          tickets: Array.from(ticketsById.values()),
-          open_pagination: current.open_pagination,
-        };
-      });
-      return true;
-    } catch {
-      setPlatformDashboard(null);
-      setPlatformDashboardError(true);
-      return true;
-    }
+    })().finally(() => {
+      if (loadPlatformDashboardInFlightRef.current === request) {
+        loadPlatformDashboardInFlightRef.current = null;
+      }
+    });
+    loadPlatformDashboardInFlightRef.current = request;
+    return request;
   }, [status]);
 
   const loadMorePlatformTickets = useCallback(async () => {
@@ -407,31 +418,40 @@ export default function DashboardPage() {
     }
   }, [loadingMorePlatformTickets, platformDashboard?.open_pagination?.next_cursor]);
 
-  const loadSupportPreview = useCallback(async () => {
+  const loadSupportPreview = useCallback((): Promise<void> => {
     if (status === "loading" || isPlatformAdmin) {
-      return;
+      return Promise.resolve();
     }
-    try {
-      const result = await fetchSupportPreview();
-      if (result._status >= 400 || !result.thread) {
-        clearStoredSupportTicketPreview();
-        setSupportPreview(null);
-        return;
+    if (loadSupportPreviewInFlightRef.current) return loadSupportPreviewInFlightRef.current;
+    const request = (async () => {
+      try {
+        const result = await fetchSupportPreview();
+        if (result._status >= 400 || !result.thread) {
+          clearStoredSupportTicketPreview();
+          setSupportPreview(null);
+          return;
+        }
+        const preview = {
+          threadId: result.thread.id,
+          topicLabel: result.thread.entry_topic_label,
+          preview: result.thread.last_message || result.thread.summary,
+          updatedAt: result.thread.updated_at,
+          unreadForUser: result.thread.unread_for_user,
+          waitingOn: result.thread.waiting_on,
+          staleLevel: result.thread.stale_level,
+        };
+        storeSupportTicketPreview(preview);
+        setSupportPreview(preview);
+      } catch {
+        setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
       }
-      const preview = {
-        threadId: result.thread.id,
-        topicLabel: result.thread.entry_topic_label,
-        preview: result.thread.last_message || result.thread.summary,
-        updatedAt: result.thread.updated_at,
-        unreadForUser: result.thread.unread_for_user,
-        waitingOn: result.thread.waiting_on,
-        staleLevel: result.thread.stale_level,
-      };
-      storeSupportTicketPreview(preview);
-      setSupportPreview(preview);
-    } catch {
-      setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
-    }
+    })().finally(() => {
+      if (loadSupportPreviewInFlightRef.current === request) {
+        loadSupportPreviewInFlightRef.current = null;
+      }
+    });
+    loadSupportPreviewInFlightRef.current = request;
+    return request;
   }, [status, isPlatformAdmin]);
 
   const connectLocalChannels = async () => {
