@@ -1118,23 +1118,6 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
 
 async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale, env: Env): Promise<Response> {
   const reportsChannelId = getReportsChannelId(env);
-  const reportsChannel = reportsChannelId
-    ? await env.DB.prepare(`
-      SELECT id, name, profile_image, bubble_color, created_at
-      FROM channels
-      WHERE id = ?
-      LIMIT 1
-    `).bind(reportsChannelId).first<ReportsChannelRow>()
-    : null;
-
-  const reportsSummary = reportsChannel
-    ? await env.DB.prepare(`
-      SELECT COUNT(*) AS open_report_count, MIN(created_at) AS oldest_report_at
-      FROM channel_reports
-      WHERE status = 'open'
-    `).first<{ open_report_count: number; oldest_report_at: string | null }>()
-    : null;
-
   const requestedOpenLimit = Number.parseInt(requestUrl.searchParams.get("open_limit") || "", 10);
   const openLimit = Number.isFinite(requestedOpenLimit)
     ? Math.min(Math.max(requestedOpenLimit, 1), SUPPORT_DASHBOARD_OPEN_TICKET_MAX_LIMIT)
@@ -1151,31 +1134,31 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
     ORDER BY st.updated_at DESC, st.id DESC
     LIMIT ?
   `);
-  const { results: openResults } = cursorUpdatedAt && cursorId
-    ? await openStatement.bind(cursorUpdatedAt, cursorUpdatedAt, cursorId, openLimit + 1).all<PlatformDashboardTicketRow>()
-    : await openStatement.bind(openLimit + 1).all<PlatformDashboardTicketRow>();
-  const { results: closedResults } = await env.DB.prepare(`
+  const reportsChannelPromise = reportsChannelId
+    ? env.DB.prepare(`
+      SELECT id, name, profile_image, bubble_color, created_at
+      FROM channels
+      WHERE id = ?
+      LIMIT 1
+    `).bind(reportsChannelId).first<ReportsChannelRow>()
+    : Promise.resolve<ReportsChannelRow | null>(null);
+  const reportsSummaryPromise = reportsChannelId
+    ? env.DB.prepare(`
+      SELECT COUNT(*) AS open_report_count, MIN(created_at) AS oldest_report_at
+      FROM channel_reports
+      WHERE status = 'open'
+    `).first<{ open_report_count: number; oldest_report_at: string | null }>()
+    : Promise.resolve<{ open_report_count: number; oldest_report_at: string | null } | null>(null);
+  const openResultsPromise = cursorUpdatedAt && cursorId
+    ? openStatement.bind(cursorUpdatedAt, cursorUpdatedAt, cursorId, openLimit + 1).all<PlatformDashboardTicketRow>()
+    : openStatement.bind(openLimit + 1).all<PlatformDashboardTicketRow>();
+  const closedResultsPromise = env.DB.prepare(`
     ${SUPPORT_THREAD_SELECT_SQL}
     WHERE st.status = 'closed'
     ORDER BY st.updated_at DESC, st.id DESC
     LIMIT ?
   `).bind(SUPPORT_DASHBOARD_CLOSED_TICKET_LIMIT).all<PlatformDashboardTicketRow>();
-
-  const openRows = openResults || [];
-  const hasMoreOpenTickets = openRows.length > openLimit;
-  const visibleOpenRows = openRows.slice(0, openLimit);
-  const openTickets = visibleOpenRows.map((thread) => ({
-    ...serializeThread(thread, locale),
-    user_label: formatSupportUserLabel(thread, locale),
-    has_admin_reply: !!thread.has_admin_reply,
-  }));
-  const closedTickets = (closedResults || []).map((thread) => ({
-    ...serializeThread(thread, locale),
-    user_label: formatSupportUserLabel(thread, locale),
-    has_admin_reply: !!thread.has_admin_reply,
-  }));
-  const tickets = [...openTickets, ...closedTickets];
-  const supportStats = await env.DB.prepare(`
+  const supportStatsPromise = env.DB.prepare(`
     WITH message_rollup AS (
       SELECT
         thread_id,
@@ -1198,6 +1181,38 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
     LEFT JOIN support_thread_reads ar ON ar.thread_id = st.id AND ar.actor_role = 'platform_admin'
     WHERE st.status = 'open'
   `).first<PlatformDashboardStatsRow>();
+
+  const [
+    reportsChannel,
+    reportsSummary,
+    openResultsResponse,
+    closedResultsResponse,
+    supportStats,
+  ] = await Promise.all([
+    reportsChannelPromise,
+    reportsSummaryPromise,
+    openResultsPromise,
+    closedResultsPromise,
+    supportStatsPromise,
+  ]);
+
+  const openResults = openResultsResponse.results;
+  const closedResults = closedResultsResponse.results;
+
+  const openRows = openResults || [];
+  const hasMoreOpenTickets = openRows.length > openLimit;
+  const visibleOpenRows = openRows.slice(0, openLimit);
+  const openTickets = visibleOpenRows.map((thread) => ({
+    ...serializeThread(thread, locale),
+    user_label: formatSupportUserLabel(thread, locale),
+    has_admin_reply: !!thread.has_admin_reply,
+  }));
+  const closedTickets = (closedResults || []).map((thread) => ({
+    ...serializeThread(thread, locale),
+    user_label: formatSupportUserLabel(thread, locale),
+    has_admin_reply: !!thread.has_admin_reply,
+  }));
+  const tickets = [...openTickets, ...closedTickets];
   const oldestOpenMs = parseIsoMs(supportStats?.oldest_open_at);
   const oldestOpenDurationMinutes = oldestOpenMs === null
     ? 0

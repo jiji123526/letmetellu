@@ -480,6 +480,25 @@ Deployment notes:
 - deploy the Worker for the `readUserState` query change;
 - deploy the Next.js frontend for the dashboard request-coalescing change.
 
+### Parallel platform-support dashboard reads — 2026-08-04
+
+This Worker-only optimization reduces platform-admin support dashboard latency by collapsing independent dashboard reads into one concurrent batch.
+
+- Reports channel metadata, open-report summary, open ticket page, closed ticket preview, and support stats now load in parallel inside `fetchPlatformSupportDashboard`.
+- Ticket serialization, pagination, stats calculation, and response shape are unchanged.
+- The optimization only changes how the Worker gathers the data, not what the admin dashboard displays.
+
+Trade-offs:
+
+- The dashboard request now creates a wider burst of concurrent D1 reads instead of a longer sequential chain.
+- If a reports channel ID is configured but the channel row is missing, the Worker can still run the open-report summary query in parallel before discarding it because `reportsInbox` remains gated on the channel row existing.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line.
+
 ### Dashboard refresh request coalescing — 2026-08-04
 
 This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.
