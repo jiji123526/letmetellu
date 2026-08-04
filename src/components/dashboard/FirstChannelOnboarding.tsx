@@ -9,6 +9,7 @@ type OnboardingStep = "features" | "create" | "guide";
 interface FirstChannelOnboardingProps {
   onCreated: (channelId: string) => Promise<void>;
   onClose: () => void;
+  onBetaCapacityReached?: () => void;
 }
 
 const FreezeIcon = ({ size = 20 }: { size?: number }) => (
@@ -81,7 +82,7 @@ const guideIcons = [
   "⚑",
 ];
 
-export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboardingProps) {
+export function FirstChannelOnboarding({ onCreated, onClose, onBetaCapacityReached }: FirstChannelOnboardingProps) {
   const { t } = useLocale();
   const [step, setStep] = useState<OnboardingStep>("features");
   const [name, setName] = useState("");
@@ -191,6 +192,10 @@ export function FirstChannelOnboarding({ onCreated, onClose }: FirstChannelOnboa
       });
       const data = await response.json() as { error?: string };
       if (!response.ok || data.error) {
+        if (data.error === "beta channel limit reached") {
+          onBetaCapacityReached?.();
+          return;
+        }
         setError(data.error === "channel already exists" ? t("channelExists") : t("dashboardCreateFailed"));
         return;
       }

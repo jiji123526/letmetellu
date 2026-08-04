@@ -125,8 +125,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   const body = await request.json() as { action: string; channel_id: string; payload?: Record<string, unknown> };
   const { action, channel_id, payload } = body;
 
-  // Skip ownership check for create-channel (channel doesn't exist yet)
-  if (action !== "create-channel") {
+  // These actions do not target an existing owned channel.
+  if (action !== "create-channel" && action !== "channel-capacity") {
     const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
       .bind(channel_id).first();
     if (!channel || channel.owner_uid !== userId) {
@@ -140,6 +140,16 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
 
   switch (action) {
+    case "channel-capacity": {
+      const row = await env.DB.prepare(`
+        SELECT COUNT(*) AS count
+        FROM channels
+        WHERE id NOT LIKE '%_live'
+      `).first<{ count: number }>();
+      const count = Number(row?.count || 0);
+      return Response.json({ count, limit: 50, can_create: count < 50 });
+    }
+
     case "create-channel": {
       const { name } = payload || {};
       const instanceId = crypto.randomUUID();
@@ -155,8 +165,23 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           FROM channels
           WHERE owner_uid = ? AND id NOT LIKE '%_live'
         ) < 5
+        AND (
+          SELECT COUNT(*)
+          FROM channels
+          WHERE id NOT LIKE '%_live'
+        ) < 50
       `).bind(channel_id, userId, name || "My Channel", instanceId, userId).run();
       if (!result.meta.changes) {
+        const counts = await env.DB.prepare(`
+          SELECT
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN owner_uid = ? THEN 1 ELSE 0 END) AS owner_count
+          FROM channels
+          WHERE id NOT LIKE '%_live'
+        `).bind(userId).first<{ total_count: number; owner_count: number }>();
+        if (Number(counts?.total_count || 0) >= 50) {
+          return Response.json({ error: "beta channel limit reached" }, { status: 403 });
+        }
         return Response.json({ error: "channel limit reached" }, { status: 403 });
       }
 

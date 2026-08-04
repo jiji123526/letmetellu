@@ -17,6 +17,7 @@ import { AdminGuidePanel } from "@/components/admin/AdminGuidePanel";
 import { DashboardHelpMenu } from "@/components/dashboard/DashboardHelpMenu";
 import { PlatformOperationalHealthCard } from "@/components/support/PlatformOperationalHealthCard";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
+import { BetaNoticeDialog } from "@/components/dashboard/BetaNoticeDialog";
 import { LegalFooter } from "@/components/legal/LegalFooter";
 import { ThemeLogo } from "@/components/ThemeLogo";
 import {
@@ -185,6 +186,9 @@ export default function DashboardPage() {
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showBetaNotice, setShowBetaNotice] = useState(false);
+  const [showBetaCapacityNotice, setShowBetaCapacityNotice] = useState(false);
+  const [checkingChannelCapacity, setCheckingChannelCapacity] = useState(false);
   const [showUserGuide, setShowUserGuide] = useState(false);
   const [showAdminGuide, setShowAdminGuide] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -657,6 +661,27 @@ export default function DashboardPage() {
   }, [loading, status, recentChannels.length]);
 
   useEffect(() => {
+    const userId = session?.user?.id;
+    if (loading || status !== "authenticated" || !userId || isPlatformAdmin) return;
+    const storageKey = `yap_beta_notice_v1_${userId}`;
+    let shouldShow = true;
+    try {
+      shouldShow = localStorage.getItem(storageKey) !== "seen";
+    } catch {}
+    if (!shouldShow) return;
+    const timer = window.setTimeout(() => setShowBetaNotice(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [isPlatformAdmin, loading, session?.user?.id, status]);
+
+  const closeBetaNotice = useCallback(() => {
+    const userId = session?.user?.id;
+    if (userId) {
+      try { localStorage.setItem(`yap_beta_notice_v1_${userId}`, "seen"); } catch {}
+    }
+    setShowBetaNotice(false);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
     if (!showAccount) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
       if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
@@ -938,6 +963,11 @@ export default function DashboardPage() {
       });
       const data = await response.json() as { error?: string };
       if (!response.ok || data.error) {
+        if (data.error === "beta channel limit reached") {
+          setShowCreate(false);
+          setShowBetaCapacityNotice(true);
+          return;
+        }
         setCreateError(
           data.error === "channel already exists"
             ? t("channelExists")
@@ -959,11 +989,30 @@ export default function DashboardPage() {
     }
   };
 
-  const openCreateFlow = useCallback(() => {
+  const openCreateFlow = useCallback(async () => {
+    if (checkingChannelCapacity) return;
     setCreateError("");
+    setCheckingChannelCapacity(true);
+    try {
+      const response = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "channel-capacity", channel_id: "" }),
+      });
+      const data = await response.json() as { can_create?: boolean };
+      if (response.ok && data.can_create === false) {
+        setShowBetaCapacityNotice(true);
+        return;
+      }
+    } catch {
+      // The create endpoint also enforces the limit. A transient check failure
+      // should not block creation while beta capacity is still available.
+    } finally {
+      setCheckingChannelCapacity(false);
+    }
     setShowCreate(ownedChannelIds.size > 0);
     setShowFirstOnboarding(ownedChannelIds.size === 0);
-  }, [ownedChannelIds]);
+  }, [checkingChannelCapacity, ownedChannelIds]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1007,7 +1056,7 @@ export default function DashboardPage() {
     if (loading || status !== "authenticated") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("onboarding") !== "true") return;
-    openCreateFlow();
+    void openCreateFlow();
     window.history.replaceState(null, "", "/dashboard");
   }, [loading, openCreateFlow, status]);
 
@@ -1833,6 +1882,10 @@ export default function DashboardPage() {
         <FirstChannelOnboarding
           onCreated={async () => { await loadChannels(); }}
           onClose={() => setShowFirstOnboarding(false)}
+          onBetaCapacityReached={() => {
+            setShowFirstOnboarding(false);
+            setShowBetaCapacityNotice(true);
+          }}
         />
       )}
 
@@ -1852,6 +1905,21 @@ export default function DashboardPage() {
 
       {showLogin && !isLoggedIn && (
         <LoginDialog onClose={closeLogin} initialError={loginError} initialTab={loginInitialTab} />
+      )}
+
+      {showBetaNotice && isLoggedIn && !showFirstOnboarding && !pendingLocalChannels && (
+        <BetaNoticeDialog onClose={closeBetaNotice} />
+      )}
+
+      {showBetaCapacityNotice && (
+        <ConfirmDialog
+          title={t("betaCapacityTitle")}
+          message={t("betaCapacityDescription")}
+          confirmLabel={t("betaCapacityConfirm")}
+          onConfirm={() => setShowBetaCapacityNotice(false)}
+          onCancel={() => setShowBetaCapacityNotice(false)}
+          showCancel={false}
+        />
       )}
 
       {!isPlatformAdmin && (
@@ -1876,7 +1944,8 @@ export default function DashboardPage() {
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
           }}
-          onClick={openCreateFlow}
+          onClick={() => void openCreateFlow()}
+          disabled={checkingChannelCapacity}
           aria-label={t("createChannel")}
         >
           <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
