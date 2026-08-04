@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { adminAction } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
 
-const DEFAULT_EMOJIS = ["🍋", "🔥", "❤️", "😂", "👏", "🎉"];
+const DEFAULT_EMOJIS = ["🔥", "❤️", "😂", "👏", "🎉"];
 const EMOJI_FX_LAYER_ID = "live-emoji-fx-layer";
 
 interface EmojiBarProps {

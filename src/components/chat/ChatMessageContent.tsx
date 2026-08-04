@@ -31,6 +31,7 @@ interface MessageTextWithEmbedsProps {
   isSearchMatch: boolean;
   isActiveMatch: boolean;
   showEmbeds: boolean;
+  fillWidgetWidth: boolean;
   editedLabel?: string;
   onExpand: (text: string) => void;
 }
@@ -192,6 +193,7 @@ function MessageTextWithEmbeds({
   isSearchMatch,
   isActiveMatch,
   showEmbeds,
+  fillWidgetWidth,
   editedLabel,
   onExpand,
 }: MessageTextWithEmbedsProps) {
@@ -218,7 +220,14 @@ function MessageTextWithEmbeds({
         editedLabel={editedLabel}
         onExpand={onExpand}
       />
-      {showEmbeds && <MessageEmbeds text={text} isMine={isMine} onEmbedReady={handleEmbedReady} />}
+      {showEmbeds && (
+        <MessageEmbeds
+          text={text}
+          isMine={isMine}
+          fillWidth={fillWidgetWidth}
+          onEmbedReady={handleEmbedReady}
+        />
+      )}
     </>
   );
 }

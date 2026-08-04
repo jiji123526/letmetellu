@@ -358,7 +358,17 @@ function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) 
 }
 
 // Main export: renders embeds for URLs found in message text
-export function MessageEmbeds({ text, isMine, onEmbedReady }: { text: string; isMine: boolean; onEmbedReady: (url: string) => void }) {
+export function MessageEmbeds({
+  text,
+  isMine,
+  fillWidth,
+  onEmbedReady,
+}: {
+  text: string;
+  isMine: boolean;
+  fillWidth: boolean;
+  onEmbedReady: (url: string) => void;
+}) {
   const urls = text.match(URL_REGEX);
   if (!urls || urls.length === 0) return null;
 
@@ -387,14 +397,14 @@ export function MessageEmbeds({ text, isMine, onEmbedReady }: { text: string; is
       marginTop: 0,
       paddingBottom: 0,
       overflow: "visible",
-      width: "fit-content",
+      width: fillWidth ? "100%" : "fit-content",
       maxWidth: "100%",
       display: "flex",
       flexDirection: "column",
       gap: "6px",
     }}>
       {unique.map((url) => (
-        <div key={url} style={{ maxWidth: "100%" }}>
+        <div key={url} style={{ width: fillWidth ? "100%" : undefined, maxWidth: "100%" }}>
           {renderEmbed(url)}
         </div>
       ))}

@@ -8,6 +8,13 @@ import { isInboxModerationMessage } from "./messageActionRules";
 import { stripInboxChannelLine } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 
+const EMBED_URL_REGEX = /https?:\/\/[^\s<]+/g;
+
+function hasWidgetCaption(text: string): boolean {
+  return (text.match(EMBED_URL_REGEX)?.length || 0) > 0
+    && text.replace(EMBED_URL_REGEX, "").trim().length > 0;
+}
+
 interface MessageRowProps {
   msg: Message;
   isReply: boolean;
@@ -96,6 +103,9 @@ const MessageRow = React.memo(function MessageRow({
       : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
+  const showEmbeds = !!msg.text && !msg.report && !msg.image && !isInboxMessage;
+  const hasCaptionedWidget = showEmbeds && hasWidgetCaption(msg.text);
+  const usesWideWidgetBubble = hasNativeEmbed || hasCaptionedWidget;
   const reportMeta = msg.report_meta;
   const petitionMeta = msg.petition_meta;
   const inboxChannel = reportMeta
@@ -136,7 +146,7 @@ const MessageRow = React.memo(function MessageRow({
         fontSize: "var(--bubble-font-size)",
         lineHeight: 1.38,
         overflowWrap: "anywhere",
-        width: hasNativeEmbed ? "100%" : undefined,
+        width: usesWideWidgetBubble ? "100%" : undefined,
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
           : "20px",
@@ -212,7 +222,8 @@ const MessageRow = React.memo(function MessageRow({
               searchQuery={searchQuery}
               isSearchMatch={isSearchMatch}
               isActiveMatch={isActiveMatch}
-              showEmbeds={!msg.report && !msg.image && !isInboxMessage}
+              showEmbeds={showEmbeds}
+              fillWidgetWidth={hasCaptionedWidget}
               editedLabel={msg.image && msg.edited ? editedMessageLabel : undefined}
               onExpand={onExpand}
             />
@@ -259,7 +270,10 @@ const MessageRow = React.memo(function MessageRow({
       <div
         className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
         style={{
-          maxWidth: hasNativeEmbed
+          width: hasCaptionedWidget
+            ? "calc(320px + var(--bubble-font-size) * 1.176)"
+            : undefined,
+          maxWidth: usesWideWidgetBubble
             ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
             : isReply ? "85%" : "74%",
         }}
