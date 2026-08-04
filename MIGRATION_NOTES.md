@@ -30,7 +30,8 @@ Deployment notes:
 
 Operational notes:
 
-- The cleanup did not execute: local and production `INTERNAL_SECRET` values intentionally differed, and broad export/injection of unrelated Vercel production secrets was rejected in favor of a future narrowly scoped maintenance path.
+- Cleanup was completed through a temporary exact-ID route in a Wrangler remote-binding session after broad production-secret export was rejected. Seven legacy credential test accounts, four owned channels and six orphan channels were removed through the existing account/channel deletion logic; the temporary route was then removed.
+- Post-cleanup D1 verification reported zero remaining target users and channels, while `reports`, `whaaa` and the new verified credential account each remained present.
 - DNS changes briefly produced cached negative responses during apex CNAME flattening; authoritative Cloudflare and `1.1.1.1` responses later validated correctly, while local/Google caches required TTL expiry.
 - At audit time `www.yapndot.com` still served the app directly rather than redirecting to the canonical apex hostname, so the Vercel redirect remains a beta gate.
 

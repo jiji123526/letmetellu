@@ -36,7 +36,7 @@ The domain, Worker CORS, Auth.js callback generation and production Resend sende
 3. Verify the `www` hostname redirects to the apex domain.
 4. Run the core chat, locked-channel, live, support and moderation smoke tests below in separate owner/viewer/incognito sessions.
 5. Confirm the super-admin health card is usable and keep `wrangler tail` available for the first beta sessions.
-6. Finish or explicitly defer the audited pre-beta test-data cleanup; no cleanup deletion was completed during the 2026-08-04 audit.
+6. The audited pre-beta test-data cleanup is complete; keep future destructive maintenance exact-ID scoped, precondition checked and temporary.
 
 ## Pre-deploy checks
 
