@@ -38,14 +38,14 @@ Deployment notes:
 - Verified the canonical `yapndot.com` deployment, HTTPS route, Auth.js provider metadata and Worker CORS response.
 - Confirmed Auth.js emits separate Google callback paths for `google-login` and `google-signup`; Google Cloud must register both exact paths.
 - Confirmed production Resend delivery is no longer sandbox-recipient limited and uses the verified `send.yapndot.com` sender.
-- Audited legacy production data without deleting it: seven credential test accounts, four channels owned by those accounts and six additional orphan channels were identified. Google accounts, the platform `reports` channel and the new verified credential account were excluded from the cleanup scope.
+- Audited legacy production data and identified seven credential test accounts, four channels owned by those accounts and six additional orphan channels. The exact target set was subsequently deleted while Google accounts, the platform `reports` channel and the new verified credential account were preserved.
 
 Operational notes:
 
 - Cleanup was completed through a temporary exact-ID route in a Wrangler remote-binding session after broad production-secret export was rejected. Seven legacy credential test accounts, four owned channels and six orphan channels were removed through the existing account/channel deletion logic; the temporary route was then removed.
 - Post-cleanup D1 verification reported zero remaining target users and channels, while `reports`, `whaaa` and the new verified credential account each remained present.
 - DNS changes briefly produced cached negative responses during apex CNAME flattening; authoritative Cloudflare and `1.1.1.1` responses later validated correctly, while local/Google caches required TTL expiry.
-- At audit time `www.yapndot.com` still served the app directly rather than redirecting to the canonical apex hostname, so the Vercel redirect remains a beta gate.
+- At initial audit time `www.yapndot.com` still served the app directly; Vercel was subsequently configured and verified to return a permanent redirect to the canonical apex hostname.
 
 ### Production Resend sender and recipient rollout — 2026-08-04
 

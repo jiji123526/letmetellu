@@ -4,7 +4,7 @@ This checklist is for shipping **yap.** beyond ad hoc internal testing.
 It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
 backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
-## Release blockers
+## Public-launch blockers
 
 Do not treat the app as public-launch ready until these are complete:
 
@@ -29,14 +29,14 @@ Do not treat the app as public-launch ready until these are complete:
 
 ## Current limited-beta gate
 
-The domain, Worker CORS, Auth.js callback generation and production Resend sender are configured. Before inviting beta users:
+The limited-beta gate was completed on 2026-08-04:
 
-1. Complete one end-to-end email signup and password-reset flow using a non-owner mailbox.
-2. Complete Google signup and Google login from `yapndot.com`.
-3. Verify the `www` hostname redirects to the apex domain.
-4. Run the core chat, locked-channel, live, support and moderation smoke tests below in separate owner/viewer/incognito sessions.
-5. Confirm the super-admin health card is usable and keep `wrangler tail` available for the first beta sessions.
-6. The audited pre-beta test-data cleanup is complete; keep future destructive maintenance exact-ID scoped, precondition checked and temporary.
+1. End-to-end email signup and password-reset testing completed.
+2. Google signup and Google login from `yapndot.com` completed.
+3. `www.yapndot.com` returns a permanent Vercel redirect to the apex hostname.
+4. Core chat, locked-channel, live, support and moderation smoke tests completed.
+5. The super-admin health card is available; keep `wrangler tail` available for the first beta sessions.
+6. Audited pre-beta test-data cleanup completed with the protected keep set verified afterward.
 
 Accepted limited-beta security trade-off:
 

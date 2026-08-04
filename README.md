@@ -24,6 +24,21 @@ Production: [yapndot.com](https://yapndot.com)
 - Explicit Worker-side security headers in addition to the existing Next.js app headers
 - Multi-image chat, embeds, gallery and link panels, temporary live sessions and recent chat UI polish
 
+## Current Beta Status
+
+The service is ready for a small, monitored limited beta. The canonical
+`https://yapndot.com` deployment is active, `www.yapndot.com` permanently
+redirects to the apex hostname, Auth.js emits the expected provider-specific
+Google callbacks, production Resend delivery is enabled, the core production
+smoke-test pass is complete, and audited legacy test accounts/orphan channels
+have been removed.
+
+The remaining work is public-launch hardening rather than a limited-beta
+blocker: regression coverage for state-heavy support/report/dashboard flows,
+calibrated external alerts, retryable cross-store deletion, broader abuse
+controls and nonce-based CSP enforcement. Operate the beta with the
+super-admin health view and Worker logs available.
+
 ## Architecture
 
 ```text
