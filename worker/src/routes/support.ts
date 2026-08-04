@@ -2,6 +2,7 @@ import type { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation";
 import { recordOperationalEvent } from "../lib/operational-events";
+import { deriveOperationalHealthStatus, serializeOperationalHealthWindow, type OperationalHealthWindowRow } from "../lib/operational-health";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow";
 import { appendSupportAuditLog } from "../lib/support-audit";
@@ -1276,6 +1277,73 @@ async function fetchPlatformSupportSessionDetail(sessionId: string, locale: User
   });
 }
 
+async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
+  const generatedAt = new Date();
+  const cutoff15m = new Date(generatedAt.getTime() - 15 * 60 * 1000).toISOString();
+  const cutoff24h = new Date(generatedAt.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const summarySql = `
+    SELECT
+      COUNT(*) AS tracked_event_count,
+      SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+      SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
+      SUM(CASE WHEN event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
+      SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
+      SUM(CASE WHEN event_type = 'forbidden' THEN 1 ELSE 0 END) AS forbidden_count
+    FROM operational_events
+    WHERE created_at >= ?
+  `;
+
+  const [last15mRow, last24hRow, routeResults] = await Promise.all([
+    env.DB.prepare(summarySql).bind(cutoff15m).first<OperationalHealthWindowRow>(),
+    env.DB.prepare(summarySql).bind(cutoff24h).first<OperationalHealthWindowRow>(),
+    env.DB.prepare(`
+      SELECT
+        route,
+        SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+        SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
+        SUM(CASE WHEN event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
+        SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
+        SUM(CASE WHEN event_type = 'forbidden' THEN 1 ELSE 0 END) AS forbidden_count,
+        MAX(created_at) AS last_event_at
+      FROM operational_events
+      WHERE created_at >= ?
+        AND event_type IN ('request_failed', 'unhandled_exception', 'maintenance_failed', 'rate_limited', 'forbidden')
+      GROUP BY route
+      ORDER BY request_5xx_count DESC, unhandled_exception_count DESC,
+               maintenance_failure_count DESC, rate_limited_count DESC, forbidden_count DESC
+      LIMIT 12
+    `).bind(cutoff24h).all<OperationalHealthWindowRow & { route: string; last_event_at: string }>(),
+  ]);
+
+  const last15m = serializeOperationalHealthWindow(last15mRow);
+  const last24h = serializeOperationalHealthWindow(last24hRow);
+  return Response.json({
+    generated_at: generatedAt.toISOString(),
+    status: deriveOperationalHealthStatus(last15m),
+    windows: {
+      last_15m: last15m,
+      last_24h: last24h,
+    },
+    thresholds: {
+      critical_15m: {
+        request_5xx_count: 5,
+        unhandled_exception_count: 3,
+        maintenance_failure_count: 1,
+      },
+      degraded_15m: {
+        request_5xx_count: 1,
+        unhandled_exception_count: 1,
+        rate_limited_count: 25,
+      },
+    },
+    routes: (routeResults.results || []).map((row) => ({
+      route: row.route,
+      ...serializeOperationalHealthWindow(row),
+      last_event_at: row.last_event_at,
+    })),
+  });
+}
+
 async function handlePlatformSupportSendMessage(body: JsonObject, actorUserId: string, env: Env): Promise<Response> {
   const rateLimited = await applySupportRateLimit({
     env,
@@ -1385,6 +1453,9 @@ export async function handlePlatformSupport(request: Request, env: Env): Promise
     const type = url.searchParams.get("type") || "dashboard";
     if (type === "dashboard") {
       return fetchPlatformSupportDashboard(url, locale, env);
+    }
+    if (type === "health") {
+      return fetchPlatformOperationalHealth(env);
     }
     if (type === "thread") {
       const threadId = url.searchParams.get("thread_id") || "";

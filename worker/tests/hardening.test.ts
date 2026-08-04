@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
+import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 
 function expectPreviewError(fn: () => unknown, message: string): void {
@@ -92,4 +93,32 @@ test("matchesImageSignature rejects mismatched, truncated and unsupported conten
   assert.equal(matchesImageSignature("image/png", pngHeader.subarray(0, 4)), false);
   assert.equal(matchesImageSignature("image/gif", new TextEncoder().encode("<html>")), false);
   assert.equal(matchesImageSignature("application/octet-stream", pngHeader), false);
+});
+
+test("operational health windows normalize D1 values and missing counts", () => {
+  assert.deepEqual(serializeOperationalHealthWindow({
+    tracked_event_count: "12",
+    request_5xx_count: 2,
+    unhandled_exception_count: null,
+    maintenance_failure_count: undefined,
+    rate_limited_count: "7",
+    forbidden_count: 3,
+  }), {
+    tracked_event_count: 12,
+    request_5xx_count: 2,
+    unhandled_exception_count: 0,
+    maintenance_failure_count: 0,
+    rate_limited_count: 7,
+    forbidden_count: 3,
+  });
+});
+
+test("operational health status applies conservative 15-minute thresholds", () => {
+  const base = serializeOperationalHealthWindow(null);
+  assert.equal(deriveOperationalHealthStatus(base), "healthy");
+  assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");
+  assert.equal(deriveOperationalHealthStatus({ ...base, rate_limited_count: 25 }), "degraded");
+  assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 5 }), "critical");
+  assert.equal(deriveOperationalHealthStatus({ ...base, unhandled_exception_count: 3 }), "critical");
+  assert.equal(deriveOperationalHealthStatus({ ...base, maintenance_failure_count: 1 }), "critical");
 });

@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Super-admin operational health aggregation — 2026-08-04
+
+- Added a super-admin-only `GET /api/platform-admin/support?type=health` read that summarizes operational events over the last 15 minutes and 24 hours.
+- The response separates failed `5xx` requests, unhandled exceptions, scheduled-maintenance failures, rate limits and forbidden requests so internally duplicated exception records are not presented as duplicate failed requests.
+- Added a bounded top-12 route breakdown without raw error details, actor identifiers or unrestricted event history.
+- The current health state is derived from explicit 15-minute thresholds and returns the thresholds alongside the counts for operator transparency.
+- Added tests for D1 count normalization and healthy, degraded and critical threshold transitions.
+
+Trade-offs:
+
+- Each health read performs three indexed, 24-hour-bounded D1 aggregations. The endpoint is restricted to the existing platform-admin identity and should be polled conservatively by the future UI.
+- `403` and `429` counts can reflect legitimate rejection or abuse rather than an outage. They are context signals; only a high rate-limit count degrades status, while forbidden counts do not change status by themselves.
+- Thresholds are conservative initial defaults and may need adjustment after observing normal production baselines.
+
+Deployment notes:
+
+- no D1 migration is required because existing operational-event indexes cover the time-bounded reads;
+- deploy the Worker for this endpoint;
+- no Next.js frontend deployment is required until the operator health UI is added.
+
 ### Uploaded-image signature validation — 2026-08-04
 
 - The Worker now compares the first bytes of JPEG, PNG, GIF and WebP uploads with the declared `Content-Type` before writing the object to R2.
