@@ -9,11 +9,8 @@ import { useLocale } from "@/hooks/useLocale";
 import { ContextMenu } from "./ContextMenu";
 import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
-import { EditDialog } from "./EditDialog";
-import { LiveJoinBanner, LiveExitBanner, LiveCountdownBanner } from "./LiveMode";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { NoticeBanner } from "./NoticeBanner";
-import { SearchBar } from "./SearchBar";
 import { EmojiBar, spawnEmoji } from "./EmojiBar";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { MessageList } from "./ChatMessageList";
@@ -36,6 +33,7 @@ import { useChatChannelSettings } from "./useChatChannelSettings";
 import { ChatViewOverlays } from "./ChatViewOverlays";
 import { useChatContextMenuActions } from "./useChatContextMenuActions";
 import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
+import { ChatViewTopChrome } from "./ChatViewTopChrome";
 
 interface Channel {
   id: string;
@@ -1278,205 +1276,61 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
-      {/* Header */}
-      <header
-        className="flex-none flex items-center px-4 relative"
-        style={{
-          background: "var(--header-bg)",
-          backdropFilter: "saturate(180%) blur(20px)",
-          WebkitBackdropFilter: "saturate(180%) blur(20px)",
-          borderBottom: "0.5px solid var(--hairline)",
-          padding: "10px 16px",
-          zIndex: 5,
-          cursor: "pointer",
+      <ChatViewTopChrome
+        channelId={channelId}
+        channelName={channel?.name || ""}
+        channelProfileImage={channel?.profile_image || null}
+        ownerChannelCount={ownerChannelCount}
+        bubbleColor={bubbleColor}
+        hasChannelRules={hasChannelRules}
+        showSearch={showSearch}
+        searchMessages={effectiveAdmin ? [...messages, ...dmMessages] : messages}
+        onSearchNavigate={(msgId) => {
+          const el = document.getElementById(`msg-${msgId}`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
         }}
-        onClick={(e) => {
-          // Scroll to top unless clicking a button/link
-          if ((e.target as HTMLElement).closest("button, a")) return;
+        onSearchState={setSearchState}
+        onCloseSearch={closeSearch}
+        onDashboard={() => { window.location.href = "/dashboard"; }}
+        onOpenNotice={openNotice}
+        onOpenOwnerChannels={openOwnerChannels}
+        onShareChannel={handleShareChannel}
+        onToggleSearch={toggleSearch}
+        onOpenHeaderMenu={openHeaderMenu}
+        onScrollToTop={() => {
           messagesContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
         }}
-      >
-        <button
-          className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: bubbleColor }}
-          onClick={() => { window.location.href = "/dashboard"; }}
-          aria-label={t("dashboardChats")}
-        >
-          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
-            <path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-
-        {hasChannelRules && (
-          <button
-            type="button"
-            className="absolute left-[50px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-            style={{ color: bubbleColor }}
-            onClick={openNotice}
-            aria-label={t("rules")}
-          >
-            <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
-              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <circle cx="12" cy="8" r="1.15" fill="currentColor" />
-              <path d="M12 11v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
-
-        <div className="flex-1 flex flex-col items-center gap-[6px]">
-          <button
-            type="button"
-            disabled={ownerChannelCount < 2}
-            className="rounded-full overflow-hidden relative top-[3px] border-none p-0"
-            aria-label={t("dashboardOwnerChannels")}
-            style={{ width: "calc(var(--bubble-font-size) + 24px)", height: "calc(var(--bubble-font-size) + 24px)", cursor: ownerChannelCount >= 2 ? "pointer" : "default" }}
-            onClick={openOwnerChannels}
-          >
-            {channel?.profile_image ? (
-              <img src={channel.profile_image} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div
-                className="w-full h-full flex items-center justify-center text-white text-lg font-semibold"
-                style={{ background: bubbleColor }}
-              >
-                {channel?.name?.slice(0, 1).toUpperCase() || "?"}
-              </div>
-            )}
-          </button>
-          <div className="font-normal flex items-center gap-[2px]" style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--gray-text)" }}>
-            {channel?.name}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="absolute right-[88px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: bubbleColor }}
-          onClick={handleShareChannel}
-          aria-label={t("shareChannel")}
-        >
-          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
-            <path d="M12 15V3M7.5 7.5 12 3l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M6 11.5v7A2.5 2.5 0 0 0 8.5 21h7a2.5 2.5 0 0 0 2.5-2.5v-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-
-        <button
-          className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: bubbleColor }}
-          onClick={toggleSearch}
-        >
-          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
-            <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
-            <path d="M21 21l-4.35-4.35" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
-
-        <button
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: bubbleColor }}
-          onClick={(e) => openHeaderMenu(e.currentTarget.getBoundingClientRect())}
-        >
-          <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 3px)", height: "calc(var(--bubble-font-size) + 3px)" }}>
-            <circle cx="12" cy="5" r="1.8" fill="currentColor" />
-            <circle cx="12" cy="12" r="1.8" fill="currentColor" />
-            <circle cx="12" cy="19" r="1.8" fill="currentColor" />
-          </svg>
-        </button>
-      </header>
-
-      {/* Search bar */}
-      {showSearch && (
-        <SearchBar
-          channelId={channelId}
-          messages={effectiveAdmin ? [...messages, ...dmMessages] : messages}
-          onNavigate={(msgId) => {
-            const el = document.getElementById(`msg-${msgId}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
-          onSearchState={setSearchState}
-          onClose={closeSearch}
-        />
-      )}
-
-      {editingMsg && (
-        <div className="flex-none px-4 pt-3">
-          <EditDialog
-            inline
-            currentText={editingMsg.text}
-            onSave={(newText) => {
-              void handleEditSave(editingMsg.id, newText);
-            }}
-            onClose={closeEditDialog}
-          />
-        </div>
-      )}
-
-      {/* Admin return banner */}
-      {isAdmin && adminViewAsUser && (
-        <div
-          className="flex-none flex items-center justify-between"
-          style={{
-            padding: "6px 14px",
-            background: `color-mix(in srgb, ${bubbleColor} 10%, transparent)`,
-            borderBottom: `1px solid color-mix(in srgb, ${bubbleColor} 20%, transparent)`,
-            fontSize: "calc(var(--bubble-font-size) - 5px)",
-            color: bubbleColor,
-          }}
-        >
-          <span>{t("viewingAsUser")}</span>
-          <button
-            className="border-none rounded-lg cursor-pointer"
-            style={{
-              background: bubbleColor,
-              color: "#fff",
-              padding: "4px 10px",
-              fontSize: "calc(var(--bubble-font-size) - 5px)",
-              fontWeight: 500,
-            }}
-            onClick={() => setAdminViewAsUser(false)}
-          >
-            {t("returnToAdmin")}
-          </button>
-        </div>
-      )}
-
-      {/* Live banners */}
-      {liveActive && !inLiveMode && (
-        <LiveJoinBanner title={liveTitle} onJoin={() => {
+        editingText={editingMsg?.text || null}
+        onSaveEdit={(newText) => {
+          if (!editingMsg) return;
+          void handleEditSave(editingMsg.id, newText);
+        }}
+        onCloseEdit={closeEditDialog}
+        isAdmin={isAdmin}
+        adminViewAsUser={adminViewAsUser}
+        onReturnToAdmin={() => setAdminViewAsUser(false)}
+        liveActive={liveActive}
+        inLiveMode={inLiveMode}
+        liveTitle={liveTitle}
+        liveCount={liveCount}
+        liveLastMinuteLabel={liveLastMinuteLabel}
+        liveLastMinuteBannerText={liveLastMinuteBannerText}
+        liveCountdownNotice={liveCountdownNotice}
+        effectiveAdmin={effectiveAdmin}
+        connected={connected}
+        onJoinLive={() => {
           enterLiveMode();
           void loadLiveChannelData().catch(() => {});
-        }} />
-      )}
-      {inLiveMode && (
-        <LiveExitBanner
-          isAdmin={effectiveAdmin}
-          title={liveTitle}
-          viewerCount={liveCount}
-          countdownLabel={liveLastMinuteLabel}
-          onExit={() => {
-            if (effectiveAdmin) {
-              setShowEndLiveConfirm(true);
-            } else {
-              // Non-admin just leaves live mode (live continues for others)
-              exitLiveMode();
-              void loadNormalChannelData().catch(() => {});
-            }
-          }}
-        />
-      )}
-      {liveLastMinuteBannerText ? (
-        <LiveCountdownBanner text={liveLastMinuteBannerText} />
-      ) : liveCountdownNotice ? (
-        <LiveCountdownBanner text={liveCountdownNotice} />
-      ) : null}
-
-      {/* Offline banner */}
-      {!connected && !loading && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 12px", background: "#fff3e0", borderBottom: "0.5px solid #ffe0b2", flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "#e65100", lineHeight: 1 }}>
-          <span>{t("connectionLost")}</span>
-        </div>
-      )}
+        }}
+        onExitLive={() => {
+          if (effectiveAdmin) {
+            setShowEndLiveConfirm(true);
+          } else {
+            exitLiveMode();
+            void loadNormalChannelData().catch(() => {});
+          }
+        }}
+      />
 
       {/* Messages */}
       <div

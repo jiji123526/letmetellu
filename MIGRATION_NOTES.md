@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat top-chrome extraction from `ChatView` — 2026-08-04
+
+- Extracted the top header/search/live-banner shell into `src/components/chat/ChatViewTopChrome.tsx`, covering the channel header, search bar, inline edit panel, admin return banner, live join/exit banners, countdown banner, and offline banner.
+- `ChatView` now delegates that upper presentation block to one focused component instead of mixing top-of-screen chrome with the message-area and overlay render flow.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat overlay callback extraction from `ChatView` — 2026-08-03
 
 - Extracted the remaining overlay event bundle into `src/components/chat/useChatOverlayCallbacks.ts`, covering live start/end prompt behavior, gallery image expansion, links-panel navigation jumps, emoji-picker selection, plus-menu photo/DM toggles, moderation-petition dialog close gating, live popup entry, and gallery-image jump-back behavior.
