@@ -66,11 +66,13 @@ function requestPreview(url: string) {
 
 function LinkPreviewCard({
   link,
+  eager,
   scrollRootRef,
   onPreview,
   onClick,
 }: {
   link: LinkItem;
+  eager: boolean;
   scrollRootRef: RefObject<HTMLDivElement | null>;
   onPreview: (url: string, preview: LinkItem["preview"]) => void;
   onClick: () => void;
@@ -87,19 +89,37 @@ function LinkPreviewCard({
     const root = scrollRootRef.current;
     if (!card || !root) return;
     let cancelled = false;
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer.disconnect();
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let observer: IntersectionObserver | undefined;
+
+    const loadPreview = (attempt = 0) => {
       void requestPreview(link.url).then((preview) => {
-        if (!cancelled) onPreview(link.url, preview);
+        if (cancelled) return;
+        if (!preview && attempt === 0) {
+          retryTimer = setTimeout(() => loadPreview(1), 1500);
+          return;
+        }
+        onPreview(link.url, preview);
       });
-    }, { root, rootMargin: "160px 0px" });
-    observer.observe(card);
+    };
+
+    if (eager) {
+      loadPreview();
+    } else {
+      observer = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer?.disconnect();
+        loadPreview();
+      }, { root, rootMargin: "160px 0px" });
+      observer.observe(card);
+    }
+
     return () => {
       cancelled = true;
-      observer.disconnect();
+      if (retryTimer) clearTimeout(retryTimer);
+      observer?.disconnect();
     };
-  }, [link.preview, link.url, onPreview, scrollRootRef]);
+  }, [eager, link.preview, link.url, onPreview, scrollRootRef]);
 
   return (
     <div
@@ -116,7 +136,13 @@ function LinkPreviewCard({
       }}
       onClick={onClick}
     >
-      {link.preview && link.preview.image ? (
+      {link.preview === undefined ? (
+        <div
+          className="animate-pulse"
+          style={{ width: "100%", aspectRatio: "1.91 / 1", background: "var(--gray-bubble)" }}
+          aria-hidden="true"
+        />
+      ) : link.preview?.image ? (
         <img
           src={link.preview.image}
           alt=""
@@ -267,6 +293,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
                     <LinkPreviewCard
                       key={`${link.url}-${i}`}
                       link={link}
+                      eager={i < 6}
                       scrollRootRef={scrollRef}
                       onPreview={applyPreview}
                       onClick={() => {
