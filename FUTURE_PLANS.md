@@ -39,7 +39,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - A super-admin-only operational-health endpoint now exposes bounded 15-minute and 24-hour summaries plus problem-route rollups without raw event details.
 - Add dashboards or alerts for `403`, `429` and `5xx` rates.
-- Add the operator dashboard card for the health summary, then introduce alert delivery only after normal production baselines are known.
+- The operator dashboard now displays the bounded health summary with conservative polling. Introduce alert delivery only after normal production baselines are known.
 - Track moderation action volume, report volume and petition outcomes.
 - Track upload failures, preview failures and WebSocket auth failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.

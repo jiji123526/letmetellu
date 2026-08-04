@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Super-admin operational health card — 2026-08-04
+
+- Added a localized service-health card to the super-admin dashboard with healthy, degraded and critical states, recent 15-minute `5xx`, exception, `429` and `403` counts, and up to three 24-hour problem routes.
+- Health reads run on dashboard entry, every five minutes while visible, and on focus or visibility return only when at least one minute has passed.
+- Concurrent health refreshes share one in-flight request, while the operator can request an immediate manual refresh.
+- A health-read failure stays isolated from reports and support tickets; the existing platform dashboard remains usable and the card offers a retry.
+
+Trade-offs:
+
+- An open super-admin dashboard now performs one additional bounded health request every five minutes. Focus events inside one minute are coalesced to avoid request bursts.
+- The card reports backend events that reached `operational_events`; purely visual frontend defects and successful-but-incorrect data responses still require regression tests or separate client telemetry.
+- The initial threshold labels can look sensitive during low-volume testing and should be calibrated from production baselines before enabling external alerts.
+
+Deployment notes:
+
+- no D1 migration or Worker change is required for this UI step;
+- deploy the Next.js frontend for the dashboard card.
+
 ### Super-admin operational health aggregation — 2026-08-04
 
 - Added a super-admin-only `GET /api/platform-admin/support?type=health` read that summarizes operational events over the last 15 minutes and 24 hours.

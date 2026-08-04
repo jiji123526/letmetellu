@@ -5,7 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchSupportPreview, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse } from "@/lib/api";
+import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchPlatformOperationalHealth, fetchSupportPreview, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse, type PlatformOperationalHealthResponse } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, markRecentChannelsValidated, removeRecentChannel, shouldValidateRecentChannels, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/chat/ConfirmDialog";
 import { UserGuidePanel } from "@/components/chat/UserGuidePanel";
 import { AdminGuidePanel } from "@/components/admin/AdminGuidePanel";
 import { DashboardHelpMenu } from "@/components/dashboard/DashboardHelpMenu";
+import { PlatformOperationalHealthCard } from "@/components/support/PlatformOperationalHealthCard";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
 import { LegalFooter } from "@/components/legal/LegalFooter";
 import { ThemeLogo } from "@/components/ThemeLogo";
@@ -75,6 +76,8 @@ interface DashboardListItem {
 }
 
 const ADMIN_DASHBOARD_POLL_MS = 30000;
+const OPERATIONAL_HEALTH_POLL_MS = 5 * 60 * 1000;
+const OPERATIONAL_HEALTH_MIN_REFRESH_MS = 60 * 1000;
 const SUPPORT_PREVIEW_POLL_MS = 60000;
 type PlatformTicketFilter = "open" | "needs_reply" | "waiting_user" | "unread" | "stale" | "critical" | null;
 
@@ -209,6 +212,9 @@ export default function DashboardPage() {
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
   const [platformDashboardError, setPlatformDashboardError] = useState(false);
+  const [operationalHealth, setOperationalHealth] = useState<PlatformOperationalHealthResponse | null>(null);
+  const [operationalHealthLoading, setOperationalHealthLoading] = useState(false);
+  const [operationalHealthError, setOperationalHealthError] = useState(false);
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -222,6 +228,8 @@ export default function DashboardPage() {
   const skipNextListAnimationRef = useRef(false);
   const loadChannelsInFlightRef = useRef<Promise<void> | null>(null);
   const loadPlatformDashboardInFlightRef = useRef<Promise<boolean> | null>(null);
+  const loadOperationalHealthInFlightRef = useRef<Promise<void> | null>(null);
+  const operationalHealthLoadedAtRef = useRef(0);
   const loadSupportPreviewInFlightRef = useRef<Promise<void> | null>(null);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -351,6 +359,8 @@ export default function DashboardPage() {
       if (status !== "authenticated") {
         setPlatformDashboard(null);
         setPlatformDashboardError(false);
+        setOperationalHealth(null);
+        setOperationalHealthError(false);
         return false;
       }
       try {
@@ -358,6 +368,8 @@ export default function DashboardPage() {
         if (result._status === 403 || result._status === 404) {
           setPlatformDashboard(null);
           setPlatformDashboardError(false);
+          setOperationalHealth(null);
+          setOperationalHealthError(false);
           return false;
         }
         if (result._status >= 400) {
@@ -427,6 +439,41 @@ export default function DashboardPage() {
       setLoadingMorePlatformTickets(false);
     }
   }, [loadingMorePlatformTickets, platformDashboard?.open_pagination?.next_cursor]);
+
+  const loadOperationalHealth = useCallback((force = false): Promise<void> => {
+    if (loadOperationalHealthInFlightRef.current) return loadOperationalHealthInFlightRef.current;
+    if (!force && Date.now() - operationalHealthLoadedAtRef.current < OPERATIONAL_HEALTH_MIN_REFRESH_MS) {
+      return Promise.resolve();
+    }
+    setOperationalHealthLoading(true);
+    const request = (async () => {
+      try {
+        const result = await fetchPlatformOperationalHealth();
+        if (result._status >= 400) {
+          setOperationalHealthError(true);
+          return;
+        }
+        setOperationalHealth({
+          generated_at: result.generated_at,
+          status: result.status,
+          windows: result.windows,
+          routes: result.routes || [],
+        });
+        operationalHealthLoadedAtRef.current = Date.now();
+        setOperationalHealthError(false);
+      } catch {
+        setOperationalHealthError(true);
+      } finally {
+        setOperationalHealthLoading(false);
+      }
+    })().finally(() => {
+      if (loadOperationalHealthInFlightRef.current === request) {
+        loadOperationalHealthInFlightRef.current = null;
+      }
+    });
+    loadOperationalHealthInFlightRef.current = request;
+    return request;
+  }, []);
 
   const loadSupportPreview = useCallback((): Promise<void> => {
     if (status === "loading" || isPlatformAdmin) {
@@ -543,6 +590,25 @@ export default function DashboardPage() {
     }, pollMs);
     return () => window.clearInterval(timer);
   }, [status, isPlatformAdmin, supportPreview, loadPlatformDashboard, loadSupportPreview]);
+
+  useEffect(() => {
+    if (!isPlatformAdmin) {
+      operationalHealthLoadedAtRef.current = 0;
+      return;
+    }
+    void loadOperationalHealth();
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadOperationalHealth();
+    };
+    const timer = window.setInterval(refresh, OPERATIONAL_HEALTH_POLL_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [isPlatformAdmin, loadOperationalHealth]);
 
   useEffect(() => {
     if (status === "loading") return;
@@ -1364,6 +1430,15 @@ export default function DashboardPage() {
             )}
           </div>
         </header>
+
+        {isPlatformAdmin && (
+          <PlatformOperationalHealthCard
+            health={operationalHealth}
+            loading={operationalHealthLoading}
+            error={operationalHealthError}
+            onRefresh={() => void loadOperationalHealth(true)}
+          />
+        )}
 
         {isPlatformAdmin && platformDashboard?.support_stats && (
           <section className="px-4 pt-3 pb-1">

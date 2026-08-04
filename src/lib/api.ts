@@ -161,6 +161,31 @@ export interface PlatformDashboardResponse {
   support_stats?: PlatformDashboardSupportStats | null;
 }
 
+export interface PlatformOperationalHealthWindow {
+  tracked_event_count: number;
+  request_5xx_count: number;
+  unhandled_exception_count: number;
+  maintenance_failure_count: number;
+  rate_limited_count: number;
+  forbidden_count: number;
+}
+
+export interface PlatformOperationalHealthRoute extends PlatformOperationalHealthWindow {
+  route: string;
+  last_event_at: string;
+}
+
+export interface PlatformOperationalHealthResponse {
+  error?: string;
+  generated_at: string;
+  status: "healthy" | "degraded" | "critical";
+  windows: {
+    last_15m: PlatformOperationalHealthWindow;
+    last_24h: PlatformOperationalHealthWindow;
+  };
+  routes: PlatformOperationalHealthRoute[];
+}
+
 export interface StoredSupportTicketPreview {
   threadId: string;
   topicLabel: string;
@@ -1113,6 +1138,29 @@ export async function fetchPlatformDashboard(openCursor?: string | null) {
   const params = new URLSearchParams({ type: "dashboard" });
   if (openCursor) params.set("open_cursor", openCursor);
   return requestSupportJson<PlatformDashboardResponse>(`/api/platform-admin/support?${params.toString()}`, {
+    cache: "no-store",
+  });
+}
+
+export async function fetchPlatformOperationalHealth() {
+  if (IS_MOCK) {
+    const emptyWindow: PlatformOperationalHealthWindow = {
+      tracked_event_count: 0,
+      request_5xx_count: 0,
+      unhandled_exception_count: 0,
+      maintenance_failure_count: 0,
+      rate_limited_count: 0,
+      forbidden_count: 0,
+    };
+    return {
+      generated_at: new Date().toISOString(),
+      status: "healthy" as const,
+      windows: { last_15m: emptyWindow, last_24h: emptyWindow },
+      routes: [],
+      _status: 200,
+    };
+  }
+  return requestSupportJson<PlatformOperationalHealthResponse>("/api/platform-admin/support?type=health", {
     cache: "no-store",
   });
 }
