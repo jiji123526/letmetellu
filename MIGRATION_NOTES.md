@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat layer-stack extraction from `ChatView` — 2026-08-04
+
+- Extracted the remaining context-menu plus overlay render assembly into `src/components/chat/ChatViewLayerStack.tsx`, and exported the relevant hook result/types so that grouped chat UI state can be passed through without rebuilding the full overlay tree inline.
+- `ChatView` now delegates the bottom-of-file layer stack to one wrapper instead of interleaving `ContextMenu` and the large `ChatViewOverlays` prop surface directly inside the main container render.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat state-screen extraction from `ChatView` — 2026-08-04
 
 - Extracted non-main-view chat surfaces into `src/components/chat/ChatViewStateScreens.tsx`, covering the passcode gate wrapper, deleted-channel confirmation state, loading skeleton state, and expanded-post reader overlay.

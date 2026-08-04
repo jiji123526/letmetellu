@@ -47,7 +47,7 @@ interface UseChatAdminChannelActionsArgs<TChannel extends ChannelState> {
   };
 }
 
-interface UseChatAdminChannelActionsResult {
+export interface UseChatAdminChannelActionsResult {
   headerMenu: DOMRect | null;
   showSettings: boolean;
   showNotice: boolean;

@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { fetchInit, fetchOwnerChannels, getStoredUid, adminAction } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { useLocale } from "@/hooks/useLocale";
-import { ContextMenu } from "./ContextMenu";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
@@ -20,12 +19,12 @@ import { useChatMessageMutations } from "./useChatMessageMutations";
 import { useChatInteractions } from "./useChatInteractions";
 import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
 import { useChatChannelSettings } from "./useChatChannelSettings";
-import { ChatViewOverlays } from "./ChatViewOverlays";
 import { useChatContextMenuActions } from "./useChatContextMenuActions";
 import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 import { ChatViewTopChrome } from "./ChatViewTopChrome";
 import { ChatViewMessagePane } from "./ChatViewMessagePane";
 import { ChatViewBottomShell } from "./ChatViewBottomShell";
+import { ChatViewLayerStack } from "./ChatViewLayerStack";
 import {
   ChatViewDeletedState,
   ChatViewExpandedPostOverlay,
@@ -264,6 +263,34 @@ export function ChatView({ channelId }: { channelId: string }) {
     onExpiredLiveEnded: handleExpiredLiveEnded,
     onLiveModePresenceChange: handleLiveModePresenceChange,
   });
+  const adminUi = useChatAdminChannelActions({
+    channelId,
+    channel,
+    channelName: channel?.name,
+    ownerChannelCount,
+    inLiveMode,
+    liveActive,
+    bubbleColor: localBubbleColor || channel?.bubble_color || "#3b8df0",
+    galleryItems,
+    galleryHasMore,
+    galleryLoadingRef: galleryLoading,
+    setChannel,
+    setBanner,
+    setGalleryItems,
+    setGalleryHasMore,
+    onOpenLiveTitlePrompt: () => setShowLiveTitlePrompt(true),
+    onOpenEndLiveConfirm: () => setShowEndLiveConfirm(true),
+    text: {
+      chatUnfrozen: t("chatUnfrozen"),
+      chatFrozen: t("chatFrozen"),
+      channelLinkCopied: t("channelLinkCopied"),
+      channelShareFailed: t("channelShareFailed"),
+      channelReported: t("channelReported"),
+      reportAlreadySubmitted: t("reportAlreadySubmitted"),
+      reportOwnerCannot: t("reportOwnerCannot"),
+      reportChannelFailed: t("reportChannelFailed"),
+    },
+  });
   const {
     headerMenu,
     showSettings,
@@ -301,34 +328,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     handleAdminLiveToggle,
     handleShareChannel,
     handleChannelReportSubmit,
-  } = useChatAdminChannelActions({
-    channelId,
-    channel,
-    channelName: channel?.name,
-    ownerChannelCount,
-    inLiveMode,
-    liveActive,
-    bubbleColor: localBubbleColor || channel?.bubble_color || "#3b8df0",
-    galleryItems,
-    galleryHasMore,
-    galleryLoadingRef: galleryLoading,
-    setChannel,
-    setBanner,
-    setGalleryItems,
-    setGalleryHasMore,
-    onOpenLiveTitlePrompt: () => setShowLiveTitlePrompt(true),
-    onOpenEndLiveConfirm: () => setShowEndLiveConfirm(true),
-    text: {
-      chatUnfrozen: t("chatUnfrozen"),
-      chatFrozen: t("chatFrozen"),
-      channelLinkCopied: t("channelLinkCopied"),
-      channelShareFailed: t("channelShareFailed"),
-      channelReported: t("channelReported"),
-      reportAlreadySubmitted: t("reportAlreadySubmitted"),
-      reportOwnerCannot: t("reportOwnerCannot"),
-      reportChannelFailed: t("reportChannelFailed"),
-    },
-  });
+  } = adminUi;
   const {
     showSearch,
     searchState,
@@ -411,22 +411,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   });
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
-  const {
-    handleViewerColorChange,
-    handleToggleView,
-    handlePetitionToggle,
-    handleDmToggle: handleDmSettingsToggle,
-    handleShowOnProfileToggle,
-    handleColorChange,
-    handleBackgroundChange,
-    handleNameChange,
-    handleProfileImageChange,
-    handlePasscodeChange,
-    handleNoticeChange: handleRulesNoticeChange,
-    handleWelcomeChange,
-    handleUnblock,
-    handleNoticeEditSave,
-  } = useChatChannelSettings({
+  const settingsActions = useChatChannelSettings({
     channelId,
     bubbleColor,
     inLiveMode,
@@ -458,6 +443,22 @@ export function ChatView({ channelId }: { channelId: string }) {
       noticePosted: t("noticePosted"),
     },
   });
+  const {
+    handleViewerColorChange,
+    handleToggleView,
+    handlePetitionToggle,
+    handleDmToggle: handleDmSettingsToggle,
+    handleShowOnProfileToggle,
+    handleColorChange,
+    handleBackgroundChange,
+    handleNameChange,
+    handleProfileImageChange,
+    handlePasscodeChange,
+    handleNoticeChange: handleRulesNoticeChange,
+    handleWelcomeChange,
+    handleUnblock,
+    handleNoticeEditSave,
+  } = settingsActions;
 
   // Sync bubble color to CSS variable so var(--bubble-sent) works everywhere
   useEffect(() => {
@@ -935,69 +936,34 @@ export function ChatView({ channelId }: { channelId: string }) {
         bubbleColor={bubbleColor}
       />
 
-      {/* Context Menu */}
-      {contextMenu && (
-        <ContextMenu
-          msg={contextMenu.msg}
-          isSent={contextMenu.isSent}
-          anchorRect={contextMenu.rect}
-          bubbleEl={contextMenu.bubbleEl}
-          isAdmin={effectiveAdmin}
-          onReaction={handleReaction}
-          onReply={contextMenuActions.onReply}
-          onReport={contextMenuActions.onReport}
-          onUnreport={contextMenuActions.onUnreport}
-          isReported={contextMenuActions.isReported}
-          onDelete={contextMenuActions.onDelete}
-          onDeleteWithReplies={contextMenuActions.onDeleteWithReplies}
-          onEdit={contextMenuActions.onEdit}
-          onBlock={contextMenuActions.onBlock}
-          isBlockedUser={contextMenuActions.isBlockedUser}
-          onDismissReportMessage={contextMenuActions.onDismissReportMessage}
-          onReportAction={contextMenuActions.onReportAction}
-          onPetitionAction={contextMenuActions.onPetitionAction}
-          reportActionPending={contextMenuActions.reportActionPending}
-          onEmojiPicker={openEmojiPicker}
-          onClose={closeContextMenu}
-          isMyMessage={contextMenu.isOwn}
-        />
-      )}
-
-      <ChatViewOverlays
+      <ChatViewLayerStack
         channelId={channelId}
-        channelName={channel?.name || ""}
-        channelProfileImage={channel?.profile_image || null}
-        channelNotice={channel?.notice || "[]"}
+        channel={channel}
         bubbleColor={bubbleColor}
         welcomeConfig={welcomeConfig}
         activeNotice={activeNotice}
         locale={locale}
         timeZone={timeZone}
         effectiveAdmin={effectiveAdmin}
-        showModerationPetitionDialog={showModerationPetitionDialog}
-        submittingModerationPetition={submittingModerationPetition}
-        headerMenu={headerMenu}
-        showChannelReportDialog={showChannelReportDialog}
-        submittingChannelReport={submittingChannelReport}
-        showOwnerChannels={showOwnerChannels}
-        showSettings={showSettings}
-        showGallery={showGallery}
-        galleryItems={galleryItems}
-        galleryHasMore={galleryHasMore}
-        showLinks={showLinks}
-        linksChannelId={inLiveModeRef.current ? `${channelId}_live` : channelId}
-        showAdminPanel={showAdminPanel}
+        isAdmin={isAdmin}
+        ownerModerationBlocked={ownerModerationBlocked}
+        canUseAdminMutations={canUseAdminMutations}
         petitionEnabled={petitionEnabled}
         dmEnabled={dmEnabled}
         blockedUsers={blockedUsers}
+        galleryItems={galleryItems}
+        galleryHasMore={galleryHasMore}
         emojiPicker={emojiPicker}
         plusMenu={plusMenu}
         dmMode={dmMode}
-        isFrozen={!!channel?.is_frozen}
         liveActive={liveActive}
         inLiveMode={inLiveMode}
         reportsOwnerFilter={reportsOwnerFilter}
         isReportsOwnerView={isReportsOwnerView}
+        showModerationPetitionDialog={showModerationPetitionDialog}
+        submittingModerationPetition={submittingModerationPetition}
+        fullViewImage={fullViewImage}
+        linksChannelId={inLiveModeRef.current ? `${channelId}_live` : channelId}
         showLiveTitlePrompt={showLiveTitlePrompt}
         showEndLiveConfirm={showEndLiveConfirm}
         liveEndTitle={t("liveEndTitle")}
@@ -1006,72 +972,18 @@ export function ChatView({ channelId }: { channelId: string }) {
         showLiveEnded={showLiveEnded}
         showLivePopup={showLivePopup}
         liveTitle={liveTitle}
-        showEmojiPreset={showEmojiPreset}
-        showNoticeEdit={showNoticeEdit}
-        showNotice={showNotice}
-        fullViewImage={fullViewImage}
-        currentColor={bubbleColor}
-        backgroundType={channel?.background_type || "default"}
-        backgroundColor={channel?.background_color || null}
-        backgroundImage={channel?.background_image || null}
-        backgroundOverlay={channel?.background_overlay ?? 14}
-        backgroundBlur={channel?.background_blur === 1}
-        passcodeHint={channel?.passcode_hint || ""}
-        showOnProfile={channel?.show_on_profile === 1}
-        onHeaderSettings={openSettings}
-        onHeaderGallery={openGallery}
-        onHeaderLinks={openLinks}
-        onHeaderReportChannel={!isAdmin ? openChannelReportDialog : undefined}
-        onCloseHeaderMenu={closeHeaderMenu}
-        onChannelReportSubmit={handleChannelReportSubmit}
-        onCloseChannelReportDialog={closeChannelReportDialog}
-        onModerationPetitionSubmit={handleModerationPetitionSubmit}
-        onCloseModerationPetitionDialog={overlayCallbacks.closeModerationPetitionDialog}
-        onCloseOwnerChannels={closeOwnerChannels}
-        onViewerColorChange={handleViewerColorChange}
-        onSettingsAdmin={effectiveAdmin && !ownerModerationBlocked ? openAdminPanel : undefined}
-        onCloseSettings={closeSettings}
-        onLoadMoreGallery={loadMoreGallery}
-        onViewGalleryImage={overlayCallbacks.viewGalleryImage}
-        onCloseGallery={closeGallery}
-        onNavigateFromLinks={overlayCallbacks.navigateFromLinks}
-        onCloseLinks={closeLinks}
-        onToggleView={handleToggleView}
-        onPetitionToggle={handlePetitionToggle}
-        onDmToggle={handleDmSettingsToggle}
-        onShowOnProfileToggle={handleShowOnProfileToggle}
-        onColorChange={handleColorChange}
-        onBackgroundChange={handleBackgroundChange}
-        onNameChange={handleNameChange}
-        onProfileImageChange={handleProfileImageChange}
-        onPasscodeChange={handlePasscodeChange}
-        onRulesNoticeChange={handleRulesNoticeChange}
-        onWelcomeChange={handleWelcomeChange}
-        onUnblock={handleUnblock}
-        onCloseAdminPanel={closeAdminPanel}
-        onEmojiSelect={overlayCallbacks.handleOverlayEmojiSelect}
-        onCloseEmojiPicker={closeEmojiPicker}
-        onPlusPhoto={overlayCallbacks.openPlusPhotoPicker}
-        onPlusDmToggle={overlayCallbacks.togglePlusDmMode}
-        onFreezeToggle={canUseAdminMutations ? handleAdminFreezeToggle : undefined}
-        onLiveToggle={canUseAdminMutations ? handleAdminLiveToggle : undefined}
-        onPlusNotice={canUseAdminMutations ? openNoticeEdit : undefined}
-        onPlusEmojiPreset={openEmojiPreset}
         onReportFilterSelect={toggleReportsOwnerFilter}
-        onClosePlusMenu={overlayCallbacks.closePlusMenu}
-        onLiveStart={overlayCallbacks.startLiveFromPrompt}
-        onCloseLiveTitlePrompt={overlayCallbacks.closeLiveTitlePrompt}
-        onConfirmEndLive={overlayCallbacks.confirmEndLive}
-        onCancelEndLive={overlayCallbacks.cancelEndLive}
-        onCloseLiveEnded={overlayCallbacks.closeLiveEnded}
-        onJoinLivePopup={overlayCallbacks.joinLivePopup}
-        onDismissLivePopup={overlayCallbacks.dismissLivePopup}
-        onCloseEmojiPreset={closeEmojiPreset}
-        onNoticeEditSave={handleNoticeEditSave}
-        onCloseNoticeEdit={closeNoticeEdit}
-        onCloseNotice={closeNotice}
+        contextMenu={contextMenu}
+        contextMenuActions={contextMenuActions}
+        overlayCallbacks={overlayCallbacks}
+        adminUi={adminUi}
+        settingsActions={settingsActions}
+        onReaction={handleReaction}
+        onOpenEmojiPicker={openEmojiPicker}
+        onCloseContextMenu={closeContextMenu}
+        onModerationPetitionSubmit={handleModerationPetitionSubmit}
+        onCloseEmojiPicker={closeEmojiPicker}
         onCloseFullViewImage={closeFullViewImage}
-        onJumpFromGalleryImage={overlayCallbacks.jumpFromGalleryImage}
       />
     </div>
   );

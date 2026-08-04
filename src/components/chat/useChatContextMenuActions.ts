@@ -64,7 +64,7 @@ interface UseChatContextMenuActionsArgs {
   text: ContextMenuText;
 }
 
-interface UseChatContextMenuActionsResult {
+export interface UseChatContextMenuActionsResult {
   onReply?: (msgId: string) => void;
   onReport?: (msgId: string) => void;
   onUnreport?: (msgId: string) => void;

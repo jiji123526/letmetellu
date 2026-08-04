@@ -46,7 +46,7 @@ interface UseChatOverlayCallbacksArgs {
   closeGallery: () => void;
 }
 
-interface UseChatOverlayCallbacksResult {
+export interface UseChatOverlayCallbacksResult {
   closeModerationPetitionDialog: () => void;
   viewGalleryImage: (src: string, meta: GalleryMeta) => void;
   navigateFromLinks: (msgId: string) => void;

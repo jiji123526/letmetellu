@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { Message } from "./chatTypes";
 
-interface ContextMenuState {
+export interface ContextMenuState {
   msg: Message;
   isSent: boolean;
   isOwn: boolean;
@@ -11,7 +11,7 @@ interface ContextMenuState {
   bubbleEl: HTMLElement;
 }
 
-interface FullViewImageState {
+export interface FullViewImageState {
   src: string;
   caption?: string;
   date?: string;
@@ -27,7 +27,7 @@ export interface ExpandedPostState {
   height: number;
 }
 
-interface EmojiPickerState {
+export interface EmojiPickerState {
   msgId: string;
   rect: DOMRect;
 }

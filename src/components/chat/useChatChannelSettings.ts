@@ -65,7 +65,7 @@ interface UseChatChannelSettingsArgs<TChannel extends ChannelSettingsState> {
   };
 }
 
-interface UseChatChannelSettingsResult {
+export interface UseChatChannelSettingsResult {
   handleViewerColorChange: (color: string) => void;
   handleToggleView: () => void;
   handlePetitionToggle: () => void;
