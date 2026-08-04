@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Pre-beta domain, email and legacy-data audit — 2026-08-04
+
+- Verified the canonical `yapndot.com` deployment, HTTPS route, Auth.js provider metadata and Worker CORS response.
+- Confirmed Auth.js emits separate Google callback paths for `google-login` and `google-signup`; Google Cloud must register both exact paths.
+- Confirmed production Resend delivery is no longer sandbox-recipient limited and uses the verified `send.yapndot.com` sender.
+- Audited legacy production data without deleting it: seven credential test accounts, four channels owned by those accounts and six additional orphan channels were identified. Google accounts, the platform `reports` channel and the new verified credential account were excluded from the cleanup scope.
+
+Operational notes:
+
+- The cleanup did not execute: local and production `INTERNAL_SECRET` values intentionally differed, and broad export/injection of unrelated Vercel production secrets was rejected in favor of a future narrowly scoped maintenance path.
+- DNS changes briefly produced cached negative responses during apex CNAME flattening; authoritative Cloudflare and `1.1.1.1` responses later validated correctly, while local/Google caches required TTL expiry.
+- At audit time `www.yapndot.com` still served the app directly rather than redirecting to the canonical apex hostname, so the Vercel redirect remains a beta gate.
+
 ### Production Resend sender and recipient rollout — 2026-08-04
 
 - Replaced the Resend sandbox sender with `yap. <noreply@send.yapndot.com>` and updated verification and password-reset branding to `yap.`.

@@ -186,6 +186,13 @@ NEXT_PUBLIC_APP_ORIGIN=https://yapndot.com
 Use `https://yapndot.com` as the canonical origin. Redirect `www.yapndot.com`
 to the apex domain rather than serving both as independent application origins.
 
+Google OAuth production configuration uses two provider-specific callbacks:
+
+```text
+https://yapndot.com/api/auth/callback/google-login
+https://yapndot.com/api/auth/callback/google-signup
+```
+
 Worker secrets:
 
 ```bash

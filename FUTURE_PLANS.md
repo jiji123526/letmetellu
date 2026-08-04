@@ -18,10 +18,10 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Custom domain cutover
 
-- Application fallbacks, dashboard link parsing and Worker CORS are prepared for `https://yapndot.com`; the Worker production `APP_ORIGIN` has also been switched to the canonical apex origin.
-- Complete the external cutover by attaching the apex and `www` domains in Vercel, redirecting `www` to the apex, and setting Vercel `AUTH_URL`, `APP_ORIGIN` and `NEXT_PUBLIC_APP_ORIGIN` to the apex URL.
-- Add `https://yapndot.com` as an authorized Google OAuth JavaScript origin and `https://yapndot.com/api/auth/callback/google` as a redirect URI.
-- Verify the Resend sending domain, then smoke-test signup verification, password reset, Google login, normal login, channel links, uploads and realtime chat from the canonical hostname.
+- Application fallbacks, dashboard link parsing, Auth.js origin generation and Worker CORS now use `https://yapndot.com`; production Resend delivery uses the verified `send.yapndot.com` sender.
+- Confirm Vercel redirects `www.yapndot.com` to the apex instead of serving both hostnames independently.
+- Google OAuth requires both `https://yapndot.com/api/auth/callback/google-login` and `https://yapndot.com/api/auth/callback/google-signup`; retain the matching legacy Vercel callbacks only during rollback readiness.
+- Smoke-test signup verification, password reset, Google signup/login, normal login, channel links, uploads and realtime chat from the canonical hostname.
 - Remove the legacy Vercel hostname from Worker CORS only after the custom-domain smoke tests pass and no rollback traffic still depends on it.
 
 ### Abuse controls
@@ -60,6 +60,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Preserve the current synchronous user experience initially, but record durable cleanup progress so partial channel or media deletion can resume safely after a timeout or transient failure.
 - Define retention and deletion policy for closed support sessions, support tickets, reports, petitions, moderation audit logs and operational events before enabling broader automated cleanup.
 - Add dry-run counts, bounded batches and failure monitoring before expanding destructive scheduled maintenance.
+- The 2026-08-04 pre-beta audit identified seven legacy credential test accounts, four channels owned by those accounts and six additional orphan channels. The intended keep set includes all Google accounts, the platform `reports` channel and the new verified credential account. No destructive cleanup completed because the production internal secret intentionally differed from the local development value; use a narrowly scoped authenticated maintenance path rather than exporting all Vercel production secrets.
 
 ### Precomputed channel activity
 

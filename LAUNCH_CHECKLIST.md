@@ -1,6 +1,6 @@
 # Launch Checklist
 
-This checklist is for shipping `letmetellu` beyond ad hoc internal testing.
+This checklist is for shipping **yap.** beyond ad hoc internal testing.
 It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
 backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
@@ -17,14 +17,25 @@ Do not treat the app as public-launch ready until these are complete:
 - Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 
 3. Production email hardening
-- Move Resend out of sandbox mode with a verified sending domain.
-- Rehearse signup verification, password reset and legacy password-hash upgrade flows in production-like conditions.
+- Resend production delivery is enabled through `yap. <noreply@send.yapndot.com>`.
+- Rehearse signup verification, password reset and legacy password-hash upgrade flows in production-like conditions, including a non-owner recipient address.
 
 4. Custom production domain
-- Attach `yapndot.com` to Vercel and redirect `www.yapndot.com` to the apex domain.
-- Set frontend and Worker origins to `https://yapndot.com`.
-- Add the new JavaScript origin and `/api/auth/callback/google` redirect URI to Google OAuth.
-- Verify login cookies, email verification links, password-reset links and Worker CORS on the custom domain.
+- `yapndot.com` is attached to Vercel and frontend/Auth.js/Worker origins use `https://yapndot.com`.
+- Confirm `www.yapndot.com` redirects to the apex domain instead of serving a second independent app origin.
+- Google OAuth must include `https://yapndot.com` as an authorized JavaScript origin and both `/api/auth/callback/google-login` and `/api/auth/callback/google-signup` redirect URIs.
+- Verify login cookies, email verification links, password-reset links and Worker CORS on the custom domain after DNS caches settle.
+
+## Current limited-beta gate
+
+The domain, Worker CORS, Auth.js callback generation and production Resend sender are configured. Before inviting beta users:
+
+1. Complete one end-to-end email signup and password-reset flow using a non-owner mailbox.
+2. Complete Google signup and Google login from `yapndot.com`.
+3. Verify the `www` hostname redirects to the apex domain.
+4. Run the core chat, locked-channel, live, support and moderation smoke tests below in separate owner/viewer/incognito sessions.
+5. Confirm the super-admin health card is usable and keep `wrangler tail` available for the first beta sessions.
+6. Finish or explicitly defer the audited pre-beta test-data cleanup; no cleanup deletion was completed during the 2026-08-04 audit.
 
 ## Pre-deploy checks
 
