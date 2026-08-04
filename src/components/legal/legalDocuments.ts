@@ -219,9 +219,9 @@ const privacyKo: LegalDocumentContent = {
     {
       heading: "제26조(개인정보 처리업무의 위탁 및 외부 서비스)",
       bullets: [
-        "Vercel Inc.: 웹 애플리케이션 호스팅, 서버 요청 처리 및 배포",
-        "Cloudflare, Inc.: 데이터베이스(D1), 파일 저장(R2), 실시간 연결(Durable Objects), 보안 및 네트워크 처리",
-        "Plus Five Five, Inc.(Resend): 이메일 인증 및 비밀번호 재설정 이메일 발송",
+        "Vercel Inc.: 웹 서비스 호스팅 및 배포",
+        "Cloudflare, Inc.: 데이터·파일 저장, 실시간 통신 및 보안",
+        "Resend(Plus Five Five, Inc.): 인증 및 비밀번호 재설정 이메일 발송",
         "Google LLC: 이용자가 선택한 Google 계정 인증",
       ],
       paragraphs: [
@@ -231,8 +231,8 @@ const privacyKo: LegalDocumentContent = {
     {
       heading: "제27조(개인정보의 국외 이전)",
       bullets: [
-        "이전받는 자 및 국가: Vercel Inc.(미국 및 하위 처리업체 운영 국가), Cloudflare, Inc.(미국 및 글로벌 데이터센터 운영 국가), Plus Five Five, Inc.(미국), Google LLC(미국 및 Google 인프라 운영 국가)",
-        "이전 항목: 서비스 요청·접속 정보와 서비스 콘텐츠(Vercel 및 Cloudflare), 이메일 주소와 인증·재설정 메일 내용(Resend), Google 계정 식별값·이메일·프로필 정보(Google)",
+        "이전받는 자 및 국가: Vercel Inc., Cloudflare, Inc., Resend(Plus Five Five, Inc.), Google LLC(미국 및 각 업체의 서비스 제공 국가)",
+        "이전 항목: 서비스 이용·접속 정보와 이용자가 저장·전송한 콘텐츠, 이메일 주소와 인증·재설정 메일 정보, Google 계정 식별·프로필 정보",
         "이전 목적: 웹 서비스 제공, 데이터 및 파일 저장, 실시간 통신, 보안, 이메일 발송 및 이용자가 선택한 Google 인증",
         "이전 시기 및 방법: 서비스 이용, 파일 업로드, 이메일 발송 또는 Google 로그인 시 암호화된 네트워크를 통한 전송",
         "보유 및 이용기간: 각 처리 목적 달성, 서비스 계약 종료 또는 이용자 정보 삭제 시까지. 다만 각 업체에 적용되는 법령이나 백업 정책에 따라 필요한 범위에서 추가 보관될 수 있음",
@@ -480,9 +480,9 @@ const privacyEn: LegalDocumentContent = {
     {
       heading: "Article 26 (Processors and External Services)",
       bullets: [
-        "Vercel Inc.: web application hosting, server request handling, and deployment",
-        "Cloudflare, Inc.: database (D1), file storage (R2), realtime connections (Durable Objects), security, and network processing",
-        "Plus Five Five, Inc. (Resend): delivery of verification and password-reset emails",
+        "Vercel Inc.: web hosting and deployment",
+        "Cloudflare, Inc.: data and file storage, realtime communication, and security",
+        "Resend (Plus Five Five, Inc.): delivery of verification and password-reset emails",
         "Google LLC: Google account authentication selected by the user",
       ],
       paragraphs: [
@@ -492,8 +492,8 @@ const privacyEn: LegalDocumentContent = {
     {
       heading: "Article 27 (International Transfers)",
       bullets: [
-        "Recipients and countries: Vercel Inc. (United States and countries used by its subprocessors), Cloudflare, Inc. (United States and countries where its global data centers operate), Plus Five Five, Inc. (United States), and Google LLC (United States and countries where Google infrastructure operates)",
-        "Transferred information: Service requests, access information, and Service content (Vercel and Cloudflare); email address and verification/reset email content (Resend); Google account identifier, email, and profile information (Google)",
+        "Recipients and countries: Vercel Inc., Cloudflare, Inc., Resend (Plus Five Five, Inc.), and Google LLC (United States and countries where each provider delivers its services)",
+        "Transferred information: Service usage and access information, content stored or transmitted by users, email address and verification/reset email information, and Google account identifiers and profile information",
         "Purpose: web delivery, data and file storage, realtime communication, security, email delivery, and Google authentication selected by the user",
         "Timing and method: encrypted network transfer when the user accesses the Service, uploads a file, requests an email, or uses Google sign-in",
         "Retention: until the processing purpose is fulfilled, the provider agreement ends, or user information is deleted, subject to legally required retention and provider backup cycles",
@@ -577,7 +577,8 @@ const termsKo: LegalDocumentContent = {
       bullets: [
         "운영자는 본 약관을 서비스 내 법적 고지 페이지 또는 그에 준하는 화면에 게시합니다.",
         "운영자는 관련 법령, 서비스 구조 또는 운영 정책 변경이 있는 경우 약관을 수정할 수 있습니다.",
-        "이용자에게 불리한 변경이 있는 경우 시행일 전에 합리적인 방법으로 이를 공지합니다.",
+        "약관을 변경하는 경우 적용일과 주요 변경 사유를 원칙적으로 시행 7일 전부터 알립니다. 이용자에게 중대하거나 불리한 변경은 원칙적으로 30일 전에 서비스 화면에 공지하고, 가능한 경우 계정 이메일 등으로 추가 안내합니다.",
+        "법령 변경, 긴급한 보안 대응 또는 이용자 보호를 위해 사전 고지가 현저히 곤란한 경우에는 변경 후 지체 없이 그 사유와 내용을 알릴 수 있습니다.",
         "변경된 약관에 동의하지 않는 이용자는 회원 탈퇴 또는 서비스 이용 중단을 선택할 수 있습니다.",
         "변경 약관 시행 후에도 서비스를 계속 이용하는 경우 특별한 사정이 없는 한 변경된 약관에 동의한 것으로 봅니다.",
       ],
@@ -639,7 +640,8 @@ const termsKo: LegalDocumentContent = {
       bullets: [
         "운영자는 약관 위반, 신고 누적, 스팸, 차단 우회, 악성 자동화, 타인 권리 침해, 서비스 방해 행위가 있는 이용자에 대하여 경고, 게시물 삭제, 채널 제한, 신고 처리, 일시 정지, 영구 제한 등의 조치를 할 수 있습니다.",
         "회원 또는 비회원이 서비스 운영을 심각하게 방해하거나 안전을 해치는 경우 익명 식별값, 기기 식별값 또는 계정 기준으로 차단할 수 있습니다.",
-        "운영자는 필요한 경우 소명 기회를 부여할 수 있으나, 긴급 보안 또는 안전 조치가 우선될 수 있습니다.",
+        "운영자는 가능한 경우 제한의 주요 사유와 범위를 안내합니다. 이용자는 서비스 내 이의 제기 또는 이용 문의 경로를 통해 재검토를 요청할 수 있습니다.",
+        "긴급한 보안·안전 조치, 불법 콘텐츠 차단 또는 타 이용자 보호가 필요한 경우에는 조치를 먼저 적용한 후 안내하거나 재검토할 수 있습니다.",
       ],
     },
     {
@@ -684,18 +686,28 @@ const termsKo: LegalDocumentContent = {
         "이용자가 작성한 게시물의 저작권은 원칙적으로 해당 이용자에게 있습니다.",
         "이용자는 서비스 운영, 전송, 저장, 표시, 백업, 검색, 신고 검토, 보안 점검 및 분쟁 대응에 필요한 범위 내에서 운영자에게 게시물 이용에 대한 비독점적 사용권을 부여합니다.",
         "운영자는 법령 위반, 권리 침해, 안전 문제 또는 운영상 필요가 있는 경우 게시물을 삭제, 비공개 처리하거나 접근을 제한할 수 있습니다.",
+        "저작권 또는 기타 권리 침해를 주장하는 자는 대상 게시물, 권리 관계 및 연락 가능한 정보를 이용 문의 경로로 제출할 수 있으며, 운영자는 필요한 자료를 확인한 후 삭제·접근 제한 또는 복원 여부를 검토합니다.",
         "이용자는 자신의 게시물이 권리 침해 또는 법령 위반 여부와 관련하여 분쟁이 발생한 경우 관련 책임을 부담할 수 있습니다.",
       ],
     },
     {
       heading: "제17조(금지행위)",
       bullets: [
-        "허위 정보 입력, 타인 명의 도용, 계정 또는 익명 식별값의 부정 사용",
-        "욕설, 혐오, 협박, 성희롱, 음란물, 불법 촬영물, 아동·청소년 성착취물, 스팸, 사기, 불법 홍보 또는 그 밖의 법령 위반 게시물의 작성·공유",
+        "이용 신청·계정 정보 변경 또는 서비스 이용 과정에서 허위 사실이나 정보를 입력·게시하는 행위",
+        "타인의 개인정보·명의·계정·익명 식별값을 도용하거나 부정하게 사용하고, 타인 또는 특정 단체의 관계자로 가장하거나 그 관계를 허위로 표시하는 행위",
+        "타인의 명예·신용·권리 또는 정당한 이익을 침해하거나 타인에게 부당한 불이익을 주는 행위",
+        "욕설, 폭력, 차별, 혐오, 협박, 성희롱, 음란물, 불법 촬영물, 아동·청소년 성착취물, 사기 또는 그 밖의 불법·부당한 콘텐츠를 작성·공유하는 행위",
+        "영리 목적의 광고, 불법 홍보, 스팸 또는 반복성 메시지를 게시·전송하는 행위",
+        "재물을 걸고 도박하거나 사행행위를 운영·홍보·알선하는 행위",
+        "서비스를 음란물 유통, 성매매, 성적 만남의 알선 또는 이와 유사한 외부 활동과 연계하여 사용하는 행위",
+        "상대방의 의사에 반하여 종교·신념 가입을 반복적으로 권유하거나 강요하는 행위",
         "서비스의 차단, 제한, 신고, 동결 또는 보안 장치를 우회하려는 행위",
         "자동화 도구, 스크립트, 과도한 요청 등으로 서비스 운영을 방해하는 행위",
+        "악성코드·피싱·계정 탈취용 링크를 배포하거나 취약점을 악용하고, 서비스 또는 타 이용자의 기기에 비정상적인 동작을 유발하는 행위",
+        "운영자의 허가 없이 서비스를 크롤링·역설계하거나 보안 및 접근제어 조치를 시험·우회하는 행위. 다만 관련 법령이 허용하거나 운영자가 사전에 승인한 보안 연구는 제외합니다.",
         "다른 이용자의 개인정보를 무단 수집, 저장, 공개하거나 외부로 유출하는 행위",
-        "운영자 또는 제3자의 권리, 명예, 신용 또는 정당한 이익을 침해하는 행위",
+        "운영자 또는 제3자의 저작권, 상표권, 개인정보권 및 그 밖의 권리를 침해하는 행위",
+        "그 밖에 관련 법령을 위반하거나 서비스의 목적과 건전한 운영질서에 비추어 명백히 부당한 행위",
       ],
     },
     {
@@ -715,6 +727,7 @@ const termsKo: LegalDocumentContent = {
         "이용자는 본 약관, 개인정보처리방침, 서비스 내 안내 및 관련 법령을 준수하여야 합니다.",
         "이용자는 자신의 계정, 비밀번호, 로그인 수단 및 접근기기를 스스로 관리하여야 하며, 제3자에게 양도하거나 공유해서는 안 됩니다.",
         "이용자는 서비스 내에서 취득한 타인의 정보와 콘텐츠를 법령 및 권리 범위 내에서만 이용하여야 합니다.",
+        "채널 운영자는 초대 링크와 비밀번호를 적절히 관리하고, 자신이 정한 채널 규칙과 제재 기능을 차별·괴롭힘·보복 또는 권리 침해 목적으로 남용해서는 안 됩니다.",
         "등록정보가 부정확하거나 본 조를 위반하는 경우 운영자는 서비스 이용을 제한할 수 있습니다.",
       ],
     },
@@ -835,7 +848,8 @@ const termsEn: LegalDocumentContent = {
       bullets: [
         "The Operator posts these Terms through the Service's legal notice pages or an equivalent area of the Service.",
         "The Operator may revise these Terms when laws, Service structure, or operational policies change.",
-        "If a change is materially unfavorable to users, reasonable advance notice will be provided before the effective date.",
+        "Changes will generally be announced with their effective date and principal reason at least 7 days in advance. Material or unfavorable changes will generally be announced 30 days in advance and, where practicable, additionally sent to the account email.",
+        "Where advance notice is impracticable because of a legal change, urgent security response, or user-protection need, the Operator may provide notice without undue delay after the change and explain the reason.",
         "Users who do not agree to a revised version may stop using the Service or terminate their membership.",
         "Continued use of the Service after the revised Terms take effect will generally be treated as acceptance of the revised Terms.",
       ],
@@ -897,7 +911,8 @@ const termsEn: LegalDocumentContent = {
       bullets: [
         "The Operator may issue warnings, delete content, restrict channels, process reports, suspend use, or permanently ban users who violate these Terms or engage in abuse, spam, block evasion, malicious automation, rights infringement, or behavior harmful to Service safety.",
         "Users may be blocked by account, anonymous identity, or device-linked identifier where necessary to protect the Service or other users.",
-        "The Operator may provide an opportunity to explain, but urgent safety or security action may take priority.",
+        "Where practicable, the Operator will explain the principal reason and scope of a restriction. Users may request review through the in-Service petition or support path.",
+        "Urgent security or safety measures, unlawful-content restrictions, and steps needed to protect other users may be applied first and explained or reviewed afterward.",
       ],
     },
     {
@@ -942,18 +957,28 @@ const termsEn: LegalDocumentContent = {
         "Copyright in content created by a user generally remains with that user.",
         "The user grants the Operator a non-exclusive license to store, transmit, display, back up, search, review, and otherwise use the content as necessary to operate the Service, review reports, perform security checks, and handle disputes.",
         "The Operator may delete, hide, or restrict access to content where necessary for legal compliance, rights protection, safety, or Service operation.",
+        "A person alleging copyright or other rights infringement may submit the identified content, basis of the claimed right, and contact information through support. The Operator may review the submission and decide whether to remove, restrict, or restore the content.",
         "A user may bear responsibility if disputes arise over infringement, illegality, or other issues in the user's content.",
       ],
     },
     {
       heading: "Article 17 (Prohibited Conduct)",
       bullets: [
-        "Providing false information, misusing another person's identity, or using accounts or anonymous identifiers improperly",
-        "Posting or sharing abusive, hateful, threatening, sexually harassing, obscene, illegally recorded, child-exploitative, spam, fraudulent, or otherwise unlawful content",
+        "Entering or posting false facts or information when applying for, changing, or using an account or the Service",
+        "Misusing another person's personal information, identity, account, or anonymous identifier; impersonating another person or organization; or falsely claiming an affiliation",
+        "Harming another person's reputation, credit, rights, or legitimate interests, or causing that person an unjustified disadvantage",
+        "Posting or sharing abusive, violent, discriminatory, hateful, threatening, sexually harassing, obscene, illegally recorded, child-exploitative, fraudulent, or otherwise unlawful or improper content",
+        "Posting or sending commercial advertisements, unlawful promotions, spam, or repetitive messages",
+        "Operating, promoting, or facilitating gambling or games of chance involving money or property",
+        "Using the Service in connection with pornography distribution, prostitution, arranging sexual encounters, or similar external activity",
+        "Repeatedly soliciting or coercing another person to join a religion or belief system against that person's wishes",
         "Attempting to evade moderation, reporting, freezing, blocking, or security measures",
         "Using bots, scripts, scraping, or excessive requests to disrupt Service operation",
+        "Distributing malware, phishing material, or credential-theft links; exploiting vulnerabilities; or causing abnormal behavior in the Service or another user's device",
+        "Crawling, reverse engineering, testing, or bypassing security and access controls without authorization, except for activity permitted by law or security research approved in advance by the Operator",
         "Collecting, storing, disclosing, or leaking other users' personal information without authorization",
-        "Infringing the rights, reputation, credit, or legitimate interests of the Operator or any third party",
+        "Infringing copyrights, trademarks, privacy rights, or any other rights of the Operator or a third party",
+        "Any other conduct that violates applicable law or is clearly improper in light of the Service's purpose and orderly operation",
       ],
     },
     {
@@ -973,6 +998,7 @@ const termsEn: LegalDocumentContent = {
         "Users must comply with these Terms, the Privacy Policy, in-Service guidance, and applicable law.",
         "Users must manage their own accounts, passwords, sign-in methods, and access devices and must not transfer or share them with third parties.",
         "Users may use information and content obtained through the Service only within the limits permitted by law and applicable rights.",
+        "Channel owners must reasonably protect invitation links and passcodes and must not misuse channel rules or enforcement tools for discrimination, harassment, retaliation, or rights infringement.",
         "If registration information is inaccurate or the user violates this Article, the Operator may restrict Service use.",
       ],
     },
