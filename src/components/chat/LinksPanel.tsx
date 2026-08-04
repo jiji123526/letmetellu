@@ -124,16 +124,16 @@ function LinkPreviewCard({
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       ) : null}
-      <div style={{ padding: "10px 12px", minWidth: 0 }}>
-        <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--meta)", marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+      <div style={{ padding: "7px 8px", minWidth: 0 }}>
+        <div style={{ fontSize: "calc(var(--bubble-font-size) - 7px)", color: "var(--meta)", marginBottom: "3px", textTransform: "uppercase", letterSpacing: "0.3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {link.preview?.siteName || hostname}
         </div>
         {link.preview?.title ? (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 3px)", fontWeight: 500, color: "var(--gray-text)", lineHeight: 1.35, overflowWrap: "anywhere" }}>
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", fontWeight: 500, color: "var(--gray-text)", lineHeight: 1.3, overflowWrap: "anywhere", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
             {link.preview.title.length > 80 ? link.preview.title.slice(0, 80) + "…" : link.preview.title}
           </div>
         ) : (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--bubble-sent)", overflowWrap: "anywhere", lineHeight: 1.35 }}>
+          <div style={{ fontSize: "calc(var(--bubble-font-size) - 6px)", color: "var(--bubble-sent)", overflowWrap: "anywhere", lineHeight: 1.3, display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
             {link.url.replace(/^https?:\/\//, "")}
           </div>
         )}
@@ -245,7 +245,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
         </div>
 
         {/* Links grid */}
-        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "10px", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "10px", alignContent: "start" }}>
+        <div ref={scrollRef} onScroll={handleScroll} className="overflow-y-auto flex-1" style={{ padding: "8px", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "8px", alignContent: "start" }}>
           {loading ? (
             <div style={{ gridColumn: "1 / -1", padding: "40px", textAlign: "center", color: "var(--meta)", fontSize: "var(--bubble-font-size, 14px)" }}>{t("loading")}</div>
           ) : links.length === 0 ? (
