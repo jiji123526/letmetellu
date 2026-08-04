@@ -180,9 +180,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     const { results: ownedChannels } = await env.DB.prepare(
       "SELECT id FROM channels WHERE owner_uid = ? AND id NOT LIKE '%_live'"
     ).bind(user.id).all<{ id: string }>();
-    for (const channel of ownedChannels) {
-      await deleteChannel(channel.id, env);
-    }
+    await Promise.all((ownedChannels || []).map((channel) => deleteChannel(channel.id, env)));
 
     await env.DB.batch([
       env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(user.id),

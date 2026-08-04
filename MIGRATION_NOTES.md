@@ -499,6 +499,25 @@ Deployment notes:
 - deploy the Worker for this optimization;
 - no Next.js frontend deploy is required for this line.
 
+### Parallel owned-channel account teardown — 2026-08-04
+
+This Worker-only optimization shortens account deletion for users who own multiple channels.
+
+- The account-deletion path now deletes the user's owned channels in parallel instead of awaiting each `deleteChannel` call one-by-one.
+- This stays low risk because channel ownership is already capped to a small fixed count, and each channel still uses the existing `deleteChannel` teardown logic.
+- User deletion semantics, response shape, and downstream cleanup are unchanged.
+
+Trade-offs:
+
+- Account deletion now creates a small burst of concurrent D1, Durable Object, and R2 cleanup work instead of a strictly serial teardown.
+- Because the path still relies on `Promise.all`, one failing channel deletion continues to fail the whole request, which preserves the existing all-or-nothing request behavior but does not introduce partial-progress reporting.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line.
+
 ### Dashboard refresh request coalescing — 2026-08-04
 
 This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.
