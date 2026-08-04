@@ -17,6 +17,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Added `scripts/prepare-legacy-main-migration.mjs` as a credential-free, auditable preparation tool. It fetches paginated Supabase rows, validates reply/gallery references, downloads and hashes media, pseudonymizes legacy actors, and produces D1 SQL plus a media manifest in a caller-selected output directory.
 - Corrected the gallery panel lookup to join through `messages.gallery_id` instead of assuming gallery and message primary keys are identical. This keeps ordinary uploads working and makes imported gallery identifiers visible without rewriting production history.
 - Changed link-preview caching so transient fetch failures are not cached for the entire browser session; reopening the panel can retry while successful previews remain cached.
+- Changed oversized preview handling to read and parse only the first 512 KB of HTML instead of rejecting a page solely because its full `Content-Length` is larger. This preserves the response-size and memory bound while allowing metadata from large article pages such as Posty to render.
 
 Trade-offs:
 

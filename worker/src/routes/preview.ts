@@ -68,12 +68,6 @@ async function fetchPreviewDocument(initialUrl: URL): Promise<Response> {
 }
 
 async function readResponseTextWithLimit(response: Response): Promise<string> {
-  const contentLengthHeader = response.headers.get("Content-Length");
-  const declaredLength = contentLengthHeader ? Number.parseInt(contentLengthHeader, 10) : NaN;
-  if (Number.isFinite(declaredLength) && declaredLength > PREVIEW_MAX_RESPONSE_BYTES) {
-    throw new PreviewError("preview response too large", 413);
-  }
-
   const reader = response.body?.getReader();
   if (!reader) return "";
 
@@ -84,11 +78,15 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > PREVIEW_MAX_RESPONSE_BYTES) {
+
+    const remainingBytes = PREVIEW_MAX_RESPONSE_BYTES - totalBytes;
+    if (value.byteLength > remainingBytes) {
+      html += decoder.decode(value.subarray(0, remainingBytes), { stream: true });
       await reader.cancel();
-      throw new PreviewError("preview response too large", 413);
+      break;
     }
+
+    totalBytes += value.byteLength;
     html += decoder.decode(value, { stream: true });
   }
 
