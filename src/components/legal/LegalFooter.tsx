@@ -21,7 +21,7 @@ export function LegalFooter() {
   const text = copy[locale];
 
   return (
-    <footer className="mt-auto px-5 pb-8 pt-5 text-center">
+    <footer className="mt-auto px-5 pt-5 text-center">
       <div className="flex items-center justify-center gap-3 text-[12px]">
         <Link href="/privacy" className="no-underline transition-opacity hover:opacity-100" style={{ color: "var(--meta)", opacity: 0.82 }}>
           {text.privacy}
