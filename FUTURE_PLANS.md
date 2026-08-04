@@ -81,7 +81,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Email and account hardening
 
-- Move Resend out of sandbox mode with a verified sending domain.
+- Resend now uses the verified `send.yapndot.com` sender and no longer restricts signup or password-reset delivery to the sandbox recipient. Monitor delivery and bounce behavior during beta.
 - Validate the legacy SHA-256 to PBKDF2 upgrade path end to end in production-like conditions.
 - The beta dependency pass is currently clean under both production-only and full `npm audit`; repeat the audit before broader releases and continue normal upgrades without `npm audit fix --force`.
 

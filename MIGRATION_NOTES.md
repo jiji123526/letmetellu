@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Production Resend sender and recipient rollout — 2026-08-04
+
+- Replaced the Resend sandbox sender with `yap. <noreply@send.yapndot.com>` and updated verification and password-reset branding to `yap.`.
+- Removed the `EMAIL_TEST_RECIPIENT` gates from signup and password-reset delivery, allowing valid recipients after the sending domain was verified.
+- Preserved neutral password-reset responses for unknown accounts so the change does not expose whether an email is registered.
+
+Trade-offs:
+
+- Signup and reset requests now create real outbound email traffic for every eligible request, making the existing per-email and per-IP rate limits operationally important.
+- A Resend domain or DNS regression now affects all credential users rather than only the test account; delivery failures return the existing bounded error and must be monitored.
+- The sender address is intentionally tied to the verified `send.yapndot.com` subdomain. Changing that Resend domain requires a coordinated code and DNS update.
+
+Deployment notes:
+
+- requires the verified Resend sending domain and existing `RESEND_API_KEY` Worker secret;
+- no D1 migration is required;
+- deploy the Worker, then smoke-test one new signup and one password-reset delivery to a non-owner address.
+
 ### Canonical production domain preparation — 2026-08-04
 
 - Changed the application fallback and documented production origin from the Vercel hostname to `https://yapndot.com`.

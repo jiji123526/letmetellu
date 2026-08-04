@@ -192,9 +192,12 @@ Worker secrets:
 cd worker
 npx wrangler secret put INTERNAL_SECRET
 npx wrangler secret put RESEND_API_KEY
-npx wrangler secret put EMAIL_TEST_RECIPIENT
 npx wrangler secret put APP_ORIGIN
 ```
+
+Production email is sent through the verified Resend domain as
+`yap. <noreply@send.yapndot.com>`. The former `EMAIL_TEST_RECIPIENT` sandbox
+gate is no longer used.
 
 Set the production Worker `APP_ORIGIN` secret to `https://yapndot.com`. The
 Worker CORS allowlist keeps the Vercel hostname during the DNS transition and

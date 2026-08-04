@@ -11,6 +11,7 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_EMAIL_FAILURES = 10;
 const MAX_LOGIN_IP_FAILURES = 50;
 const DUMMY_PASSWORD_HASH = "pbkdf2-sha256$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+const EMAIL_FROM = "yap. <noreply@send.yapndot.com>";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -92,18 +93,18 @@ async function sendVerificationEmail(
   verificationUrl.searchParams.set("token", rawToken);
   verificationUrl.searchParams.set("lang", locale);
   const korean = locale === "ko";
-  const subject = korean ? "Let Me Tell U 이메일을 인증해 주세요" : "Verify your Let Me Tell U email";
+  const subject = korean ? "yap. 이메일을 인증해 주세요" : "Verify your yap. email";
   const title = korean ? "이메일을 인증해 주세요" : "Verify your email";
   const description = korean
-    ? "Let Me Tell U 계정 생성을 완료하려면 이 이메일을 인증해 주세요."
-    : "Confirm this email to finish creating your Let Me Tell U account.";
+    ? "yap. 계정 생성을 완료하려면 이 이메일을 인증해 주세요."
+    : "Confirm this email to finish creating your yap. account.";
   const buttonLabel = korean ? "이메일 인증하기" : "Verify email";
   const expiration = korean
     ? "이 링크는 30분 동안 유효합니다. 요청하지 않았다면 이 메일을 무시해 주세요."
     : "This link expires in 30 minutes. If you did not request this, you can ignore this email.";
   const text = korean
-    ? `Let Me Tell U 이메일을 인증해 주세요:\n\n${verificationUrl.toString()}\n\n${expiration}`
-    : `Verify your email for Let Me Tell U:\n\n${verificationUrl.toString()}\n\n${expiration}`;
+    ? `yap. 이메일을 인증해 주세요:\n\n${verificationUrl.toString()}\n\n${expiration}`
+    : `Verify your email for yap.:\n\n${verificationUrl.toString()}\n\n${expiration}`;
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -113,7 +114,7 @@ async function sendVerificationEmail(
       "Idempotency-Key": `verify-${tokenHash}`,
     },
     body: JSON.stringify({
-      from: "Let Me Tell U <onboarding@resend.dev>",
+      from: EMAIL_FROM,
       to: [email],
       subject,
       text,
@@ -146,7 +147,7 @@ async function sendPasswordResetEmail(
   resetUrl.searchParams.set("token", rawToken);
   resetUrl.searchParams.set("lang", locale);
   const korean = locale === "ko";
-  const subject = korean ? "Let Me Tell U 비밀번호 재설정" : "Reset your Let Me Tell U password";
+  const subject = korean ? "yap. 비밀번호 재설정" : "Reset your yap. password";
   const title = korean ? "비밀번호를 재설정하세요" : "Reset your password";
   const description = korean
     ? "아래 버튼을 눌러 새 비밀번호를 설정해 주세요."
@@ -164,7 +165,7 @@ async function sendPasswordResetEmail(
       "Idempotency-Key": `reset-${tokenHash}`,
     },
     body: JSON.stringify({
-      from: "Let Me Tell U <onboarding@resend.dev>",
+      from: EMAIL_FROM,
       to: [email],
       subject,
       text: `${title}\n\n${resetUrl.toString()}\n\n${expiration}`,
@@ -220,7 +221,7 @@ async function handlePasswordResetRequest(
   ).bind(email).first<{ id: string; email: string }>();
 
   // Always return the same response so callers cannot discover registered emails.
-  if (!user || email !== normalizeEmail(env.EMAIL_TEST_RECIPIENT || "")) {
+  if (!user) {
     return Response.json({ ok: true });
   }
 
@@ -304,11 +305,6 @@ async function handleSignup(
   if (password.length < 8 || password.length > 128) {
     return Response.json({ error: "weak_password" }, { status: 400 });
   }
-  // Resend sandbox can deliver only to the address that owns the Resend account.
-  if (email !== normalizeEmail(env.EMAIL_TEST_RECIPIENT || "")) {
-    return Response.json({ ok: true, pending: true });
-  }
-
   const now = Date.now();
   const clientIp = request.headers.get("X-Client-IP") || "unknown";
   const ipHash = await sha256(clientIp);
