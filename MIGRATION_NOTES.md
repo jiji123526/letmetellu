@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat message-pane extraction from `ChatView` — 2026-08-04
+
+- Extracted the message viewport shell into `src/components/chat/ChatViewMessagePane.tsx`, covering the message-area background treatment, notice banner, live viewer count badge, restricted-channel summary card, `MessageList` mount point, and bottom anchor element.
+- `ChatView` now delegates that middle render block to one focused component instead of mixing the viewport shell with history orchestration, overlay wiring, and composer state in the main container.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat top-chrome extraction from `ChatView` — 2026-08-04
 
 - Extracted the top header/search/live-banner shell into `src/components/chat/ChatViewTopChrome.tsx`, covering the channel header, search bar, inline edit panel, admin return banner, live join/exit banners, countdown banner, and offline banner.

@@ -10,10 +10,8 @@ import { ContextMenu } from "./ContextMenu";
 import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { NoticeBanner } from "./NoticeBanner";
 import { EmojiBar, spawnEmoji } from "./EmojiBar";
 import { PasscodeOverlay } from "./PasscodeOverlay";
-import { MessageList } from "./ChatMessageList";
 import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
@@ -34,6 +32,7 @@ import { ChatViewOverlays } from "./ChatViewOverlays";
 import { useChatContextMenuActions } from "./useChatContextMenuActions";
 import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 import { ChatViewTopChrome } from "./ChatViewTopChrome";
+import { ChatViewMessagePane } from "./ChatViewMessagePane";
 
 interface Channel {
   id: string;
@@ -1332,187 +1331,51 @@ export function ChatView({ channelId }: { channelId: string }) {
         }}
       />
 
-      {/* Messages */}
-      <div
-        className="relative flex-1 min-h-0 overflow-hidden"
-        style={{
-          backgroundColor: channel?.background_type === "color"
-            ? (channel.background_color || "var(--bg)")
-            : "var(--bg)",
-        }}
-      >
-        {channel?.background_type === "image" && channel.background_image && (
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage: `linear-gradient(rgba(0,0,0,${(channel.background_overlay ?? 14) / 100}), rgba(0,0,0,${(channel.background_overlay ?? 14) / 100})), url("${channel.background_image}")`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              filter: channel.background_blur ? "blur(5px)" : "none",
-              transform: channel.background_blur ? "scale(1.04)" : "none",
-            }}
-          />
-        )}
-        {activeNotice && (
-          <NoticeBanner
-            channelId={inLiveMode ? `${channelId}_live` : channelId}
-            notice={activeNotice}
-            onDismiss={() => setActiveNotice("")}
-          />
-        )}
-        {/* Live viewer count — overlays top-right of messages area */}
-        {inLiveMode && (
-          <div style={{ position: "absolute", top: "14px", right: "14px", zIndex: 11, display: "inline-flex", alignItems: "center", gap: "0.28em", padding: "0.28em 0.58em", borderRadius: "999px", background: "rgba(60,60,67,.10)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", color: "rgba(60,60,67,.68)", fontSize: "var(--bubble-font-size, 13px)", fontWeight: 600, lineHeight: 1, pointerEvents: "none" }}>
-            <svg viewBox="0 0 24 24" style={{ width: "1.05em", height: "1.05em" }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="8" r="3.25" /><path d="M5.75 19c.45-4 2.55-6 6.25-6s5.8 2 6.25 6" />
-            </svg>
-            <span>{liveCount}</span>
-          </div>
-        )}
-        <main
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-          className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
-          style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", background: "transparent" }}
-        >
-        {isReportsOwnerView && restrictedChannels.length > 0 && (
-          <section
-            style={{
-              marginBottom: "12px",
-              padding: "12px",
-              borderRadius: "18px",
-              background: "rgba(255,255,255,0.88)",
-              border: "1px solid rgba(15,23,42,0.08)",
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              boxShadow: "0 10px 30px rgba(15,23,42,0.08)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "8px",
-                marginBottom: "10px",
-              }}
-            >
-              <strong style={{ fontSize: "calc(var(--bubble-font-size) - 1px)", color: "#0f172a" }}>
-                {t("restrictedChannelsTitle")}
-              </strong>
-              <span style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>
-                {restrictedChannels.length}
-              </span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {restrictedChannels.map((item) => (
-                <a
-                  key={item.channelId}
-                  href={`/ch/${encodeURIComponent(item.channelId)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "10px",
-                    padding: "10px 12px",
-                    borderRadius: "14px",
-                    background: "#f8fafc",
-                    color: "inherit",
-                    textDecoration: "none",
-                    border: "1px solid rgba(148,163,184,0.22)",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "var(--bubble-font-size)", fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {item.channelName}
-                    </div>
-                    <div style={{ marginTop: "5px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "3px 8px",
-                          borderRadius: "999px",
-                          fontSize: "calc(var(--bubble-font-size) - 5px)",
-                          fontWeight: 700,
-                          background: item.moderationStatus === "frozen" ? "#fee2e2" : "#fff7d6",
-                          color: item.moderationStatus === "frozen" ? "#991b1b" : "#8a5a00",
-                        }}
-                      >
-                        {item.moderationStatus === "frozen" ? t("reportModerationFrozen") : t("reportModerationSuspended")}
-                      </span>
-                      {item.hasOpenReport && (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "3px 8px",
-                            borderRadius: "999px",
-                            fontSize: "calc(var(--bubble-font-size) - 5px)",
-                            fontWeight: 600,
-                            background: "#e0ecff",
-                            color: "#1d4ed8",
-                          }}
-                        >
-                          {t("reportOpenBadge")}
-                        </span>
-                      )}
-                      {item.hasOpenPetition && (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "3px 8px",
-                            borderRadius: "999px",
-                            fontSize: "calc(var(--bubble-font-size) - 5px)",
-                            fontWeight: 600,
-                            background: "#ede9fe",
-                            color: "#6d28d9",
-                          }}
-                        >
-                          {t("petitionOpenBadge")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span style={{ flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "var(--meta)" }}>
-                    {t("viewReportedChannel")}
-                  </span>
-                </a>
-              ))}
-            </div>
-          </section>
-        )}
-        <MessageList
-          threadedMessages={threadedMessages}
-          effectiveAdmin={effectiveAdmin}
-          uid={uid}
-          authUserId={authUserId}
-          bubbleColor={bubbleColor}
-          reportedMsgIds={reportedMsgIds}
-          reportedTargetIds={reportedTargetIds}
-          blockedUidSet={blockedUidSet}
-          searchQuery={searchState.query}
-          searchResultIdSet={searchResultIdSet}
-          activeSearchId={searchState.activeId}
-          deletedMessageLabel={t("deletedMessage")}
-          editedMessageLabel={t("edited")}
-          locale={locale}
-          timeZone={timeZone}
-          onLongPress={openContextMenu}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          onOpenImage={openMessageImage}
-          onExpand={openExpandedPost}
-          onReaction={handleReaction}
-          onEmojiPicker={openEmojiPicker}
-        />
-        <div ref={messagesEndRef} />
-        </main>
-      </div>
+      <ChatViewMessagePane
+        channelId={channelId}
+        inLiveMode={inLiveMode}
+        backgroundType={channel?.background_type || "default"}
+        backgroundColor={channel?.background_color || null}
+        backgroundImage={channel?.background_image || null}
+        backgroundOverlay={channel?.background_overlay ?? 14}
+        backgroundBlur={channel?.background_blur === 1}
+        activeNotice={activeNotice}
+        onDismissNotice={() => setActiveNotice("")}
+        liveCount={liveCount}
+        messagesContainerRef={messagesContainerRef}
+        messagesEndRef={messagesEndRef}
+        onScroll={handleScroll}
+        isReportsOwnerView={isReportsOwnerView}
+        restrictedChannels={restrictedChannels}
+        restrictedChannelsTitle={t("restrictedChannelsTitle")}
+        reportModerationFrozenLabel={t("reportModerationFrozen")}
+        reportModerationSuspendedLabel={t("reportModerationSuspended")}
+        reportOpenBadgeLabel={t("reportOpenBadge")}
+        petitionOpenBadgeLabel={t("petitionOpenBadge")}
+        viewReportedChannelLabel={t("viewReportedChannel")}
+        threadedMessages={threadedMessages}
+        effectiveAdmin={effectiveAdmin}
+        uid={uid}
+        authUserId={authUserId}
+        bubbleColor={bubbleColor}
+        reportedMsgIds={reportedMsgIds}
+        reportedTargetIds={reportedTargetIds}
+        blockedUidSet={blockedUidSet}
+        searchQuery={searchState.query}
+        searchResultIdSet={searchResultIdSet}
+        activeSearchId={searchState.activeId}
+        deletedMessageLabel={t("deletedMessage")}
+        editedMessageLabel={t("edited")}
+        locale={locale}
+        timeZone={timeZone}
+        onLongPress={openContextMenu}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onOpenImage={openMessageImage}
+        onExpand={openExpandedPost}
+        onReaction={handleReaction}
+        onEmojiPicker={openEmojiPicker}
+      />
 
       {/* Long-message reader, constrained to the visible chat field. */}
       {expandedPost && (
