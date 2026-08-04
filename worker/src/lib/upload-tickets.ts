@@ -8,6 +8,7 @@ const MAX_UPLOADS_PER_UID_WINDOW = 12;
 const MAX_UPLOADS_PER_IP_WINDOW = 24;
 const MAX_PENDING_UPLOADS_PER_UID = 4;
 const MAX_PENDING_UPLOADS_PER_IP = 8;
+const UPLOAD_TICKET_CLEANUP_DELETE_CONCURRENCY = 16;
 
 function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -42,18 +43,20 @@ export async function cleanupExpiredUploadTickets(env: Env, limit = 50): Promise
     "SELECT id, key FROM upload_tickets WHERE status = 'pending' AND expires_at <= ? ORDER BY expires_at ASC LIMIT ?"
   ).bind(now, limit).all<{ id: string; key: string }>();
 
-  for (const row of results || []) {
-    await env.MEDIA.delete(row.key).catch(() => {});
+  const rows = results || [];
+  for (let index = 0; index < rows.length; index += UPLOAD_TICKET_CLEANUP_DELETE_CONCURRENCY) {
+    const batch = rows.slice(index, index + UPLOAD_TICKET_CLEANUP_DELETE_CONCURRENCY);
+    await Promise.all(batch.map((row) => env.MEDIA.delete(row.key).catch(() => {})));
   }
 
-  if ((results || []).length > 0) {
-    const ids = (results || []).map((row) => row.id);
+  if (rows.length > 0) {
+    const ids = rows.map((row) => row.id);
     const placeholders = ids.map(() => "?").join(", ");
     await env.DB.prepare(`DELETE FROM upload_tickets WHERE id IN (${placeholders})`)
       .bind(...ids)
       .run();
   }
-  return (results || []).length;
+  return rows.length;
 }
 
 export async function enforceUploadQuota(input: {

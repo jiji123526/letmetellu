@@ -403,6 +403,25 @@ Deployment notes:
 - no Worker deploy is required for this optimization;
 - deploy the Next.js frontend for this line.
 
+### Concurrent scheduled upload cleanup batches — 2026-08-04
+
+This Worker-only optimization shortens the hourly abandoned-upload cleanup sweep without changing its retention policy.
+
+- Each `cleanupExpiredUploadTickets` batch still selects the same expired pending upload-ticket rows and deletes the same rows from D1 afterward.
+- R2 object deletions inside that batch are now processed in bounded parallel groups of `16` instead of one-by-one.
+- Upload quotas, upload-ticket expiry rules and the hourly cleanup schedule are unchanged.
+
+Trade-offs:
+
+- The scheduled cleanup sweep now uses a small amount of parallel R2 delete pressure during each batch instead of purely serial calls.
+- Deletion failures are still treated the same way as before: they are swallowed so the maintenance pass can continue, which keeps this change low risk but does not add retry tracking.
+
+Deployment notes:
+
+- no new D1 migration is required;
+- deploy the Worker for this optimization;
+- no Next.js frontend deploy is required for this line.
+
 ### Dashboard refresh request coalescing — 2026-08-04
 
 This frontend-only optimization prevents the dashboard's overlapping refresh triggers from starting duplicate support-preview and platform-dashboard fetches at the same time.
