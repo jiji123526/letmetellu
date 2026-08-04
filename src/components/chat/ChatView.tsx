@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { clearRoomToken, decorateMediaUrl, decorateMessageMedia, decorateProtectedMediaUrl, fetchInit, fetchOwnerChannels, getStoredUid, adminAction, fetchMessages } from "@/lib/api";
+import { fetchInit, fetchOwnerChannels, getStoredUid, adminAction } from "@/lib/api";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -10,16 +10,13 @@ import { ContextMenu } from "./ContextMenu";
 import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { EmojiBar, spawnEmoji } from "./EmojiBar";
+import { EmojiBar } from "./EmojiBar";
 import { PasscodeOverlay } from "./PasscodeOverlay";
-import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
+import { removeRecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
-import {
-  mergeServerMessageSnapshot,
-} from "./chatMessageUtils";
-import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
+import type { Message } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReportsSearch } from "./useChatReportsSearch";
@@ -34,6 +31,7 @@ import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 import { ChatViewTopChrome } from "./ChatViewTopChrome";
 import { ChatViewMessagePane } from "./ChatViewMessagePane";
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
+import { useChatRealtimeSync } from "./useChatRealtimeSync";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -511,325 +509,53 @@ export function ChatView({ channelId }: { channelId: string }) {
     setBanner,
   });
 
-  // Debounce not needed — local patching handles most events, reconnect does full refetch
-
-  // Listen for realtime updates
-  useEffect(() => {
-    return subscribe((event) => {
-      // New message — append to local array
-      if (event.type === "message-new") {
-        const msg = decorateMessageMedia(event.message as Message);
-        // Only add if it belongs to the channel we're viewing
-        const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        if (msg.channel_id === viewingChannel) {
-          if (historyModeRef.current === "context") {
-            setNewerMessageCount((count) => count + 1);
-            return;
-          }
-          const shouldFollowNewMessage = isNearBottomRef.current;
-          setMessages((prev) => {
-            // Avoid duplicates (e.g. our own message already shown optimistically)
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
-          if (shouldFollowNewMessage) {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-              });
-            });
-          }
-        }
-      }
-      // Message edited — patch text in place
-      if (event.type === "message-edited") {
-        const id = event.message_id as string;
-        setMessages((prev) => prev.map((m) =>
-          m.id === id
-            ? {
-                ...m,
-                text: event.text as string,
-                edited: true,
-                report_meta: event.report_meta ? event.report_meta as ReportMeta : m.report_meta,
-                petition_meta: event.petition_meta ? event.petition_meta as PetitionMeta : m.petition_meta,
-              }
-            : m
-        ));
-      }
-      // Message deleted — remove or mark as deleted
-      if (event.type === "message-deleted") {
-        const id = event.message_id as string;
-        const deletedIds = new Set(
-          Array.isArray(event.deleted_ids) ? event.deleted_ids as string[] : [id]
-        );
-        setGalleryItems((prev) => prev.filter((item) => !deletedIds.has(item.id)));
-        if (event.soft) {
-          // User soft-delete (own message with replies) — keep as placeholder if has replies
-          setMessages((prev) => {
-            const hasReplies = prev.some((m) => m.reply_to === id);
-            if (hasReplies) {
-              return prev.map((m) => m.id === id ? { ...m, deleted: true, text: t("deletedMessage"), image: null } : m);
-            }
-            return prev.filter((m) => m.id !== id);
-          });
-        } else {
-          // Admin hard-delete — remove message and its replies entirely
-          setMessages((prev) => prev.filter((m) => m.id !== id && m.reply_to !== id));
-        }
-      }
-      // Reconnect or bulk sync — full refetch as safety net
-      if (event.type === "reconnected" || event.type === "messages-sync") {
-        if (historyModeRef.current === "latest") {
-          const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-          fetchMessages(fetchChannel).then((data) => {
-            if (data.messages) {
-              setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
-            }
-          }).catch(() => {});
-        }
-      }
-      // A reconnect can happen while a settings broadcast is in flight (and
-      // local Wrangler restarts its isolated Durable Object during development).
-      // Refresh channel configuration as well as messages so non-admin viewers
-      // do not keep a stale profile or background until a manual reload.
-      if (event.type === "reconnected" && !isOwner && !isAdmin) {
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchInit(fetchChannel).then((data: InitData) => {
-          if (!data.channel || data.messages === undefined) return;
-          setChannel(data.channel);
-          if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
-          if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
-          if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
-          if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
-          setOwnerModeration(data.ownerModeration);
-          setViewerModerationStatus(data.viewerModerationStatus ?? null);
-        }).catch(() => {});
-      }
-      // Re-send join-live on reconnect so DO has accurate count
-      if (event.type === "reconnected" && inLiveModeRef.current) {
-        send({ type: "join-live" });
-      }
-      if (event.type === "dm-new") {
-        const dm = decorateMessageMedia(event.dm as Message);
-        const viewingChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        if (dm.channel_id === viewingChannel) {
-          setDmMessages((prev) => {
-            if (prev.some((d) => d.id === dm.id)) return prev;
-            return [...prev, { ...dm, dm: true }];
-          });
-        }
-      }
-      if (event.type === "dm-deleted") {
-        const dmId = event.dm_id as string;
-        setDmMessages((prev) => prev.filter((d) => d.id !== dmId));
-      }
-      if (event.type === "freeze-change") {
-        const isLiveFreeze = !!event.live;
-        if (isLiveFreeze && inLiveModeRef.current) {
-          setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
-        } else if (!isLiveFreeze && !inLiveModeRef.current) {
-          setChannel((prev) => prev ? { ...prev, is_frozen: event.frozen ? 1 : 0 } : null);
-          if (event.moderation && event.frozen) {
-            setViewerModerationStatus("frozen");
-          } else if (event.moderation && !event.frozen) {
-            setViewerModerationStatus((previous) => previous === "frozen" ? null : previous);
-          }
-        }
-        if (isOwner) refreshOwnerModeration();
-      }
-      if (event.type === "moderation-state-change" && !event.live) {
-        setViewerModerationStatus(event.status === "frozen" ? "frozen" : null);
-      }
-      if (event.type === "profile-change") {
-        const nextProfileImage = event.profile_image !== undefined
-          ? decorateMediaUrl(event.profile_image as string | null)
-          : undefined;
-        const nextBackgroundImage = event.background_image !== undefined
-          ? decorateProtectedMediaUrl(event.background_image as string | null)
-          : undefined;
-        updateRecentChannelAppearance(channelId, {
-          ...(event.name ? { name: event.name as string } : {}),
-          ...(nextProfileImage !== undefined ? { profileImage: nextProfileImage } : {}),
-          ...(event.bubble_color && !localBubbleColor ? { bubbleColor: event.bubble_color as string } : {}),
-        });
-        setChannel((prev) => {
-          if (!prev) return null;
-          const updated = { ...prev };
-          if (event.name) updated.name = event.name as string;
-          if (nextProfileImage !== undefined) updated.profile_image = nextProfileImage;
-          if (event.bubble_color) updated.bubble_color = event.bubble_color as string;
-          if (event.show_on_profile !== undefined) updated.show_on_profile = event.show_on_profile ? 1 : 0;
-          if (event.background_type !== undefined) updated.background_type = event.background_type as Channel["background_type"];
-          if (event.background_color !== undefined) updated.background_color = event.background_color as string | null;
-          if (nextBackgroundImage !== undefined) updated.background_image = nextBackgroundImage;
-          if (event.background_overlay !== undefined) updated.background_overlay = event.background_overlay as number;
-          if (event.background_blur !== undefined) updated.background_blur = event.background_blur ? 1 : 0;
-          return updated;
-        });
-      }
-      if (event.type === "emoji-fx") {
-        spawnEmoji(event.emoji as string, event.x as number, event.h as number);
-      }
-      if (event.type === "reaction-changed") {
-        const msgId = event.message_id as string;
-        const newReactions = event.reactions as string;
-        pendingReactionUpdatesRef.current.set(msgId, newReactions);
-        if (reactionFrameRef.current === null) {
-          reactionFrameRef.current = requestAnimationFrame(() => {
-            reactionFrameRef.current = null;
-            const updates = new Map(pendingReactionUpdatesRef.current);
-            pendingReactionUpdatesRef.current.clear();
-            setMessages((previous) => {
-              let changed = false;
-              const next = previous.map((message) => {
-                const reactions = updates.get(message.id);
-                if (reactions === undefined || reactions === message.reactions) return message;
-                changed = true;
-                return { ...message, reactions };
-              });
-              return changed ? next : previous;
-            });
-          });
-        }
-      }
-      if (event.type === "room-auth-failed") {
-        clearRoomToken(channelId);
-        if (!isOwner) {
-          showPasscodeGate(t("roomAuthExpired"), t("roomAuthExpired"));
-        }
-      }
-      if (event.type === "room-authenticated") {
-        clearRoomAccessBanner();
-      }
-      if (event.type === "admin-authenticated") {
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchInit(fetchChannel).then((data: InitData) => {
-          applyInitData(data);
-        }).catch(() => {});
-      }
-      if (event.type === "admin-auth-failed" && isOwner) {
-        setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
-      }
-      if (event.type === "room-access-opened") {
-        clearRoomAccessBanner();
-        setPasscodeGate(null);
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchInit(fetchChannel).then((data: InitData) => {
-          applyInitData(data);
-        }).catch(() => {});
-      }
-      if (event.type === "room-access-revoked") {
-        clearRoomToken(channelId);
-        if (!isOwner) {
-          showPasscodeGate(t("passcodeChanged"));
-        }
-      }
-      if (event.type === "user-blocked") {
-        const blockedUid = event.uid as string;
-        if (blockedUid === uid) {
-          setViewerBlocked(true);
-        }
-        if (isOwner) {
-          setBlockedUsers((prev) => {
-            if (prev.some((b) => b.uid === blockedUid)) return prev;
-            return [...prev, { uid: blockedUid, reason: "" }];
-          });
-        }
-      }
-      if (event.type === "user-unblocked") {
-        const unblockedUid = event.uid as string;
-        if (unblockedUid === uid) {
-          setViewerBlocked(false);
-        }
-        setBlockedUsers((prev) => prev.filter((b) => b.uid !== unblockedUid));
-      }
-      if (event.type === "petition-changed") {
-        setPetitionEnabled(!!event.enabled);
-      }
-      if (event.type === "dm-toggle-changed") {
-        setDmEnabled(!!event.enabled);
-      }
-      if (event.type === "live-ended") {
-        const wasInLiveMode = endLiveSessionLocally({
-          clearSeen: true,
-          showEndedPopup: inLiveModeRef.current,
-        });
-        if (wasInLiveMode) {
-          void loadNormalChannelData().catch(() => {});
-        }
-      }
-      if (event.type === "live-started") {
-        handleLiveStartedEvent({
-          title: typeof event.title === "string" ? event.title : undefined,
-          sessionId: typeof event.sessionId === "string" ? event.sessionId : "",
-          expiresAt: typeof event.expiresAt === "string" ? event.expiresAt : null,
-        });
-      }
-      if (event.type === "notice-changed") {
-        const isLiveNotice = !!event.live;
-        // Only apply if the notice matches user's current mode
-        if (isLiveNotice && inLiveModeRef.current) {
-          setActiveNotice((event.notice as string) || "");
-        } else if (!isLiveNotice && !inLiveModeRef.current) {
-          setActiveNotice((event.notice as string) || "");
-        }
-      }
-      if (event.type === "rules-changed") {
-        setChannel((prev) => prev ? { ...prev, notice: event.rules as string } : null);
-      }
-      if (event.type === "channel-deleted") {
-        clearChannelLocalState(channelId);
-        if (!isLoggedIn) removeRecentChannel(channelId);
-        setShowChannelDeleted(true);
-      }
-      if (event.type === "emoji-presets-changed") {
-        applyEmojiPresetsSnapshot(typeof event.emojis === "string" ? event.emojis : null);
-      }
-    });
-  }, [
-    subscribe,
+  useChatRealtimeSync({
     channelId,
-    send,
+    connected,
+    uid,
     isOwner,
     isAdmin,
     isLoggedIn,
-    uid,
-    t,
-    channel,
-    applyInitData,
     localBubbleColor,
+    subscribe,
+    send,
+    inLiveModeRef,
+    historyModeRef,
+    isNearBottomRef,
+    messagesEndRef,
+    pendingReactionUpdatesRef,
+    reactionFrameRef,
+    applyInitData,
     showPasscodeGate,
     clearRoomAccessBanner,
     refreshOwnerModeration,
-    historyModeRef,
-    isNearBottomRef,
-    endLiveSessionLocally,
     loadNormalChannelData,
+    endLiveSessionLocally,
     handleLiveStartedEvent,
     applyEmojiPresetsSnapshot,
-    inLiveModeRef,
-  ]);
-
-  // Refetch on tab focus only if backgrounded for >5 minutes (safety net for missed broadcasts)
-  useEffect(() => {
-    let lastHidden = 0;
-    const handler = () => {
-      if (document.visibilityState === "hidden") {
-        lastHidden = Date.now();
-      } else if (document.visibilityState === "visible" && lastHidden && Date.now() - lastHidden > 5 * 60 * 1000) {
-        if (!connected) return;
-        if (historyModeRef.current === "context") return;
-        const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-        fetchMessages(fetchChannel).then((data) => {
-          if (data.messages) {
-            setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
-          }
-        });
-      }
-    };
-    document.addEventListener("visibilitychange", handler);
-    return () => document.removeEventListener("visibilitychange", handler);
-  }, [channelId, connected, historyModeRef]);
+    setMessages,
+    setNewerMessageCount,
+    setGalleryItems,
+    setChannel,
+    setActiveNotice,
+    setWelcomeConfig,
+    setPetitionEnabled,
+    setDmEnabled,
+    setOwnerModeration,
+    setViewerModerationStatus,
+    setDmMessages,
+    setPasscodeGate,
+    setViewerBlocked,
+    setBlockedUsers,
+    setBanner,
+    setShowChannelDeleted,
+    text: {
+      deletedMessage: t("deletedMessage"),
+      roomAuthExpired: t("roomAuthExpired"),
+      passcodeChanged: t("passcodeChanged"),
+      adminDataAuthFailed: t("adminDataAuthFailed"),
+    },
+  });
 
   // Position the initial channel view at the latest message once. Subsequent
   // message mutations (new/edit/delete/reaction/refetch) preserve scroll.

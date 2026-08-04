@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat realtime-sync extraction from `ChatView` — 2026-08-04
+
+- Extracted websocket event application and the background-tab safety refetch into `src/components/chat/useChatRealtimeSync.ts`, covering message/dm updates, reconnect sync, room-access auth events, profile/freeze/live updates, reaction batching, channel deletion handling, and the visibility-triggered latest-message refresh.
+- `ChatView` now delegates the realtime synchronization policy to one focused hook instead of carrying the large event switch and related tab-visibility effect inline beside render composition and composer state.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat channel-bootstrap extraction from `ChatView` — 2026-08-04
 
 - Extracted channel bootstrap and recovery logic into `src/components/chat/useChatChannelBootstrap.ts`, covering `applyInitData`, normal/live reload helpers, owner moderation refresh, the initial channel load effect, passcode-gate recovery, and room-access banner clearing.
