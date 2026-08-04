@@ -12,15 +12,15 @@ import { ScrollToBottom } from "./ScrollToBottom";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EmojiBar, spawnEmoji } from "./EmojiBar";
 import { PasscodeOverlay } from "./PasscodeOverlay";
-import { recordRecentChannel, removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
-import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
-import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
+import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
+import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import {
   mergeServerMessageSnapshot,
 } from "./chatMessageUtils";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
+import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReportsSearch } from "./useChatReportsSearch";
 import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
@@ -33,50 +33,7 @@ import { useChatContextMenuActions } from "./useChatContextMenuActions";
 import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 import { ChatViewTopChrome } from "./ChatViewTopChrome";
 import { ChatViewMessagePane } from "./ChatViewMessagePane";
-
-interface Channel {
-  id: string;
-  owner_uid: string;
-  name: string;
-  profile_image: string | null;
-  bubble_color: string;
-  is_frozen: number;
-  notice: string;
-  passcode_hint?: string | null;
-  owner_name?: string | null;
-  instance_id?: string | null;
-  show_on_profile?: number;
-  background_type?: "default" | "color" | "image";
-  background_color?: string | null;
-  background_image?: string | null;
-  background_overlay?: number;
-  background_blur?: number;
-}
-
-interface InitData {
-  channel: Channel;
-  messages?: Message[];
-  blocked?: { uid: string; reason: string }[];
-  viewerBlocked?: boolean;
-  viewerModerationStatus?: "frozen" | null;
-  dm?: Message[];
-  bannerNotice?: string;
-  welcomeConfig?: string;
-  live?: { active: boolean; title?: string; sessionId?: string; startedAt?: string; expiresAt?: string } | null;
-  emojiPresets?: string | null;
-  petitionEnabled?: boolean;
-  dmEnabled?: boolean;
-  hasPasscode?: boolean;
-  passcodeHint?: string;
-  adminDataStatus?: "authorized" | "unauthorized";
-  anonymousUid?: string;
-  viewerAccess?: "owner" | "reports_owner" | "standard";
-  isReportsChannel?: boolean;
-  ownerModeration?: {
-    status: "active" | "warned" | "suspended" | "frozen";
-    petitionStatus: "none" | "open" | "accepted" | "rejected";
-  };
-}
+import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -147,7 +104,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [viewerBlocked, setViewerBlocked] = useState(false);
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [passcodeGate, setPasscodeGate] = useState<{ name: string; profile_image: string | null; bubble_color: string; passcodeHint?: string; notice?: string } | null>(null);
+  const [passcodeGate, setPasscodeGate] = useState<PasscodeGateState | null>(null);
   const [uid, setUid] = useState(getInitialUid);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [historyMode, setHistoryMode] = useState<"latest" | "context">("latest");
@@ -436,129 +393,50 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
-  const applyInitData = useCallback((data: InitData) => {
-    if (typeof data.anonymousUid === "string" && data.anonymousUid) {
-      setUid(data.anonymousUid);
-    }
-    const channelWasRecreated = syncChannelInstance(channelId, data.channel.instance_id);
-    if (channelWasRecreated) {
-      setLocalBubbleColor(null);
-      document.documentElement.style.setProperty(
-        "--bubble-sent",
-        data.channel.bubble_color || "#3b8df0",
-      );
-    }
-    setChannel(data.channel);
-    const savedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
-    if (isLoggedIn) {
-      void recordAccountRecentChannel(channelId).then(({ record }) => {
-        if (!record?.bubble_color) return;
-        setLocalBubbleColor(record.bubble_color);
-        localStorage.setItem(`bubbleColor_${channelId}`, record.bubble_color);
-        document.documentElement.style.setProperty("--bubble-sent", record.bubble_color);
-      }).catch(() => {
-        // A temporary sync failure must not block channel entry.
-      });
-    } else {
-      recordRecentChannel({
-        id: channelId,
-        name: data.channel.name,
-        profileImage: data.channel.profile_image,
-        bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3b8df0",
-        hasPasscode: data.hasPasscode === true,
-        ownerName: data.channel.owner_name || "",
-      });
-    }
-    setMessages(data.messages || []);
-    setHistoryMode("latest");
-    setNewerMessageCount(0);
-    setBlockedUsers(data.blocked || []);
-    setViewerBlocked(data.viewerBlocked ?? false);
-    setViewerModerationStatus(data.viewerModerationStatus ?? null);
-    setViewerAccess(data.viewerAccess ?? "standard");
-    setReportsChannelView(Boolean(data.isReportsChannel));
-    setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
-    setActiveNotice(data.bannerNotice || "");
-    setWelcomeConfig(data.welcomeConfig || "");
-    setPetitionEnabled(data.petitionEnabled ?? true);
-    setDmEnabled(data.dmEnabled ?? true);
-    setOwnerModeration(data.ownerModeration);
-    if (data.adminDataStatus === "unauthorized") {
-      setBanner({ text: t("adminDataAuthFailed"), color: "#d32f2f" });
-    }
-
-    applyEmojiPresetsSnapshot(data.emojiPresets);
-    applyLiveSnapshot(data.live);
-  }, [applyEmojiPresetsSnapshot, applyLiveSnapshot, channelId, isLoggedIn, setReportsChannelView, t]);
-
-  applyInitDataRef.current = applyInitData;
-
-  const loadNormalChannelData = useCallback(async () => {
-    const data = await fetchInit(channelId) as InitData;
-    applyInitData(data);
-  }, [applyInitData, channelId]);
-
-  const loadLiveChannelData = useCallback(async () => {
-    setMessages([]);
-    setDmMessages([]);
-    setActiveNotice("");
-    const data = await fetchInit(`${channelId}_live`) as InitData;
-    applyInitData(data);
-  }, [applyInitData, channelId]);
-
-  const refreshOwnerModeration = useCallback(() => {
-    if (!isOwner) return;
-    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    fetchInit(fetchChannel).then((data: InitData) => {
-      if (data.channel) {
-        setChannel((previous) => previous ? { ...previous, is_frozen: data.channel.is_frozen } : data.channel);
-      }
-      setOwnerModeration(data.ownerModeration);
-    }).catch(() => {});
-  }, [channelId, isOwner]);
-
-  // Load initial data
-  useEffect(() => {
-    const shouldResumeLive =
-      localStorage.getItem(`inLiveMode_${channelId}`) === "true" &&
-      localStorage.getItem(`liveActive_${channelId}`) === "true";
-    const initChannel = shouldResumeLive ? `${channelId}_live` : channelId;
-    const requestId = ++initRequestIdRef.current;
-    fetchInit(initChannel)
-      .then(async (data: InitData) => {
-        if (requestId !== initRequestIdRef.current) return;
-        if (typeof data.anonymousUid === "string" && data.anonymousUid) {
-          setUid(data.anonymousUid);
-        }
-        // Check if passcode-gated
-        if (data.hasPasscode && !data.messages) {
-          setPasscodeGate({ name: data.channel.name, profile_image: data.channel.profile_image, bubble_color: data.channel.bubble_color, passcodeHint: data.passcodeHint });
-          setLoading(false);
-          return;
-        }
-        setPasscodeGate(null);
-        applyInitData(data);
-
-        // A stale local live flag may have made the first request target the
-        // live channel after that live session already ended. In that case,
-        // replace the empty live payload with the normal channel payload.
-        if (!data.live?.active && initChannel !== channelId) {
-          const normalData = await fetchInit(channelId) as InitData;
-          if (requestId !== initRequestIdRef.current) return;
-          applyInitData(normalData);
-        }
-        setLoading(false);
-      })
-      .catch((error) => {
-        if (requestId !== initRequestIdRef.current) return;
-        console.error(error);
-        if (error instanceof Error && error.message.includes("Init failed: 404")) {
-          clearChannelLocalState(channelId);
-          setShowChannelDeleted(true);
-        }
-        setLoading(false);
-      });
-  }, [channelId, applyInitData]);
+  const {
+    applyInitData,
+    loadNormalChannelData,
+    loadLiveChannelData,
+    refreshOwnerModeration,
+    showPasscodeGate,
+    clearRoomAccessBanner,
+  } = useChatChannelBootstrap({
+    channelId,
+    channel,
+    isLoggedIn,
+    isOwner,
+    inLiveModeRef,
+    initRequestIdRef,
+    applyInitDataRef,
+    applyEmojiPresetsSnapshot,
+    applyLiveSnapshot,
+    setUid,
+    setChannel,
+    setMessages,
+    setHistoryMode,
+    setNewerMessageCount,
+    setBlockedUsers,
+    setViewerBlocked,
+    setViewerModerationStatus,
+    setViewerAccess,
+    setDmMessages,
+    setActiveNotice,
+    setWelcomeConfig,
+    setPetitionEnabled,
+    setDmEnabled,
+    setOwnerModeration,
+    setLocalBubbleColor,
+    setBanner,
+    setPasscodeGate,
+    setLoading,
+    setShowChannelDeleted,
+    setReportsChannelView,
+    text: {
+      adminDataAuthFailed: t("adminDataAuthFailed"),
+      roomAuthExpired: t("roomAuthExpired"),
+      passcodeChanged: t("passcodeChanged"),
+    },
+  });
 
   const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
   const {
@@ -634,48 +512,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   });
 
   // Debounce not needed — local patching handles most events, reconnect does full refetch
-
-  const showPasscodeGate = useCallback((notice?: string, bannerText?: string) => {
-    const fallbackGate = {
-      name: channel?.name || "",
-      profile_image: channel?.profile_image || null,
-      bubble_color: channel?.bubble_color || "#3b8df0",
-      passcodeHint: channel?.passcode_hint || "",
-      notice,
-    };
-
-    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    fetchInit(fetchChannel).then((data: InitData) => {
-      if (data.hasPasscode && !data.messages) {
-        setPasscodeGate({
-          name: data.channel.name,
-          profile_image: data.channel.profile_image,
-          bubble_color: data.channel.bubble_color,
-          passcodeHint: data.passcodeHint,
-          notice,
-        });
-        return;
-      }
-      setPasscodeGate(null);
-      applyInitData(data);
-    }).catch(() => {
-      setPasscodeGate(fallbackGate);
-    });
-
-    if (bannerText) {
-      setBanner({ text: bannerText, color: "#d32f2f" });
-    }
-  }, [applyInitData, channel, channelId]);
-
-  const clearRoomAccessBanner = useCallback(() => {
-    setBanner((current) => {
-      if (!current) return current;
-      if (current.text === t("roomAuthExpired") || current.text === t("passcodeChanged")) {
-        return null;
-      }
-      return current;
-    });
-  }, [t]);
 
   // Listen for realtime updates
   useEffect(() => {

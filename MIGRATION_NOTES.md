@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat channel-bootstrap extraction from `ChatView` — 2026-08-04
+
+- Extracted channel bootstrap and recovery logic into `src/components/chat/useChatChannelBootstrap.ts`, covering `applyInitData`, normal/live reload helpers, owner moderation refresh, the initial channel load effect, passcode-gate recovery, and room-access banner clearing.
+- Moved the shared `Channel`, `InitData`, and passcode-gate state types into `src/components/chat/chatViewTypes.ts` so `ChatView` no longer owns the bootstrap data contracts inline.
+- `ChatView` now delegates this data-entry lifecycle slice to one focused hook instead of mixing channel initialization and passcode recovery with realtime handling, render composition, and composer state.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat message-pane extraction from `ChatView` — 2026-08-04
 
 - Extracted the message viewport shell into `src/components/chat/ChatViewMessagePane.tsx`, covering the message-area background treatment, notice banner, live viewer count badge, restricted-channel summary card, `MessageList` mount point, and bottom anchor element.

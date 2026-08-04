@@ -1,0 +1,53 @@
+import type { Message } from "./chatTypes";
+
+export interface Channel {
+  id: string;
+  owner_uid: string;
+  name: string;
+  profile_image: string | null;
+  bubble_color: string;
+  is_frozen: number;
+  notice: string;
+  passcode_hint?: string | null;
+  owner_name?: string | null;
+  instance_id?: string | null;
+  show_on_profile?: number;
+  background_type?: "default" | "color" | "image";
+  background_color?: string | null;
+  background_image?: string | null;
+  background_overlay?: number;
+  background_blur?: number;
+}
+
+export interface InitData {
+  channel: Channel;
+  messages?: Message[];
+  blocked?: { uid: string; reason: string }[];
+  viewerBlocked?: boolean;
+  viewerModerationStatus?: "frozen" | null;
+  dm?: Message[];
+  bannerNotice?: string;
+  welcomeConfig?: string;
+  live?: { active: boolean; title?: string; sessionId?: string; startedAt?: string; expiresAt?: string } | null;
+  emojiPresets?: string | null;
+  petitionEnabled?: boolean;
+  dmEnabled?: boolean;
+  hasPasscode?: boolean;
+  passcodeHint?: string;
+  adminDataStatus?: "authorized" | "unauthorized";
+  anonymousUid?: string;
+  viewerAccess?: "owner" | "reports_owner" | "standard";
+  isReportsChannel?: boolean;
+  ownerModeration?: {
+    status: "active" | "warned" | "suspended" | "frozen";
+    petitionStatus: "none" | "open" | "accepted" | "rejected";
+  };
+}
+
+export interface PasscodeGateState {
+  name: string;
+  profile_image: string | null;
+  bubble_color: string;
+  passcodeHint?: string;
+  notice?: string;
+}
