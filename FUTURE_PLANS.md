@@ -40,6 +40,15 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Track upload failures, preview failures and WebSocket auth failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
 
+### Precomputed channel activity
+
+- The highest-upside remaining dashboard performance change is to stop deriving owned-channel activity from `messages` and live-config rows on every `/api/user` read.
+- The likely shape is a dedicated `channel_activity` table keyed by `channel_id`, or equivalent derived fields on `channels`, that stores precomputed `last_activity_at`, `last_message_at`, and live-state fields.
+- This should be treated as a data-consistency project, not a small hot-path tweak. All message creation, latest-message deletion/moderation, live start, live end, live expiry, channel creation, and channel deletion paths would need to keep the derived state correct.
+- Prefer a separate table over immediately extending `channels` so rollout, backfill, dual-write, and shadow comparison are easier to control.
+- Safe rollout order: add schema, backfill from existing `messages` and live config, dual-write on mutations, compare derived reads against the current read-time query, switch `/api/user` to the precomputed source, then remove the old aggregation path after confidence is high.
+- The main risk is stale or incorrect dashboard ordering or live badges if any write path misses an update, so this should only be done with focused regression coverage and temporary comparison logging.
+
 ### Frontend maintainability
 
 - Continue separating `ChatView` policy logic from render wiring; shared action rules, pure message utilities, message text/embed rendering, row-level presentation, message-derivation selectors, history navigation, moderation state, live-session state, reports/search state, composer local state, chat mutations, interaction state, admin/channel shell actions, channel-settings callbacks, overlay rendering, overlay callbacks, and context-menu action policy are now extracted.
