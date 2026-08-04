@@ -19,10 +19,13 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 ### Custom domain cutover
 
 - Application fallbacks, dashboard link parsing, Auth.js origin generation and Worker CORS now use `https://yapndot.com`; production Resend delivery uses the verified `send.yapndot.com` sender.
+- The custom-domain security review found that browser WebSocket upgrades bypassed CORS. The Worker boundary now requires an exact `Origin` match from `ALLOWED_ORIGIN` before forwarding an upgrade to a Durable Object; keep this covered by the focused origin-policy tests.
 - Confirm Vercel redirects `www.yapndot.com` to the apex instead of serving both hostnames independently.
+- Confirm the apex response includes the intended CSP and HSTS headers. This could not be checked from AgentSpaces because the production hostname was not reachable from its restricted network.
 - Google OAuth requires both `https://yapndot.com/api/auth/callback/google-login` and `https://yapndot.com/api/auth/callback/google-signup`; retain the matching legacy Vercel callbacks only during rollback readiness.
 - Smoke-test signup verification, password reset, Google signup/login, normal login, channel links, uploads and realtime chat from the canonical hostname.
-- Remove the legacy Vercel hostname from Worker CORS only after the custom-domain smoke tests pass and no rollback traffic still depends on it.
+- After smoke tests and rollback readiness are complete, narrow production Worker CORS to `https://yapndot.com`. Remove the legacy Vercel hostname, remove `www` after its permanent apex redirect is confirmed, and move localhost to development-only Wrangler configuration.
+- Plan a separate CSP hardening change to remove `script-src 'unsafe-inline'`. First replace the inline theme bootstrap with nonce-based handling and remove the generic arbitrary-HTML contract from `ConfirmDialog`; this is higher risk than the origin-policy fix and should ship with focused UI and production-header verification.
 
 ### Abuse controls
 

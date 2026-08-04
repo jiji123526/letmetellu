@@ -15,12 +15,12 @@ import { handleChannelReports } from "./routes/channel-reports";
 import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { recordOperationalEvent } from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
+import { isAllowedRequestOrigin } from "./lib/request-origin";
 
 export { ChatRoom };
 
 function corsHeaders(origin: string, allowedOrigin: string): HeadersInit {
-  const allowed = allowedOrigin.split(",").map((s) => s.trim());
-  const isAllowed = allowed.includes(origin) || allowed.includes("*");
+  const isAllowed = isAllowedRequestOrigin(origin, allowedOrigin);
   return {
     "Access-Control-Allow-Origin": isAllowed ? origin : "",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
@@ -89,6 +89,9 @@ export default {
     if (url.pathname.startsWith("/ws/")) {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("websocket upgrade required", { status: 426 });
+      }
+      if (!isAllowedRequestOrigin(request.headers.get("Origin"), env.ALLOWED_ORIGIN)) {
+        return new Response("forbidden origin", { status: 403 });
       }
       const channelId = url.pathname.split("/ws/")[1];
       if (!channelId) return new Response("missing channel", { status: 400 });
