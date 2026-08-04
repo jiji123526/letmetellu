@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ChangeEventHandler, KeyboardEventHandler, RefObject } from "react";
 import { EmojiBar } from "./EmojiBar";
 import { ReplyBar } from "./ReplyBar";
@@ -10,6 +11,54 @@ import type { Message } from "./chatTypes";
 interface BannerState {
   text: string;
   color: string;
+}
+
+function ActionToast({ banner }: { banner: BannerState }) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [fontSize, setFontSize] = useState<number | null>(null);
+
+  useEffect(() => {
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const text = textRef.current;
+        if (!text) return;
+        const baseFontSize = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bubble-font-size")) || 16;
+        text.style.fontSize = `${baseFontSize}px`;
+        const availableWidth = Math.max(1, window.innerWidth - 64);
+        const fittedSize = Math.min(baseFontSize, baseFontSize * (availableWidth / Math.max(1, text.scrollWidth)));
+        text.style.fontSize = "";
+        setFontSize(fittedSize);
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measure);
+    };
+  }, [banner.text]);
+
+  return (
+    <div
+      className="fixed left-1/2 -translate-x-1/2 z-[550] w-max whitespace-nowrap text-white font-normal px-4 py-[10px] rounded-[12px] text-center"
+      role="status"
+      aria-live="polite"
+      style={{
+        bottom: "80px",
+        maxWidth: "calc(100% - 32px)",
+        background: banner.color.startsWith("var(") ? banner.color : `${banner.color}dd`,
+        backdropFilter: "saturate(180%) blur(12px)",
+        WebkitBackdropFilter: "saturate(180%) blur(12px)",
+        boxShadow: "0 6px 20px rgba(0,0,0,.25)",
+      }}
+    >
+      <span ref={textRef} style={{ fontSize: fontSize === null ? "var(--bubble-font-size)" : `${fontSize}px` }}>
+        {banner.text}
+      </span>
+    </div>
+  );
 }
 
 interface ChatViewBottomShellProps {
@@ -150,21 +199,7 @@ export function ChatViewBottomShell({
         onClick={onScrollToBottom}
       />
 
-      {banner && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[550] text-white font-normal px-4 py-[10px] rounded-[12px] text-center max-w-[90%]"
-          style={{
-            bottom: "80px",
-            background: banner.color.startsWith("var(") ? banner.color : `${banner.color}dd`,
-            backdropFilter: "saturate(180%) blur(12px)",
-            WebkitBackdropFilter: "saturate(180%) blur(12px)",
-            fontSize: "var(--bubble-font-size)",
-            boxShadow: "0 6px 20px rgba(0,0,0,.25)",
-          }}
-        >
-          {banner.text}
-        </div>
-      )}
+      {banner && <ActionToast key={banner.text} banner={banner} />}
 
       <ReplyBar replyingTo={replyingTo} onClose={onCloseReply} />
 
