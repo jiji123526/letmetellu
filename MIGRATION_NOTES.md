@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Pre-body upload authorization and quota checks — 2026-08-04
+
+- Message and DM uploads now complete channel passcode authorization, signed actor validation and the existing upload quota checks before the Worker consumes the request body.
+- Rejected callers therefore no longer make the Worker buffer as much as the 10 MB upload limit before returning `401`, `403` or `429`.
+- Added a Worker regression test that fails if an unauthenticated upload reaches the body reader.
+- The existing file-size, upload-count and pending-ticket limits are unchanged; this update only moves rejection earlier in the request lifecycle.
+
+Trade-offs:
+
+- Authorized uploads now perform their access and quota D1 reads before streaming the body instead of after it. The same reads already existed, so successful uploads do not add queries, but body transfer begins slightly later.
+- A request that passes the early check can still disconnect or submit an invalid body without creating an upload ticket. A separate low-cost attempt limiter can be considered later if production metrics show repeated failed-body abuse.
+
+Deployment notes:
+
+- no D1 migration is required;
+- deploy the Worker for this hardening change;
+- no Next.js frontend deployment is required.
+
 ### Chat layer-stack extraction from `ChatView` — 2026-08-04
 
 - Extracted the remaining context-menu plus overlay render assembly into `src/components/chat/ChatViewLayerStack.tsx`, and exported the relevant hook result/types so that grouped chat UI state can be passed through without rebuilding the full overlay tree inline.

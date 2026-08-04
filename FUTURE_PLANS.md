@@ -20,6 +20,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Expand durable rate limits to broader cross-channel abuse patterns, not just per-route throttles.
 - Add stronger report-target and evidence validation for direct API callers.
+- Upload access and existing ticket-quota checks now run before request-body consumption. If operational metrics show repeated authorized requests that fail before ticket creation, add a separate low-cost upload-attempt limiter rather than lowering successful-upload quotas.
 - Keep tightening upload validation toward stricter decoded-type checks.
 - If the platform later exposes safe DNS or IP verification primitives, strengthen preview destination validation beyond hostname rules.
 

@@ -68,6 +68,19 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     return Response.json({ error: "invalid upload purpose" }, { status: 400 });
   }
 
+  const contentType = request.headers.get("Content-Type") || "image/jpeg";
+  if (!ALLOWED_TYPES.includes(contentType)) {
+    return Response.json({ error: "invalid file type" }, { status: 400 });
+  }
+
+  const contentLength = parseInt(request.headers.get("Content-Length") || "0");
+  if (contentLength > MAX_UPLOAD_SIZE) {
+    return Response.json({ error: "file too large" }, { status: 413 });
+  }
+  if (!request.body) {
+    return Response.json({ error: "missing body" }, { status: 400 });
+  }
+
   // Passcode gate
   const parentChannelId = getParentChannelId(channelId);
   if (channelId.endsWith("_live") && purpose !== "channel-asset") {
@@ -95,37 +108,10 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     return Response.json({ error: "not owner" }, { status: 403 });
   }
 
-  const contentType = request.headers.get("Content-Type") || "image/jpeg";
-
-  // Validate content type
-  if (!ALLOWED_TYPES.includes(contentType)) {
-    return Response.json({ error: "invalid file type" }, { status: 400 });
-  }
-
-  // Validate size from Content-Length header
-  const contentLength = parseInt(request.headers.get("Content-Length") || "0");
-  if (contentLength > MAX_UPLOAD_SIZE) {
-    return Response.json({ error: "file too large" }, { status: 413 });
-  }
-
-  const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : contentType.includes("webp") ? "webp" : "jpg";
-  const key = `${channelId}/${crypto.randomUUID()}.${ext}`;
-
-  // Read body with size enforcement (in case Content-Length is spoofed)
-  const chunks: Uint8Array[] = [];
-  let totalSize = 0;
-  const reader = request.body!.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalSize += value.byteLength;
-    if (totalSize > MAX_UPLOAD_SIZE) {
-      reader.cancel();
-      return Response.json({ error: "file too large" }, { status: 413 });
-    }
-    chunks.push(value);
-  }
-
+  // Complete access and quota checks before consuming a potentially large
+  // request body. Rejected callers should not be able to make the Worker
+  // buffer up to MAX_UPLOAD_SIZE bytes before learning that they cannot
+  // upload to this channel.
   let anonymousPayload: { uid: string } | null = null;
   let ipHash: string | null = null;
   if (purpose !== "channel-asset") {
@@ -157,6 +143,24 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     if (!quota.ok) {
       return Response.json({ error: quota.error }, { status: 429 });
     }
+  }
+
+  const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : contentType.includes("webp") ? "webp" : "jpg";
+  const key = `${channelId}/${crypto.randomUUID()}.${ext}`;
+
+  // Read body with size enforcement (in case Content-Length is spoofed)
+  const chunks: Uint8Array[] = [];
+  let totalSize = 0;
+  const reader = request.body.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalSize += value.byteLength;
+    if (totalSize > MAX_UPLOAD_SIZE) {
+      reader.cancel();
+      return Response.json({ error: "file too large" }, { status: 413 });
+    }
+    chunks.push(value);
   }
 
   const blob = new Blob(chunks, { type: contentType });

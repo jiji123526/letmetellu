@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
@@ -59,4 +60,17 @@ test("assertAllowedPreviewUrl rejects malformed or unsafe URLs", () => {
   expectPreviewError(() => assertAllowedPreviewUrl("https://user:pass@example.com"), "credentials not allowed");
   expectPreviewError(() => assertAllowedPreviewUrl("https://127.0.0.1/admin"), "blocked preview host");
   expectPreviewError(() => assertAllowedPreviewUrl("https://[::1]/"), "blocked preview host");
+});
+
+test("upload access and quota checks stay ahead of request-body consumption", () => {
+  const source = readFileSync(new URL("../src/routes/upload.ts", import.meta.url), "utf8");
+  const handlerStart = source.indexOf("export async function handleUpload");
+  const identityCheck = source.indexOf("await verifyAnonymousIdentityToken", handlerStart);
+  const quotaCheck = source.indexOf("await enforceUploadQuota", handlerStart);
+  const bodyRead = source.indexOf("request.body.getReader()", handlerStart);
+
+  assert.ok(handlerStart >= 0, "upload handler should exist");
+  assert.ok(identityCheck > handlerStart, "upload handler should validate actor identity");
+  assert.ok(quotaCheck > identityCheck, "upload handler should enforce quota after identity validation");
+  assert.ok(bodyRead > quotaCheck, "upload body must not be consumed before access and quota checks");
 });
