@@ -160,7 +160,7 @@ function MessageText({
       style={image
         ? { display: "block", padding: "2px 10px 8px" }
         : hasEmbeddedWidgets
-          ? { display: "block", padding: "2px 2px 8px" }
+          ? { display: "block", padding: "0 0 8px" }
           : undefined}
     >
       {content}

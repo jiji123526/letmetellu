@@ -180,7 +180,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       let query = `
         SELECT g.*
         FROM gallery g
-        INNER JOIN messages m ON m.id = g.id AND m.channel_id = g.channel_id
+        INNER JOIN messages m ON m.gallery_id = g.id AND m.channel_id = g.channel_id
         WHERE g.channel_id = ? AND m.deleted = 0
       `;
       const params: unknown[] = [channelId];

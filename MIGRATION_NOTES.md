@@ -4,6 +4,27 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Supabase `main` history import into `zziks` — 2026-08-04
+
+- Exported the legacy `main` channel from the original Supabase-backed application with its service-role credential kept outside the repository.
+- Imported 685 normal messages into the existing D1 `zziks` channel while preserving timestamps, 204 reply relationships, reactions and four edited states.
+- Pseudonymized legacy `uid` and `auth_uid` values with deterministic SHA-256-derived migration identifiers. They are retained only to preserve visual message grouping and are not connected to current yap. identities or edit/delete authority.
+- Copied 25 referenced images from Supabase Storage into the `letmetellu-media` R2 bucket under the isolated `zziks/legacy-main/` prefix. Added matching attached upload tickets and 25 gallery rows so protected media lookup and channel deletion remain consistent.
+- Added 44 existing link messages to `message_links`. Existing `zziks` ownership, profile, passcode, notice, colors and other channel settings were not changed.
+- Excluded the three legacy DMs and seven legacy config rows. The source had no report-message rows, deleted-message rows or blocked-user rows in `main`.
+- Validated the generated import against a fresh local D1 containing all 28 migrations before production execution. The local and production checks both returned 685 messages, 204 replies, four edited messages, 25 image messages, 25 gallery rows, 25 unique attached media tickets, zero broken replies and zero broken gallery references.
+- Recorded the pre-import D1 Time Travel bookmark as `00000428-00000002-000050bd-d66ae8b227b23b5034bba30a25893377`. The successful import completed at bookmark `0000042b-0000007f-000050bd-4480ca41fb5dbec420debb701969e06a`.
+- Added `scripts/prepare-legacy-main-migration.mjs` as a credential-free, auditable preparation tool. It fetches paginated Supabase rows, validates reply/gallery references, downloads and hashes media, pseudonymizes legacy actors, and produces D1 SQL plus a media manifest in a caller-selected output directory.
+- Corrected the gallery panel lookup to join through `messages.gallery_id` instead of assuming gallery and message primary keys are identical. This keeps ordinary uploads working and makes imported gallery identifiers visible without rewriting production history.
+- Changed link-preview caching so transient fetch failures are not cached for the entire browser session; reopening the panel can retry while successful previews remain cached.
+
+Trade-offs:
+
+- Imported authors cannot claim, edit or delete their historical messages because the old anonymous identity system is intentionally not linked to current signed identities. The current `zziks` owner retains moderation authority.
+- One legacy GIF is about 15.4 MB, above yap.'s current 10 MB upload limit. It was preserved under a migration-only 50 MB ceiling; the normal upload limit remains unchanged.
+- Connected chat clients do not receive a realtime event for direct administrative imports. Reloading or reopening `zziks` fetches the imported history normally.
+- Supabase remains the unchanged source backup until the imported channel has been visually reviewed. Removing that source later should be handled as a separate destructive operation.
+
 ### Jittered WebSocket reconnect backoff — 2026-08-04
 
 - Replaced the fixed two-second chat WebSocket reconnect loop with exponential delays starting near two seconds and capped near thirty seconds.

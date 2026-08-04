@@ -384,8 +384,8 @@ export function MessageEmbeds({ text, isMine, onEmbedReady }: { text: string; is
 
   return (
     <div className="message-embeds" style={{
-      marginTop: "2px",
-      paddingBottom: "2px",
+      marginTop: 0,
+      paddingBottom: 0,
       overflow: "visible",
       width: "fit-content",
       maxWidth: "100%",

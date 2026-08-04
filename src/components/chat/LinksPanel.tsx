@@ -46,7 +46,10 @@ function requestPreview(url: string) {
           : null)
         .catch(() => null)
         .then((preview) => {
-          previewCache.set(url, preview);
+          // Do not make a transient timeout or rate-limit response sticky for
+          // the rest of the browser session. Successful previews are cached;
+          // failed ones can be retried when the panel is opened again.
+          if (preview) previewCache.set(url, preview);
           resolve(preview);
         })
         .finally(() => {
