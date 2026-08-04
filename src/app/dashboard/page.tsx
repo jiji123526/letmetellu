@@ -1478,6 +1478,21 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
+
+          {editing && (
+            <div className="px-4 py-3 flex items-center justify-between border-t" style={{ background: "var(--header-bg)", borderColor: "var(--hairline)" }}>
+              <span className="text-[14px]" style={{ color: "var(--meta)" }}>{t("dashboardSelected").replace("{count}", String(selectedIds.size))}</span>
+              <button
+                type="button"
+                disabled={!selectedIds.size || deleting}
+                className="border-none bg-transparent text-[15px] font-medium"
+                style={{ color: selectedIds.size ? "#ff3b30" : "#c7c7cc", cursor: selectedIds.size && !deleting ? "pointer" : "default" }}
+                onClick={deleteSelected}
+              >
+                {deleting ? t("loading") : t("delete")}
+              </button>
+            </div>
+          )}
         </header>
 
         {isPlatformAdmin && (
@@ -1829,21 +1844,6 @@ export default function DashboardPage() {
         )}
 
         <LegalFooter />
-
-        {editing && (
-          <div className="sticky bottom-0 z-30 px-4 py-3 flex items-center justify-between border-t" style={{ background: "var(--header-bg)", borderColor: "var(--hairline)", backdropFilter: "blur(20px)" }}>
-            <span className="text-[14px]" style={{ color: "var(--meta)" }}>{t("dashboardSelected").replace("{count}", String(selectedIds.size))}</span>
-            <button
-              type="button"
-              disabled={!selectedIds.size || deleting}
-              className="border-none bg-transparent text-[15px] font-medium"
-              style={{ color: selectedIds.size ? "#ff3b30" : "#c7c7cc", cursor: selectedIds.size && !deleting ? "pointer" : "default" }}
-              onClick={deleteSelected}
-            >
-              {deleting ? t("loading") : t("delete")}
-            </button>
-          </div>
-        )}
       </div>
 
       {showCreate && isLoggedIn && (
