@@ -4,6 +4,12 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat bottom-shell extraction from `ChatView` — 2026-08-04
+
+- Extracted the post-message shell into `src/components/chat/ChatViewBottomShell.tsx`, covering the scroll-to-latest CTA, toast banner, reply bar, pending-photo tray, moderation banners, and composer footer with live emoji broadcast entry.
+- `ChatView` now delegates the lower render block to one focused component instead of mixing message-area exit UI, composer presentation, and moderation/status chrome inline with the remaining page orchestration.
+- This is a frontend-only maintainability change with no schema or Worker deployment requirement.
+
 ### Chat realtime-sync extraction from `ChatView` — 2026-08-04
 
 - Extracted websocket event application and the background-tab safety refetch into `src/components/chat/useChatRealtimeSync.ts`, covering message/dm updates, reconnect sync, room-access auth events, profile/freeze/live updates, reaction batching, channel deletion handling, and the visibility-triggered latest-message refresh.

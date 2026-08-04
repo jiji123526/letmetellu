@@ -7,10 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { useLocale } from "@/hooks/useLocale";
 import { ContextMenu } from "./ContextMenu";
-import { ReplyBar } from "./ReplyBar";
-import { ScrollToBottom } from "./ScrollToBottom";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { EmojiBar } from "./EmojiBar";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
@@ -30,6 +27,7 @@ import { useChatContextMenuActions } from "./useChatContextMenuActions";
 import { useChatOverlayCallbacks } from "./useChatOverlayCallbacks";
 import { ChatViewTopChrome } from "./ChatViewTopChrome";
 import { ChatViewMessagePane } from "./ChatViewMessagePane";
+import { ChatViewBottomShell } from "./ChatViewBottomShell";
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
 
@@ -969,238 +967,53 @@ export function ChatView({ channelId }: { channelId: string }) {
         </div>
       )}
 
-      {/* Scroll to bottom */}
-      <ScrollToBottom
-        visible={historyMode === "context" || showScrollBtn}
-        unreadCount={historyMode === "context" ? newerMessageCount : undefined}
-        label={historyMode === "context" ? (locale === "ko" ? "최신 메시지" : "Latest") : undefined}
-        onClick={scrollToBottom}
-      />
-
-      {/* Toast banner */}
-      {banner && (
-        <div
-          className="fixed left-1/2 -translate-x-1/2 z-[550] text-white font-normal px-4 py-[10px] rounded-[12px] text-center max-w-[90%]"
-          style={{
-            bottom: "80px",
-            background: banner.color.startsWith("var(") ? banner.color : `${banner.color}dd`,
-            backdropFilter: "saturate(180%) blur(12px)",
-            WebkitBackdropFilter: "saturate(180%) blur(12px)",
-            fontSize: "var(--bubble-font-size)",
-            boxShadow: "0 6px 20px rgba(0,0,0,.25)",
-          }}
-        >
-          {banner.text}
-        </div>
-      )}
-
-      {/* Reply bar */}
-      <ReplyBar replyingTo={replyingTo} onClose={clearReplyingTo} />
-
-      {/* Photo preview */}
-      {pendingPhotos.length > 0 && (
-        <div
-          className="flex-none flex items-center gap-2"
-          style={{
-            padding: "8px 16px",
-            background: "var(--composer-bg)",
-            borderTop: "0.5px solid var(--hairline)",
-          }}
-        >
-          <div className="flex gap-2 overflow-x-auto flex-1">
-            {pendingPhotos.map((p, i) => (
-              <div key={i} className="relative flex-shrink-0">
-                <img
-                  src={p.previewUrl}
-                  className="block rounded-[10px]"
-                  style={{ width: "56px", height: "56px", objectFit: "cover" }}
-                />
-                <button
-                  className="absolute flex items-center justify-center border-none cursor-pointer"
-                  style={{
-                    top: "-4px",
-                    right: "-4px",
-                    width: "20px",
-                    height: "20px",
-                    borderRadius: "50%",
-                    background: "rgba(0,0,0,.6)",
-                    color: "#fff",
-                    fontSize: "11px",
-                    lineHeight: 1,
-                  }}
-                  onClick={() => removePendingPhoto(i)}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Frozen banner */}
-      {ownerModerationBlocked && (
-        <div
-          className="flex-none flex items-center justify-between gap-3"
-          style={{
-            padding: "10px 14px",
-            background: "rgba(139,92,246,.08)",
-            borderTop: "0.5px solid rgba(139,92,246,.18)",
-            color: "#5b21b6",
-          }}
-        >
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
-            {ownerModerationBannerText}
-          </div>
-          {ownerCanSubmitPetition && (
-            <button
-              type="button"
-              className="flex-none border-none cursor-pointer"
-              style={{
-                borderRadius: "999px",
-                background: "#8b5cf6",
-                color: "#fff",
-                padding: "8px 12px",
-                fontSize: "calc(var(--bubble-font-size) - 5px)",
-                fontFamily: "inherit",
-                lineHeight: 1,
-              }}
-              onClick={() => setShowModerationPetitionDialog(true)}
-            >
-              {t("submitModerationPetition")}
-            </button>
-          )}
-        </div>
-      )}
-
-      {viewerModerationBlocked && (
-        <div
-          className="flex-none flex items-center gap-3"
-          style={{
-            padding: "10px 14px",
-            background: "rgba(139,92,246,.08)",
-            borderTop: "0.5px solid rgba(139,92,246,.18)",
-            color: "#5b21b6",
-          }}
-        >
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.45 }}>
-            {t("moderationFrozenBanner")}
-          </div>
-        </div>
-      )}
-
-      {/* Composer */}
-      <footer
-        className="flex-none flex items-end gap-2"
-        style={{
-          padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
-          background: "var(--composer-bg)",
-          backdropFilter: "saturate(180%) blur(20px)",
-          WebkitBackdropFilter: "saturate(180%) blur(20px)",
-          borderTop: "0.5px solid var(--hairline)",
+      <ChatViewBottomShell
+        channelId={channelId}
+        historyMode={historyMode}
+        showScrollBtn={showScrollBtn}
+        newerMessageCount={newerMessageCount}
+        latestMessagesLabel={locale === "ko" ? "최신 메시지" : "Latest"}
+        onScrollToBottom={scrollToBottom}
+        banner={banner}
+        replyingTo={replyingTo}
+        onCloseReply={clearReplyingTo}
+        pendingPhotos={pendingPhotos}
+        onRemovePendingPhoto={removePendingPhoto}
+        ownerModerationBlocked={ownerModerationBlocked}
+        ownerModerationBannerText={ownerModerationBannerText}
+        ownerCanSubmitPetition={ownerCanSubmitPetition}
+        submitModerationPetitionLabel={t("submitModerationPetition")}
+        onOpenModerationPetition={() => setShowModerationPetitionDialog(true)}
+        viewerModerationBlocked={viewerModerationBlocked}
+        moderationFrozenBannerLabel={t("moderationFrozenBanner")}
+        photoInputRef={photoInputRef}
+        onPhotoSelect={handlePhotoSelect}
+        onOpenPlusMenu={setPlusMenu}
+        isUserBlocked={isUserBlocked}
+        hasPetitioned={hasPetitioned}
+        petitionEnabled={petitionEnabled}
+        isFrozen={!!channel?.is_frozen}
+        effectiveAdmin={effectiveAdmin}
+        dmMode={dmMode}
+        input={input}
+        textareaRef={textareaRef}
+        onInputChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        ownerSuspendedInputLabel={t("ownerSuspendedInput")}
+        moderationFrozenInputLabel={t("moderationFrozenInput")}
+        frozenInputLabel={t("frozenInput")}
+        blockedInputLabel={t("blockedInput")}
+        petitionInputLabel={t("petitionInput")}
+        sentToAdminLabel={t("sentToAdmin")}
+        messageInputLabel={t("messageInput")}
+        inLiveMode={inLiveMode}
+        emojiPresets={emojiPresets}
+        onBroadcastEmoji={(emoji, x, h) => {
+          send({ type: "emoji-fx", emoji, x, h });
         }}
-      >
-          {/* Hidden photo input */}
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={handlePhotoSelect}
-          />
-
-          <button
-            className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
-            style={{ color: "var(--meta)", width: "32px", height: "32px", opacity: ((isUserBlocked && (hasPetitioned || !petitionEnabled)) || ownerModerationBlocked) ? 0.3 : 1, pointerEvents: ((isUserBlocked && (hasPetitioned || !petitionEnabled)) || ownerModerationBlocked) ? "none" : "auto" }}
-            onClick={(e) => setPlusMenu(e.currentTarget.getBoundingClientRect())}
-          >
-            <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 11px)", height: "calc(var(--bubble-font-size) + 11px)" }}>
-              <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <path d="M12 7v10M7 12h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
-
-          <div
-            className="flex-1 flex items-center relative"
-            style={{
-              minHeight: "calc(var(--bubble-font-size) + 19px)",
-              padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
-              background: ownerModerationBlocked
-                ? "rgba(139,92,246,.06)"
-                : (channel?.is_frozen && !effectiveAdmin && !dmMode)
-                ? "rgba(0,0,0,.03)"
-                : isUserBlocked
-                  ? "rgba(255,59,48,.05)"
-                  : dmMode ? "rgba(155,89,182,.05)" : "var(--input-bg)",
-              border: ownerModerationBlocked
-                ? "1px solid rgba(139,92,246,.28)"
-                : (channel?.is_frozen && !effectiveAdmin && !dmMode)
-                ? "1px solid #ccc"
-                : isUserBlocked
-                  ? "1px solid #d32f2f"
-                  : dmMode ? "1px solid #7b3fa0" : "1px solid var(--input-border)",
-              borderRadius: "20px",
-            }}
-          >
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              disabled={ownerModerationBlocked || !!(channel?.is_frozen && !effectiveAdmin && !dmMode) || (isUserBlocked && (hasPetitioned || !petitionEnabled))}
-              rows={1}
-              placeholder={
-                ownerModerationBlocked
-                  ? t("ownerSuspendedInput")
-                  : viewerModerationBlocked
-                  ? t("moderationFrozenInput")
-                  : (channel?.is_frozen && !effectiveAdmin && !dmMode)
-                  ? t("frozenInput")
-                  : isUserBlocked
-                    ? (hasPetitioned || !petitionEnabled ? t("blockedInput") : t("petitionInput"))
-                    : (channel?.is_frozen && effectiveAdmin)
-                      ? t("frozenInput")
-                      : dmMode
-                        ? t("sentToAdmin")
-                        : t("messageInput")
-              }
-              className="flex-1 border-none bg-transparent outline-none resize-none"
-              style={{
-                fontSize: "var(--bubble-font-size)",
-                color: ownerModerationBlocked || (channel?.is_frozen && !effectiveAdmin && !dmMode) ? "#999" : "var(--gray-text)",
-                padding: "8px 0",
-                caretColor: "var(--tint)",
-                fontFamily: "inherit",
-                lineHeight: 1.4,
-                maxHeight: "80px",
-                overflowY: "auto",
-              }}
-            />
-            {/* Emoji bar trigger (live mode only) */}
-            {inLiveMode && !isUserBlocked && !ownerModerationBlocked && (
-              <EmojiBar channelId={channelId} presets={emojiPresets} onBroadcast={(emoji, x, h) => {
-                send({ type: "emoji-fx", emoji, x, h });
-              }} />
-            )}
-            {(input.trim() || pendingPhotos.length > 0) && !ownerModerationBlocked && !(channel?.is_frozen && !effectiveAdmin && !dmMode) && (
-              <button
-                onClick={handleSend}
-                className="flex-none flex items-center justify-center border-none cursor-pointer"
-                style={{
-                  width: "calc(var(--bubble-font-size) + 9px)",
-                  height: "calc(var(--bubble-font-size) + 9px)",
-                  borderRadius: "50%",
-                  background: dmMode ? "#7b3fa0" : bubbleColor,
-                }}
-              >
-                <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>
-                  <path d="M12 20V5m0 0l-6 6m6-6l6 6" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </footer>
+        onSend={handleSend}
+        bubbleColor={bubbleColor}
+      />
 
       {/* Context Menu */}
       {contextMenu && (
