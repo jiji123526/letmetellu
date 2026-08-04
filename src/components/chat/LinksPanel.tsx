@@ -302,8 +302,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
                       onPreview={applyPreview}
                       onClick={() => {
                         if (onNavigate) {
-                          onClose();
-                          setTimeout(() => onNavigate(link.msgId), 100);
+                          onNavigate(link.msgId);
                         } else {
                           window.open(link.url, "_blank");
                         }

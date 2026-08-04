@@ -21,7 +21,7 @@ interface UseChatOverlayCallbacksArgs {
   submittingModerationPetition: boolean;
   openGalleryImage: (src: string, meta: GalleryMeta, caption?: string) => void;
   closeLinks: () => void;
-  scrollToMessage: (msgId: string) => void;
+  scrollToMessage: (msgId: string) => Promise<void>;
   handleReaction: (messageId: string, emoji: string) => Promise<void>;
   closeEmojiPicker: () => void;
   setDmMode: Dispatch<SetStateAction<boolean>>;
@@ -113,7 +113,7 @@ export function useChatOverlayCallbacks({
 
   const navigateFromLinks = useCallback((msgId: string) => {
     closeLinks();
-    setTimeout(() => scrollToMessage(msgId), 100);
+    void scrollToMessage(msgId);
   }, [closeLinks, scrollToMessage]);
 
   const handleOverlayEmojiSelect = useCallback((emoji: string, messageId: string) => {
@@ -187,7 +187,7 @@ export function useChatOverlayCallbacks({
   const jumpFromGalleryImage = useCallback((msgId: string) => {
     closeFullViewImage();
     closeGallery();
-    setTimeout(() => scrollToMessage(msgId), 100);
+    void scrollToMessage(msgId);
   }, [closeFullViewImage, closeGallery, scrollToMessage]);
 
   return {

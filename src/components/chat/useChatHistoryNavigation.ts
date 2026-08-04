@@ -43,6 +43,54 @@ function flashBubble(element: HTMLElement | null) {
   }, 800);
 }
 
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+async function waitForMessageElement(msgId: string, timeoutMs = 1500): Promise<HTMLElement | null> {
+  const startedAt = performance.now();
+  while (performance.now() - startedAt < timeoutMs) {
+    const element = document.getElementById(`msg-${msgId}`);
+    if (element) return element;
+    await nextAnimationFrame();
+  }
+  return null;
+}
+
+function isBeforeOrInsideTarget(node: Element, target: Element): boolean {
+  return target.contains(node)
+    || Boolean(node.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+function hasPendingContentBeforeTarget(container: HTMLElement, target: HTMLElement): boolean {
+  const pendingElements = container.querySelectorAll(".media-loading-dots, img, video");
+  return [...pendingElements].some((node) => {
+    if (!isBeforeOrInsideTarget(node, target)) return false;
+    if (node.classList.contains("media-loading-dots")) return true;
+    if (node instanceof HTMLImageElement) return !node.complete;
+    return node instanceof HTMLVideoElement && node.readyState < HTMLMediaElement.HAVE_METADATA;
+  });
+}
+
+async function waitForStableMessageLayout(
+  container: HTMLElement,
+  target: HTMLElement,
+  timeoutMs = 6000,
+): Promise<void> {
+  const startedAt = performance.now();
+  let previousSignature = "";
+  let stableFrames = 0;
+
+  while (performance.now() - startedAt < timeoutMs) {
+    await nextAnimationFrame();
+    const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
+    const pendingContent = hasPendingContentBeforeTarget(container, target);
+    stableFrames = !pendingContent && signature === previousSignature ? stableFrames + 1 : 0;
+    previousSignature = signature;
+    if (stableFrames >= 3) return;
+  }
+}
+
 export function useChatHistoryNavigation({
   channelId,
   messages,
@@ -195,38 +243,42 @@ export function useChatHistoryNavigation({
   }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
 
   const scrollToMessage = useCallback(async (msgId: string) => {
+    await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-      flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
+
+    if (!element) {
+      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+      try {
+        const data = await fetchMessageContext(fetchChannel, msgId);
+        if (!data.messages?.some((message: Message) => message.id === msgId)) {
+          throw new Error("message not found");
+        }
+        setMessages(data.messages as Message[]);
+        historyModeRef.current = "context";
+        setHistoryMode("context");
+        setNewerMessageCount(0);
+        hasMoreMessagesRef.current = data.has_older !== false;
+        hasMoreNewerMessagesRef.current = data.has_newer !== false;
+        element = await waitForMessageElement(msgId);
+      } catch {
+        element = null;
+      }
+    }
+
+    if (!element) {
+      setBanner({ text: "Message not found", color: "var(--meta)" });
+      setTimeout(() => setBanner(null), 2000);
       return;
     }
 
-    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    try {
-      const data = await fetchMessageContext(fetchChannel, msgId);
-      if (!data.messages?.some((message: Message) => message.id === msgId)) {
-        throw new Error("message not found");
-      }
-      setMessages(data.messages as Message[]);
-      historyModeRef.current = "context";
-      setHistoryMode("context");
-      setNewerMessageCount(0);
-      hasMoreMessagesRef.current = data.has_older !== false;
-      hasMoreNewerMessagesRef.current = data.has_newer !== false;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      element = document.getElementById(`msg-${msgId}`);
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "center" });
-        flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
-        return;
-      }
-      throw new Error("message did not render");
-    } catch {
-      setBanner({ text: "Message not found", color: "var(--meta)" });
-      setTimeout(() => setBanner(null), 2000);
+    const container = messagesContainerRef.current;
+    if (container) {
+      await waitForStableMessageLayout(container, element);
     }
-  }, [channelId, inLiveModeRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
+    element = document.getElementById(`msg-${msgId}`) || element;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
+  }, [channelId, inLiveModeRef, messagesContainerRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 
   return {
     historyModeRef,
