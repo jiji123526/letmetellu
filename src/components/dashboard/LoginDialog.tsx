@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
@@ -228,6 +229,19 @@ export function LoginDialog({ onClose, initialError = "", initialTab = "login" }
               <button type="button" disabled={submitting} className="w-full border-none bg-transparent pt-4 text-[13px] cursor-pointer" style={{ color: "var(--tint)" }} onClick={() => switchTab("login")}>{t("backToLogin")}</button>
             </form>
           )
+        )}
+        {tab === "signup" && !verificationSent && (
+          <p className="mt-4 mb-0 text-center text-[11px] leading-[1.5]" style={{ color: "var(--meta)" }}>
+            {locale === "ko" ? "가입을 진행하면 " : "By signing up, you agree to the "}
+            <Link href="/terms" target="_blank" className="underline" style={{ color: "var(--meta)" }}>
+              {locale === "ko" ? "서비스 이용약관" : "Terms of Service"}
+            </Link>
+            {locale === "ko" ? "에 동의하고 " : " and acknowledge the "}
+            <Link href="/privacy" target="_blank" className="underline" style={{ color: "var(--meta)" }}>
+              {locale === "ko" ? "개인정보처리방침" : "Privacy Policy"}
+            </Link>
+            {locale === "ko" ? "을 확인한 것으로 봅니다." : "."}
+          </p>
         )}
       </div>
     </div>

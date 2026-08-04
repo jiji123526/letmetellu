@@ -15,13 +15,13 @@ const privacyKo: LegalDocumentContent = {
   intro:
     "본 개인정보처리방침은 현재 운영 중인 yap. 서비스의 실제 기능, 인증 구조, 익명 이용 흐름, 신고 및 1:1 지원 흐름을 기준으로 작성되었습니다.",
   effectiveDate: "2026년 7월 31일",
-  lastUpdated: "2026년 7월 31일",
+  lastUpdated: "2026년 8월 4일",
   sections: [
     {
       heading: "제1조(목적)",
       paragraphs: [
         "이 개인정보처리방침은 yap.(이하 \"서비스\")를 개인 프로젝트 형태로 운영하는 서비스 운영자(이하 \"운영자\")가 서비스 이용자 또는 방문자의 개인정보를 어떻게 수집, 이용, 보관, 제공 및 파기하는지 설명하기 위하여 마련되었습니다.",
-        "운영자는 개인정보보호법, 정보통신망 이용촉진 및 정보보호 등에 관한 법률 등 관련 법령을 준수하며, 개인정보 관련 고충을 가능한 한 신속하고 원활하게 처리하기 위하여 본 방침을 수립하고 공개합니다.",
+        "운영자는 개인정보 보호법 등 관련 법령을 준수하며, 개인정보 관련 고충을 가능한 한 신속하고 원활하게 처리하기 위하여 본 방침을 수립하고 공개합니다.",
       ],
     },
     {
@@ -50,8 +50,8 @@ const privacyKo: LegalDocumentContent = {
     {
       heading: "제5조(회원 가입을 위하여 수집하는 정보)",
       bullets: [
-        "필수 수집 정보: 이메일 주소, 비밀번호, 닉네임",
-        "Google 로그인 이용 시: Google 계정의 기본 식별 정보 및 인증 처리에 필요한 정보",
+        "이메일 가입 시 필수 수집 정보: 이메일 주소, 단방향 해시 처리된 비밀번호 및 이메일 인증 상태",
+        "Google 로그인 이용 시: Google 계정 식별값, 이메일 주소, 이메일 인증 여부, Google이 제공하는 이름 및 프로필 이미지",
         "회원가입 또는 로그인 흐름에서 인증 링크 또는 인증 상태 확인에 필요한 기록",
       ],
     },
@@ -107,7 +107,6 @@ const privacyKo: LegalDocumentContent = {
       ],
       bullets: [
         "이용자가 사전에 동의한 경우",
-        "Google 로그인 사용 시 인증 제공을 위하여 필요한 범위에서 Google과 인증 정보가 연동되는 경우",
         "법령에 따른 제출 의무가 있거나 수사기관 등 관계 기관의 적법한 요청이 있는 경우",
       ],
     },
@@ -115,16 +114,15 @@ const privacyKo: LegalDocumentContent = {
       heading: "제12조(개인정보의 보유 및 이용기간)",
       bullets: [
         "운영자는 개인정보 수집 및 이용 목적이 달성될 때까지 개인정보를 보유·이용합니다.",
-        "회원 탈퇴, 계정 삭제 또는 처리 목적 종료 후에도 법령 준수, 분쟁 대응, 보안 분석, 부정 이용 방지에 필요한 정보는 일정 기간 보관될 수 있습니다.",
-        "지원 티켓, 신고 처리 기록, 운영 감사 로그, 운영 이벤트는 후속 검토 및 보안 목적상 합리적인 기간 동안 보관될 수 있습니다.",
-        "서비스 악용 방지용 식별 기록은 내부 기준에 따라 최대 1년 범위 내에서 보관될 수 있습니다.",
+        "계정 정보와 계정에 연결된 최근 채널·환경설정은 회원 탈퇴 시 삭제됩니다. 회원이 소유한 채널도 함께 삭제되며, 다른 채널에 작성한 메시지·DM·갤러리 기록은 대화 맥락 보존을 위해 계정 식별값을 제거한 뒤 해당 콘텐츠가 삭제되거나 채널이 삭제될 때까지 남을 수 있습니다.",
+        "미첨부 업로드는 발급 후 15분이 지나면 만료되어 정기 정리 대상이 됩니다. 요청 제한 기록은 7일, 운영 이벤트는 30일, 메시지 작성자 보안 식별 기록은 90일, 운영 및 지원 감사 로그는 1년 동안 보관됩니다.",
+        "지원 티켓, 신고, 이의 제기 및 관련 처리 기록은 해당 사안의 처리, 재검토, 악용 방지 및 분쟁 대응 목적이 끝날 때까지 보관한 후 삭제합니다. 법령상 보존 의무가 있거나 진행 중인 분쟁·조사가 있는 경우에는 필요한 범위에서 그 종료 시까지 보관할 수 있습니다.",
       ],
     },
     {
       heading: "제13조(법령에 따른 개인정보의 보유 및 이용기간)",
       bullets: [
         "통신비밀보호법에 따른 웹사이트 접속 로그 자료: 3개월",
-        "전자상거래 등에서의 소비자보호에 관한 법률상 소비자 불만 또는 분쟁 처리 기록: 3년",
         "기타 관계 법령이 별도의 보관기간을 정하는 경우 그 기간",
       ],
       paragraphs: [
@@ -212,14 +210,48 @@ const privacyKo: LegalDocumentContent = {
       ],
     },
     {
-      heading: "제25조(개인정보 보호 책임자 지정)",
+      heading: "제25조(개인정보의 안전성 확보조치)",
       paragraphs: [
-        "운영주체: yap. 서비스 운영자(개인)",
-        "문의 이메일: yapndot@gmail.com",
+        "운영자는 개인정보에 대한 접근 통제, 전송 구간 암호화, 비밀번호의 단방향 해시 처리, 인증 토큰의 만료 및 요청 제한, 최소 권한의 운영 접근, 보안 이벤트 기록 등 서비스 규모와 위험에 상응하는 기술적·관리적 조치를 적용합니다.",
+        "인터넷 전송과 전자적 저장 방식은 절대적인 안전을 보장할 수 없으므로, 운영자는 위험을 지속적으로 점검하고 필요한 보호조치를 개선합니다.",
       ],
     },
     {
-      heading: "제26조(권익침해에 대한 구제방법)",
+      heading: "제26조(개인정보 처리업무의 위탁 및 외부 서비스)",
+      bullets: [
+        "Vercel Inc.: 웹 애플리케이션 호스팅, 서버 요청 처리 및 배포",
+        "Cloudflare, Inc.: 데이터베이스(D1), 파일 저장(R2), 실시간 연결(Durable Objects), 보안 및 네트워크 처리",
+        "Plus Five Five, Inc.(Resend): 이메일 인증 및 비밀번호 재설정 이메일 발송",
+        "Google LLC: 이용자가 선택한 Google 계정 인증",
+      ],
+      paragraphs: [
+        "운영자는 위 업체가 서비스 제공에 필요한 범위에서만 정보를 처리하도록 각 업체의 약관, 개인정보 보호 조건 및 보안조치를 확인하며, 위탁 관계가 변경되는 경우 본 방침을 갱신합니다.",
+      ],
+    },
+    {
+      heading: "제27조(개인정보의 국외 이전)",
+      bullets: [
+        "이전받는 자 및 국가: Vercel Inc.(미국 및 하위 처리업체 운영 국가), Cloudflare, Inc.(미국 및 글로벌 데이터센터 운영 국가), Plus Five Five, Inc.(미국), Google LLC(미국 및 Google 인프라 운영 국가)",
+        "이전 항목: 서비스 요청·접속 정보와 서비스 콘텐츠(Vercel 및 Cloudflare), 이메일 주소와 인증·재설정 메일 내용(Resend), Google 계정 식별값·이메일·프로필 정보(Google)",
+        "이전 목적: 웹 서비스 제공, 데이터 및 파일 저장, 실시간 통신, 보안, 이메일 발송 및 이용자가 선택한 Google 인증",
+        "이전 시기 및 방법: 서비스 이용, 파일 업로드, 이메일 발송 또는 Google 로그인 시 암호화된 네트워크를 통한 전송",
+        "보유 및 이용기간: 각 처리 목적 달성, 서비스 계약 종료 또는 이용자 정보 삭제 시까지. 다만 각 업체에 적용되는 법령이나 백업 정책에 따라 필요한 범위에서 추가 보관될 수 있음",
+        "국외 이전을 원하지 않는 이용자는 Google 로그인을 선택하지 않고 이메일 인증 방식을 이용할 수 있습니다. 다만 Vercel·Cloudflare·Resend 처리는 서비스 제공에 필요하므로 이를 거부하면 회원가입, 이메일 인증 또는 서비스 일부·전체 이용이 제한될 수 있습니다.",
+      ],
+      paragraphs: [
+        "국외 처리위탁 및 보관은 서비스 이용계약의 체결·이행에 필요한 범위에서 이루어지며, 운영자는 관련 법령에 따른 보호조치와 이용자 권리 보장 조치를 적용합니다.",
+      ],
+    },
+    {
+      heading: "제28조(개인정보 보호 책임자 및 문의처)",
+      paragraphs: [
+        "운영주체: yap. 서비스 운영자(개인)",
+        "문의 이메일: yapndot@gmail.com",
+        "서비스 내 문의: /support",
+      ],
+    },
+    {
+      heading: "제29조(권익침해에 대한 구제방법)",
       bullets: [
         "개인정보분쟁조정위원회: 1833-6972 / www.kopico.go.kr",
         "개인정보침해신고센터: 118 / privacy.kisa.or.kr",
@@ -228,7 +260,7 @@ const privacyKo: LegalDocumentContent = {
         "중앙행정심판위원회: 110 / www.simpan.go.kr",
       ],
       paragraphs: [
-        "운영자는 이용자의 개인정보자기결정권을 보장하기 위하여 노력하며, 개인정보 관련 상담이나 신고가 필요한 경우 제25조의 이메일로 문의할 수 있습니다.",
+        "운영자는 이용자의 개인정보자기결정권을 보장하기 위하여 노력하며, 개인정보 관련 상담이나 신고가 필요한 경우 제28조의 문의처로 연락할 수 있습니다.",
       ],
     },
     {
@@ -244,7 +276,7 @@ const privacyEn: LegalDocumentContent = {
   intro:
     "This Privacy Policy is written to reflect the actual features and data flows currently operated in yap., including anonymous participation, account login, moderation, reports, and one-to-one support.",
   effectiveDate: "July 31, 2026",
-  lastUpdated: "July 31, 2026",
+  lastUpdated: "August 4, 2026",
   sections: [
     {
       heading: "Article 1 (Purpose)",
@@ -279,8 +311,8 @@ const privacyEn: LegalDocumentContent = {
     {
       heading: "Article 5 (Information Collected for Registration)",
       bullets: [
-        "Required information: email address, password, and nickname",
-        "When Google sign-in is used: basic Google account identifier and information required for authentication",
+        "Email registration: email address, one-way password hash, and email-verification status",
+        "Google sign-in: Google account identifier, email address, email-verification status, and the name and profile image supplied by Google",
         "Registration and login status records needed to complete or confirm account authentication",
       ],
     },
@@ -336,7 +368,6 @@ const privacyEn: LegalDocumentContent = {
       ],
       bullets: [
         "Where the user has given prior consent",
-        "Where Google sign-in requires limited sharing with Google for authentication",
         "Where disclosure is required by law or by a lawful request from an authorized authority",
       ],
     },
@@ -344,16 +375,15 @@ const privacyEn: LegalDocumentContent = {
       heading: "Article 12 (Retention Period)",
       bullets: [
         "Personal information is retained only for as long as necessary to achieve the purposes described in this Policy.",
-        "Even after account deletion or the end of a processing purpose, certain records may be retained where required for legal compliance, dispute response, security review, or abuse prevention.",
-        "Support-ticket records, report handling history, audit logs, and operational events may be retained for a reasonable period for follow-up review and platform safety.",
-        "Anti-abuse identifiers may be retained for up to one year under internal standards.",
+        "Account information, account-linked recent channels, and preferences are deleted when the account is deleted. Channels owned by that account are also deleted. Messages, DMs, and gallery records posted in channels owned by others may remain after their account identifier is removed, preserving conversation context until the content or channel is deleted.",
+        "Unattached uploads expire after 15 minutes and enter scheduled cleanup. Rate-limit records are retained for 7 days, operational events for 30 days, message-actor security identifiers for 90 days, and moderation and support audit logs for one year.",
+        "Support tickets, reports, petitions, and related handling records are retained until their handling, review, abuse-prevention, and dispute-response purposes end, then deleted. They may be kept longer where required by law or while a related dispute or investigation remains pending.",
       ],
     },
     {
       heading: "Article 13 (Statutory Retention Periods)",
       bullets: [
         "Website access log records under communications privacy laws: 3 months",
-        "Complaint or dispute-handling records where required by consumer protection law: 3 years",
         "Any other retention period specifically required by applicable law",
       ],
       paragraphs: [
@@ -441,14 +471,48 @@ const privacyEn: LegalDocumentContent = {
       ],
     },
     {
-      heading: "Article 25 (Privacy Contact)",
+      heading: "Article 25 (Security Measures)",
       paragraphs: [
-        "Operator: yap. service operator (individual project)",
-        "Contact email: yapndot@gmail.com",
+        "The Operator applies safeguards proportionate to the Service's size and risk, including access controls, encryption in transit, one-way password hashing, expiring authentication tokens, request limits, least-privilege operational access, and security-event records.",
+        "No internet transmission or electronic storage method can guarantee absolute security. The Operator therefore reviews risks and improves safeguards as reasonably necessary.",
       ],
     },
     {
-      heading: "Article 26 (Remedies for Privacy Infringement)",
+      heading: "Article 26 (Processors and External Services)",
+      bullets: [
+        "Vercel Inc.: web application hosting, server request handling, and deployment",
+        "Cloudflare, Inc.: database (D1), file storage (R2), realtime connections (Durable Objects), security, and network processing",
+        "Plus Five Five, Inc. (Resend): delivery of verification and password-reset emails",
+        "Google LLC: Google account authentication selected by the user",
+      ],
+      paragraphs: [
+        "The Operator reviews the providers' contractual privacy terms and security measures and limits processing to what is needed to provide the Service. This Policy will be updated if these processing relationships materially change.",
+      ],
+    },
+    {
+      heading: "Article 27 (International Transfers)",
+      bullets: [
+        "Recipients and countries: Vercel Inc. (United States and countries used by its subprocessors), Cloudflare, Inc. (United States and countries where its global data centers operate), Plus Five Five, Inc. (United States), and Google LLC (United States and countries where Google infrastructure operates)",
+        "Transferred information: Service requests, access information, and Service content (Vercel and Cloudflare); email address and verification/reset email content (Resend); Google account identifier, email, and profile information (Google)",
+        "Purpose: web delivery, data and file storage, realtime communication, security, email delivery, and Google authentication selected by the user",
+        "Timing and method: encrypted network transfer when the user accesses the Service, uploads a file, requests an email, or uses Google sign-in",
+        "Retention: until the processing purpose is fulfilled, the provider agreement ends, or user information is deleted, subject to legally required retention and provider backup cycles",
+        "Users who do not want Google processing may use email authentication instead. Vercel, Cloudflare, and Resend processing is necessary to provide the relevant Service functions, so refusing it may prevent registration, email verification, or some or all Service use.",
+      ],
+      paragraphs: [
+        "International processing and storage are performed as necessary to form and perform the Service agreement, with safeguards and data-subject rights required by applicable law.",
+      ],
+    },
+    {
+      heading: "Article 28 (Privacy Contact)",
+      paragraphs: [
+        "Operator: yap. service operator (individual project)",
+        "Contact email: yapndot@gmail.com",
+        "In-Service support: /support",
+      ],
+    },
+    {
+      heading: "Article 29 (Remedies for Privacy Infringement)",
       bullets: [
         "Personal Information Dispute Mediation Committee: 1833-6972 / www.kopico.go.kr",
         "Personal Information Infringement Report Center: 118 / privacy.kisa.or.kr",
@@ -457,7 +521,7 @@ const privacyEn: LegalDocumentContent = {
         "Central Administrative Appeals Commission: 110 / www.simpan.go.kr",
       ],
       paragraphs: [
-        "The Operator seeks to protect each user's right to control their own personal information. Privacy-related complaints or questions may be directed to the contact listed in Article 25.",
+        "The Operator seeks to protect each user's right to control their own personal information. Privacy-related complaints or questions may be directed to the contact listed in Article 28.",
       ],
     },
     {
@@ -473,7 +537,7 @@ const termsKo: LegalDocumentContent = {
   intro:
     "아래 이용약관은 현재 운영 중인 yap. 서비스의 실제 기능, 익명 채팅 구조, 회원 인증 구조, 신고 및 1:1 지원 흐름을 기준으로 작성되었습니다.",
   effectiveDate: "2026년 7월 31일",
-  lastUpdated: "2026년 7월 31일",
+  lastUpdated: "2026년 8월 4일",
   sections: [
     {
       heading: "제1장 [총칙]",
@@ -564,6 +628,7 @@ const termsKo: LegalDocumentContent = {
       heading: "제10조(이용계약의 종료)",
       bullets: [
         "회원은 언제든지 서비스가 제공하는 탈퇴 절차 또는 운영자에게의 요청을 통해 이용계약을 종료할 수 있습니다.",
+        "회원 탈퇴 시 회원이 소유한 채널은 삭제됩니다. 다른 이용자의 채널에 작성한 게시물은 대화 맥락 보존을 위해 계정과의 연결이 제거된 상태로 남을 수 있으며, 이용자는 탈퇴 전에 직접 삭제하거나 운영자에게 법령상 권리 범위의 처리를 요청할 수 있습니다.",
         "운영자는 이용자가 본 약관 또는 법령을 중대하게 위반한 경우 이용계약을 해지하거나 서비스 이용을 제한할 수 있습니다.",
         "서비스 안전, 타 이용자 보호, 법적 의무 이행을 위하여 필요한 경우 사전 통지 없이 긴급 제한이 먼저 이루어질 수 있습니다.",
         "이용계약 종료와 관련하여 이용자의 귀책사유로 발생한 손해는 해당 이용자가 부담합니다.",
@@ -601,6 +666,7 @@ const termsKo: LegalDocumentContent = {
         "링크 기반 채널 입장 및 익명 또는 회원 기반 채팅 기능",
         "채널 생성, 관리, 규칙 설정, 공지, 동결, 신고 및 차단 등 채널 운영 기능",
         "답글, 반응, 검색, 이미지 업로드, 링크 미리보기, 라이브 세션 등 대화 확장 기능",
+        "라이브 세션에서 작성된 메시지와 첨부파일은 세션 종료 또는 만료 시 삭제되는 임시 콘텐츠 기능",
         "운영자 신고 처리, 1:1 지원, 가이드형 지원 흐름, 대시보드 및 개인 설정 기능",
       ],
     },
@@ -625,7 +691,7 @@ const termsKo: LegalDocumentContent = {
       heading: "제17조(금지행위)",
       bullets: [
         "허위 정보 입력, 타인 명의 도용, 계정 또는 익명 식별값의 부정 사용",
-        "욕설, 혐오, 협박, 성희롱, 음란물, 불법 촬영물, 스팸, 사기, 불법 홍보 또는 법령 위반 게시물의 작성",
+        "욕설, 혐오, 협박, 성희롱, 음란물, 불법 촬영물, 아동·청소년 성착취물, 스팸, 사기, 불법 홍보 또는 그 밖의 법령 위반 게시물의 작성·공유",
         "서비스의 차단, 제한, 신고, 동결 또는 보안 장치를 우회하려는 행위",
         "자동화 도구, 스크립트, 과도한 요청 등으로 서비스 운영을 방해하는 행위",
         "다른 이용자의 개인정보를 무단 수집, 저장, 공개하거나 외부로 유출하는 행위",
@@ -678,7 +744,7 @@ const termsKo: LegalDocumentContent = {
       heading: "제23조(개인정보의 위탁 또는 외부 서비스 이용)",
       paragraphs: [
         "운영자는 서비스 호스팅, 데이터 저장, 파일 저장, 이메일 발송, 인증, 보안 및 성능 제공을 위하여 외부 인프라 또는 플랫폼 사업자를 이용할 수 있습니다.",
-        "현재 서비스 구조상 Next.js, Cloudflare, Vercel, 인증 제공자 및 이메일 발송 수단 등 외부 기술 서비스가 사용될 수 있으며, 관련 개인정보 처리 사항은 개인정보처리방침에서 정한 범위에 따릅니다.",
+        "외부 서비스가 처리하는 개인정보의 항목·목적·보유기간 및 국외 이전에 관한 구체적인 사항은 개인정보처리방침에 따릅니다.",
       ],
     },
     {
@@ -713,7 +779,7 @@ const termsKo: LegalDocumentContent = {
         "운영자는 서비스의 전부 또는 일부를 개선, 변경, 중단할 수 있으며, 중대한 변경은 합리적인 방법으로 공지합니다.",
         "이용자는 운영자의 사전 서면 동의 없이 본 약관상 지위 또는 권리·의무를 양도할 수 없습니다.",
         "본 약관의 일부 조항이 무효 또는 집행불능이 되더라도 나머지 조항의 효력에는 영향을 미치지 않습니다.",
-        "서비스 이용 관련 문의는 yapndot@gmail.com으로 할 수 있습니다.",
+        "서비스 이용 관련 문의는 서비스 내 이용 문의(/support) 또는 yapndot@gmail.com으로 할 수 있습니다.",
       ],
     },
     {
@@ -729,7 +795,7 @@ const termsEn: LegalDocumentContent = {
   intro:
     "These Terms of Service are written to reflect the actual features currently operated in yap., including anonymous chat, account login, moderation, reports, and one-to-one support.",
   effectiveDate: "July 31, 2026",
-  lastUpdated: "July 31, 2026",
+  lastUpdated: "August 4, 2026",
   sections: [
     {
       heading: "Chapter 1 [General]",
@@ -820,6 +886,7 @@ const termsEn: LegalDocumentContent = {
       heading: "Article 10 (Termination of the User Agreement)",
       bullets: [
         "A member may terminate the user agreement at any time through the withdrawal process provided by the Service or by contacting the Operator.",
+        "Deleting an account also deletes channels owned by that member. Content posted in channels owned by others may remain after its account link is removed to preserve conversation context. Before deletion, users may delete that content themselves or request handling within the scope of their applicable legal rights.",
         "The Operator may terminate the agreement or restrict access where the user materially violates these Terms or applicable law.",
         "Where necessary for safety, legal compliance, or protection of other users, urgent restrictions may be applied before notice is given.",
         "Losses caused by the user's own fault in connection with termination are the user's responsibility.",
@@ -857,6 +924,7 @@ const termsEn: LegalDocumentContent = {
         "Link-based channel access and anonymous or account-based chat participation",
         "Channel creation, management, rules, notices, freezing, reporting, and blocking tools",
         "Replies, reactions, search, image upload, link previews, and live-session features",
+        "Temporary live-session content whose messages and attachments are deleted when the session ends or expires",
         "Moderation handling, one-to-one support, guided support flows, dashboard views, and personal settings",
       ],
     },
@@ -881,7 +949,7 @@ const termsEn: LegalDocumentContent = {
       heading: "Article 17 (Prohibited Conduct)",
       bullets: [
         "Providing false information, misusing another person's identity, or using accounts or anonymous identifiers improperly",
-        "Posting abusive, hateful, threatening, sexually harassing, obscene, illegal, spam, fraudulent, or otherwise unlawful content",
+        "Posting or sharing abusive, hateful, threatening, sexually harassing, obscene, illegally recorded, child-exploitative, spam, fraudulent, or otherwise unlawful content",
         "Attempting to evade moderation, reporting, freezing, blocking, or security measures",
         "Using bots, scripts, scraping, or excessive requests to disrupt Service operation",
         "Collecting, storing, disclosing, or leaking other users' personal information without authorization",
@@ -934,7 +1002,7 @@ const termsEn: LegalDocumentContent = {
       heading: "Article 23 (Entrusted Processing or External Service Use)",
       paragraphs: [
         "The Operator may use external infrastructure or platform providers for hosting, storage, file handling, email delivery, authentication, security, and performance.",
-        "The current Service stack may rely on providers such as Next.js hosting, Cloudflare services, Vercel deployment, authentication providers, and email-delivery tools, and any related personal-information handling is governed by the Privacy Policy.",
+        "Details about the information processed by external services, processing purposes, retention, and international transfers are provided in the Privacy Policy.",
       ],
     },
     {
@@ -969,7 +1037,7 @@ const termsEn: LegalDocumentContent = {
         "The Operator may improve, modify, or discontinue all or part of the Service, and material changes will be announced by a reasonable method.",
         "Users may not assign their status under these Terms or any rights or obligations arising from them without the Operator's prior written consent.",
         "If any provision of these Terms is held invalid or unenforceable, the remaining provisions remain in effect.",
-        "Questions about Service use may be sent to yapndot@gmail.com.",
+        "Questions about Service use may be submitted through in-Service support (/support) or sent to yapndot@gmail.com.",
       ],
     },
     {
