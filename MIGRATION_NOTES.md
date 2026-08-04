@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Canonical production domain preparation — 2026-08-04
+
+- Changed the application fallback and documented production origin from the Vercel hostname to `https://yapndot.com`.
+- Restricted dashboard channel-address parsing to the canonical domain, its `www` alias, the existing Vercel transition hostname and localhost development instead of accepting an arbitrary full-link hostname.
+- Added the apex domain and `www` alias to the Worker CORS allowlist while retaining the Vercel hostname for a safe deployment transition.
+
+Trade-offs:
+
+- The legacy Vercel origin remains temporarily authorized, so it should be removed from Worker CORS only after DNS, OAuth, email verification and password-reset smoke tests pass on the custom domain.
+- Links copied from unrelated hostnames are no longer interpreted as yap. channel addresses; users can still enter `/ch/name`, `yapndot.com/ch/name` or the complete canonical URL.
+- Using one canonical apex origin avoids split cookies and OAuth state, but `www.yapndot.com` must redirect to it at the hosting layer.
+
+Deployment notes:
+
+- set Vercel `AUTH_URL`, `APP_ORIGIN` and `NEXT_PUBLIC_APP_ORIGIN` to `https://yapndot.com`;
+- set the Worker `APP_ORIGIN` secret to `https://yapndot.com`, then deploy the Worker;
+- configure Google OAuth origins and callback URLs for the new domain before login smoke testing.
+
 ### Next.js 16.3 security update — 2026-08-04
 
 - Updated `next` and `eslint-config-next` from `16.2.11` to `16.3.0` before beta release.

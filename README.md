@@ -2,7 +2,7 @@
 
 **yap.** is a link-based, multi-tenant anonymous chat service built with Next.js and Cloudflare.
 
-Production: [letmetellu.vercel.app](https://letmetellu.vercel.app)
+Production: [yapndot.com](https://yapndot.com)
 
 ## Overview
 
@@ -175,6 +175,17 @@ APP_VERSION=<optional-local-version-label>
 
 Set `AUTH_URL` to the deployed frontend origin in production.
 
+Production frontend values:
+
+```dotenv
+AUTH_URL=https://yapndot.com
+APP_ORIGIN=https://yapndot.com
+NEXT_PUBLIC_APP_ORIGIN=https://yapndot.com
+```
+
+Use `https://yapndot.com` as the canonical origin. Redirect `www.yapndot.com`
+to the apex domain rather than serving both as independent application origins.
+
 Worker secrets:
 
 ```bash
@@ -184,6 +195,10 @@ npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put EMAIL_TEST_RECIPIENT
 npx wrangler secret put APP_ORIGIN
 ```
+
+Set the production Worker `APP_ORIGIN` secret to `https://yapndot.com`. The
+Worker CORS allowlist keeps the Vercel hostname during the DNS transition and
+can remove it after the custom domain has been stable and smoke-tested.
 
 Never commit `.env.local`, Worker secrets, OAuth client secrets or production database exports.
 

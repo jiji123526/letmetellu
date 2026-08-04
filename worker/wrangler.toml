@@ -27,7 +27,7 @@ bucket_name = "letmetellu-media"
 remote = true
 
 [vars]
-ALLOWED_ORIGIN = "https://letmetellu.vercel.app,http://localhost:3000"
+ALLOWED_ORIGIN = "https://yapndot.com,https://www.yapndot.com,https://letmetellu.vercel.app,http://localhost:3000"
 REPORTS_CHANNEL_ID = "reports"
 # For development, temporarily use "*" if needed:
 # ALLOWED_ORIGIN = "*"

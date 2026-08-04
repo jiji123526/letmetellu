@@ -16,6 +16,14 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ## Remaining Ship Work
 
+### Custom domain cutover
+
+- Application fallbacks, dashboard link parsing and Worker CORS are prepared for `https://yapndot.com`; the Worker production `APP_ORIGIN` has also been switched to the canonical apex origin.
+- Complete the external cutover by attaching the apex and `www` domains in Vercel, redirecting `www` to the apex, and setting Vercel `AUTH_URL`, `APP_ORIGIN` and `NEXT_PUBLIC_APP_ORIGIN` to the apex URL.
+- Add `https://yapndot.com` as an authorized Google OAuth JavaScript origin and `https://yapndot.com/api/auth/callback/google` as a redirect URI.
+- Verify the Resend sending domain, then smoke-test signup verification, password reset, Google login, normal login, channel links, uploads and realtime chat from the canonical hostname.
+- Remove the legacy Vercel hostname from Worker CORS only after the custom-domain smoke tests pass and no rollback traffic still depends on it.
+
 ### Abuse controls
 
 - Expand durable rate limits to broader cross-channel abuse patterns, not just per-route throttles.

@@ -116,12 +116,12 @@ function getChannelPreviewColor(channelId: string, fallback: string) {
 }
 
 function getChannelIdFromLink(value: string) {
-  const match = value.trim().match(/^(?:(?:https?:\/\/[^/\s]+|letmetellu\.vercel\.app))?\/ch\/([a-z0-9-]{3,30})\/?(?:[?#].*)?$/i);
+  const match = value.trim().match(/^(?:(?:https?:\/\/(?:www\.)?yapndot\.com|(?:www\.)?yapndot\.com|https?:\/\/letmetellu\.vercel\.app|letmetellu\.vercel\.app|https?:\/\/localhost(?::\d+)?|localhost(?::\d+)?))?\/ch\/([a-z0-9-]{3,30})\/?(?:[?#].*)?$/i);
   return match?.[1]?.toLowerCase() || null;
 }
 
 function looksLikeChannelAddress(value: string) {
-  return /^(?:(?:https?:\/\/[^/\s]+|letmetellu\.vercel\.app))?\/ch\//i.test(value.trim());
+  return /^(?:(?:https?:\/\/(?:www\.)?yapndot\.com|(?:www\.)?yapndot\.com|https?:\/\/letmetellu\.vercel\.app|letmetellu\.vercel\.app|https?:\/\/localhost(?::\d+)?|localhost(?::\d+)?))?\/ch\//i.test(value.trim());
 }
 
 function localMigrationSignature(channels: RecentChannel[]) {

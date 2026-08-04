@@ -30,7 +30,7 @@ function VerificationResult({ verified, locale }: { verified: boolean; locale: "
   const appOrigin = (
     process.env.APP_ORIGIN
     || process.env.NEXT_PUBLIC_APP_ORIGIN
-    || "https://letmetellu.vercel.app"
+    || "https://yapndot.com"
   ).replace(/\/+$/, "");
   const loginUrl = `${appOrigin}/dashboard?login=true${verified ? "&verified=true" : ""}`;
 

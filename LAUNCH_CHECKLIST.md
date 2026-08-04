@@ -20,6 +20,12 @@ Do not treat the app as public-launch ready until these are complete:
 - Move Resend out of sandbox mode with a verified sending domain.
 - Rehearse signup verification, password reset and legacy password-hash upgrade flows in production-like conditions.
 
+4. Custom production domain
+- Attach `yapndot.com` to Vercel and redirect `www.yapndot.com` to the apex domain.
+- Set frontend and Worker origins to `https://yapndot.com`.
+- Add the new JavaScript origin and `/api/auth/callback/google` redirect URI to Google OAuth.
+- Verify login cookies, email verification links, password-reset links and Worker CORS on the custom domain.
+
 ## Pre-deploy checks
 
 1. Confirm the working tree contains only the intended release changes.
