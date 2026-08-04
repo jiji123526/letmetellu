@@ -13,7 +13,8 @@ Do not treat the app as public-launch ready until these are complete:
 - Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
 2. Monitoring and operator alerting
-- Turn operational events and moderation/support audit data into visible dashboards or alerts.
+- Calibrate the existing super-admin operational-health dashboard against production baselines, then add alert delivery for degraded or critical states.
+- Add bounded operator summaries for moderation/support audit trends.
 - Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 
 3. Production email hardening
@@ -194,5 +195,5 @@ Internal or limited beta can proceed after:
 Public launch should wait until:
 
 - regression coverage exists for support/report/dashboard state sync;
-- monitoring and alerting are visible to operators;
-- production email delivery no longer depends on sandbox constraints.
+- operational-health thresholds are calibrated and operators have either external alerts or an explicit manual response procedure;
+- production signup verification, password reset and legacy password upgrades have been rehearsed and are monitored.

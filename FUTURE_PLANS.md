@@ -6,23 +6,21 @@ This file tracks remaining product and platform work. Implemented behavior and d
 
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
-1. Regression coverage for the recent chat refactors plus support, reports and dashboard state transitions.
-2. Monitoring, alerting and operator visibility for the optimized Worker and dashboard paths.
-3. Production email and credential-path hardening.
-4. Retryable deletion, cleanup and retention workflows.
-5. Durable abuse controls beyond the current first pass.
-6. Operator efficiency improvements for support and moderation.
-7. Larger performance redesigns only after measurement, starting with precomputed channel activity if `/api/user` remains a proven hotspot.
+1. Complete custom-domain, authentication, email and realtime smoke tests, then remove transition origins.
+2. Add regression coverage for the recent chat refactors plus support, reports and dashboard state transitions.
+3. Calibrate the existing operational-health view from production baselines, then add alert delivery and response procedures.
+4. Add explicit monitoring for production email and legacy credential-upgrade paths.
+5. Move deletion, cleanup and retention toward retryable, observable workflows.
+6. Expand durable abuse controls beyond the current first pass.
+7. Pursue larger performance redesigns only after measurement, starting with precomputed channel activity if `/api/user` remains a proven hotspot.
 
 ## Remaining Ship Work
 
 ### Custom domain cutover
 
-- Application fallbacks, dashboard link parsing, Auth.js origin generation and Worker CORS now use `https://yapndot.com`; production Resend delivery uses the verified `send.yapndot.com` sender.
-- The custom-domain security review found that browser WebSocket upgrades bypassed CORS. The Worker boundary now requires an exact `Origin` match from `ALLOWED_ORIGIN` before forwarding an upgrade to a Durable Object; keep this covered by the focused origin-policy tests.
 - Confirm Vercel redirects `www.yapndot.com` to the apex instead of serving both hostnames independently.
-- Confirm the apex response includes the intended CSP and HSTS headers. This could not be checked from AgentSpaces because the production hostname was not reachable from its restricted network.
-- Google OAuth requires both `https://yapndot.com/api/auth/callback/google-login` and `https://yapndot.com/api/auth/callback/google-signup`; retain the matching legacy Vercel callbacks only during rollback readiness.
+- Confirm the apex response includes the intended CSP and HSTS headers from a network that can reach the production hostname.
+- Confirm Google Cloud has both `https://yapndot.com/api/auth/callback/google-login` and `https://yapndot.com/api/auth/callback/google-signup`; retain the matching legacy Vercel callbacks only during rollback readiness.
 - Smoke-test signup verification, password reset, Google signup/login, normal login, channel links, uploads and realtime chat from the canonical hostname.
 - After smoke tests and rollback readiness are complete, narrow production Worker CORS to `https://yapndot.com`. Remove the legacy Vercel hostname, remove `www` after its permanent apex redirect is confirmed, and move localhost to development-only Wrangler configuration.
 - Plan a separate CSP hardening change to remove `script-src 'unsafe-inline'`. First replace the inline theme bootstrap with nonce-based handling and remove the generic arbitrary-HTML contract from `ConfirmDialog`; this is higher risk than the origin-policy fix and should ship with focused UI and production-header verification.
@@ -31,8 +29,8 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Expand durable rate limits to broader cross-channel abuse patterns, not just per-route throttles.
 - Add stronger report-target and evidence validation for direct API callers.
-- Upload access and existing ticket-quota checks now run before request-body consumption. If operational metrics show repeated authorized requests that fail before ticket creation, add a separate low-cost upload-attempt limiter rather than lowering successful-upload quotas.
-- Basic JPEG, PNG, GIF and WebP signatures are now checked before R2 writes. Consider full image decoding or malware scanning only if production abuse or a future image-processing pipeline justifies the extra CPU and implementation cost.
+- Add a separate low-cost upload-attempt limiter only if metrics show repeated authorized requests failing before ticket creation; do not lower successful-upload quotas preemptively.
+- Consider full image decoding or malware scanning only if production abuse or a future image-processing pipeline justifies the additional CPU and implementation cost.
 - If the platform later exposes safe DNS or IP verification primitives, strengthen preview destination validation beyond hostname rules.
 
 ### Rewarded media credits
@@ -48,20 +46,19 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Monitoring and alerts
 
-- A super-admin-only operational-health endpoint now exposes bounded 15-minute and 24-hour summaries plus problem-route rollups without raw event details.
-- Add dashboards or alerts for `403`, `429` and `5xx` rates.
-- The operator dashboard now displays the bounded health summary with conservative polling. Introduce alert delivery only after normal production baselines are known.
-- Track moderation action volume, report volume and petition outcomes.
-- Track upload failures, preview failures and WebSocket auth failures.
+- Establish normal production baselines for the existing super-admin health card, then calibrate its `5xx`, exception and `429` thresholds.
+- Add external alert delivery for degraded or critical health only after threshold calibration, with a documented operator response and escalation path.
+- Add bounded summaries for moderation action volume, report volume, petition outcomes and support queue age; the underlying audit records already exist, but these trends are not yet presented.
+- Add explicit operational-event coverage for upload failures, preview failures and WebSocket authorization/origin failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
 - Measure `/api/user`, platform-support dashboard and support-thread latency before pursuing another query redesign.
-- Track scheduled upload-cleanup duration, deleted-ticket count and R2 deletion failures so the recent cleanup changes are operationally visible.
+- Track scheduled-maintenance duration, per-table deletion counts and R2 deletion failures so the existing bounded cleanup work is operationally visible.
 
 ### Cleanup and deletion reliability
 
 - Move channel, account and cross-store media deletion toward idempotent, retryable cleanup jobs instead of relying indefinitely on one request completing every D1, Durable Object and R2 step.
 - Preserve the current synchronous user experience initially, but record durable cleanup progress so partial channel or media deletion can resume safely after a timeout or transient failure.
-- Define retention and deletion policy for closed support sessions, support tickets, reports, petitions, moderation audit logs and operational events before enabling broader automated cleanup.
+- Existing scheduled retention covers operational events, moderation/support audit logs, message actor identities, rate-limit rows and expired upload tickets. Define policy for closed support sessions and tickets, reports and petitions before extending automated cleanup to those product records.
 - Add dry-run counts, bounded batches and failure monitoring before expanding destructive scheduled maintenance.
 - The 2026-08-04 pre-beta audit identified seven legacy credential test accounts, four channels owned by those accounts and six additional orphan channels. The intended keep set includes all Google accounts, the platform `reports` channel and the new verified credential account. No destructive cleanup completed because the production internal secret intentionally differed from the local development value; use a narrowly scoped authenticated maintenance path rather than exporting all Vercel production secrets.
 
@@ -77,7 +74,6 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Frontend maintainability
 
-- Treat the broad `ChatView` extraction phase as complete enough to pause. The component now delegates its major state, mutation, realtime, history, shell and layer domains.
 - Add targeted regression coverage around message selectors, action rules, history navigation, realtime synchronization and the extracted layer-stack contracts before further structural changes.
 - The next maintainability candidates are domain-splitting `src/lib/api.ts` and reducing the state/orchestration surface in `src/app/dashboard/page.tsx`; take one domain at a time rather than starting another broad rewrite.
 - Reduce `ContextMenu` and overlay prop surfaces only when a concrete feature or testability problem justifies it.
@@ -85,32 +81,14 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Email and account hardening
 
-- Resend now uses the verified `send.yapndot.com` sender and no longer restricts signup or password-reset delivery to the sandbox recipient. Monitor delivery and bounce behavior during beta.
+- Monitor Resend delivery, bounce and failure behavior during beta.
+- Rehearse signup verification and password reset with a non-owner mailbox from the canonical production domain.
 - Validate the legacy SHA-256 to PBKDF2 upgrade path end to end in production-like conditions.
 - The beta dependency pass is currently clean under both production-only and full `npm audit`; repeat the audit before broader releases and continue normal upgrades without `npm audit fix --force`.
 
 ## Guided Support Follow-up
 
-The first guided support version now exists as a separate flow from reports and from public channel chat.
-
-Current shape:
-
-- Guests and logged-in users open support from the dashboard help button, not from a separate inbox page.
-- The default user experience is a chatbot-style decision tree with self-resolve paths.
-- Escalation creates at most one open support ticket per signed actor.
-- Users can reopen the guided flow while an active ticket exists, but the UI does not allow them to submit another ticket until that ticket closes.
-- Closing the guided support panel abandons the in-progress guided session so reopening starts from the beginning.
-- Users do not get a support history view; the ticket disappears from their side when the super admin closes it.
-- A replied-to ticket can surface as a temporary channel-like item in the user dashboard, then disappears again when closed.
-- Users can also dismiss that temporary support item themselves, which closes the active ticket on the super-admin side instead of keeping a separate user-only hide state.
-- Guest ticket previews are mirrored in local storage for dashboard reopen convenience, while Worker authorization still relies on signed anonymous identity cookies.
-- Manual locale selection now overrides device language for support-adjacent surfaces, and the legal pages now render only the active locale instead of a bilingual combined view.
-- The super admin dashboard shows `Report` and `Tickets` sections instead of a mixed inbox.
-- Reports still stay in the private reports inbox channel; only guided-support escalations become tickets.
-- The reports inbox now includes simple `Open`, `Warned`, and `Frozen` filters plus a restricted-channel summary block for follow-up work.
-- The super-admin dashboard fetch is now bounded to open tickets plus a recent closed-ticket window, and the user dashboard preview uses a lightweight support-preview read instead of loading full support state.
-
-### Next support work
+The implemented guided-support and operator-dashboard shape is recorded in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md). Remaining work:
 
 - Add focused regression tests for guided-session reset, active-ticket visibility, report filters and dashboard sync between user and super-admin views.
 - Expand the decision tree coverage for real user issues and keep all new user-facing support copy in the centralized locale files rather than growing inline logic again.

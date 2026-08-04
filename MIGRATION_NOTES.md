@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### WebSocket origin enforcement — 2026-08-04
+
+- Added exact-match `Origin` validation at the Worker boundary before browser WebSocket upgrades can reach a chat-room Durable Object.
+- Reused the same configured-origin policy for CORS and WebSocket checks so the two browser trust boundaries cannot drift independently.
+- Added focused tests for configured origins, spoofed subdomains, missing origins, development wildcard behavior and enforcement before Durable Object access.
+
+Trade-offs:
+
+- Supported browser users on configured origins see no UI change.
+- Preview deployments, scripts, native clients and tools with an unconfigured or missing `Origin` now receive `403` before opening a realtime connection.
+- New production hostnames must be added deliberately to `ALLOWED_ORIGIN`; transition origins should be removed after canonical-domain smoke testing.
+
+Deployment notes:
+
+- no D1 migration or frontend deployment is required;
+- deploy the Worker for the WebSocket boundary change.
+
 ### Pre-beta domain, email and legacy-data audit — 2026-08-04
 
 - Verified the canonical `yapndot.com` deployment, HTTPS route, Auth.js provider metadata and Worker CORS response.
