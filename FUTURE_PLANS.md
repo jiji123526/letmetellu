@@ -6,12 +6,13 @@ This file tracks remaining product and platform work. Implemented behavior and d
 
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
-1. Regression coverage for support, reports and dashboard state transitions.
-2. Monitoring, alerting and operator visibility.
-3. Operator efficiency improvements for support and moderation.
-4. Durable abuse controls beyond the current first pass.
-5. Email and credential-path production hardening.
-6. Continue extracting `ChatView` action/state policy into small shared modules before taking on larger chat-surface UI changes.
+1. Regression coverage for the recent chat refactors plus support, reports and dashboard state transitions.
+2. Monitoring, alerting and operator visibility for the optimized Worker and dashboard paths.
+3. Production email and credential-path hardening.
+4. Retryable deletion, cleanup and retention workflows.
+5. Durable abuse controls beyond the current first pass.
+6. Operator efficiency improvements for support and moderation.
+7. Larger performance redesigns only after measurement, starting with precomputed channel activity if `/api/user` remains a proven hotspot.
 
 ## Remaining Ship Work
 
@@ -39,10 +40,20 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Track moderation action volume, report volume and petition outcomes.
 - Track upload failures, preview failures and WebSocket auth failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
+- Measure `/api/user`, platform-support dashboard and support-thread latency before pursuing another query redesign.
+- Track scheduled upload-cleanup duration, deleted-ticket count and R2 deletion failures so the recent cleanup changes are operationally visible.
+
+### Cleanup and deletion reliability
+
+- Move channel, account and cross-store media deletion toward idempotent, retryable cleanup jobs instead of relying indefinitely on one request completing every D1, Durable Object and R2 step.
+- Preserve the current synchronous user experience initially, but record durable cleanup progress so partial channel or media deletion can resume safely after a timeout or transient failure.
+- Define retention and deletion policy for closed support sessions, support tickets, reports, petitions, moderation audit logs and operational events before enabling broader automated cleanup.
+- Add dry-run counts, bounded batches and failure monitoring before expanding destructive scheduled maintenance.
 
 ### Precomputed channel activity
 
 - The highest-upside remaining dashboard performance change is to stop deriving owned-channel activity from `messages` and live-config rows on every `/api/user` read.
+- Do not start this migration until latency and D1 query measurements show that the optimized `/api/user` query is still a material bottleneck.
 - The likely shape is a dedicated `channel_activity` table keyed by `channel_id`, or equivalent derived fields on `channels`, that stores precomputed `last_activity_at`, `last_message_at`, and live-state fields.
 - This should be treated as a data-consistency project, not a small hot-path tweak. All message creation, latest-message deletion/moderation, live start, live end, live expiry, channel creation, and channel deletion paths would need to keep the derived state correct.
 - Prefer a separate table over immediately extending `channels` so rollout, backfill, dual-write, and shadow comparison are easier to control.
@@ -51,9 +62,11 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Frontend maintainability
 
-- Continue separating `ChatView` policy logic from render wiring; shared action rules, pure message utilities, message text/embed rendering, row-level presentation, message-derivation selectors, history navigation, moderation state, live-session state, reports/search state, composer local state, chat mutations, interaction state, admin/channel shell actions, channel-settings callbacks, overlay rendering, overlay callbacks, and context-menu action policy are now extracted.
-- The next low-risk extraction target is reducing the remaining prop surface between `ChatView` and the overlay/context-menu layers, then peeling off one more focused orchestration domain such as live-entry/loading transitions or reports-inbox shell policy.
-- Keep reducing `ContextMenu`, `ChatView`, and overlay prop-surface React/compiler lint debt before adding more admin chat controls.
+- Treat the broad `ChatView` extraction phase as complete enough to pause. The component now delegates its major state, mutation, realtime, history, shell and layer domains.
+- Add targeted regression coverage around message selectors, action rules, history navigation, realtime synchronization and the extracted layer-stack contracts before further structural changes.
+- The next maintainability candidates are domain-splitting `src/lib/api.ts` and reducing the state/orchestration surface in `src/app/dashboard/page.tsx`; take one domain at a time rather than starting another broad rewrite.
+- Reduce `ContextMenu` and overlay prop surfaces only when a concrete feature or testability problem justifies it.
+- Continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures before adding another large chat UI surface.
 
 ### Email and account hardening
 
@@ -84,8 +97,8 @@ Current shape:
 
 ### Next support work
 
-- Expand the decision tree coverage for real user issues and keep all new user-facing support copy in the centralized locale files rather than growing inline logic again.
 - Add focused regression tests for guided-session reset, active-ticket visibility, report filters and dashboard sync between user and super-admin views.
+- Expand the decision tree coverage for real user issues and keep all new user-facing support copy in the centralized locale files rather than growing inline logic again.
 - Add operator macros or close-reason presets for common support replies once the current flow stabilizes.
 - Add explicit pagination or archive filtering for older closed tickets if the operator audit workflow outgrows the current recent-closed window.
 - Decide whether support audit logs need an operator-visible review UI or should remain backend-only for incident tracing.
@@ -101,7 +114,7 @@ Current shape:
 
 ## Platform Moderation Direction
 
-Current production has a narrow moderation model: one manually bootstrapped reports-inbox owner can review reports, warn owners, freeze or delete channels and resolve owner petitions. The larger delegated moderation system still does not exist.
+Current production has a narrow moderation model: one manually bootstrapped reports-inbox owner can review reports, warn owners, freeze or delete channels and resolve owner petitions. Durable reports, moderation state, petitions and moderation audit logs already exist; delegated platform roles still do not.
 
 ### Principles
 
@@ -118,25 +131,33 @@ Current production has a narrow moderation model: one manually bootstrapped repo
 | `moderator` | Resolve reports, warn owners, restrict, suspend and restore channels |
 | `super_admin` | Grant and revoke operator roles, perform destructive or system-level actions |
 
-### Likely data model
+### Existing foundation
 
-- `platform_admins`
 - `channel_reports`
-- `platform_audit_logs`
+- `channel_moderation`
+- `channel_petitions`
+- `moderation_audit_logs`
+
+### Future additions
+
+- Add `platform_admins` only if the product actually needs delegated reviewer and moderator roles.
+- Extend the existing moderation audit model instead of creating a second overlapping platform-audit system unless non-moderation operator actions require a separate boundary.
 
 Reporter network and device signals should stay HMAC-hashed; raw IP addresses and fingerprints should not be retained.
 
 ### Delivery phases
 
-1. Finalize report categories, enforcement states and retention policy.
-2. Add role, report and platform-audit migrations.
-3. Implement shared platform-role checks and append-only audit helpers.
-4. Keep the current reports-inbox workflow stable before adding a separate report console, if one is still needed later.
-5. Add reversible restriction, suspension and restoration actions.
-6. Add owner notifications, appeals and recent re-authentication for sensitive actions.
+1. Add regression coverage and retention policy for the existing report, warning, freeze, deletion, restoration and petition flows.
+2. Decide whether the current single-super-admin model is still insufficient before adding role infrastructure.
+3. If delegation is needed, add `platform_admins`, shared role checks and a migration path from reports-inbox ownership.
+4. Add operator assignment and audit-review UI without replacing the existing reports-inbox workflow prematurely.
+5. Require recent authentication for destructive or system-level actions.
+6. Add a separate report console only if measured operator workflow problems justify it.
 
 ## Not Next
 
 - Full multi-moderator RBAC before the current single-admin flow is fully stable.
 - A large mixed support-plus-reports inbox built on top of the current owner DM model.
 - Shareable or raw-ID anonymous support thread access outside the current signed-identity boundary.
+- Another broad `ChatView` extraction pass without a concrete feature, defect or testability reason.
+- Precomputed channel activity without production measurements, a backfill, dual writes and shadow comparison.
