@@ -532,7 +532,7 @@ export const ko = {
   supportMockUserName: "테스트 사용자",
   firstOnboardingTitle: "오직 당신을 위한 익명 채팅방",
   firstOnboardingDesc: "링크 하나로 열고, 필요한 순간에는 안전하게 관리하세요.",
-  firstOnboardingPrivateTitle: "검색에 공개되지 않는 링크 입장",
+  firstOnboardingPrivateTitle: "공유된 링크로만 입장 가능",
   firstOnboardingPrivateDesc: "링크를 공유받은 사람만 바로 참여하고, 필요하면 비밀번호도 설정할 수 있어요.",
   firstOnboardingDmTitle: "아 그거 디엠 주세요",
   firstOnboardingDmDesc: "DM은 방장이 언제든 켜고 끌 수 있어요. 방장만 확인할 수 있고, 전송 후에는 보낸 사람의 채팅 화면에도 기록이 남지 않아요.",
