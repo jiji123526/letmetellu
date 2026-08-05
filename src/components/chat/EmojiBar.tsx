@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } f
 import { createPortal } from "react-dom";
 import { adminAction } from "@/lib/api";
 import { useLocale } from "@/hooks/useLocale";
+import { buildEmojiPicker } from "./emojiPickerData";
 
 const DEFAULT_EMOJIS = ["🔥", "❤️", "😂", "👏", "🎉"];
 const EMOJI_FX_LAYER_ID = "live-emoji-fx-layer";
@@ -77,7 +78,10 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
   const gridRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -168,17 +172,17 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
           style={{ position: "fixed", bottom: "120px", right: "12px", zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
           ref={(el) => {
             pickerRef.current = el;
-            if (el && !el.querySelector("emoji-picker")) {
-              import("emoji-picker-element").then(() => {
-                const picker = document.createElement("emoji-picker");
-                picker.setAttribute("locale", "ko");
-                picker.style.height = "320px";
-                picker.style.width = "300px";
-                picker.addEventListener("emoji-click", (ev: Event) => {
-                  const detail = (ev as CustomEvent).detail;
-                  onSelect(detail.unicode);
-                });
+            if (el && !el.dataset.pickerLoading && !el.querySelector("emoji-picker")) {
+              el.dataset.pickerLoading = "true";
+              void buildEmojiPicker({
+                height: "320px",
+                onSelect,
+                width: "300px",
+              }).then((picker) => {
+                if (!el.isConnected || el.querySelector("emoji-picker")) return;
                 el.appendChild(picker);
+              }).finally(() => {
+                delete el.dataset.pickerLoading;
               });
             }
           }}
@@ -350,17 +354,17 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
             <div
               style={{ marginTop: "12px", borderRadius: "12px", overflow: "hidden" }}
               ref={(el) => {
-                if (el && !el.querySelector("emoji-picker")) {
-                  import("emoji-picker-element").then(() => {
-                    const picker = document.createElement("emoji-picker");
-                    picker.setAttribute("locale", "ko");
-                    picker.style.width = "100%";
-                    picker.style.height = "280px";
-                    picker.addEventListener("emoji-click", (ev: Event) => {
-                      const detail = (ev as CustomEvent).detail;
-                      addEmoji(detail.unicode);
-                    });
+                if (el && !el.dataset.pickerLoading && !el.querySelector("emoji-picker")) {
+                  el.dataset.pickerLoading = "true";
+                  void buildEmojiPicker({
+                    height: "280px",
+                    onSelect: addEmoji,
+                    width: "100%",
+                  }).then((picker) => {
+                    if (!el.isConnected || el.querySelector("emoji-picker")) return;
                     el.appendChild(picker);
+                  }).finally(() => {
+                    delete el.dataset.pickerLoading;
                   });
                 }
               }}
