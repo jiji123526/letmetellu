@@ -690,6 +690,26 @@ Deployment notes:
 - deploy the Worker for the `readUserState` query change;
 - deploy the Next.js frontend for the dashboard request-coalescing change.
 
+### Indexed dashboard activity lookup — 2026-08-05
+
+This Worker and D1 optimization reduces rows read when loading owned channels without changing dashboard behavior.
+
+- Added migration `0029_message_activity_lookup.sql` with a covering index on `(channel_id, deleted, created_at DESC, id DESC)`.
+- Replaced the `/api/user` `GROUP BY + MAX` message-activity aggregation with one latest-visible-message index lookup per owned channel.
+- The index also supports the ordering and deletion filter used by paginated channel search, avoiding a separate sort while substring matching remains unchanged.
+
+Trade-offs:
+
+- Each message insert, deletion-state update, and timestamp/id index change now maintains one additional index entry.
+- The index consumes additional D1 storage.
+- Arbitrary substring search still scans candidate message text because a normal B-tree cannot index `instr(lower(text), ...)`; trigram search remains a separate, higher-cost redesign.
+
+Deployment notes:
+
+- apply D1 migration `0029_message_activity_lookup.sql` first;
+- deploy the Worker after the migration;
+- no Next.js frontend deployment is required.
+
 ### Parallel platform-support dashboard reads — 2026-08-04
 
 This Worker-only optimization reduces platform-admin support dashboard latency by collapsing independent dashboard reads into one concurrent batch.

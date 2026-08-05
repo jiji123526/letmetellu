@@ -38,17 +38,17 @@ async function readUserState(
          LEFT JOIN users ON users.id = channels.owner_uid
          WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'
            ${reportsChannelId ? "AND channels.id != ?" : ""}
-       ),
-       message_activity AS (
-         SELECT messages.channel_id, MAX(messages.created_at) AS last_message_at
-         FROM messages
-         INNER JOIN owner_channels ON owner_channels.id = messages.channel_id
-         WHERE messages.deleted = 0
-         GROUP BY messages.channel_id
        )
        SELECT owner_channels.id, owner_channels.name, owner_channels.profile_image,
               owner_channels.bubble_color, owner_channels.created_at,
-              COALESCE(message_activity.last_message_at, owner_channels.created_at) AS last_message_at,
+              COALESCE((
+                SELECT messages.created_at
+                FROM messages
+                WHERE messages.channel_id = owner_channels.id
+                  AND messages.deleted = 0
+                ORDER BY messages.created_at DESC, messages.id DESC
+                LIMIT 1
+              ), owner_channels.created_at) AS last_message_at,
               owner_channels.has_passcode,
               owner_channels.owner_name,
               CASE
@@ -56,7 +56,6 @@ async function readUserState(
                 ELSE 0
               END AS live_active
        FROM owner_channels
-       LEFT JOIN message_activity ON message_activity.channel_id = owner_channels.id
        LEFT JOIN config AS live_config
          ON live_config.id = 'live_' || owner_channels.id
         AND live_config.text IS NOT NULL

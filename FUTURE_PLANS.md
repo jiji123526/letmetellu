@@ -65,6 +65,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 ### Precomputed channel activity
 
 - The highest-upside remaining dashboard performance change is to stop deriving owned-channel activity from `messages` and live-config rows on every `/api/user` read.
+- The intermediate 2026-08-05 optimization added an indexed latest-visible-message lookup, replacing the full per-owner message aggregation. Measure that rollout before pursuing this larger redesign.
 - Do not start this migration until latency and D1 query measurements show that the optimized `/api/user` query is still a material bottleneck.
 - The likely shape is a dedicated `channel_activity` table keyed by `channel_id`, or equivalent derived fields on `channels`, that stores precomputed `last_activity_at`, `last_message_at`, and live-state fields.
 - This should be treated as a data-consistency project, not a small hot-path tweak. All message creation, latest-message deletion/moderation, live start, live end, live expiry, channel creation, and channel deletion paths would need to keep the derived state correct.
