@@ -29,6 +29,7 @@ function buildContentSecurityPolicy() {
   ];
   const connectSrc = [
     "'self'",
+    "blob:",
     ...workerOrigins,
     "https://cdn.jsdelivr.net",
     "https://platform.twitter.com",
