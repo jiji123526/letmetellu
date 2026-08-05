@@ -4,7 +4,7 @@ import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
-import { buildMessageSearchQuery } from "../lib/message-search";
+import { normalizeMessageSearchQuery } from "../lib/message-search";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -225,12 +225,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     }
 
     case "search": {
-      const query = url.searchParams.get("q");
+      const query = normalizeMessageSearchQuery(url.searchParams.get("q") || "");
       if (!query) {
-        return Response.json({ results: [], has_more: false, next_cursor: null });
-      }
-      const ftsQuery = buildMessageSearchQuery(query);
-      if (!ftsQuery) {
         return Response.json({ results: [], has_more: false, next_cursor: null });
       }
 
@@ -240,12 +236,11 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       let searchQuery = `
         SELECT m.*
         FROM messages m
-        JOIN messages_fts ON m.rowid = messages_fts.rowid
-        WHERE messages_fts.text MATCH ?
-          AND m.channel_id = ?
+        WHERE m.channel_id = ?
           AND m.deleted = 0
+          AND instr(lower(COALESCE(m.text, '')), lower(?)) > 0
       `;
-      const params: unknown[] = [ftsQuery, channelId];
+      const params: unknown[] = [channelId, query];
       if (cursor && cursorId) {
         searchQuery += " AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))";
         params.push(cursor, cursor, cursorId);
