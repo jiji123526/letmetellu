@@ -57,15 +57,9 @@ async function waitForMessageElement(msgId: string, timeoutMs = 1500): Promise<H
   return null;
 }
 
-function isBeforeOrInsideTarget(node: Element, target: Element): boolean {
-  return target.contains(node)
-    || Boolean(node.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
-}
-
-function hasPendingContentBeforeTarget(container: HTMLElement, target: HTMLElement): boolean {
+function hasPendingWindowContent(container: HTMLElement): boolean {
   const pendingElements = container.querySelectorAll(".media-loading-dots, img, video");
   return [...pendingElements].some((node) => {
-    if (!isBeforeOrInsideTarget(node, target)) return false;
     if (node.classList.contains("media-loading-dots")) return true;
     if (node instanceof HTMLImageElement) return !node.complete;
     return node instanceof HTMLVideoElement && node.readyState < HTMLMediaElement.HAVE_METADATA;
@@ -81,10 +75,12 @@ async function waitForStableMessageLayout(
   let previousSignature = "";
   let stableFrames = 0;
 
+  await document.fonts?.ready;
+
   while (performance.now() - startedAt < timeoutMs) {
     await nextAnimationFrame();
     const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
-    const pendingContent = hasPendingContentBeforeTarget(container, target);
+    const pendingContent = hasPendingWindowContent(container);
     stableFrames = !pendingContent && signature === previousSignature ? stableFrames + 1 : 0;
     previousSignature = signature;
     if (stableFrames >= 3) return;
