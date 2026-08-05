@@ -4,6 +4,7 @@ import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
+import { buildMessageSearchQuery } from "../lib/message-search";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -228,6 +229,10 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       if (!query) {
         return Response.json({ results: [], has_more: false, next_cursor: null });
       }
+      const ftsQuery = buildMessageSearchQuery(query);
+      if (!ftsQuery) {
+        return Response.json({ results: [], has_more: false, next_cursor: null });
+      }
 
       const cursor = url.searchParams.get("cursor");
       const cursorId = url.searchParams.get("cursor_id");
@@ -240,7 +245,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           AND m.channel_id = ?
           AND m.deleted = 0
       `;
-      const params: unknown[] = [query, channelId];
+      const params: unknown[] = [ftsQuery, channelId];
       if (cursor && cursorId) {
         searchQuery += " AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))";
         params.push(cursor, cursor, cursorId);
