@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { adminAction, fetchGallery, submitChannelReport } from "@/lib/api";
+import { adminAction, fetchGallery, submitChannelReport } from "@/lib/api-chat";
 
 interface ChannelState {
   is_frozen: number;

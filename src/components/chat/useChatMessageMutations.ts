@@ -13,7 +13,7 @@ import {
   toggleReactionAsAdmin,
   uploadAdminImage,
   uploadImage,
-} from "@/lib/api";
+} from "@/lib/api-chat";
 import { mergeServerMessageSnapshot, parseReactions } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 import type { PendingPhoto } from "./useChatComposerState";

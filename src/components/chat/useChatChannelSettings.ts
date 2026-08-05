@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import { adminAction, decorateMediaUrl, decorateProtectedMediaUrl, decorateWelcomeConfig } from "@/lib/api";
+import { decorateMediaUrl, decorateProtectedMediaUrl, decorateWelcomeConfig } from "@/lib/api-core";
+import { adminAction } from "@/lib/api-chat";
 import { updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { setAccountChannelColor } from "@/lib/account-recent-channels";
 

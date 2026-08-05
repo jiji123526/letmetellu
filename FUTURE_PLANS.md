@@ -54,11 +54,53 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Measure `/api/user`, platform-support dashboard and support-thread latency before pursuing another query redesign.
 - Track scheduled-maintenance duration, per-table deletion counts and R2 deletion failures so the existing bounded cleanup work is operationally visible.
 
+### Measured performance follow-up
+
+- The current post-Phase-1 frontend measurement from writable webpack builds is still heavy for the simplest routes: `/` at about `526 KB`, `/support` at about `638 KB`, `/privacy` and `/terms` at about `535 KB`, `/dashboard` at about `718 KB`, and `/ch/[slug]` at about `848 KB` of first-load uncompressed JS.
+- The most recent API split reduced `/support` by about `16 KB`, `/dashboard` by about `16 KB`, and `/ch/[slug]` by about `14 KB` compared with the previous `c2f272b` build, while `/` and the already-optimized legal pages stayed effectively flat.
+- Treat that route-bundle snapshot, plus request counts for dashboard refresh and chat reconnect paths, as the baseline for the next optimization pass. Re-measure after each phase instead of stacking another broad rewrite.
+- Start with bundle and request-churn reductions that do not require a schema migration. Keep larger derived-data redesigns conditional on measured backend hotspots that remain after the cheaper changes ship.
+
+#### Phase 1: global bundle reduction
+
+- Completed on 2026-08-05: the root layout no longer mounts the full provider shell for every route, `/privacy` plus `/terms` now render on the server from request locale, and the old `src/lib/api.ts` monolith is split by domain with mock-only helpers lazy-loaded behind dynamic imports.
+- Phase 1 is complete. The remaining route-bundle problem is now concentrated in the interactive chat, support and dashboard shells rather than in global providers or mixed-domain API code.
+
+#### Phase 2: dashboard refresh consolidation
+
+- Completed on 2026-08-05: replaced the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
+- The consolidated scheduler retains in-flight dedupe and independently enforces 30-second admin-dashboard, 60-second support-preview and five-minute operational-health freshness windows.
+- Follow-up validation fixed two edge cases before merge: request locale now reaches the document-level `lang`, and support-preview polling remains active from an empty state so another tab or device can create a ticket that this dashboard later discovers.
+- Add lightweight measurement for dashboard refresh count and network fan-out before and after the consolidation so the change is validated with real request reductions, not just cleaner code.
+- Keep the custom support-ticket event as an explicit forced refresh for known mutations rather than treating it as polling.
+
+#### Phase 3: chat init and reconnect shaping
+
+- The first reconnect-shaping slice is complete: initial WebSocket authorization is no longer treated as a reconnect, so it does not repeat the page bootstrap reads. A true reconnect now performs one recovery request instead of independently fetching messages and channel init state.
+- Normal viewers merge the message snapshot carried by their reconnect init without leaving contextual-history mode; owners retain a full recovery init, and the legacy manual-admin path keeps a message-only refresh.
+- Keep full init for passcode/access changes and live-session transitions until narrower responses carry every authorization, moderation and live-state field those paths require.
+- The owner-channel-count lookup is already keyed only to channel identity and profile-visibility changes, while the owner-channel popup fetches on demand. Do not broaden either dependency set during later refactors.
+- Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
+- Measure initial-load and reconnect request counts, post-reconnect settle time and visibility-resume behavior before calling Phase 3 complete.
+
+#### Phase 4: support dashboard query tuning
+
+- The first measured query-tuning slice is complete: read markers now use direct primary-key joins, and composite indexes cover status pagination, latest-message ordering and sender-role timestamp lookups. A 1,000-ticket/20,000-message local fixture measured about 54-56% lower query time across repeated 250-read runs.
+- A page-first windowed message rollup was evaluated but rejected after representative local SQLite benchmarks ran materially slower than indexed point lookups. Keep the measured point-lookup shape unless production data demonstrates a different crossover.
+- Compare production platform-support latency after rollout before considering denormalized per-thread summaries.
+- Keep the existing dashboard behavior stable while tuning query shape first; do not jump to a broader support schema redesign unless latency remains materially high after query and index work.
+- Re-check operational-health summaries and platform-support latency after rollout so the next backend bottleneck is identified from measurement rather than assumption.
+
+#### Phase 5: conditional derived activity redesign
+
+- If `/api/user` still remains a proven hotspot after the earlier frontend, polling and support-query work, continue with the precomputed channel-activity plan below.
+- Do not skip directly to derived channel activity while the cheaper bundle, refresh-policy and query-shape reductions are still available.
+
 ### Cleanup and deletion reliability
 
 - Move channel, account and cross-store media deletion toward idempotent, retryable cleanup jobs instead of relying indefinitely on one request completing every D1, Durable Object and R2 step.
 - Preserve the current synchronous user experience initially, but record durable cleanup progress so partial channel or media deletion can resume safely after a timeout or transient failure.
-- Existing scheduled retention covers operational events, moderation/support audit logs, message actor identities, rate-limit rows and expired upload tickets. Define policy for closed support sessions and tickets, reports and petitions before extending automated cleanup to those product records.
+- Existing scheduled retention covers operational events, moderation/support audit logs, message actor identities, rate-limit rows and expired upload tickets. Define policy for closed support sessions and tickets, reports, petitions and visit-survey responses before extending automated cleanup to those product records.
 - Add dry-run counts, bounded batches and failure monitoring before expanding destructive scheduled maintenance.
 - The 2026-08-04 pre-beta cleanup removed seven legacy credential test accounts, their four owned channels and six additional orphan channels through an exact-ID, precondition-checked one-time maintenance run. The temporary route was removed immediately afterward; all Google accounts, the platform `reports` channel, `whaaa` and the new verified credential account were confirmed preserved.
 
@@ -76,7 +118,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 ### Frontend maintainability
 
 - Add targeted regression coverage around message selectors, action rules, history navigation, realtime synchronization and the extracted layer-stack contracts before further structural changes.
-- The next maintainability candidates are domain-splitting `src/lib/api.ts` and reducing the state/orchestration surface in `src/app/dashboard/page.tsx`; take one domain at a time rather than starting another broad rewrite.
+- The next maintainability candidate is reducing the state/orchestration surface in `src/app/dashboard/page.tsx`, especially if the Phase 2 polling consolidation still leaves that page effect-heavy.
 - Reduce `ContextMenu` and overlay prop surfaces only when a concrete feature or testability problem justifies it.
 - Continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures before adding another large chat UI surface.
 

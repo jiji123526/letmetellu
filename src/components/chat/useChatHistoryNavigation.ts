@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
-import { fetchMessageContext, fetchMessagePage, fetchMessages } from "@/lib/api";
+import { fetchMessageContext, fetchMessagePage, fetchMessages } from "@/lib/api-chat";
 import { MAX_MOUNTED_HISTORY_MESSAGES, trimMessageWindow } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 

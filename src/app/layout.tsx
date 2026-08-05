@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Providers } from "@/components/Providers";
+import { getRequestLocale } from "@/lib/server-locale";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,13 +28,15 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getRequestLocale();
+
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -48,7 +50,7 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <Providers>{children}</Providers>
+        {children}
       </body>
     </html>
   );

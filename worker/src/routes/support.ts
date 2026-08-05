@@ -157,20 +157,12 @@ const SUPPORT_THREAD_SELECT_SQL = `
       ORDER BY sm4.created_at DESC, sm4.id DESC
       LIMIT 1
     ) AS last_admin_message_at,
-    (
-      SELECT read_at
-      FROM support_thread_reads str
-      WHERE str.thread_id = st.id AND str.actor_role = 'user'
-      LIMIT 1
-    ) AS user_read_at,
-    (
-      SELECT read_at
-      FROM support_thread_reads str
-      WHERE str.thread_id = st.id AND str.actor_role = 'platform_admin'
-      LIMIT 1
-    ) AS admin_read_at
+    ur.read_at AS user_read_at,
+    ar.read_at AS admin_read_at
   FROM support_threads st
   LEFT JOIN users u ON u.id = st.user_id
+  LEFT JOIN support_thread_reads ur ON ur.thread_id = st.id AND ur.actor_role = 'user'
+  LEFT JOIN support_thread_reads ar ON ar.thread_id = st.id AND ar.actor_role = 'platform_admin'
 `;
 
 function parseIsoMs(value: string | null | undefined): number | null {

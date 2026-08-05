@@ -15,6 +15,10 @@ function normalizeFontSize(value: unknown) {
   return Number.isInteger(size) && size >= 12 && size <= 20 ? size : DEFAULT_FONT_SIZE;
 }
 
+function persistLocaleCookie(locale: "ko" | "en") {
+  document.cookie = `locale=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
 export function applyFontSize(value: unknown) {
   const size = normalizeFontSize(value);
   document.documentElement.style.setProperty("--bubble-font-size", `${size}px`);
@@ -68,6 +72,7 @@ export function UserPreferencesSync() {
         const nextLocale = syncedLocale || localLocale;
         persistedLocaleRef.current = syncedLocale;
         localStorage.setItem("locale", nextLocale);
+        persistLocaleCookie(nextLocale);
         window.dispatchEvent(new CustomEvent("locale-changed", {
           detail: { locale: nextLocale },
         }));
@@ -106,6 +111,7 @@ export function UserPreferencesSync() {
       if (nextLocale !== "ko" && nextLocale !== "en") return;
       if (persistedLocaleRef.current === nextLocale) return;
       persistedLocaleRef.current = nextLocale;
+      persistLocaleCookie(nextLocale);
       fetch("/api/user", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

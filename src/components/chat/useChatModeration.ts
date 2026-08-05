@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
-import { actOnChannelReport, submitModerationPetition } from "@/lib/api";
+import { actOnChannelReport, submitModerationPetition } from "@/lib/api-chat";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 
 interface BannerState {

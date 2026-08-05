@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, type RefObject } from "react";
-import { fetchLinks, fetchPreview } from "@/lib/api";
+import { fetchLinks, fetchPreview } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 import { chatDateLabel } from "@/lib/chat-date";
 

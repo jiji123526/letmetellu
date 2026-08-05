@@ -15,7 +15,7 @@ const privacyKo: LegalDocumentContent = {
   intro:
     "본 개인정보처리방침은 현재 운영 중인 yap. 서비스의 실제 기능, 인증 구조, 익명 이용 흐름, 신고 및 1:1 지원 흐름을 기준으로 작성되었습니다.",
   effectiveDate: "2026년 7월 31일",
-  lastUpdated: "2026년 8월 4일",
+  lastUpdated: "2026년 8월 5일",
   sections: [
     {
       heading: "제1조(목적)",
@@ -65,7 +65,7 @@ const privacyKo: LegalDocumentContent = {
     {
       heading: "제7조(서비스 제공 과정에서 수집 또는 생성되는 정보)",
       bullets: [
-        "채널, 메시지, 답글, 반응, 이미지 업로드, 신고, DM, 라이브 세션, 1:1 지원 문의 등 서비스 이용 과정에서 이용자가 입력하거나 업로드하는 정보",
+        "채널, 메시지, 답글, 반응, 이미지 업로드, 신고, DM, 라이브 세션, 1:1 지원 문의, 서비스 개선 설문 의견 등 서비스 이용 과정에서 이용자가 입력하거나 업로드하는 정보",
         "IP 주소, 접속 일시, 브라우저 정보, 기기 정보, 쿠키, 로컬 저장소 기반 환경설정, 서비스 이용 기록",
         "익명 참여 상태 유지를 위한 서버 발급 익명 토큰, 기기 토큰, 최근 채널 및 지원 세션 상태 정보",
         "신고 처리, 차단, 동결, 운영 경고, 지원 티켓 처리, 감사 로그 및 운영 이벤트 기록",
@@ -84,7 +84,7 @@ const privacyKo: LegalDocumentContent = {
     {
       heading: "제9조(개인정보 수집 방법)",
       bullets: [
-        "이용자가 회원가입, 로그인, 채널 참여, 채팅, 설정 변경, 신고, 지원 문의 과정에서 직접 입력하는 방식",
+        "이용자가 회원가입, 로그인, 채널 참여, 채팅, 설정 변경, 신고, 지원 문의 또는 서비스 개선 설문 과정에서 직접 입력하는 방식",
         "브라우저, 기기 또는 네트워크 환경에서 서비스 이용 중 자동으로 생성되는 정보를 수집하는 방식",
         "이메일 인증, 비밀번호 재설정, 지원 응답 또는 계정 보호 절차를 통하여 수집되는 방식",
       ],
@@ -97,6 +97,7 @@ const privacyKo: LegalDocumentContent = {
         "익명 참여 상태 유지, 대시보드 최근 항목 복원, 언어 및 UI 환경설정 유지",
         "서비스 안정성 확보, 장애 대응, 보안 분석, 악용 방지, 제한 조치 및 분쟁 대응",
         "이용 문의 회신, 불만 처리, 운영 공지 전달, 기능 품질 개선 및 이용 통계 분석",
+        "서비스 개선 설문의 중복 노출 방지 및 이용자가 제출한 개선 의견의 검토",
       ],
     },
     {
@@ -117,6 +118,7 @@ const privacyKo: LegalDocumentContent = {
         "계정 정보와 계정에 연결된 최근 채널·환경설정은 회원 탈퇴 시 삭제됩니다. 회원이 소유한 채널도 함께 삭제되며, 다른 채널에 작성한 메시지·DM·갤러리 기록은 대화 맥락 보존을 위해 계정 식별값을 제거한 뒤 해당 콘텐츠가 삭제되거나 채널이 삭제될 때까지 남을 수 있습니다.",
         "미첨부 업로드는 발급 후 15분이 지나면 만료되어 정기 정리 대상이 됩니다. 요청 제한 기록은 7일, 운영 이벤트는 30일, 메시지 작성자 보안 식별 기록은 90일, 운영 및 지원 감사 로그는 1년 동안 보관됩니다.",
         "지원 티켓, 신고, 이의 제기 및 관련 처리 기록은 해당 사안의 처리, 재검토, 악용 방지 및 분쟁 대응 목적이 끝날 때까지 보관한 후 삭제합니다. 법령상 보존 의무가 있거나 진행 중인 분쟁·조사가 있는 경우에는 필요한 범위에서 그 종료 시까지 보관할 수 있습니다.",
+        "서비스 개선 설문 응답은 중복 노출 방지와 제품 개선 검토 목적이 끝날 때까지 가명 처리된 이용자 식별값과 함께 보관한 후 삭제합니다.",
       ],
     },
     {
@@ -276,7 +278,7 @@ const privacyEn: LegalDocumentContent = {
   intro:
     "This Privacy Policy is written to reflect the actual features and data flows currently operated in yap., including anonymous participation, account login, moderation, reports, and one-to-one support.",
   effectiveDate: "July 31, 2026",
-  lastUpdated: "August 4, 2026",
+  lastUpdated: "August 5, 2026",
   sections: [
     {
       heading: "Article 1 (Purpose)",
@@ -326,7 +328,7 @@ const privacyEn: LegalDocumentContent = {
     {
       heading: "Article 7 (Information Collected or Generated During Service Use)",
       bullets: [
-        "Information users submit while using channels, messages, replies, reactions, uploads, reports, owner DMs, live sessions, or one-to-one support",
+        "Information users submit while using channels, messages, replies, reactions, uploads, reports, owner DMs, live sessions, one-to-one support, or Service-improvement surveys",
         "IP address, access time, browser and device information, cookies, locally stored preferences, and Service usage records",
         "Server-issued anonymous tokens, device tokens, and recent channel or support-session state used to preserve guest participation",
         "Operational and audit records used for moderation, blocking, freezing, warnings, report handling, and support-ticket handling",
@@ -345,7 +347,7 @@ const privacyEn: LegalDocumentContent = {
     {
       heading: "Article 9 (Methods of Collection)",
       bullets: [
-        "Information entered directly by users during sign-up, login, channel participation, chat, settings changes, reports, or support flows",
+        "Information entered directly by users during sign-up, login, channel participation, chat, settings changes, reports, support flows, or Service-improvement surveys",
         "Information automatically generated from the browser, device, or network environment during Service use",
         "Information collected through email verification, password reset, support replies, or account protection procedures",
       ],
@@ -358,6 +360,7 @@ const privacyEn: LegalDocumentContent = {
         "Maintaining anonymous participation state, restoring dashboard recents, and preserving language and UI preferences",
         "Ensuring Service reliability, responding to incidents, analyzing security issues, preventing abuse, enforcing restrictions, and handling disputes",
         "Replying to inquiries, handling complaints, delivering operational notices, and improving Service quality through usage analysis",
+        "Preventing duplicate survey prompts and reviewing improvement feedback submitted by users",
       ],
     },
     {
@@ -378,6 +381,7 @@ const privacyEn: LegalDocumentContent = {
         "Account information, account-linked recent channels, and preferences are deleted when the account is deleted. Channels owned by that account are also deleted. Messages, DMs, and gallery records posted in channels owned by others may remain after their account identifier is removed, preserving conversation context until the content or channel is deleted.",
         "Unattached uploads expire after 15 minutes and enter scheduled cleanup. Rate-limit records are retained for 7 days, operational events for 30 days, message-actor security identifiers for 90 days, and moderation and support audit logs for one year.",
         "Support tickets, reports, petitions, and related handling records are retained until their handling, review, abuse-prevention, and dispute-response purposes end, then deleted. They may be kept longer where required by law or while a related dispute or investigation remains pending.",
+        "Service-improvement survey responses are retained with a pseudonymous actor identifier until duplicate-prompt prevention and product-improvement review purposes end, then deleted.",
       ],
     },
     {

@@ -4,6 +4,126 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Tenth-visit improvement survey — 2026-08-05
+
+This frontend, Worker and D1 feature asks for improvement feedback once after a user reaches ten qualified dashboard or channel visits.
+
+- One eligible visit is counted per browser session across `/dashboard` and `/ch/*`; visits one through nine remain local-only and create no survey request.
+- At the threshold, the frontend checks durable response state before showing the dialog. Existing responses suppress the prompt across devices for authenticated users and within the signed browser identity for guests.
+- Choosing no, closing the dialog or successfully submitting feedback permanently suppresses the prompt locally. Each terminal outcome is also stored so the server does not ask the same actor again.
+- Feedback descriptions are required, trimmed and limited to 1,500 characters. Responses are stored in `visit_survey_responses`, separate from support tickets and support messages.
+- Actor identifiers are HMAC-pseudonymized before storage, POST requests require an authenticated user or signed guest identity, and response writes are rate-limited and unique per actor.
+- Korean and English survey copy and privacy-policy disclosures are included.
+
+Trade-offs:
+
+- Browser visit counting is intentionally local and session-based, so clearing browser storage resets the counter. The durable status check still suppresses a repeat prompt when the signed identity remains available.
+- Dismissal is terminal as requested; there is no reminder cadence or second opportunity after an accidental close.
+- Responses are stored for direct D1 review in this slice; no platform-admin survey inbox is added.
+
+Deployment notes:
+
+- apply D1 migration `0032_visit_survey_responses.sql`;
+- deploy the Worker before the Next.js frontend so the threshold status check is available;
+- deploy the Next.js frontend.
+
+### Platform support dashboard query shaping — 2026-08-05
+
+This Phase 4 Worker and D1 optimization keeps the support dashboard response contract unchanged while aligning reads with measured SQLite behavior.
+
+- User and platform-admin read markers are joined directly instead of fetched through separate correlated subqueries for every ticket.
+- Migration `0031_support_dashboard_query_indexes.sql` adds composite indexes matching status pagination, latest-message ordering and sender-role timestamp lookups, then removes the narrower indexes they supersede.
+- Message fields retain targeted indexed lookups. A page-first CTE with one windowed message rollup produced equivalent rows but ran about 7.3 times slower on a representative local fixture of 1,000 tickets and 20,000 messages, so it was rejected rather than shipping the planned-but-slower shape.
+- On the same fixture, direct read-marker joins plus the accepted indexes preserved exact query rows and reduced repeated 101-ticket list-query time by about 54-56% across two 250-read benchmark runs.
+- The direct read-marker joins also benefit single-thread and user-facing support queries that share the same select contract.
+
+Trade-offs:
+
+- The two message indexes add storage and minor write amplification, but support-message writes are low-volume and reads are the dashboard hotspot being optimized.
+- Targeted message lookups remain correlated, but the new indexes make each lookup bounded and avoid the sorting/grouping cost observed in the rollup benchmark.
+- A derived support-thread summary could remove those lookups, but would introduce write-path consistency risk and is not justified without production evidence.
+- The migration adds no columns or backfill, but it must be applied before production latency is evaluated against the new query shape.
+
+Deployment notes:
+
+- apply D1 migration `0031_support_dashboard_query_indexes.sql`;
+- deploy the Worker;
+- no Next.js frontend deployment is required.
+
+### Initial socket and reconnect request shaping — 2026-08-05
+
+This frontend-only Phase 3 slice removes duplicate chat recovery reads without weakening passcode, moderation or live-state transitions.
+
+- The realtime hook now distinguishes the first successful socket authorization from a true reconnect. Initial authorization emits `connected`, while only later recovery emits `reconnected`.
+- Initial page bootstrap remains the single owner of the first full channel read. Socket authorization no longer immediately repeats message and init requests after that bootstrap.
+- A true reconnect now performs one recovery request: owners refresh full init state, normal viewers merge messages and current viewer-facing state from one init response, and the legacy manual-admin path performs a message-only refresh.
+- Contextual history remains stable for normal viewers because reconnect recovery merges messages only while the user is in the latest-message view.
+- Passcode access changes, explicit live-mode entry/exit and live termination retain their full-init behavior because those transitions still require broader authorization and channel-state reconciliation.
+- Audited the owner-channel-count effect and popup loading path. The count is already limited to channel identity/profile-visibility changes, and the full list is fetched only when the popup opens.
+
+Expected request-shape change:
+
+- supplemental requests after initial socket authorization: from up to two to zero;
+- recovery requests after an ordinary reconnect: from two to one;
+- production request counts and reconnect settle time still need measurement before Phase 3 is considered complete.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend.
+
+### Locale semantics and empty support refresh follow-up — 2026-08-05
+
+- Root request locale now sets the document-level `lang`, keeping server-rendered English legal content and accessibility metadata aligned.
+- Dashboard support-preview polling now remains active when no ticket is currently visible, allowing tickets opened from another tab or device to appear within the existing 60-second freshness window.
+- The production frontend build and Worker hardening tests passed after both corrections.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend.
+
+### API domain split and lazy mock loading — 2026-08-05
+
+This completes the remaining Phase 1 bundle-reduction work by removing the old all-in-one client API surface from hot interactive routes.
+
+- Split the old `src/lib/api.ts` monolith into focused modules: `src/lib/api-core.ts` for shared client helpers, `src/lib/api-chat.ts` for chat/admin/upload/realtime APIs, and `src/lib/api-support.ts` plus `src/lib/api-support-types.ts` for support and dashboard APIs.
+- Moved support mock state into `src/lib/api-support-mock.ts` and changed both chat and support mock paths to dynamic `import(...)` calls. Mock-only helpers are no longer part of the default route graph for production bundles.
+- Repointed chat, dashboard, support and admin consumers to the split modules directly, while shrinking `src/lib/api.ts` to a small compatibility barrel instead of a 1.5k-line mixed-domain client module.
+- Verification in writable webpack builds against the previous `c2f272b` commit showed the interactive route bundles drop from about `654 KB` to `638 KB` for `/support`, `734 KB` to `718 KB` for `/dashboard`, and `862 KB` to `848 KB` for `/ch/[slug]` of first-load uncompressed JS. `/` stayed about `526 KB`, while the already-optimized server-rendered legal pages stayed about `535 KB`.
+
+Trade-offs:
+
+- This reduces mixed-domain client code in the chat, dashboard and support graphs, but it does not yet simplify the dashboard refresh policy or the chat reconnect/init request pattern. The remaining performance work stays in those later phases.
+- `src/lib/api.ts` still exists as a compatibility barrel for low-risk migration, so import hygiene matters if future work wants to preserve the same bundle boundary.
+
+Deployment notes:
+
+- no D1 migration is required;
+- no Worker deploy is required for this optimization;
+- deploy the Next.js frontend for this line.
+
+### Root provider scoping and server-rendered legal pages — 2026-08-05
+
+This frontend-only optimization removes avoidable global client bootstrapping from routes that do not need authenticated or locale-managed interactivity.
+
+- The root app layout no longer mounts the full `Providers` client shell for every route. Interactive routes that actually need `SessionProvider`, locale state and user-preference synchronization now mount that shell at the page boundary instead.
+- `/privacy` and `/terms` no longer wait for a client-only locale hydration gate. They now render on the server from request locale, using a locale cookie first and `Accept-Language` as the fallback.
+- Locale changes now persist a lightweight `locale` cookie alongside existing browser storage so server-rendered pages can respect the user's last selected language without pulling the full locale client runtime into static legal pages.
+- Verification in a writable webpack build confirmed that `/privacy` and `/terms` now ship only tiny route-specific client chunks for the page wrapper and shared `Link` runtime, while dashboard/chat routes retain their heavier interactive client graph.
+
+Trade-offs:
+
+- Interactive routes still pay for the existing provider shell because they genuinely depend on session, locale and user-preference synchronization. This pass narrows scope; it does not yet reduce the interactive dashboard or chat bundle itself.
+- The legal pages now read locale from request context rather than waiting for post-hydration browser state. A user's first visit on a new device can therefore follow browser language until they explicitly change locale.
+- This is only the first phase of the planned bundle-reduction work. `src/lib/api.ts` still mixes multiple domains and mock helpers, so dashboard and chat routes continue to carry more client code than necessary.
+
+Deployment notes:
+
+- no D1 migration is required;
+- no Worker deploy is required for this optimization;
+- deploy the Next.js frontend for this line.
+
 ### Supabase `main` history import into `zziks` — 2026-08-04
 
 - Exported the legacy `main` channel from the original Supabase-backed application with its service-role credential kept outside the repository.
@@ -721,6 +841,23 @@ Deployment notes:
 
 - apply D1 migration `0030_support_closure_acknowledgement.sql` first;
 - deploy the Worker and Next.js frontend together.
+
+### Dashboard foreground refresh consolidation — 2026-08-05
+
+- Replaced separate dashboard interval, focus and visibility refresh effects with the shared foreground polling hook.
+- One scheduler now applies independent freshness windows for the platform-admin dashboard, normal-user support preview and operational-health data.
+- Existing in-flight request deduplication remains in place, while focus and visibility events no longer fan out through multiple listener sets.
+- Support-ticket mutation events still force an immediate targeted refresh.
+
+Trade-offs:
+
+- Returning to the dashboard before a resource becomes stale no longer forces a redundant network request, so data can remain at most 30 seconds old for platform admins, 60 seconds old for support previews and five minutes old for operational health.
+- Manual refresh controls and known ticket mutations continue to bypass the polling wait.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend.
 
 ### Parallel platform-support dashboard reads — 2026-08-04
 

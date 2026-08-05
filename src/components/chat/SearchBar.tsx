@@ -6,7 +6,7 @@ import {
   searchMessages,
   type MessageSearchCursor,
   type MessageSearchResult,
-} from "@/lib/api";
+} from "@/lib/api-chat";
 
 interface SearchMessage {
   id: string;
