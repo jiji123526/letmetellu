@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
+import { Providers } from "@/components/Providers";
 import { useLocale } from "@/hooks/useLocale";
 
 function ResetPasswordContent() {
@@ -65,5 +66,11 @@ function ResetPasswordContent() {
 }
 
 export default function ResetPasswordPage() {
-  return <Suspense><ResetPasswordContent /></Suspense>;
+  return (
+    <Providers>
+      <Suspense>
+        <ResetPasswordContent />
+      </Suspense>
+    </Providers>
+  );
 }

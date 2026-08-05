@@ -4,6 +4,27 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Root provider scoping and server-rendered legal pages — 2026-08-05
+
+This frontend-only optimization removes avoidable global client bootstrapping from routes that do not need authenticated or locale-managed interactivity.
+
+- The root app layout no longer mounts the full `Providers` client shell for every route. Interactive routes that actually need `SessionProvider`, locale state and user-preference synchronization now mount that shell at the page boundary instead.
+- `/privacy` and `/terms` no longer wait for a client-only locale hydration gate. They now render on the server from request locale, using a locale cookie first and `Accept-Language` as the fallback.
+- Locale changes now persist a lightweight `locale` cookie alongside existing browser storage so server-rendered pages can respect the user's last selected language without pulling the full locale client runtime into static legal pages.
+- Verification in a writable webpack build confirmed that `/privacy` and `/terms` now ship only tiny route-specific client chunks for the page wrapper and shared `Link` runtime, while dashboard/chat routes retain their heavier interactive client graph.
+
+Trade-offs:
+
+- Interactive routes still pay for the existing provider shell because they genuinely depend on session, locale and user-preference synchronization. This pass narrows scope; it does not yet reduce the interactive dashboard or chat bundle itself.
+- The legal pages now read locale from request context rather than waiting for post-hydration browser state. A user's first visit on a new device can therefore follow browser language until they explicitly change locale.
+- This is only the first phase of the planned bundle-reduction work. `src/lib/api.ts` still mixes multiple domains and mock helpers, so dashboard and chat routes continue to carry more client code than necessary.
+
+Deployment notes:
+
+- no D1 migration is required;
+- no Worker deploy is required for this optimization;
+- deploy the Next.js frontend for this line.
+
 ### Supabase `main` history import into `zziks` — 2026-08-04
 
 - Exported the legacy `main` channel from the original Supabase-backed application with its service-role credential kept outside the repository.

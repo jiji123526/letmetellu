@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Providers } from "@/components/Providers";
 import { auth } from "@/lib/auth";
 import { PlatformSupportThreadPanel } from "@/components/support/PlatformSupportThreadPanel";
 import { SupportPanel } from "@/components/support/SupportPanel";
@@ -17,8 +18,16 @@ export default async function SupportPage({
     if (!session?.user?.id) {
       redirect("/dashboard?login=true");
     }
-    return <PlatformSupportThreadPanel threadId={threadParam} />;
+    return (
+      <Providers>
+        <PlatformSupportThreadPanel threadId={threadParam} />
+      </Providers>
+    );
   }
 
-  return <SupportPanel showThreadView={typeof threadParam === "string" && !!threadParam} />;
+  return (
+    <Providers>
+      <SupportPanel showThreadView={typeof threadParam === "string" && !!threadParam} />
+    </Providers>
+  );
 }

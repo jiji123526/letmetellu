@@ -1,4 +1,5 @@
 import { ChatView } from "@/components/chat/ChatView";
+import { Providers } from "@/components/Providers";
 import { channelPreviewVersion, getPublicChannelPreview } from "@/lib/channel-preview";
 import type { Metadata } from "next";
 
@@ -52,5 +53,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ChannelPage({ params }: Props) {
   const { slug } = await params;
-  return <ChatView channelId={slug} />;
+  return (
+    <Providers>
+      <ChatView channelId={slug} />
+    </Providers>
+  );
 }

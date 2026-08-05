@@ -22,6 +22,10 @@ const LocaleContext = createContext<LocaleContextValue>({
   t: (key) => ko[key],
 });
 
+function persistLocaleCookie(locale: Locale) {
+  document.cookie = `locale=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   // Keep the server render and the browser's first render identical. Reading
   // localStorage in the state initializer makes saved English preferences
@@ -34,6 +38,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.setItem("locale", newLocale);
     } catch {}
+    persistLocaleCookie(newLocale);
     window.dispatchEvent(new CustomEvent("locale-changed", {
       detail: { locale: newLocale },
     }));
@@ -56,6 +61,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
         ? "ko"
         : "en";
     setLocaleState(nextLocale);
+    persistLocaleCookie(nextLocale);
     setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   }, []);
 

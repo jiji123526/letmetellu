@@ -4,6 +4,7 @@ import Image from "next/image";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Providers } from "@/components/Providers";
 import { useLocale } from "@/hooks/useLocale";
 import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchPlatformOperationalHealth, fetchSupportPreview, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse, type PlatformOperationalHealthResponse } from "@/lib/api";
 import { clearRecentChannels, getRecentChannels, markRecentChannelsValidated, removeRecentChannel, shouldValidateRecentChannels, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
@@ -171,7 +172,7 @@ function getSupportTopicVisual(topic: string | null | undefined) {
   }
 }
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const { locale, setLocale, t } = useLocale();
@@ -2023,5 +2024,13 @@ export default function DashboardPage() {
         />
       )}
     </main>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Providers>
+      <DashboardPageContent />
+    </Providers>
   );
 }

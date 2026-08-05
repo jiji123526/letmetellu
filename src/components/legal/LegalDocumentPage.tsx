@@ -1,8 +1,4 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useLocale } from "@/hooks/useLocale";
 import { legalDocuments } from "./legalDocuments";
 
 const copy = {
@@ -24,35 +20,10 @@ const copy = {
 
 interface LegalDocumentPageProps {
   document: "privacy" | "terms";
+  locale: "ko" | "en";
 }
 
-export function LegalDocumentPage({ document }: LegalDocumentPageProps) {
-  const { locale } = useLocale();
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
-
-  if (!hydrated) {
-    return (
-      <main className="min-h-dvh px-4 py-8" style={{ background: "var(--bg)", color: "var(--gray-text)" }}>
-        <div className="mx-auto w-full max-w-[820px]">
-          <section
-            className="rounded-[28px] px-6 py-7 md:px-8"
-            style={{ background: "var(--card)", boxShadow: "0 22px 60px rgba(0,0,0,.08)" }}
-          >
-            <div className="h-4 w-28 animate-pulse rounded-full" style={{ background: "var(--hairline)" }} />
-            <div className="mt-5 h-8 w-52 animate-pulse rounded-full" style={{ background: "var(--hairline)" }} />
-            <div className="mt-4 h-4 w-full animate-pulse rounded-full" style={{ background: "var(--hairline)" }} />
-            <div className="mt-2 h-4 w-[82%] animate-pulse rounded-full" style={{ background: "var(--hairline)" }} />
-            <div className="mt-8 h-[420px] animate-pulse rounded-[24px]" style={{ background: "var(--bg)" }} />
-          </section>
-        </div>
-      </main>
-    );
-  }
-
+export function LegalDocumentPage({ document, locale }: LegalDocumentPageProps) {
   const text = copy[locale];
   const content = legalDocuments[document][locale];
   const title = document === "privacy" ? text.privacyTitle : text.termsTitle;

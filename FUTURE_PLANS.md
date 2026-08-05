@@ -54,6 +54,44 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Measure `/api/user`, platform-support dashboard and support-thread latency before pursuing another query redesign.
 - Track scheduled-maintenance duration, per-table deletion counts and R2 deletion failures so the existing bounded cleanup work is operationally visible.
 
+### Measured performance follow-up
+
+- The current 2026-08-05 frontend baseline from Next route bundle stats is still too heavy for the simplest routes: `/` at about `591 KB`, `/support` at about `634 KB`, `/privacy` and `/terms` at about `667 KB`, `/dashboard` at about `714 KB`, and `/ch/[slug]` at about `849 KB` of first-load uncompressed JS.
+- Treat that route-bundle snapshot, plus request counts for dashboard refresh and chat reconnect paths, as the baseline for the next optimization pass. Re-measure after each phase instead of stacking another broad rewrite.
+- Start with bundle and request-churn reductions that do not require a schema migration. Keep larger derived-data redesigns conditional on measured backend hotspots that remain after the cheaper changes ship.
+
+#### Phase 1: global bundle reduction
+
+- Completed on 2026-08-05: the root layout no longer mounts the full provider shell for every route, and `/privacy` plus `/terms` now render on the server from request locale instead of waiting on a client hydration gate.
+- Remaining Phase 1 work: split `src/lib/api.ts` by domain and lazy-load mock-only helpers instead of shipping support, mock and dashboard helpers into unrelated route bundles.
+- Re-run route-bundle measurement after the API split with focus on `/dashboard` and `/ch/[slug]`, because the static legal-page win is already landed while the interactive routes remain the larger bundle problem.
+
+#### Phase 2: dashboard refresh consolidation
+
+- Replace the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
+- Keep the current in-flight dedupe, but move refresh policy into one place so support preview, admin dashboard and operational-health refreshes cannot fan out from multiple effects on the same focus event.
+- Add lightweight measurement for dashboard refresh count and network fan-out before and after the consolidation so the change is validated with real request reductions, not just cleaner code.
+- Do not expand dashboard surface area until the current refresh model is simplified and measured.
+
+#### Phase 3: chat init and reconnect shaping
+
+- Reduce full `fetchInit` reloads on reconnect, live-session transitions and passcode/access changes when a narrower refresh or realtime payload can keep state accurate.
+- Revisit secondary reads such as owner-channel-count lookups so they do not rerun on unrelated channel-state changes.
+- Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
+- Measure reconnect request count, post-reconnect settle time and visibility-resume behavior before and after this pass.
+
+#### Phase 4: support dashboard query tuning
+
+- Replace the current per-thread correlated support subqueries with joined rollups or CTEs for last message, sender, unread and reply-state fields.
+- Add composite indexes that match the platform-support dashboard scans and message-rollup access patterns, then benchmark open-ticket and recent-closed-ticket reads before and after.
+- Keep the existing dashboard behavior stable while tuning query shape first; do not jump to a broader support schema redesign unless latency remains materially high after query and index work.
+- Re-check operational-health summaries and platform-support latency after rollout so the next backend bottleneck is identified from measurement rather than assumption.
+
+#### Phase 5: conditional derived activity redesign
+
+- If `/api/user` still remains a proven hotspot after the earlier frontend, polling and support-query work, continue with the precomputed channel-activity plan below.
+- Do not skip directly to derived channel activity while the cheaper bundle, refresh-policy and query-shape reductions are still available.
+
 ### Cleanup and deletion reliability
 
 - Move channel, account and cross-store media deletion toward idempotent, retryable cleanup jobs instead of relying indefinitely on one request completing every D1, Durable Object and R2 step.
