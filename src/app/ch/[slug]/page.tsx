@@ -1,5 +1,6 @@
 import { ChatView } from "@/components/chat/ChatView";
 import { Providers } from "@/components/Providers";
+import { VisitSurvey } from "@/components/VisitSurvey";
 import { channelPreviewVersion, getPublicChannelPreview } from "@/lib/channel-preview";
 import type { Metadata } from "next";
 
@@ -56,6 +57,7 @@ export default async function ChannelPage({ params }: Props) {
   return (
     <Providers>
       <ChatView channelId={slug} />
+      <VisitSurvey />
     </Providers>
   );
 }

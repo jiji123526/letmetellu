@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Tenth-visit improvement survey — 2026-08-05
+
+This frontend, Worker and D1 feature asks for improvement feedback once after a user reaches ten qualified dashboard or channel visits.
+
+- One eligible visit is counted per browser session across `/dashboard` and `/ch/*`; visits one through nine remain local-only and create no survey request.
+- At the threshold, the frontend checks durable response state before showing the dialog. Existing responses suppress the prompt across devices for authenticated users and within the signed browser identity for guests.
+- Choosing no, closing the dialog or successfully submitting feedback permanently suppresses the prompt locally. Each terminal outcome is also stored so the server does not ask the same actor again.
+- Feedback descriptions are required, trimmed and limited to 1,500 characters. Responses are stored in `visit_survey_responses`, separate from support tickets and support messages.
+- Actor identifiers are HMAC-pseudonymized before storage, POST requests require an authenticated user or signed guest identity, and response writes are rate-limited and unique per actor.
+- Korean and English survey copy and privacy-policy disclosures are included.
+
+Trade-offs:
+
+- Browser visit counting is intentionally local and session-based, so clearing browser storage resets the counter. The durable status check still suppresses a repeat prompt when the signed identity remains available.
+- Dismissal is terminal as requested; there is no reminder cadence or second opportunity after an accidental close.
+- Responses are stored for direct D1 review in this slice; no platform-admin survey inbox is added.
+
+Deployment notes:
+
+- apply D1 migration `0032_visit_survey_responses.sql`;
+- deploy the Worker before the Next.js frontend so the threshold status check is available;
+- deploy the Next.js frontend.
+
 ### Platform support dashboard query shaping — 2026-08-05
 
 This Phase 4 Worker and D1 optimization keeps the support dashboard response contract unchanged while aligning reads with measured SQLite behavior.

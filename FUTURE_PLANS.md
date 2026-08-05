@@ -100,7 +100,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Move channel, account and cross-store media deletion toward idempotent, retryable cleanup jobs instead of relying indefinitely on one request completing every D1, Durable Object and R2 step.
 - Preserve the current synchronous user experience initially, but record durable cleanup progress so partial channel or media deletion can resume safely after a timeout or transient failure.
-- Existing scheduled retention covers operational events, moderation/support audit logs, message actor identities, rate-limit rows and expired upload tickets. Define policy for closed support sessions and tickets, reports and petitions before extending automated cleanup to those product records.
+- Existing scheduled retention covers operational events, moderation/support audit logs, message actor identities, rate-limit rows and expired upload tickets. Define policy for closed support sessions and tickets, reports, petitions and visit-survey responses before extending automated cleanup to those product records.
 - Add dry-run counts, bounded batches and failure monitoring before expanding destructive scheduled maintenance.
 - The 2026-08-04 pre-beta cleanup removed seven legacy credential test accounts, their four owned channels and six additional orphan channels through an exact-ID, precondition-checked one-time maintenance run. The temporary route was removed immediately afterward; all Google accounts, the platform `reports` channel, `whaaa` and the new verified credential account were confirmed preserved.
 

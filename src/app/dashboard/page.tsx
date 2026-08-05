@@ -33,6 +33,7 @@ import { LoginDialog } from "@/components/dashboard/LoginDialog";
 import { BetaNoticeDialog } from "@/components/dashboard/BetaNoticeDialog";
 import { LegalFooter } from "@/components/legal/LegalFooter";
 import { ThemeLogo } from "@/components/ThemeLogo";
+import { VisitSurvey } from "@/components/VisitSurvey";
 import {
   fetchAccountRecentChannels,
   mergeAccountRecentChannels,
@@ -2022,6 +2023,7 @@ export default function DashboardPage() {
   return (
     <Providers>
       <DashboardPageContent />
+      <VisitSurvey />
     </Providers>
   );
 }
