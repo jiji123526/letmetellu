@@ -34,6 +34,7 @@ export function useRealtime(channelId: string | null, uid: string) {
   const mountedRef = useRef(false);
   const intentionalCloseRef = useRef(false);
   const sleepingRef = useRef(false);
+  const hasSynchronizedRef = useRef(false);
 
   const requestSocketAuthorization = useCallback(async (socket: WebSocket) => {
     if (!channelId) return;
@@ -118,7 +119,9 @@ export function useRealtime(channelId: string | null, uid: string) {
       if (synchronized) return;
       synchronized = true;
       reconnectAttemptRef.current = 0;
-      handlersRef.current.forEach((handler) => handler({ type: "reconnected" }));
+      const type = hasSynchronizedRef.current ? "reconnected" : "connected";
+      hasSynchronizedRef.current = true;
+      handlersRef.current.forEach((handler) => handler({ type }));
     };
 
     ws.onopen = () => {
@@ -199,6 +202,7 @@ export function useRealtime(channelId: string | null, uid: string) {
   useEffect(() => {
     connectRef.current = connect;
     mountedRef.current = true;
+    hasSynchronizedRef.current = false;
     const initialConnectTimer = setTimeout(() => connectRef.current(), 0);
     return () => {
       clearTimeout(initialConnectTimer);

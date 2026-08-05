@@ -70,15 +70,18 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Completed on 2026-08-05: replaced the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
 - The consolidated scheduler retains in-flight dedupe and independently enforces 30-second admin-dashboard, 60-second support-preview and five-minute operational-health freshness windows.
+- Follow-up validation fixed two edge cases before merge: request locale now reaches the document-level `lang`, and support-preview polling remains active from an empty state so another tab or device can create a ticket that this dashboard later discovers.
 - Add lightweight measurement for dashboard refresh count and network fan-out before and after the consolidation so the change is validated with real request reductions, not just cleaner code.
 - Keep the custom support-ticket event as an explicit forced refresh for known mutations rather than treating it as polling.
 
 #### Phase 3: chat init and reconnect shaping
 
-- Reduce full `fetchInit` reloads on reconnect, live-session transitions and passcode/access changes when a narrower refresh or realtime payload can keep state accurate.
-- Revisit secondary reads such as owner-channel-count lookups so they do not rerun on unrelated channel-state changes.
+- The first reconnect-shaping slice is complete: initial WebSocket authorization is no longer treated as a reconnect, so it does not repeat the page bootstrap reads. A true reconnect now performs one recovery request instead of independently fetching messages and channel init state.
+- Normal viewers merge the message snapshot carried by their reconnect init without leaving contextual-history mode; owners retain a full recovery init, and the legacy manual-admin path keeps a message-only refresh.
+- Keep full init for passcode/access changes and live-session transitions until narrower responses carry every authorization, moderation and live-state field those paths require.
+- The owner-channel-count lookup is already keyed only to channel identity and profile-visibility changes, while the owner-channel popup fetches on demand. Do not broaden either dependency set during later refactors.
 - Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
-- Measure reconnect request count, post-reconnect settle time and visibility-resume behavior before and after this pass.
+- Measure initial-load and reconnect request counts, post-reconnect settle time and visibility-resume behavior before calling Phase 3 complete.
 
 #### Phase 4: support dashboard query tuning
 

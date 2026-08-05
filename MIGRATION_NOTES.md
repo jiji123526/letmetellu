@@ -4,6 +4,39 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Initial socket and reconnect request shaping — 2026-08-05
+
+This frontend-only Phase 3 slice removes duplicate chat recovery reads without weakening passcode, moderation or live-state transitions.
+
+- The realtime hook now distinguishes the first successful socket authorization from a true reconnect. Initial authorization emits `connected`, while only later recovery emits `reconnected`.
+- Initial page bootstrap remains the single owner of the first full channel read. Socket authorization no longer immediately repeats message and init requests after that bootstrap.
+- A true reconnect now performs one recovery request: owners refresh full init state, normal viewers merge messages and current viewer-facing state from one init response, and the legacy manual-admin path performs a message-only refresh.
+- Contextual history remains stable for normal viewers because reconnect recovery merges messages only while the user is in the latest-message view.
+- Passcode access changes, explicit live-mode entry/exit and live termination retain their full-init behavior because those transitions still require broader authorization and channel-state reconciliation.
+- Audited the owner-channel-count effect and popup loading path. The count is already limited to channel identity/profile-visibility changes, and the full list is fetched only when the popup opens.
+
+Expected request-shape change:
+
+- supplemental requests after initial socket authorization: from up to two to zero;
+- recovery requests after an ordinary reconnect: from two to one;
+- production request counts and reconnect settle time still need measurement before Phase 3 is considered complete.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend.
+
+### Locale semantics and empty support refresh follow-up — 2026-08-05
+
+- Root request locale now sets the document-level `lang`, keeping server-rendered English legal content and accessibility metadata aligned.
+- Dashboard support-preview polling now remains active when no ticket is currently visible, allowing tickets opened from another tab or device to appear within the existing 60-second freshness window.
+- The production frontend build and Worker hardening tests passed after both corrections.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend.
+
 ### API domain split and lazy mock loading — 2026-08-05
 
 This completes the remaining Phase 1 bundle-reduction work by removing the old all-in-one client API surface from hot interactive routes.

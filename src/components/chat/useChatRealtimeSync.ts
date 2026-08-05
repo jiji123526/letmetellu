@@ -162,6 +162,34 @@ export function useChatRealtimeSync({
     }).catch(() => {});
   }, [applyInitData, getViewingChannelId]);
 
+  const refreshViewerChannelState = useCallback(() => {
+    const fetchChannel = getViewingChannelId();
+    fetchInit(fetchChannel).then((data: InitData) => {
+      if (!data.channel || data.messages === undefined) return;
+      setChannel(data.channel);
+      if (historyModeRef.current === "latest") {
+        setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
+      }
+      if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
+      if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
+      if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
+      if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
+      setOwnerModeration(data.ownerModeration);
+      setViewerModerationStatus(data.viewerModerationStatus ?? null);
+    }).catch(() => {});
+  }, [
+    getViewingChannelId,
+    historyModeRef,
+    setActiveNotice,
+    setChannel,
+    setDmEnabled,
+    setMessages,
+    setOwnerModeration,
+    setPetitionEnabled,
+    setViewerModerationStatus,
+    setWelcomeConfig,
+  ]);
+
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "message-new") {
@@ -223,26 +251,21 @@ export function useChatRealtimeSync({
         }
       }
 
-      if ((event.type === "reconnected" || event.type === "messages-sync") && historyModeRef.current === "latest") {
+      if (event.type === "messages-sync" && historyModeRef.current === "latest") {
         refreshLatestMessages();
       }
 
-      if (event.type === "reconnected" && !isOwner && !isAdmin) {
-        const fetchChannel = getViewingChannelId();
-        fetchInit(fetchChannel).then((data: InitData) => {
-          if (!data.channel || data.messages === undefined) return;
-          setChannel(data.channel);
-          if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
-          if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
-          if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
-          if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
-          setOwnerModeration(data.ownerModeration);
-          setViewerModerationStatus(data.viewerModerationStatus ?? null);
-        }).catch(() => {});
-      }
-
-      if (event.type === "reconnected" && inLiveModeRef.current) {
-        send({ type: "join-live" });
+      if (event.type === "reconnected") {
+        if (isOwner) {
+          refreshCurrentChannelInit();
+        } else if (!isAdmin) {
+          refreshViewerChannelState();
+        } else if (historyModeRef.current === "latest") {
+          refreshLatestMessages();
+        }
+        if (inLiveModeRef.current) {
+          send({ type: "join-live" });
+        }
       }
 
       if (event.type === "dm-new") {
@@ -344,10 +367,6 @@ export function useChatRealtimeSync({
 
       if (event.type === "room-authenticated") {
         clearRoomAccessBanner();
-      }
-
-      if (event.type === "admin-authenticated") {
-        refreshCurrentChannelInit();
       }
 
       if (event.type === "admin-auth-failed" && isOwner) {
@@ -479,6 +498,7 @@ export function useChatRealtimeSync({
     getViewingChannelId,
     refreshLatestMessages,
     refreshCurrentChannelInit,
+    refreshViewerChannelState,
     deletedMessage,
     roomAuthExpired,
     passcodeChanged,
