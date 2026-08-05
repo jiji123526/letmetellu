@@ -33,7 +33,7 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
     if (error instanceof Error && error.name === "AbortError") {
       throw new PreviewError("preview fetch timeout", 504);
     }
-    throw error;
+    throw new PreviewError("preview upstream fetch failed", 502);
   } finally {
     clearTimeout(timeout);
   }
@@ -104,7 +104,19 @@ async function fetchYouTubeOEmbed(videoId: string): Promise<{ title?: string; au
   if (!response.ok) {
     throw new PreviewError("failed to fetch youtube preview", 502);
   }
-  return response.json() as Promise<{ title?: string; author_name?: string }>;
+  try {
+    return await response.json() as { title?: string; author_name?: string };
+  } catch {
+    throw new PreviewError("invalid youtube preview response", 502);
+  }
+}
+
+async function cachePreview(cacheKey: Request, response: Response): Promise<void> {
+  try {
+    await caches.default.put(cacheKey, response.clone());
+  } catch (error) {
+    console.warn("failed to cache preview", error);
+  }
 }
 
 export async function handlePreview(request: Request, env: Env): Promise<Response> {
@@ -156,7 +168,7 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
         siteName: "YouTube",
         url: rawUrl,
       }, { headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` } });
-      await caches.default.put(cacheKey, previewResponse.clone());
+      await cachePreview(cacheKey, previewResponse);
       return previewResponse;
     }
 
@@ -188,13 +200,14 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
       headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` },
     });
     if (metadata.title || metadata.image) {
-      await caches.default.put(cacheKey, previewResponse.clone());
+      await cachePreview(cacheKey, previewResponse);
     }
     return previewResponse;
   } catch (error) {
     if (error instanceof PreviewError) {
       return Response.json({ error: error.message }, { status: error.status });
     }
+    console.error("unexpected preview failure", error);
     return Response.json({ error: "failed to fetch preview" }, { status: 500 });
   }
 }
