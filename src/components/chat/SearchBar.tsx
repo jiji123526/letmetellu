@@ -2,22 +2,50 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useLocale } from "@/hooks/useLocale";
-import { searchMessages } from "@/lib/api";
+import {
+  searchMessages,
+  type MessageSearchCursor,
+  type MessageSearchResult,
+} from "@/lib/api";
+
+interface SearchMessage {
+  id: string;
+  text: string;
+  created_at?: string;
+}
 
 interface SearchBarProps {
   channelId: string;
-  messages: { id: string; text: string }[];
+  messages: SearchMessage[];
   onNavigate: (msgId: string) => void;
   onSearchState: (state: { query: string; activeId: string | null; resultIds: string[] }) => void;
   onClose: () => void;
 }
 
+function mergeSearchResults(
+  existing: SearchMessage[],
+  incoming: MessageSearchResult[],
+): SearchMessage[] {
+  const byId = new Map(existing.map((message) => [message.id, message]));
+  incoming.forEach((message) => byId.set(message.id, message));
+  return [...byId.values()].sort((left, right) => {
+    const dateOrder = (left.created_at || "").localeCompare(right.created_at || "");
+    return dateOrder || left.id.localeCompare(right.id);
+  });
+}
+
 export function SearchBar({ channelId, messages, onNavigate, onSearchState, onClose }: SearchBarProps) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<{ id: string; text: string }[]>([]);
+  const [results, setResults] = useState<SearchMessage[]>([]);
   const [index, setIndex] = useState(-1);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<MessageSearchCursor | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const blurFromEnterRef = useRef(false);
+  const paginationInFlightRef = useRef(false);
+  const searchRequestIdRef = useRef(0);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -30,34 +58,80 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
   };
 
   const performSearch = async (q: string) => {
-    if (!q) { setResults([]); setIndex(-1); updateState("", [], -1); return; }
+    const normalizedQuery = q.trim();
+    const requestId = ++searchRequestIdRef.current;
+    if (!normalizedQuery) {
+      setResults([]);
+      setIndex(-1);
+      setHasMore(false);
+      setNextCursor(null);
+      updateState("", [], -1);
+      return;
+    }
 
-    const queryLower = q.toLowerCase();
+    const queryLower = normalizedQuery.toLowerCase();
     let matched = messages.filter((m) => m.text && m.text.toLowerCase().includes(queryLower));
+    let nextHasMore = false;
+    let nextPageCursor: MessageSearchCursor | null = null;
 
     try {
-      const serverData = await searchMessages(channelId, q);
-      if (serverData.results) {
-        const byId = new Map(matched.map((m) => [m.id, m]));
-        serverData.results.forEach((m: { id: string; text: string }) => byId.set(m.id, m));
-        matched = [...byId.values()];
-      }
+      const serverData = await searchMessages(channelId, normalizedQuery);
+      if (requestId !== searchRequestIdRef.current) return;
+      matched = mergeSearchResults(matched, serverData.results);
+      nextHasMore = serverData.has_more;
+      nextPageCursor = serverData.next_cursor;
     } catch {}
 
+    if (requestId !== searchRequestIdRef.current) return;
     setResults(matched);
+    setHasMore(nextHasMore);
+    setNextCursor(nextPageCursor);
     if (matched.length > 0) {
       const lastIdx = matched.length - 1;
       setIndex(lastIdx);
       onNavigate(matched[lastIdx].id);
-      updateState(q, matched, lastIdx);
+      updateState(normalizedQuery, matched, lastIdx);
     } else {
       setIndex(-1);
-      updateState(q, [], -1);
+      updateState(normalizedQuery, [], -1);
     }
   };
 
-  const navigate = (dir: number) => {
+  const navigate = async (dir: number) => {
     if (results.length === 0) return;
+
+    if (
+      dir < 0
+      && index <= 0
+      && hasMore
+      && nextCursor
+      && !paginationInFlightRef.current
+    ) {
+      paginationInFlightRef.current = true;
+      setLoadingMore(true);
+      const requestId = searchRequestIdRef.current;
+      const currentId = results[index]?.id;
+      try {
+        const serverData = await searchMessages(channelId, query.trim(), nextCursor);
+        if (requestId !== searchRequestIdRef.current) return;
+        const merged = mergeSearchResults(results, serverData.results);
+        const currentIndex = Math.max(0, merged.findIndex((message) => message.id === currentId));
+        const nextIndex = Math.max(0, currentIndex - 1);
+        setResults(merged);
+        setIndex(nextIndex);
+        setHasMore(serverData.has_more);
+        setNextCursor(serverData.next_cursor);
+        onNavigate(merged[nextIndex].id);
+        updateState(query.trim(), merged, nextIndex);
+      } catch {
+        // Keep the current result page available when loading older matches fails.
+      } finally {
+        paginationInFlightRef.current = false;
+        setLoadingMore(false);
+      }
+      return;
+    }
+
     let next = index + dir;
     if (next < 0) next = 0;
     if (next >= results.length) next = results.length - 1;
@@ -69,11 +143,12 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      blurFromEnterRef.current = true;
       inputRef.current?.blur(); // dismiss keyboard on mobile
       if (results.length === 0) {
-        performSearch(query);
+        void performSearch(query);
       } else {
-        navigate(-1);
+        void navigate(-1);
       }
     }
     if (e.key === "Escape") { onSearchState({ query: "", activeId: null, resultIds: [] }); onClose(); }
@@ -90,22 +165,36 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
         ref={inputRef}
         type="text"
         value={query}
-        onChange={(e) => { setQuery(e.target.value); setResults([]); setIndex(-1); updateState("", [], -1); }}
+        onChange={(e) => {
+          searchRequestIdRef.current += 1;
+          setQuery(e.target.value);
+          setResults([]);
+          setIndex(-1);
+          setHasMore(false);
+          setNextCursor(null);
+          updateState("", [], -1);
+        }}
         onKeyDown={handleKeyDown}
-        onBlur={() => { if (query && results.length === 0) performSearch(query); }}
+        onBlur={() => {
+          if (blurFromEnterRef.current) {
+            blurFromEnterRef.current = false;
+            return;
+          }
+          if (query && results.length === 0) void performSearch(query);
+        }}
         placeholder={t("searchPlaceholder")}
         style={{ flex: 1, minWidth: 0, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "8px", padding: "6px 10px", fontSize: "var(--bubble-font-size, 15px)", fontFamily: "inherit", outline: "none", lineHeight: 1 }}
       />
       <button
-        disabled={results.length === 0 || index <= 0}
-        onClick={() => navigate(-1)}
-        style={{ background: "none", border: "none", color: (results.length > 0 && index > 0) ? "var(--tint)" : "var(--meta)", cursor: (results.length > 0 && index > 0) ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: (results.length > 0 && index > 0) ? 1 : 0.3 }}
+        disabled={results.length === 0 || loadingMore || (index <= 0 && !hasMore)}
+        onClick={() => void navigate(-1)}
+        style={{ background: "none", border: "none", color: (results.length > 0 && (index > 0 || hasMore) && !loadingMore) ? "var(--tint)" : "var(--meta)", cursor: (results.length > 0 && (index > 0 || hasMore) && !loadingMore) ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: (results.length > 0 && (index > 0 || hasMore) && !loadingMore) ? 1 : 0.3 }}
       >
         <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}><path d="M18 15l-6-6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       <button
         disabled={results.length === 0 || index >= results.length - 1}
-        onClick={() => navigate(1)}
+        onClick={() => void navigate(1)}
         style={{ background: "none", border: "none", color: (results.length > 0 && index < results.length - 1) ? "var(--tint)" : "var(--meta)", cursor: (results.length > 0 && index < results.length - 1) ? "pointer" : "default", padding: "5px", display: "flex", alignItems: "center", opacity: (results.length > 0 && index < results.length - 1) ? 1 : 0.3 }}
       >
         <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) + 6px)", height: "calc(var(--bubble-font-size) + 6px)" }}><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>

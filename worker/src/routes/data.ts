@@ -225,11 +225,40 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
     case "search": {
       const query = url.searchParams.get("q");
-      if (!query) return Response.json({ results: [] });
-      const { results } = await env.DB.prepare(
-        "SELECT m.* FROM messages m JOIN messages_fts ON m.rowid = messages_fts.rowid WHERE messages_fts.text MATCH ? AND m.channel_id = ? AND m.deleted = 0 ORDER BY m.created_at DESC LIMIT 30"
-      ).bind(query, channelId).all();
-      return Response.json({ results });
+      if (!query) {
+        return Response.json({ results: [], has_more: false, next_cursor: null });
+      }
+
+      const cursor = url.searchParams.get("cursor");
+      const cursorId = url.searchParams.get("cursor_id");
+      const limit = 30;
+      let searchQuery = `
+        SELECT m.*
+        FROM messages m
+        JOIN messages_fts ON m.rowid = messages_fts.rowid
+        WHERE messages_fts.text MATCH ?
+          AND m.channel_id = ?
+          AND m.deleted = 0
+      `;
+      const params: unknown[] = [query, channelId];
+      if (cursor && cursorId) {
+        searchQuery += " AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))";
+        params.push(cursor, cursor, cursorId);
+      }
+      searchQuery += " ORDER BY m.created_at DESC, m.id DESC LIMIT ?";
+      params.push(limit + 1);
+
+      const { results } = await env.DB.prepare(searchQuery).bind(...params).all();
+      const page = results.slice(0, limit);
+      const hasMore = results.length > limit;
+      const last = page.at(-1) as { id?: unknown; created_at?: unknown } | undefined;
+      return Response.json({
+        results: page,
+        has_more: hasMore,
+        next_cursor: hasMore && last
+          ? { created_at: String(last.created_at || ""), id: String(last.id || "") }
+          : null,
+      });
     }
 
     case "banned-words": {

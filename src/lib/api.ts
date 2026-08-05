@@ -1392,14 +1392,40 @@ export async function editMessageApi(payload: {
   return res.json();
 }
 
-export async function searchMessages(channelId: string, query: string) {
-  if (IS_MOCK) return { results: [] };
+export interface MessageSearchCursor {
+  created_at: string;
+  id: string;
+}
+
+export interface MessageSearchResult {
+  id: string;
+  text: string;
+  created_at: string;
+}
+
+export interface MessageSearchResponse {
+  results: MessageSearchResult[];
+  has_more: boolean;
+  next_cursor: MessageSearchCursor | null;
+}
+
+export async function searchMessages(
+  channelId: string,
+  query: string,
+  cursor?: MessageSearchCursor | null,
+): Promise<MessageSearchResponse> {
+  if (IS_MOCK) return { results: [], has_more: false, next_cursor: null };
   const parentChannelId = getParentChannelId(channelId);
   const params = new URLSearchParams({ type: "search", channel: channelId, q: query });
+  if (cursor) {
+    params.set("cursor", cursor.created_at);
+    params.set("cursor_id", cursor.id);
+  }
   const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(parentChannelId),
   });
-  return res.json();
+  if (!res.ok) throw new Error(`Message search failed: ${res.status}`);
+  return res.json() as Promise<MessageSearchResponse>;
 }
 
 export async function sendDm(payload: {
