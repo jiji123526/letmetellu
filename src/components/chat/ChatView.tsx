@@ -794,8 +794,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         showSearch={showSearch}
         searchMessages={effectiveAdmin ? [...messages, ...dmMessages] : messages}
         onSearchNavigate={(msgId) => {
-          const el = document.getElementById(`msg-${msgId}`);
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          void scrollToMessage(msgId);
         }}
         onSearchState={setSearchState}
         onCloseSearch={closeSearch}
