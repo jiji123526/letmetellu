@@ -6,7 +6,18 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Providers } from "@/components/Providers";
 import { useLocale } from "@/hooks/useLocale";
-import { clearStoredSupportTicketPreview, closeSupportThread, decorateMediaUrl, fetchPlatformDashboard, fetchPlatformOperationalHealth, fetchSupportPreview, readStoredSupportTicketPreview, storeSupportTicketPreview, type PlatformDashboardResponse, type PlatformOperationalHealthResponse } from "@/lib/api";
+import { decorateMediaUrl } from "@/lib/api-core";
+import {
+  clearStoredSupportTicketPreview,
+  closeSupportThread,
+  fetchPlatformDashboard,
+  fetchPlatformOperationalHealth,
+  fetchSupportPreview,
+  readStoredSupportTicketPreview,
+  storeSupportTicketPreview,
+  type PlatformDashboardResponse,
+  type PlatformOperationalHealthResponse,
+} from "@/lib/api-support";
 import { clearRecentChannels, getRecentChannels, markRecentChannelsValidated, removeRecentChannel, shouldValidateRecentChannels, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";

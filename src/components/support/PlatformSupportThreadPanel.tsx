@@ -12,7 +12,7 @@ import {
   type SupportMessage,
   type SupportTranscriptEvent,
   type SupportThreadState,
-} from "@/lib/api";
+} from "@/lib/api-support";
 import { useForegroundPolling } from "@/hooks/useForegroundPolling";
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";

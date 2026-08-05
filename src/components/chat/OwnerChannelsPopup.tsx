@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchOwnerChannels } from "@/lib/api";
+import { fetchOwnerChannels } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 
 interface OwnerChannel {

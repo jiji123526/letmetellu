@@ -1,4 +1,4 @@
-import { decorateMediaUrl } from "./api";
+import { decorateMediaUrl } from "./api-core";
 import type { RecentChannel } from "./recent-channels";
 
 interface AccountRecentRow {

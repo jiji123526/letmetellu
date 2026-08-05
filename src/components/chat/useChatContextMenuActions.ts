@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import { adminAction } from "@/lib/api";
+import { adminAction } from "@/lib/api-chat";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 

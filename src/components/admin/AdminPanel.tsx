@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { adminAction, uploadAdminImage } from "@/lib/api";
+import { adminAction, uploadAdminImage } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 import { ProfileImageCropper } from "./ProfileImageCropper";
 

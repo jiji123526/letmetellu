@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { notifyRoomAccessGranted, verifyPasscode } from "@/lib/api";
+import { notifyRoomAccessGranted } from "@/lib/api-core";
+import { verifyPasscode } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 
 interface PasscodeOverlayProps {

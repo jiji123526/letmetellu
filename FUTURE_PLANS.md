@@ -56,15 +56,15 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Measured performance follow-up
 
-- The current 2026-08-05 frontend baseline from Next route bundle stats is still too heavy for the simplest routes: `/` at about `591 KB`, `/support` at about `634 KB`, `/privacy` and `/terms` at about `667 KB`, `/dashboard` at about `714 KB`, and `/ch/[slug]` at about `849 KB` of first-load uncompressed JS.
+- The current post-Phase-1 frontend measurement from writable webpack builds is still heavy for the simplest routes: `/` at about `526 KB`, `/support` at about `638 KB`, `/privacy` and `/terms` at about `535 KB`, `/dashboard` at about `718 KB`, and `/ch/[slug]` at about `848 KB` of first-load uncompressed JS.
+- The most recent API split reduced `/support` by about `16 KB`, `/dashboard` by about `16 KB`, and `/ch/[slug]` by about `14 KB` compared with the previous `c2f272b` build, while `/` and the already-optimized legal pages stayed effectively flat.
 - Treat that route-bundle snapshot, plus request counts for dashboard refresh and chat reconnect paths, as the baseline for the next optimization pass. Re-measure after each phase instead of stacking another broad rewrite.
 - Start with bundle and request-churn reductions that do not require a schema migration. Keep larger derived-data redesigns conditional on measured backend hotspots that remain after the cheaper changes ship.
 
 #### Phase 1: global bundle reduction
 
-- Completed on 2026-08-05: the root layout no longer mounts the full provider shell for every route, and `/privacy` plus `/terms` now render on the server from request locale instead of waiting on a client hydration gate.
-- Remaining Phase 1 work: split `src/lib/api.ts` by domain and lazy-load mock-only helpers instead of shipping support, mock and dashboard helpers into unrelated route bundles.
-- Re-run route-bundle measurement after the API split with focus on `/dashboard` and `/ch/[slug]`, because the static legal-page win is already landed while the interactive routes remain the larger bundle problem.
+- Completed on 2026-08-05: the root layout no longer mounts the full provider shell for every route, `/privacy` plus `/terms` now render on the server from request locale, and the old `src/lib/api.ts` monolith is split by domain with mock-only helpers lazy-loaded behind dynamic imports.
+- Phase 1 is complete. The remaining route-bundle problem is now concentrated in the interactive chat, support and dashboard shells rather than in global providers or mixed-domain API code.
 
 #### Phase 2: dashboard refresh consolidation
 
@@ -114,7 +114,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 ### Frontend maintainability
 
 - Add targeted regression coverage around message selectors, action rules, history navigation, realtime synchronization and the extracted layer-stack contracts before further structural changes.
-- The next maintainability candidates are domain-splitting `src/lib/api.ts` and reducing the state/orchestration surface in `src/app/dashboard/page.tsx`; take one domain at a time rather than starting another broad rewrite.
+- The next maintainability candidate is reducing the state/orchestration surface in `src/app/dashboard/page.tsx`, especially if the Phase 2 polling consolidation still leaves that page effect-heavy.
 - Reduce `ContextMenu` and overlay prop surfaces only when a concrete feature or testability problem justifies it.
 - Continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures before adding another large chat UI surface.
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { SupportMessage, SupportTranscriptEvent } from "@/lib/api";
+import type { SupportMessage, SupportTranscriptEvent } from "@/lib/api-support";
 import { useLocale } from "@/hooks/useLocale";
 
 function readTranscriptText(event: SupportTranscriptEvent, escalatedLabel: string) {

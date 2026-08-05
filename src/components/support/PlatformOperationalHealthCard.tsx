@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale } from "@/hooks/useLocale";
-import type { PlatformOperationalHealthResponse } from "@/lib/api";
+import type { PlatformOperationalHealthResponse } from "@/lib/api-support";
 
 export function PlatformOperationalHealthCard({
   health,

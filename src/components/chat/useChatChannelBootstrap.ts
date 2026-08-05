@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { fetchInit } from "@/lib/api";
+import { fetchInit } from "@/lib/api-chat";
 import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { recordRecentChannel } from "@/lib/recent-channels";

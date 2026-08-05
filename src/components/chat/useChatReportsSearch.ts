@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { deleteMessage, sendMessage as sendMessageApi } from "@/lib/api";
+import { deleteMessage, sendMessage as sendMessageApi } from "@/lib/api-chat";
 import {
   deriveChatMessageCollections,
   type ReportsOwnerFilter,

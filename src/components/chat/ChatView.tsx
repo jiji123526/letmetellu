@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { fetchInit, fetchOwnerChannels, getStoredUid, adminAction } from "@/lib/api";
+import { getStoredUid } from "@/lib/api-core";
+import { adminAction, fetchInit, fetchOwnerChannels } from "@/lib/api-chat";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";

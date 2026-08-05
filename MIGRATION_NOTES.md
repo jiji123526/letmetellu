@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### API domain split and lazy mock loading — 2026-08-05
+
+This completes the remaining Phase 1 bundle-reduction work by removing the old all-in-one client API surface from hot interactive routes.
+
+- Split the old `src/lib/api.ts` monolith into focused modules: `src/lib/api-core.ts` for shared client helpers, `src/lib/api-chat.ts` for chat/admin/upload/realtime APIs, and `src/lib/api-support.ts` plus `src/lib/api-support-types.ts` for support and dashboard APIs.
+- Moved support mock state into `src/lib/api-support-mock.ts` and changed both chat and support mock paths to dynamic `import(...)` calls. Mock-only helpers are no longer part of the default route graph for production bundles.
+- Repointed chat, dashboard, support and admin consumers to the split modules directly, while shrinking `src/lib/api.ts` to a small compatibility barrel instead of a 1.5k-line mixed-domain client module.
+- Verification in writable webpack builds against the previous `c2f272b` commit showed the interactive route bundles drop from about `654 KB` to `638 KB` for `/support`, `734 KB` to `718 KB` for `/dashboard`, and `862 KB` to `848 KB` for `/ch/[slug]` of first-load uncompressed JS. `/` stayed about `526 KB`, while the already-optimized server-rendered legal pages stayed about `535 KB`.
+
+Trade-offs:
+
+- This reduces mixed-domain client code in the chat, dashboard and support graphs, but it does not yet simplify the dashboard refresh policy or the chat reconnect/init request pattern. The remaining performance work stays in those later phases.
+- `src/lib/api.ts` still exists as a compatibility barrel for low-risk migration, so import hygiene matters if future work wants to preserve the same bundle boundary.
+
+Deployment notes:
+
+- no D1 migration is required;
+- no Worker deploy is required for this optimization;
+- deploy the Next.js frontend for this line.
+
 ### Root provider scoping and server-rendered legal pages — 2026-08-05
 
 This frontend-only optimization removes avoidable global client bootstrapping from routes that do not need authenticated or locale-managed interactivity.

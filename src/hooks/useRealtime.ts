@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { getWebSocketUrl } from "@/lib/api";
+import { getWebSocketUrl } from "@/lib/api-chat";
 
 type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 

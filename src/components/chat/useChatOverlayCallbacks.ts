@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, type Dispatch, type RefObject, type SetStateAction } from "react";
-import { adminAction } from "@/lib/api";
+import { adminAction } from "@/lib/api-chat";
 import type { Message } from "./chatTypes";
 
 interface BannerState {

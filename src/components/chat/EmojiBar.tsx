@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { adminAction } from "@/lib/api";
+import { adminAction } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 import { buildEmojiPicker } from "./emojiPickerData";
 

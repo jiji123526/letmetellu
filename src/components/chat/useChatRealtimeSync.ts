@@ -6,9 +6,11 @@ import {
   decorateMediaUrl,
   decorateMessageMedia,
   decorateProtectedMediaUrl,
+} from "@/lib/api-core";
+import {
   fetchInit,
   fetchMessages,
-} from "@/lib/api";
+} from "@/lib/api-chat";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { spawnEmoji } from "./EmojiBar";

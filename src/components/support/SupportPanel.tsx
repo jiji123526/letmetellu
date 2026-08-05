@@ -14,7 +14,7 @@ import {
   storeSupportTicketPreview,
   type SupportStateResponse,
   type SupportTranscriptEvent,
-} from "@/lib/api";
+} from "@/lib/api-support";
 import { useForegroundPolling } from "@/hooks/useForegroundPolling";
 import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
