@@ -48,6 +48,7 @@ interface SupportThreadRow {
   updated_at: string;
   closed_at: string | null;
   closed_by: string | null;
+  user_acknowledged_at: string | null;
   user_name?: string | null;
   user_email?: string | null;
   last_message?: string | null;
@@ -120,6 +121,7 @@ const SUPPORT_THREAD_SELECT_SQL = `
     st.updated_at,
     st.closed_at,
     st.closed_by,
+    st.user_acknowledged_at,
     u.name AS user_name,
     u.email AS user_email,
     (
@@ -259,6 +261,9 @@ function serializeThread(row: SupportThreadRow, locale: UserLocale, nowMs = Date
     updated_at: row.updated_at,
     closed_at: row.closed_at,
     closed_by: row.closed_by,
+    requires_user_acknowledgement: row.status === "closed"
+      && row.closed_by !== row.user_id
+      && !row.user_acknowledged_at,
     user_name: row.user_name || null,
     user_email: row.user_email || null,
     last_message: row.last_message || null,
@@ -403,6 +408,24 @@ async function fetchOpenSupportThreadForUser(userId: string, env: Env): Promise<
     ${SUPPORT_THREAD_SELECT_SQL}
     WHERE st.user_id = ? AND st.status = 'open'
     ORDER BY st.updated_at DESC, st.id DESC
+    LIMIT 1
+  `).bind(userId).first<SupportThreadRow>();
+}
+
+async function fetchVisibleSupportThreadForUser(userId: string, env: Env): Promise<SupportThreadRow | null> {
+  return env.DB.prepare(`
+    ${SUPPORT_THREAD_SELECT_SQL}
+    WHERE st.user_id = ?
+      AND (
+        st.status = 'open'
+        OR (
+          st.status = 'closed'
+          AND st.closed_by IS NOT NULL
+          AND st.closed_by != st.user_id
+          AND st.user_acknowledged_at IS NULL
+        )
+      )
+    ORDER BY CASE WHEN st.status = 'open' THEN 0 ELSE 1 END, st.updated_at DESC, st.id DESC
     LIMIT 1
   `).bind(userId).first<SupportThreadRow>();
 }
@@ -638,7 +661,7 @@ async function buildUserSupportState(subjectId: string, locale: UserLocale, env:
   const [platformAdmin, openSession, openThread] = await Promise.all([
     isAnonymousSupportSubjectId(subjectId) ? Promise.resolve(false) : isReportsChannelOwner(subjectId, env),
     fetchOpenSupportSessionForUser(subjectId, env),
-    fetchOpenSupportThreadForUser(subjectId, env),
+    fetchVisibleSupportThreadForUser(subjectId, env),
   ]);
   if (openSession) {
     const [transcript, messages] = await Promise.all([
@@ -679,7 +702,7 @@ async function buildUserSupportState(subjectId: string, locale: UserLocale, env:
 }
 
 async function buildUserSupportPreview(subjectId: string, locale: UserLocale, env: Env): Promise<Response> {
-  const openThread = await fetchOpenSupportThreadForUser(subjectId, env);
+  const openThread = await fetchVisibleSupportThreadForUser(subjectId, env);
   return Response.json({
     thread: openThread ? serializeThread(openThread, locale) : null,
   });
@@ -1007,11 +1030,30 @@ async function closeSupportThreadRecord(
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
   const closedAt = new Date().toISOString();
-  await env.DB.prepare(`
-    UPDATE support_threads
-    SET status = 'closed', updated_at = ?, closed_at = ?, closed_by = ?
-    WHERE id = ?
-  `).bind(closedAt, closedAt, actorUserId, threadId).run();
+  if (actorRole === "platform_admin") {
+    const userLocale = await getUserLocale(thread.user_id, env);
+    const closureText = userLocale === "en"
+      ? "This support ticket has been closed."
+      : "1:1 문의가 종료되었습니다.";
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE support_threads
+        SET status = 'closed', updated_at = ?, closed_at = ?, closed_by = ?,
+            user_acknowledged_at = NULL
+        WHERE id = ?
+      `).bind(closedAt, closedAt, actorUserId, threadId),
+      env.DB.prepare(`
+        INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, text, created_at)
+        VALUES (?, ?, 'platform_admin', ?, ?, ?)
+      `).bind(crypto.randomUUID(), threadId, actorUserId, closureText, closedAt),
+    ]);
+  } else {
+    await env.DB.prepare(`
+      UPDATE support_threads
+      SET status = 'closed', updated_at = ?, closed_at = ?, closed_by = ?
+      WHERE id = ?
+    `).bind(closedAt, closedAt, actorUserId, threadId).run();
+  }
   const action = actorRole === "user" ? "user_closed" : "admin_closed";
   await appendSupportAuditLog({
     env,
@@ -1071,6 +1113,41 @@ async function handleUserSupportMarkThreadRead(body: JsonObject, subjectId: stri
   return Response.json({ ok: true });
 }
 
+async function handleUserSupportAcknowledgeClosure(body: JsonObject, subjectId: string, env: Env): Promise<Response> {
+  const threadId = typeof body.thread_id === "string" ? body.thread_id : "";
+  if (!threadId) {
+    return Response.json({ error: "missing thread_id" }, { status: 400 });
+  }
+
+  const thread = await fetchSupportThreadById(threadId, env);
+  if (
+    !thread
+    || thread.user_id !== subjectId
+    || thread.status !== "closed"
+    || thread.closed_by === thread.user_id
+  ) {
+    return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+  if (thread.user_acknowledged_at) {
+    return Response.json({ ok: true });
+  }
+
+  const acknowledgedAt = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE support_threads
+    SET user_acknowledged_at = ?
+    WHERE id = ? AND user_id = ? AND user_acknowledged_at IS NULL
+  `).bind(acknowledgedAt, threadId, subjectId).run();
+  await appendSupportAuditLog({
+    env,
+    threadId,
+    actorRole: "user",
+    actorUserId: subjectId,
+    action: "user_acknowledged_closure",
+  });
+  return Response.json({ ok: true });
+}
+
 export async function handleSupport(request: Request, env: Env): Promise<Response> {
   const actor = await resolveSupportActor(request, env);
 
@@ -1113,6 +1190,9 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   }
   if (action === "mark_thread_read") {
     return withSupportIdentityHeaders(await handleUserSupportMarkThreadRead(body, actor.subjectId, env), actor);
+  }
+  if (action === "acknowledge_closure") {
+    return withSupportIdentityHeaders(await handleUserSupportAcknowledgeClosure(body, actor.subjectId, env), actor);
   }
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }

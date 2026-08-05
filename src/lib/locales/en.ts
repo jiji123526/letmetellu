@@ -532,6 +532,7 @@ export const en: Record<LocaleKeys, string> = {
   supportMockResolved: "Glad that helped.",
   supportMockSummary: "Mock support summary",
   supportMockUserName: "Mock User",
+  supportMockTicketClosed: "This support ticket has been closed.",
   firstOnboardingTitle: "Start a space of your own",
   firstOnboardingDesc: "Open it with one link and stay in control when you need to.",
   firstOnboardingPrivateTitle: "Unlisted, link-based access",

@@ -33,6 +33,7 @@ interface SupportThreadChatProps {
   onSend: () => void;
   onBack: () => void;
   onCloseTicket?: () => void;
+  onAcknowledgeClosure?: () => void;
   menuActions?: Array<{
     label: string;
     onClick: () => void;
@@ -60,6 +61,7 @@ export function SupportThreadChat({
   onSend,
   onBack,
   onCloseTicket,
+  onAcknowledgeClosure,
   menuActions = [],
   submitting,
   placeholder,
@@ -286,7 +288,7 @@ export function SupportThreadChat({
             </div>
           ) : null}
 
-          {messages.map((message) => {
+          {messages.map((message, index) => {
             const isSelf = message.sender_role === selfRole;
             return (
               <div
@@ -309,6 +311,27 @@ export function SupportThreadChat({
                     }}
                   >
                     {message.text}
+                    {status === "closed"
+                      && onAcknowledgeClosure
+                      && index === messages.length - 1
+                      && !isSelf && (
+                        <button
+                          type="button"
+                          className="mt-3 block w-full rounded-full border-none cursor-pointer"
+                          style={{
+                            padding: "8px 12px",
+                            background: selfBubbleColor,
+                            color: "#fff",
+                            fontFamily: "inherit",
+                            fontSize: "calc(var(--bubble-font-size) - 2px)",
+                            fontWeight: 600,
+                          }}
+                          disabled={submitting}
+                          onClick={onAcknowledgeClosure}
+                        >
+                          {t("confirm")}
+                        </button>
+                      )}
                   </div>
                 </div>
               </div>

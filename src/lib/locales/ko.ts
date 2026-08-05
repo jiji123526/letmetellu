@@ -530,6 +530,7 @@ export const ko = {
   supportMockResolved: "도움이 되었다니 다행이에요.",
   supportMockSummary: "테스트용 문의 요약",
   supportMockUserName: "테스트 사용자",
+  supportMockTicketClosed: "1:1 문의가 종료되었습니다.",
   firstOnboardingTitle: "오직 당신을 위한 익명 채팅방",
   firstOnboardingDesc: "링크 하나로 열고, 필요한 순간에는 안전하게 관리하세요.",
   firstOnboardingPrivateTitle: "공유된 링크로만 입장 가능",

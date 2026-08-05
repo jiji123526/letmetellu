@@ -710,6 +710,18 @@ Deployment notes:
 - deploy the Worker after the migration;
 - no Next.js frontend deployment is required.
 
+### User-acknowledged support closure — 2026-08-05
+
+- Added migration `0030_support_closure_acknowledgement.sql` to retain whether a user has acknowledged an admin-closed support ticket.
+- Closing a ticket as platform admin now appends a localized closure message and keeps that closed ticket visible in the user's support state and dashboard preview.
+- The user confirms the closure from the final message. Acknowledgement then removes the ticket from the user's dashboard and allows the normal new-support flow.
+- User-initiated ticket closure retains its previous immediate-removal behavior.
+
+Deployment notes:
+
+- apply D1 migration `0030_support_closure_acknowledgement.sql` first;
+- deploy the Worker and Next.js frontend together.
+
 ### Parallel platform-support dashboard reads — 2026-08-04
 
 This Worker-only optimization reduces platform-admin support dashboard latency by collapsing independent dashboard reads into one concurrent batch.

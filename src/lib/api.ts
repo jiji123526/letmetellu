@@ -21,7 +21,8 @@ type SupportMockLocaleKey =
   | "supportMockContactSupport"
   | "supportMockResolved"
   | "supportMockSummary"
-  | "supportMockUserName";
+  | "supportMockUserName"
+  | "supportMockTicketClosed";
 
 export interface SupportChoice {
   id: string;
@@ -66,6 +67,7 @@ export interface SupportThreadState {
   updated_at: string;
   closed_at: string | null;
   closed_by: string | null;
+  requires_user_acknowledgement: boolean;
   user_name: string | null;
   user_email: string | null;
   last_message: string | null;
@@ -397,10 +399,11 @@ function getMockSupportThreadState(): SupportThreadState | null {
 
 function getMockSupportState(): SupportStateResponse {
   const thread = getMockSupportThreadState();
+  const isVisible = thread?.status === "open" || thread?.requires_user_acknowledgement;
   return {
     platformAdmin: true,
-    thread: thread?.status === "open" ? thread : null,
-    messages: thread?.status === "open" ? mockSupportMessages : [],
+    thread: isVisible ? thread : null,
+    messages: isVisible ? mockSupportMessages : [],
     session: mockSupportSession,
     transcript: mockSupportSession ? mockSupportTranscript : [],
     currentNode: getMockSupportNode(mockSupportSession?.current_node_id),
@@ -410,7 +413,7 @@ function getMockSupportState(): SupportStateResponse {
 function getMockSupportPreview(): SupportPreviewResponse {
   const thread = getMockSupportThreadState();
   return {
-    thread: thread?.status === "open" ? thread : null,
+    thread: thread?.status === "open" || thread?.requires_user_acknowledgement ? thread : null,
   };
 }
 
@@ -458,6 +461,7 @@ function createMockEscalatedSupportThread() {
     updated_at: createdAt,
     closed_at: null,
     closed_by: null,
+    requires_user_acknowledgement: false,
     user_name: getMockSupportText("supportMockUserName"),
     user_email: "mock@example.com",
     last_message: getMockSupportText("supportMockSummary"),
@@ -1049,6 +1053,7 @@ export async function closeSupportThread(threadId: string) {
       updated_at: new Date().toISOString(),
       closed_at: new Date().toISOString(),
       closed_by: mockSupportThread.user_id,
+      requires_user_acknowledgement: false,
     };
     mockSupportReadState.user = mockSupportThread.updated_at;
     mockSupportMessages = [];
@@ -1084,6 +1089,27 @@ export async function markSupportThreadRead(threadId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "mark_thread_read",
+      thread_id: threadId,
+    }),
+  });
+}
+
+export async function acknowledgeSupportThreadClosure(threadId: string) {
+  if (IS_MOCK) {
+    if (mockSupportThread?.id === threadId) {
+      mockSupportThread = null;
+      mockSupportMessages = [];
+    }
+    return { ok: true, _status: 200 };
+  }
+  return requestSupportJson<{
+    ok?: boolean;
+    error?: string;
+  }>("/api/support", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "acknowledge_closure",
       thread_id: threadId,
     }),
   });
@@ -1259,9 +1285,20 @@ export async function closePlatformSupportThread(threadId: string) {
       updated_at: new Date().toISOString(),
       closed_at: new Date().toISOString(),
       closed_by: "mock-admin",
+      requires_user_acknowledgement: true,
     };
+    mockSupportMessages = [
+      ...mockSupportMessages,
+      {
+        id: crypto.randomUUID(),
+        thread_id: threadId,
+        sender_role: "platform_admin",
+        sender_user_id: "mock-admin",
+        text: getMockSupportText("supportMockTicketClosed"),
+        created_at: mockSupportThread.updated_at,
+      },
+    ];
     mockSupportReadState.platform_admin = mockSupportThread.updated_at;
-    mockSupportMessages = [];
     mockSupportSession = null;
     mockSupportTranscript = [];
     return { ok: true, _status: 200 };

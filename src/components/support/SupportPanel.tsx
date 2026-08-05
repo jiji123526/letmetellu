@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
+  acknowledgeSupportThreadClosure,
   answerSupportSession,
   clearStoredSupportTicketPreview,
   clearSupportSession,
@@ -351,6 +352,22 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
     }
   }
 
+  async function handleAcknowledgeClosure() {
+    const thread = supportState.thread;
+    if (!thread || submitting) return;
+    setSubmitting(true);
+    const result = await acknowledgeSupportThreadClosure(thread.id);
+    if (result._status >= 400) {
+      setError(typeof result.error === "string" ? result.error : t("sendFailed"));
+      setSubmitting(false);
+      return;
+    }
+    clearStoredSupportTicketPreview();
+    setSupportState(emptySupportState);
+    window.dispatchEvent(new CustomEvent("support-ticket-changed"));
+    router.push("/dashboard");
+  }
+
   if (showThreadView && supportState.thread) {
     return (
       <SupportThreadChat
@@ -367,6 +384,9 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
         onDraftChange={setThreadDraft}
         onSend={() => { void handleThreadSend(); }}
         onBack={() => router.push("/dashboard")}
+        onAcknowledgeClosure={supportState.thread.requires_user_acknowledgement
+          ? () => { void handleAcknowledgeClosure(); }
+          : undefined}
         menuActions={[
           {
             label: t("supportRestartWithNewTopic"),
