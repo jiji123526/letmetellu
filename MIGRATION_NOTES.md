@@ -763,6 +763,23 @@ Deployment notes:
 - apply D1 migration `0030_support_closure_acknowledgement.sql` first;
 - deploy the Worker and Next.js frontend together.
 
+### Dashboard foreground refresh consolidation — 2026-08-05
+
+- Replaced separate dashboard interval, focus and visibility refresh effects with the shared foreground polling hook.
+- One scheduler now applies independent freshness windows for the platform-admin dashboard, normal-user support preview and operational-health data.
+- Existing in-flight request deduplication remains in place, while focus and visibility events no longer fan out through multiple listener sets.
+- Support-ticket mutation events still force an immediate targeted refresh.
+
+Trade-offs:
+
+- Returning to the dashboard before a resource becomes stale no longer forces a redundant network request, so data can remain at most 30 seconds old for platform admins, 60 seconds old for support previews and five minutes old for operational health.
+- Manual refresh controls and known ticket mutations continue to bypass the polling wait.
+
+Deployment notes:
+
+- no D1 migration or Worker deployment is required;
+- deploy the Next.js frontend.
+
 ### Parallel platform-support dashboard reads — 2026-08-04
 
 This Worker-only optimization reduces platform-admin support dashboard latency by collapsing independent dashboard reads into one concurrent batch.

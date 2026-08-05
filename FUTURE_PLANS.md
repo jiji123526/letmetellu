@@ -68,10 +68,10 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### Phase 2: dashboard refresh consolidation
 
-- Replace the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
-- Keep the current in-flight dedupe, but move refresh policy into one place so support preview, admin dashboard and operational-health refreshes cannot fan out from multiple effects on the same focus event.
+- Completed on 2026-08-05: replaced the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
+- The consolidated scheduler retains in-flight dedupe and independently enforces 30-second admin-dashboard, 60-second support-preview and five-minute operational-health freshness windows.
 - Add lightweight measurement for dashboard refresh count and network fan-out before and after the consolidation so the change is validated with real request reductions, not just cleaner code.
-- Do not expand dashboard surface area until the current refresh model is simplified and measured.
+- Keep the custom support-ticket event as an explicit forced refresh for known mutations rather than treating it as polling.
 
 #### Phase 3: chat init and reconnect shaping
 
