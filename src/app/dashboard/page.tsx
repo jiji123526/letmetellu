@@ -614,16 +614,13 @@ function DashboardPageContent() {
       }
       return;
     }
-    if (
-      supportPreview
-      && now - supportPreviewLoadedAtRef.current >= SUPPORT_PREVIEW_POLL_MS
-    ) {
+    if (now - supportPreviewLoadedAtRef.current >= SUPPORT_PREVIEW_POLL_MS) {
       void loadSupportPreview();
     }
-  }, [isPlatformAdmin, loadOperationalHealth, loadPlatformDashboard, loadSupportPreview, supportPreview]);
+  }, [isPlatformAdmin, loadOperationalHealth, loadPlatformDashboard, loadSupportPreview]);
 
   useForegroundPolling({
-    enabled: status !== "loading" && (isPlatformAdmin || Boolean(supportPreview)),
+    enabled: status !== "loading",
     pollMs: DASHBOARD_REFRESH_TICK_MS,
     runImmediately: true,
     onRefresh: refreshForegroundDashboard,
