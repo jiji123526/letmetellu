@@ -57,9 +57,15 @@ async function waitForMessageElement(msgId: string, timeoutMs = 1500): Promise<H
   return null;
 }
 
-function hasPendingWindowContent(container: HTMLElement): boolean {
+function isBeforeOrInsideTarget(node: Element, target: Element): boolean {
+  return target.contains(node)
+    || Boolean(node.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+function hasPendingPositioningContent(container: HTMLElement, target: HTMLElement): boolean {
   const pendingElements = container.querySelectorAll(".media-loading-dots, img, video");
   return [...pendingElements].some((node) => {
+    if (!isBeforeOrInsideTarget(node, target)) return false;
     if (node.classList.contains("media-loading-dots")) return true;
     if (node instanceof HTMLImageElement) return !node.complete;
     return node instanceof HTMLVideoElement && node.readyState < HTMLMediaElement.HAVE_METADATA;
@@ -80,10 +86,26 @@ async function waitForStableMessageLayout(
   while (performance.now() - startedAt < timeoutMs) {
     await nextAnimationFrame();
     const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
-    const pendingContent = hasPendingWindowContent(container);
+    const pendingContent = hasPendingPositioningContent(container, target);
     stableFrames = !pendingContent && signature === previousSignature ? stableFrames + 1 : 0;
     previousSignature = signature;
     if (stableFrames >= 3) return;
+  }
+}
+
+async function correctMessageAlignment(
+  container: HTMLElement,
+  target: HTMLElement,
+  isCurrent: () => boolean,
+): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  if (!isCurrent()) return;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const offset = targetRect.top + targetRect.height / 2
+    - (containerRect.top + container.clientHeight / 2);
+  if (Math.abs(offset) > 2) {
+    container.scrollBy({ top: offset, behavior: "auto" });
   }
 }
 
@@ -105,6 +127,7 @@ export function useChatHistoryNavigation({
   const loadingMoreRef = useRef(false);
   const hasMoreMessagesRef = useRef(true);
   const hasMoreNewerMessagesRef = useRef(false);
+  const navigationRequestRef = useRef(0);
 
   useEffect(() => {
     historyModeRef.current = historyMode;
@@ -239,6 +262,7 @@ export function useChatHistoryNavigation({
   }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
 
   const scrollToMessage = useCallback(async (msgId: string) => {
+    const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
 
@@ -246,6 +270,7 @@ export function useChatHistoryNavigation({
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
       try {
         const data = await fetchMessageContext(fetchChannel, msgId);
+        if (navigationRequest !== navigationRequestRef.current) return;
         if (!data.messages?.some((message: Message) => message.id === msgId)) {
           throw new Error("message not found");
         }
@@ -262,6 +287,7 @@ export function useChatHistoryNavigation({
     }
 
     if (!element) {
+      if (navigationRequest !== navigationRequestRef.current) return;
       setBanner({ text: "Message not found", color: "var(--meta)" });
       setTimeout(() => setBanner(null), 2000);
       return;
@@ -271,9 +297,17 @@ export function useChatHistoryNavigation({
     if (container) {
       await waitForStableMessageLayout(container, element);
     }
+    if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
     element.scrollIntoView({ behavior: "smooth", block: "center" });
     flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
+    if (container) {
+      await correctMessageAlignment(
+        container,
+        element,
+        () => navigationRequest === navigationRequestRef.current,
+      );
+    }
   }, [channelId, inLiveModeRef, messagesContainerRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 
   return {
