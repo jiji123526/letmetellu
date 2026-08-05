@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Platform support dashboard query shaping — 2026-08-05
+
+This Phase 4 Worker and D1 optimization keeps the support dashboard response contract unchanged while aligning reads with measured SQLite behavior.
+
+- User and platform-admin read markers are joined directly instead of fetched through separate correlated subqueries for every ticket.
+- Migration `0031_support_dashboard_query_indexes.sql` adds composite indexes matching status pagination, latest-message ordering and sender-role timestamp lookups, then removes the narrower indexes they supersede.
+- Message fields retain targeted indexed lookups. A page-first CTE with one windowed message rollup produced equivalent rows but ran about 7.3 times slower on a representative local fixture of 1,000 tickets and 20,000 messages, so it was rejected rather than shipping the planned-but-slower shape.
+- On the same fixture, direct read-marker joins plus the accepted indexes preserved exact query rows and reduced repeated 101-ticket list-query time by about 54-56% across two 250-read benchmark runs.
+- The direct read-marker joins also benefit single-thread and user-facing support queries that share the same select contract.
+
+Trade-offs:
+
+- The two message indexes add storage and minor write amplification, but support-message writes are low-volume and reads are the dashboard hotspot being optimized.
+- Targeted message lookups remain correlated, but the new indexes make each lookup bounded and avoid the sorting/grouping cost observed in the rollup benchmark.
+- A derived support-thread summary could remove those lookups, but would introduce write-path consistency risk and is not justified without production evidence.
+- The migration adds no columns or backfill, but it must be applied before production latency is evaluated against the new query shape.
+
+Deployment notes:
+
+- apply D1 migration `0031_support_dashboard_query_indexes.sql`;
+- deploy the Worker;
+- no Next.js frontend deployment is required.
+
 ### Initial socket and reconnect request shaping — 2026-08-05
 
 This frontend-only Phase 3 slice removes duplicate chat recovery reads without weakening passcode, moderation or live-state transitions.

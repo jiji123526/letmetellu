@@ -85,8 +85,9 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### Phase 4: support dashboard query tuning
 
-- Replace the current per-thread correlated support subqueries with joined rollups or CTEs for last message, sender, unread and reply-state fields.
-- Add composite indexes that match the platform-support dashboard scans and message-rollup access patterns, then benchmark open-ticket and recent-closed-ticket reads before and after.
+- The first measured query-tuning slice is complete: read markers now use direct primary-key joins, and composite indexes cover status pagination, latest-message ordering and sender-role timestamp lookups. A 1,000-ticket/20,000-message local fixture measured about 54-56% lower query time across repeated 250-read runs.
+- A page-first windowed message rollup was evaluated but rejected after representative local SQLite benchmarks ran materially slower than indexed point lookups. Keep the measured point-lookup shape unless production data demonstrates a different crossover.
+- Compare production platform-support latency after rollout before considering denormalized per-thread summaries.
 - Keep the existing dashboard behavior stable while tuning query shape first; do not jump to a broader support schema redesign unless latency remains materially high after query and index work.
 - Re-check operational-health summaries and platform-support latency after rollout so the next backend bottleneck is identified from measurement rather than assumption.
 
