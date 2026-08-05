@@ -234,7 +234,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const cursorId = url.searchParams.get("cursor_id");
       const limit = 30;
       let searchQuery = `
-        SELECT m.*
+        SELECT m.id, m.text, m.created_at
         FROM messages m
         WHERE m.channel_id = ?
           AND m.deleted = 0
