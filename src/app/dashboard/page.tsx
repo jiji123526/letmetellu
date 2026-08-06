@@ -240,6 +240,10 @@ function DashboardPageContent() {
   const [showDeleteAccountError, setShowDeleteAccountError] = useState(false);
   const [platformDashboard, setPlatformDashboard] = useState<PlatformDashboardResponse | null>(null);
   const [platformDashboardError, setPlatformDashboardError] = useState(false);
+  const [platformAdminRole, setPlatformAdminRole] = useState<{
+    userId: string;
+    isAdmin: boolean;
+  } | null>(null);
   const [operationalHealth, setOperationalHealth] = useState<PlatformOperationalHealthResponse | null>(null);
   const [operationalHealthLoading, setOperationalHealthLoading] = useState(false);
   const [operationalHealthError, setOperationalHealthError] = useState(false);
@@ -254,7 +258,7 @@ function DashboardPageContent() {
   const channelItemRefs = useRef(new Map<string, HTMLDivElement>());
   const previousItemPositionsRef = useRef(new Map<string, number>());
   const skipNextListAnimationRef = useRef(false);
-  const loadChannelsInFlightRef = useRef<Promise<void> | null>(null);
+  const loadChannelsInFlightRef = useRef<Promise<boolean> | null>(null);
   const loadPlatformDashboardInFlightRef = useRef<Promise<boolean> | null>(null);
   const platformDashboardLoadedAtRef = useRef(0);
   const loadOperationalHealthInFlightRef = useRef<Promise<void> | null>(null);
@@ -272,7 +276,11 @@ function DashboardPageContent() {
   const linkedChannelId = submittedLinkedChannelId;
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
-  const isPlatformAdmin = !!platformDashboard || platformDashboardError;
+  const authenticatedUserId = session?.user?.id;
+  const hasResolvedPlatformRole = Boolean(
+    authenticatedUserId && platformAdminRole?.userId === authenticatedUserId
+  );
+  const isPlatformAdmin = hasResolvedPlatformRole && platformAdminRole?.isAdmin === true;
   const togglePlatformTicketFilter = useCallback((nextFilter: Exclude<PlatformTicketFilter, null>) => {
     skipNextListAnimationRef.current = true;
     setPlatformTicketFilter((current) => current === nextFilter ? null : nextFilter);
@@ -308,15 +316,26 @@ function DashboardPageContent() {
     return () => window.removeEventListener("resize", syncViewportHeight);
   }, []);
 
-  const loadChannels = useCallback((): Promise<void> => {
+  const loadChannels = useCallback((): Promise<boolean> => {
     if (loadChannelsInFlightRef.current) return loadChannelsInFlightRef.current;
     const request = (async () => {
       const response = await fetch("/api/user", { cache: "no-store" });
-      const data = await response.json() as { channels?: Channel[] };
+      const data = await response.json() as {
+        user_id?: string;
+        channels?: Channel[];
+        is_platform_admin?: boolean;
+      };
+      if (!response.ok) throw new Error("user dashboard unavailable");
+      const isAdmin = data.is_platform_admin === true;
+      setPlatformAdminRole({
+        userId: data.user_id || authenticatedUserId || "",
+        isAdmin,
+      });
       setChannels((data.channels || []).map((channel) => ({
         ...channel,
         profile_image: decorateMediaUrl(channel.profile_image),
       })));
+      return isAdmin;
     })().finally(() => {
       if (loadChannelsInFlightRef.current === request) {
         loadChannelsInFlightRef.current = null;
@@ -324,7 +343,7 @@ function DashboardPageContent() {
     });
     loadChannelsInFlightRef.current = request;
     return request;
-  }, []);
+  }, [authenticatedUserId]);
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -397,6 +416,7 @@ function DashboardPageContent() {
       try {
         const result = await fetchPlatformDashboard();
         if (result._status === 403 || result._status === 404) {
+          setPlatformAdminRole((current) => current ? { ...current, isAdmin: false } : current);
           setPlatformDashboard(null);
           setPlatformDashboardError(false);
           setOperationalHealth(null);
@@ -508,7 +528,11 @@ function DashboardPageContent() {
   }, []);
 
   const loadSupportPreview = useCallback((): Promise<void> => {
-    if (status === "loading" || isPlatformAdmin) {
+    if (
+      status === "loading"
+      || isPlatformAdmin
+      || (status === "authenticated" && !hasResolvedPlatformRole)
+    ) {
       return Promise.resolve();
     }
     if (loadSupportPreviewInFlightRef.current) return loadSupportPreviewInFlightRef.current;
@@ -542,7 +566,7 @@ function DashboardPageContent() {
     });
     loadSupportPreviewInFlightRef.current = request;
     return request;
-  }, [status, isPlatformAdmin]);
+  }, [status, isPlatformAdmin, hasResolvedPlatformRole]);
 
   const connectLocalChannels = async () => {
     if (!pendingLocalChannels || !session?.user?.id || migratingLocalChannels) return;
@@ -587,14 +611,13 @@ function DashboardPageContent() {
           if (cachedRecentChannels.length > 0) {
             setRecentChannels(cachedRecentChannels);
           }
-          const coreDashboardRequest = userId
-            ? Promise.allSettled([
-                loadChannels(),
-                loadAccountRecentChannels(userId),
-              ])
-            : Promise.resolve([]);
-          const hasPlatformDashboard = await loadPlatformDashboard();
-          if (hasPlatformDashboard) {
+          const recentChannelsRequest = userId
+            ? loadAccountRecentChannels(userId)
+            : Promise.resolve();
+          const roleResult = await Promise.allSettled([loadChannels()]);
+          const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
+          if (isAdmin) {
+            await loadPlatformDashboard();
             setLoading(false);
             return;
           }
@@ -606,7 +629,7 @@ function DashboardPageContent() {
           if (cachedRecentChannels.length > 0) {
             setLoading(false);
           }
-          await coreDashboardRequest;
+          await Promise.allSettled([recentChannelsRequest]);
           setLoading(false);
         })();
       } else if (status === "unauthenticated") {
@@ -614,6 +637,7 @@ function DashboardPageContent() {
           loadLocalRecentChannels(),
           loadSupportPreview(),
         ]);
+        setPlatformAdminRole(null);
         setPlatformDashboard(null);
         setLoading(false);
       }

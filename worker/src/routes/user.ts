@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { getReportsChannelId } from "../lib/special-channels";
+import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { deleteChannel } from "./admin";
 
 function normalizeEmail(email: string) {
@@ -27,7 +27,7 @@ async function readUserState(
   userId: string,
   reportsChannelId: string | null,
 ) {
-  const [channelsResult, preferences] = await Promise.all([
+  const [channelsResult, preferences, isPlatformAdmin] = await Promise.all([
     env.DB.prepare(
       `WITH owner_channels AS (
          SELECT channels.id, channels.owner_uid, channels.name, channels.profile_image,
@@ -64,12 +64,14 @@ async function readUserState(
     ).bind(userId, ...(reportsChannelId ? [reportsChannelId] : [])).all(),
     env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
       .bind(userId).first<{ font_size: number | null; locale: string | null }>(),
+    isReportsChannelOwner(userId, env),
   ]);
 
   return {
     channels: channelsResult.results,
     font_size: preferences?.font_size ?? null,
     locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
+    is_platform_admin: isPlatformAdmin,
   };
 }
 
@@ -116,6 +118,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
         channels: state.channels,
         font_size: state.font_size,
         locale: state.locale,
+        is_platform_admin: state.is_platform_admin,
       });
     }
 
