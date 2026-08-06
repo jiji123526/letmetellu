@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { getRequestLocale } from "@/lib/server-locale";
 import "./globals.css";
 
@@ -51,6 +52,7 @@ export default async function RootLayout({
       </head>
       <body className="antialiased">
         {children}
+        <Analytics />
       </body>
     </html>
   );
