@@ -262,7 +262,7 @@ const MessageRow = React.memo(function MessageRow({
       id={`msg-${msg.id}`}
       className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
       style={{
-        paddingTop: "calc(var(--bubble-font-size) * 0.18)",
+        paddingTop: "calc(var(--bubble-font-size) * 0.32)",
         paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
         paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
       }}
