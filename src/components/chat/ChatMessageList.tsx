@@ -102,10 +102,8 @@ const MessageRow = React.memo(function MessageRow({
       ? false
       : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-  const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
   const showEmbeds = !!msg.text && !msg.report && !msg.image && !isInboxMessage;
   const hasCaptionedWidget = showEmbeds && hasWidgetCaption(msg.text);
-  const usesWideWidgetBubble = hasNativeEmbed || hasCaptionedWidget;
   const reportMeta = msg.report_meta;
   const petitionMeta = msg.petition_meta;
   const inboxChannel = reportMeta
@@ -146,7 +144,6 @@ const MessageRow = React.memo(function MessageRow({
         fontSize: "var(--bubble-font-size)",
         lineHeight: 1.38,
         overflowWrap: "anywhere",
-        width: usesWideWidgetBubble ? "100%" : undefined,
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
           : "20px",
