@@ -171,7 +171,7 @@ export function useChatHistoryNavigation({
   const hasMoreMessagesRef = useRef(true);
   const hasMoreNewerMessagesRef = useRef(false);
   const navigationRequestRef = useRef(0);
-  const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pageExitRef = useRef(false);
 
   const scrollStorageKey = `chatScrollPosition:${channelId}`;
 
@@ -193,13 +193,23 @@ export function useChatHistoryNavigation({
   }, [inLiveModeRef, messagesContainerRef, scrollStorageKey]);
 
   useEffect(() => {
-    const handlePageHide = () => saveScrollPosition();
-    window.addEventListener("pagehide", handlePageHide);
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-      if (scrollSaveTimerRef.current !== null) clearTimeout(scrollSaveTimerRef.current);
+    const handlePageExit = () => {
+      pageExitRef.current = true;
+      saveScrollPosition();
     };
-  }, [saveScrollPosition]);
+    const handlePageShow = () => {
+      pageExitRef.current = false;
+    };
+    window.addEventListener("beforeunload", handlePageExit);
+    window.addEventListener("pagehide", handlePageExit);
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("beforeunload", handlePageExit);
+      window.removeEventListener("pagehide", handlePageExit);
+      window.removeEventListener("pageshow", handlePageShow);
+      if (!pageExitRef.current) sessionStorage.removeItem(scrollStorageKey);
+    };
+  }, [saveScrollPosition, scrollStorageKey]);
 
   useEffect(() => {
     historyModeRef.current = historyMode;
@@ -232,13 +242,6 @@ export function useChatHistoryNavigation({
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     isNearBottomRef.current = distanceFromBottom <= 120;
     setShowScrollBtn(distanceFromBottom > 200);
-
-    if (scrollSaveTimerRef.current === null) {
-      scrollSaveTimerRef.current = setTimeout(() => {
-        scrollSaveTimerRef.current = null;
-        saveScrollPosition();
-      }, 120);
-    }
 
     if (
       element.scrollTop < 50
@@ -328,7 +331,7 @@ export function useChatHistoryNavigation({
           loadingMoreRef.current = false;
         });
     }
-  }, [channelId, inLiveModeRef, messages, messagesContainerRef, saveScrollPosition, setHistoryMode, setMessages, setShowScrollBtn]);
+  }, [channelId, inLiveModeRef, messages, messagesContainerRef, setHistoryMode, setMessages, setShowScrollBtn]);
 
   const scrollToBottom = useCallback(() => {
     if (historyModeRef.current === "context") {
@@ -391,10 +394,9 @@ export function useChatHistoryNavigation({
 
   const restoreRefreshPosition = useCallback(async () => {
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-    if (navigation?.type !== "reload") return false;
-
     const rawPosition = sessionStorage.getItem(scrollStorageKey);
     sessionStorage.removeItem(scrollStorageKey);
+    if (navigation?.type !== "reload") return false;
     if (!rawPosition) return false;
 
     let position: SavedScrollPosition;

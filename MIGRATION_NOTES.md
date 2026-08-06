@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Refresh-only chat scroll restoration — 2026-08-06
+
+- A channel preserves its visible message position only for an actual browser refresh of that same channel.
+- Client-side navigation away from the channel removes its saved position, so returning from the dashboard or another channel starts at the latest message.
+- Non-reload page entries consume and discard any stale tab-local position before the normal initial bottom scroll runs.
+- Browser unload/pagehide continues to capture the final anchor for refresh, while pageshow resets the lifecycle guard for restored back-forward-cache pages.
+
+Trade-off: leaving and re-entering a channel intentionally loses historical browsing position even within the same tab. Refresh remains tab-local and does not sync across devices.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Legacy link cards and gallery media alignment — 2026-08-06
 
 - Link-panel cards now retain a uniform 104px layout for current and migrated messages while preview requests load or fail, preventing recent cards from collapsing into border-only lines.
