@@ -123,23 +123,17 @@ interface PreviewData {
   url: string;
 }
 
-interface StoredPreviewEntry {
-  url: string;
-  data: PreviewData;
-  cachedAt: number;
-  lastAccessedAt: number;
-}
-
-const PREVIEW_STORAGE_KEY = "letmetellu_link_previews_v1";
-const PREVIEW_STORAGE_VERSION = 1;
-const PREVIEW_STORAGE_LIMIT = 100;
+const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v2";
+const LEGACY_PREVIEW_STORAGE_KEY = "letmetellu_link_previews_v1";
+const PREVIEW_CACHE_LIMIT = 200;
+const PREVIEW_CACHED_AT_HEADER = "X-Letmetellu-Preview-Cached-At";
 const PREVIEW_FRESH_TTL_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const previewCache = new Map<string, PreviewData | null>();
-const previewCacheMetadata = new Map<string, { cachedAt: number; lastAccessedAt: number }>();
+const previewCacheMetadata = new Map<string, { cachedAt: number }>();
 const previewRequests = new Map<string, Promise<PreviewData | null>>();
-let previewStorageHydrated = false;
-let previewStorageWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let persistentPreviewCachePromise: Promise<Cache | null> | null = null;
+let legacyPreviewStorageCleaned = false;
 
 function isPreviewData(value: unknown): value is PreviewData {
   if (!value || typeof value !== "object") return false;
@@ -163,91 +157,98 @@ function compactPreviewData(data: PreviewData): PreviewData {
   };
 }
 
-function persistPreviewCache() {
-  if (typeof window === "undefined") return;
-  const entries = [...previewCacheMetadata.entries()]
-    .flatMap(([url, metadata]) => {
-      const data = previewCache.get(url);
-      if (!data || url.length > 2048) return [];
-      return [{ url, data: compactPreviewData(data), ...metadata }];
-    })
-    .sort((left, right) => right.lastAccessedAt - left.lastAccessedAt)
-    .slice(0, PREVIEW_STORAGE_LIMIT);
-
-  try {
-    localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({
-      version: PREVIEW_STORAGE_VERSION,
-      entries,
-    }));
-  } catch {
-    // Preview persistence is optional and must not block rendering.
-  }
+function getPreviewCacheRequest(url: string): Request {
+  return new Request(
+    new URL(`/api/preview?url=${encodeURIComponent(url)}`, window.location.origin),
+    { method: "GET" },
+  );
 }
 
-function schedulePreviewCacheWrite() {
-  if (previewStorageWriteTimer || typeof window === "undefined") return;
-  previewStorageWriteTimer = setTimeout(() => {
-    previewStorageWriteTimer = null;
-    persistPreviewCache();
-  }, 250);
-}
+function openPersistentPreviewCache(): Promise<Cache | null> {
+  if (persistentPreviewCachePromise) return persistentPreviewCachePromise;
+  if (typeof window === "undefined") return Promise.resolve(null);
 
-function hydratePreviewCache() {
-  if (previewStorageHydrated || typeof window === "undefined") return;
-  previewStorageHydrated = true;
-  try {
-    const parsed = JSON.parse(localStorage.getItem(PREVIEW_STORAGE_KEY) || "null") as {
-      version?: unknown;
-      entries?: unknown;
-    } | null;
-    if (parsed?.version !== PREVIEW_STORAGE_VERSION || !Array.isArray(parsed.entries)) return;
-
-    const now = Date.now();
-    const entries = (parsed.entries as StoredPreviewEntry[])
-      .filter((entry) =>
-        entry
-        && typeof entry.url === "string"
-        && entry.url.length <= 2048
-        && isPreviewData(entry.data)
-        && Number.isFinite(entry.cachedAt)
-        && Number.isFinite(entry.lastAccessedAt)
-        && now - entry.cachedAt <= PREVIEW_MAX_STALE_MS
-      )
-      .sort((left, right) => right.lastAccessedAt - left.lastAccessedAt)
-      .slice(0, PREVIEW_STORAGE_LIMIT);
-
-    for (const entry of entries) {
-      previewCache.set(entry.url, compactPreviewData(entry.data));
-      previewCacheMetadata.set(entry.url, {
-        cachedAt: entry.cachedAt,
-        lastAccessedAt: entry.lastAccessedAt,
-      });
+  if (!legacyPreviewStorageCleaned) {
+    legacyPreviewStorageCleaned = true;
+    try {
+      localStorage.removeItem(LEGACY_PREVIEW_STORAGE_KEY);
+    } catch {
+      // Legacy cleanup is optional.
     }
+  }
+
+  if (!("caches" in window)) return Promise.resolve(null);
+  persistentPreviewCachePromise = window.caches.open(PREVIEW_CACHE_NAME).catch(() => null);
+  return persistentPreviewCachePromise;
+}
+
+async function trimPersistentPreviewCache(cache: Cache) {
+  const keys = await cache.keys();
+  const excessCount = keys.length - PREVIEW_CACHE_LIMIT;
+  if (excessCount <= 0) return;
+  await Promise.all(keys.slice(0, excessCount).map((request) => cache.delete(request)));
+}
+
+async function persistPreview(url: string, data: PreviewData, cachedAt: number) {
+  if (url.length > 2048) return;
+  const cache = await openPersistentPreviewCache();
+  if (!cache) return;
+
+  try {
+    const request = getPreviewCacheRequest(url);
+    const response = new Response(JSON.stringify(compactPreviewData(data)), {
+      headers: {
+        "Content-Type": "application/json",
+        [PREVIEW_CACHED_AT_HEADER]: String(cachedAt),
+      },
+    });
+    await cache.delete(request);
+    await cache.put(request, response);
+    await trimPersistentPreviewCache(cache);
   } catch {
-    // Ignore malformed or unavailable browser storage.
+    // Cache API persistence is optional and must not block rendering.
   }
 }
 
-function readCachedPreview(url: string): { data: PreviewData; isStale: boolean } | null {
-  hydratePreviewCache();
+async function readCachedPreview(url: string): Promise<{ data: PreviewData; isStale: boolean } | null> {
   const data = previewCache.get(url);
-  if (!data) return null;
+  if (data) {
+    const cachedAt = previewCacheMetadata.get(url)?.cachedAt || Date.now();
+    return { data, isStale: Date.now() - cachedAt > PREVIEW_FRESH_TTL_MS };
+  }
+  if (previewCache.has(url)) return null;
 
-  const now = Date.now();
-  const metadata = previewCacheMetadata.get(url) || { cachedAt: now, lastAccessedAt: now };
-  previewCacheMetadata.set(url, { ...metadata, lastAccessedAt: now });
-  schedulePreviewCacheWrite();
-  return { data, isStale: now - metadata.cachedAt > PREVIEW_FRESH_TTL_MS };
+  const cache = await openPersistentPreviewCache();
+  if (!cache) return null;
+
+  try {
+    const request = getPreviewCacheRequest(url);
+    const response = await cache.match(request);
+    if (!response) return null;
+
+    const cachedAt = Number(response.headers.get(PREVIEW_CACHED_AT_HEADER));
+    const now = Date.now();
+    if (!Number.isFinite(cachedAt) || cachedAt <= 0 || now - cachedAt > PREVIEW_MAX_STALE_MS) {
+      await cache.delete(request);
+      return null;
+    }
+
+    const cachedData = await response.json() as unknown;
+    if (!isPreviewData(cachedData)) {
+      await cache.delete(request);
+      return null;
+    }
+
+    const normalized = compactPreviewData(cachedData);
+    previewCache.set(url, normalized);
+    previewCacheMetadata.set(url, { cachedAt });
+    return { data: normalized, isStale: now - cachedAt > PREVIEW_FRESH_TTL_MS };
+  } catch {
+    return null;
+  }
 }
 
 function requestPreview(url: string, forceRefresh = false): Promise<PreviewData | null> {
-  hydratePreviewCache();
-  if (!forceRefresh) {
-    const cached = readCachedPreview(url);
-    if (cached) return Promise.resolve(cached.data);
-    if (previewCache.has(url)) return Promise.resolve(null);
-  }
-
   const pending = previewRequests.get(url);
   if (pending) return pending;
 
@@ -258,8 +259,8 @@ function requestPreview(url: string, forceRefresh = false): Promise<PreviewData 
       if (normalized) {
         const now = Date.now();
         previewCache.set(url, normalized);
-        previewCacheMetadata.set(url, { cachedAt: now, lastAccessedAt: now });
-        schedulePreviewCacheWrite();
+        previewCacheMetadata.set(url, { cachedAt: now });
+        void persistPreview(url, normalized, now);
       } else if (!forceRefresh) {
         previewCache.set(url, null);
       }
@@ -388,8 +389,10 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
     if (!isVisible) return;
 
     let cancelled = false;
-    const resolveTimer = setTimeout(() => {
-      const cached = readCachedPreview(url);
+    void (async () => {
+      const cached = await readCachedPreview(url);
+      if (cancelled) return;
+
       if (cached) {
         setData(cached.data);
         setHasResolved(true);
@@ -399,23 +402,19 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
         return;
       }
 
-      void requestPreview(url, !!cached)
-        .then((result) => {
-          if (cancelled) return;
-          if (result) setData(result);
-          else if (!cached) setData(null);
-          setHasResolved(true);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setHasResolved(true);
-          }
-        });
-    }, 0);
+      const result = await requestPreview(url, !!cached);
+      if (cancelled) return;
+      if (result) setData(result);
+      else if (!cached) setData(null);
+      setHasResolved(true);
+    })().catch(() => {
+      if (!cancelled) {
+        setHasResolved(true);
+      }
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(resolveTimer);
     };
   }, [isVisible, url]);
 
