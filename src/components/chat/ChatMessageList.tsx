@@ -89,19 +89,20 @@ const MessageRow = React.memo(function MessageRow({
   onReaction,
   onEmojiPicker,
 }: MessageRowProps) {
-  const parentIsSent = parentIsAdmin !== null
-    ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
-    : false;
   const isReportInboxMessage = !!msg.report_meta;
   const isPetitionInboxMessage = !!msg.petition_meta;
   const isFallbackInboxMessage = isInboxModerationMessage(msg);
   const isInboxMessage = isReportInboxMessage || isPetitionInboxMessage;
+  const fallbackIsSent = (isInboxMessage || isFallbackInboxMessage)
+    ? false
+    : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+  const parentIsSent = parentIsAdmin !== null
+    ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
+    : fallbackIsSent;
   const isSent = isReply
     ? parentIsSent
-    : (isInboxMessage || isFallbackInboxMessage)
-      ? false
-      : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-  const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
+    : fallbackIsSent;
+  const isMine = fallbackIsSent;
   const showEmbeds = !!msg.text && !msg.report && !msg.image && !isInboxMessage;
   const hasCaptionedWidget = showEmbeds && hasWidgetCaption(msg.text);
   const usesWideWidgetBubble = hasCaptionedWidget;
@@ -325,6 +326,16 @@ export const MessageList = React.memo(function MessageList({
   onReaction,
   onEmojiPicker,
 }: MessageListProps) {
+  const messagesById = new Map<string, Message>();
+  for (const message of threadedMessages.topLevel) {
+    messagesById.set(message.id, message);
+  }
+  for (const replies of Object.values(threadedMessages.repliesMap)) {
+    for (const reply of replies) {
+      messagesById.set(reply.id, reply);
+    }
+  }
+
   const commonProps = {
     effectiveAdmin,
     uid,
@@ -344,6 +355,7 @@ export const MessageList = React.memo(function MessageList({
   return threadedMessages.topLevel.flatMap((message, messageIndex) => {
     const previousMessage = threadedMessages.topLevel[messageIndex - 1];
     const currentDateKey = chatDateKey(message.created_at, timeZone);
+    const parentMessage = message.reply_to ? messagesById.get(message.reply_to) : undefined;
     const showDate = Boolean(currentDateKey) && (
       !previousMessage || chatDateKey(previousMessage.created_at, timeZone) !== currentDateKey
     );
@@ -361,8 +373,8 @@ export const MessageList = React.memo(function MessageList({
         key={message.id}
         {...commonProps}
         msg={message}
-        isReply={false}
-        parentIsAdmin={null}
+        isReply={!!message.reply_to}
+        parentIsAdmin={parentMessage ? !!parentMessage.is_admin : null}
         isReported={reportedMsgIds.has(message.id)}
         isReportedTarget={reportedTargetIds.has(message.id)}
         isBlockedSender={blockedUidSet.has(message.uid)}
