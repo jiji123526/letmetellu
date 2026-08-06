@@ -27,6 +27,14 @@ const previewQueue: Array<() => void> = [];
 const MAX_CONCURRENT_PREVIEWS = 3;
 let activePreviewRequests = 0;
 
+function normalizeExtractedUrl(rawUrl: string) {
+  const cleaned = rawUrl
+    .replace(/&amp;/gi, "&")
+    .replace(/[\])}>.,!?;:'"”’]+$/g, "");
+  if (!cleaned) return "";
+  return cleaned.startsWith("http") ? cleaned : `https://${cleaned}`;
+}
+
 function drainPreviewQueue() {
   while (activePreviewRequests < MAX_CONCURRENT_PREVIEWS && previewQueue.length > 0) {
     activePreviewRequests += 1;
@@ -128,11 +136,11 @@ function LinkPreviewCard({
       className="cursor-pointer"
       style={{
         width: "100%",
-        height: link.isLegacy ? "104px" : undefined,
-        minHeight: link.isLegacy ? "104px" : undefined,
+        height: "104px",
+        minHeight: "104px",
         minWidth: 0,
-        display: link.isLegacy ? "flex" : undefined,
-        flexDirection: link.isLegacy ? "column" : undefined,
+        display: "flex",
+        flexDirection: "column",
         border: "1px solid var(--hairline)",
         borderRadius: "12px",
         overflow: "hidden",
@@ -141,38 +149,23 @@ function LinkPreviewCard({
       }}
       onClick={onClick}
     >
-      {link.isLegacy ? (
-        <div
-          className={link.preview === undefined ? "animate-pulse" : undefined}
-          style={{ position: "relative", width: "100%", height: "58px", minHeight: "58px", flexShrink: 0, background: "var(--gray-bubble)", overflow: "hidden" }}
-          aria-hidden="true"
-        >
-          {link.preview?.image ? (
-            <img
-              src={link.preview.image}
-              alt=""
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-          ) : null}
-        </div>
-      ) : link.preview === undefined ? (
-        <div
-          className="animate-pulse"
-          style={{ width: "100%", aspectRatio: "1.91 / 1", background: "var(--gray-bubble)" }}
-          aria-hidden="true"
-        />
-      ) : link.preview?.image ? (
-        <img
-          src={link.preview.image}
-          alt=""
-          style={{ width: "100%", aspectRatio: "1.91 / 1", objectFit: "cover", display: "block", background: "var(--gray-bubble)" }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      ) : null}
+      <div
+        className={link.preview === undefined ? "animate-pulse" : undefined}
+        style={{ position: "relative", width: "100%", height: "58px", minHeight: "58px", flexShrink: 0, background: "var(--gray-bubble)", overflow: "hidden" }}
+        aria-hidden="true"
+      >
+        {link.preview?.image ? (
+          <img
+            src={link.preview.image}
+            alt=""
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        ) : null}
+      </div>
       <div style={{
-        height: link.isLegacy ? "46px" : undefined,
-        minHeight: link.isLegacy ? "46px" : undefined,
+        height: "46px",
+        minHeight: "46px",
         padding: "7px 8px",
         minWidth: 0,
         boxSizing: "border-box",
@@ -211,7 +204,8 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
         const matches = m.text.match(URL_REGEX);
         if (matches) {
           matches.forEach((url) => {
-            const fullUrl = url.startsWith("http") ? url : `https://${url}`;
+            const fullUrl = normalizeExtractedUrl(url);
+            if (!fullUrl) return;
             found.push({
               url: fullUrl,
               msgId: m.id,

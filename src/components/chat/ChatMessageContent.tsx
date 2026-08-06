@@ -92,7 +92,7 @@ export function MessageImage({ src, onOpen }: MessageImageProps) {
   const [attempt, setAttempt] = useState(0);
 
   return (
-    <div className="relative inline-block select-none" onContextMenu={(event) => event.preventDefault()}>
+    <div data-message-media className="relative inline-block select-none" onContextMenu={(event) => event.preventDefault()}>
       {!loaded && !failed && <MediaLoadingDots />}
       {failed ? (
         <button

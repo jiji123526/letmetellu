@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Legacy link cards and gallery media alignment — 2026-08-06
+
+- Link-panel cards now retain a uniform 104px layout for current and migrated messages while preview requests load or fail, preventing recent cards from collapsing into border-only lines.
+- Extracted legacy URLs decode `&amp;` and trim common trailing punctuation before preview requests; failed previews still show the hostname and URL fallback.
+- Gallery-to-chat navigation now centers the selected media wrapper rather than the full message row, so long captions no longer leave the image just above the visible area.
+
+Trade-offs: link cards reserve their full preview height even when a site provides no preview image. Gallery navigation may position the surrounding caption asymmetrically because visibility of the selected media takes priority.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Default bubble color — 2026-08-06
 
 - The default sent-bubble color is now `#3598fe` across initial CSS, UI fallbacks, channel previews, Open Graph images and both admin/viewer color presets.

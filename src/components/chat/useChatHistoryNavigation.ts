@@ -31,7 +31,7 @@ interface UseChatHistoryNavigationResult {
   isNearBottomRef: MutableRefObject<boolean>;
   handleScroll: () => void;
   scrollToBottom: () => void;
-  scrollToMessage: (msgId: string) => Promise<void>;
+  scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
 }
 
@@ -340,7 +340,7 @@ export function useChatHistoryNavigation({
     setShowScrollBtn(false);
   }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
 
-  const scrollToMessage = useCallback(async (msgId: string) => {
+  const scrollToMessage = useCallback(async (msgId: string, alignment: "message" | "media" = "message") => {
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
@@ -374,13 +374,16 @@ export function useChatHistoryNavigation({
 
     if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
-    element.scrollIntoView({ behavior: "auto", block: "center" });
+    const alignmentElement = alignment === "media"
+      ? element.querySelector<HTMLElement>("[data-message-media]") || element
+      : element;
+    alignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
     flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
     const container = messagesContainerRef.current;
     if (container) {
       await correctMessageAfterLayoutSettles(
         container,
-        element,
+        alignmentElement,
         () => navigationRequest === navigationRequestRef.current,
       );
     }
