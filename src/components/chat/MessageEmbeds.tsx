@@ -206,6 +206,9 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
   if (!hasResolved) return null;
   if (!data) return null;
 
+  const hasTextMetadata = !!(data.title || data.description || data.siteName);
+  const shouldPreserveFullImage = !!data.image && !data.video && !hasTextMetadata;
+
   return (
     <a
       className="link-preview-card"
@@ -238,27 +241,35 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
         <img
           src={data.image}
           alt=""
-          style={{ width: "100%", display: "block", maxHeight: "160px", objectFit: "cover" }}
+          style={{
+            width: "100%",
+            display: "block",
+            maxHeight: shouldPreserveFullImage ? "320px" : "160px",
+            objectFit: shouldPreserveFullImage ? "contain" : "cover",
+            background: shouldPreserveFullImage ? (isMine ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.05)") : undefined,
+          }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
         />
       ) : null}
-      <div style={{ padding: "10px 12px" }}>
-        {data.siteName && (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
-            {data.siteName}
-          </div>
-        )}
-        {data.title && (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", fontWeight: 400, color: isMine ? "#fff" : "var(--gray-text)", lineHeight: 1.3, marginBottom: "2px" }}>
-            {data.title}
-          </div>
-        )}
-        {data.description && (
-          <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: isMine ? "rgba(255,255,255,.7)" : "var(--meta)", lineHeight: 1.3 }}>
-            {data.description.length > 100 ? data.description.slice(0, 100) + "…" : data.description}
-          </div>
-        )}
-      </div>
+      {hasTextMetadata && (
+        <div style={{ padding: "10px 12px" }}>
+          {data.siteName && (
+            <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+              {data.siteName}
+            </div>
+          )}
+          {data.title && (
+            <div style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", fontWeight: 400, color: isMine ? "#fff" : "var(--gray-text)", lineHeight: 1.3, marginBottom: "2px" }}>
+              {data.title}
+            </div>
+          )}
+          {data.description && (
+            <div style={{ fontSize: "calc(var(--bubble-font-size) - 4px)", color: isMine ? "rgba(255,255,255,.7)" : "var(--meta)", lineHeight: 1.3 }}>
+              {data.description.length > 100 ? data.description.slice(0, 100) + "…" : data.description}
+            </div>
+          )}
+        </div>
+      )}
     </a>
   );
 }
