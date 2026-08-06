@@ -94,8 +94,22 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       }
 
       const target = await env.DB.prepare(
-        "SELECT id, created_at, reply_to FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0"
-      ).bind(messageId, channelId).first<{ id: string; created_at: string; reply_to: string | null }>();
+        `SELECT id, created_at, reply_to
+         FROM messages
+         WHERE id = ? AND channel_id = ?
+           AND (
+             deleted = 0
+             OR (
+               deleted = 1
+               AND EXISTS (
+                 SELECT 1 FROM messages child
+                 WHERE child.channel_id = ?
+                   AND child.reply_to = messages.id
+                   AND child.deleted = 0
+               )
+             )
+           )`
+      ).bind(messageId, channelId, channelId).first<{ id: string; created_at: string; reply_to: string | null }>();
       if (!target) {
         return Response.json({ error: "message not found" }, { status: 404 });
       }

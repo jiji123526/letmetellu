@@ -28,6 +28,7 @@ interface UseChatReportsSearchArgs {
   messages: Message[];
   dmMessages: Message[];
   blockedUsers: ReadonlyArray<{ uid: string; reason?: string }>;
+  unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
@@ -86,6 +87,7 @@ export function useChatReportsSearch({
   messages,
   dmMessages,
   blockedUsers,
+  unavailableReplyParentIds,
   effectiveAdmin,
   setMessages,
   setBanner,
@@ -113,11 +115,12 @@ export function useChatReportsSearch({
       messages,
       dmMessages,
       blockedUsers,
+      unavailableReplyParentIds,
       effectiveAdmin,
       isReportsChannelView,
       reportsOwnerFilter,
     }),
-    [blockedUsers, dmMessages, effectiveAdmin, isReportsChannelView, messages, reportsOwnerFilter],
+    [blockedUsers, dmMessages, effectiveAdmin, isReportsChannelView, messages, reportsOwnerFilter, unavailableReplyParentIds],
   );
 
   const searchResultIdSet = useMemo(

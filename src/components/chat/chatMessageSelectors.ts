@@ -21,6 +21,7 @@ interface DeriveChatMessageCollectionsArgs {
   messages: Message[];
   dmMessages: Message[];
   blockedUsers: ReadonlyArray<{ uid: string }>;
+  unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
   isReportsChannelView: boolean;
   reportsOwnerFilter: ReportsOwnerFilter;
@@ -151,16 +152,25 @@ export function getReportedTargetIds(displayMessages: Message[], effectiveAdmin:
   return ids;
 }
 
-export function getThreadedMessages(displayMessages: Message[]): ThreadedMessages {
+export function getThreadedMessages(
+  displayMessages: Message[],
+  unavailableReplyParentIds: ReadonlySet<string> = new Set(),
+  knownMessageIds: ReadonlySet<string> = new Set(displayMessages.map((message) => message.id)),
+): ThreadedMessages {
   const topLevel: Message[] = [];
   const repliesMap: Record<string, Message[]> = {};
   const messageIds = new Set(displayMessages.map((message) => message.id));
 
   for (const message of displayMessages) {
-    if (message.reply_to && messageIds.has(message.reply_to)) {
+    if (!message.reply_to) {
+      topLevel.push(message);
+    } else if (messageIds.has(message.reply_to)) {
       if (!repliesMap[message.reply_to]) repliesMap[message.reply_to] = [];
       repliesMap[message.reply_to].push(message);
-    } else {
+    } else if (
+      unavailableReplyParentIds.has(message.reply_to)
+      || knownMessageIds.has(message.reply_to)
+    ) {
       topLevel.push(message);
     }
   }
@@ -172,6 +182,7 @@ export function deriveChatMessageCollections({
   messages,
   dmMessages,
   blockedUsers,
+  unavailableReplyParentIds,
   effectiveAdmin,
   isReportsChannelView,
   reportsOwnerFilter,
@@ -185,6 +196,9 @@ export function deriveChatMessageCollections({
     reportsOwnerView,
     reportsOwnerFilter,
   );
+  const knownMessageIds = new Set(
+    [...messages, ...dmMessages].map((message) => message.id),
+  );
 
   return {
     hasReportsInboxContent: reportsInboxContent,
@@ -193,6 +207,10 @@ export function deriveChatMessageCollections({
     restrictedChannels: getRestrictedChannels(nextDisplayMessages, reportsOwnerView),
     blockedUidSet: new Set(blockedUsers.map((blockedUser) => blockedUser.uid)),
     reportedTargetIds: getReportedTargetIds(nextDisplayMessages, effectiveAdmin),
-    threadedMessages: getThreadedMessages(nextDisplayMessages),
+    threadedMessages: getThreadedMessages(
+      nextDisplayMessages,
+      unavailableReplyParentIds,
+      knownMessageIds,
+    ),
   };
 }

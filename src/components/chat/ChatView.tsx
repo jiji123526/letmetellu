@@ -14,6 +14,7 @@ import { useChatModeration } from "./useChatModeration";
 import type { Message } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
+import { useChatReplyParents } from "./useChatReplyParents";
 import { useChatReportsSearch } from "./useChatReportsSearch";
 import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
 import { useChatMessageMutations } from "./useChatMessageMutations";
@@ -331,6 +332,18 @@ export function ChatView({ channelId }: { channelId: string }) {
     handleChannelReportSubmit,
   } = adminUi;
   const {
+    unavailableReplyParentIds,
+    isResolvingReplyParents,
+  } = useChatReplyParents({
+    channelId,
+    inLiveMode,
+    enabled: !loading && !passcodeGate && !showChannelDeleted,
+    messages,
+    messagesContainerRef,
+    messagesEndRef,
+    setMessages,
+  });
+  const {
     showSearch,
     searchState,
     searchResultIdSet,
@@ -356,6 +369,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     messages,
     dmMessages,
     blockedUsers,
+    unavailableReplyParentIds,
     effectiveAdmin,
     setMessages,
     setBanner,
@@ -542,7 +556,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, [channelId]);
 
   useEffect(() => {
-    if (loading || passcodeGate || initialScrollDoneRef.current) return;
+    if (loading || passcodeGate || isResolvingReplyParents || initialScrollDoneRef.current) return;
     initialScrollDoneRef.current = true;
     let cancelled = false;
     void restoreRefreshPosition().then((restored) => {
@@ -554,7 +568,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       });
     });
     return () => { cancelled = true; };
-  }, [loading, passcodeGate, restoreRefreshPosition]);
+  }, [isResolvingReplyParents, loading, passcodeGate, restoreRefreshPosition]);
 
   // Effective admin state (false when viewing as user)
   const {
