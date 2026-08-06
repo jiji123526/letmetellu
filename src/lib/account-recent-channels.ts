@@ -15,6 +15,52 @@ interface AccountRecentRow {
   last_visited_at: number;
 }
 
+const ACCOUNT_RECENT_CACHE_PREFIX = "letmetellu_account_recent_channels_v1_";
+const ACCOUNT_RECENT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const ACCOUNT_RECENT_CACHE_LIMIT = 100;
+
+export function readCachedAccountRecentChannels(userId: string): RecentChannel[] {
+  if (typeof window === "undefined" || !userId) return [];
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(`${ACCOUNT_RECENT_CACHE_PREFIX}${userId}`) || "null",
+    ) as { cachedAt?: unknown; channels?: unknown } | null;
+    if (
+      typeof parsed?.cachedAt !== "number"
+      || Date.now() - parsed.cachedAt > ACCOUNT_RECENT_CACHE_TTL_MS
+      || !Array.isArray(parsed.channels)
+    ) {
+      return [];
+    }
+    return parsed.channels
+      .filter((channel): channel is RecentChannel =>
+        channel
+        && typeof channel.id === "string"
+        && typeof channel.name === "string"
+        && typeof channel.bubbleColor === "string"
+        && typeof channel.lastVisitedAt === "number"
+      )
+      .slice(0, ACCOUNT_RECENT_CACHE_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+export function storeCachedAccountRecentChannels(userId: string, channels: RecentChannel[]) {
+  if (typeof window === "undefined" || !userId) return;
+  try {
+    localStorage.setItem(
+      `${ACCOUNT_RECENT_CACHE_PREFIX}${userId}`,
+      JSON.stringify({
+        cachedAt: Date.now(),
+        channels: channels.slice(0, ACCOUNT_RECENT_CACHE_LIMIT),
+      }),
+    );
+  } catch {
+    // Dashboard snapshots are optional.
+  }
+}
+
 export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
   const response = await fetch("/api/recent-channels", { cache: "no-store" });
   if (!response.ok) throw new Error("recent channels unavailable");

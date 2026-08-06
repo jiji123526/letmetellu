@@ -38,8 +38,10 @@ import { VisitSurvey } from "@/components/VisitSurvey";
 import {
   fetchAccountRecentChannels,
   mergeAccountRecentChannels,
+  readCachedAccountRecentChannels,
   removeAccountRecentChannel,
   setAccountRecentChannelPinned,
+  storeCachedAccountRecentChannels,
 } from "@/lib/account-recent-channels";
 
 interface Channel {
@@ -359,6 +361,7 @@ function DashboardPageContent() {
     try {
       const accountChannels = await fetchAccountRecentChannels();
       setRecentChannels(accountChannels);
+      storeCachedAccountRecentChannels(userId, accountChannels);
       const migrationState = localStorage.getItem(migrationKey);
       const accountChannelIds = new Set(accountChannels.map((channel) => channel.id));
       const unsyncedLocalChannels = getRecentChannels().filter(
@@ -550,6 +553,7 @@ function DashboardPageContent() {
       await mergeAccountRecentChannels(pendingLocalChannels);
       const accountChannels = await fetchAccountRecentChannels();
       setRecentChannels(accountChannels);
+      storeCachedAccountRecentChannels(session.user.id, accountChannels);
       localStorage.setItem(migrationKey, "merged");
       clearRecentChannels();
       setPendingLocalChannels(null);
@@ -577,6 +581,12 @@ function DashboardPageContent() {
       const userId = session?.user?.id;
       if (status === "authenticated" && session?.user?.id) {
         void (async () => {
+          const cachedRecentChannels = userId
+            ? readCachedAccountRecentChannels(userId)
+            : [];
+          if (cachedRecentChannels.length > 0) {
+            setRecentChannels(cachedRecentChannels);
+          }
           const coreDashboardRequest = userId
             ? Promise.allSettled([
                 loadChannels(),
@@ -593,6 +603,9 @@ function DashboardPageContent() {
             return;
           }
           void loadSupportPreview();
+          if (cachedRecentChannels.length > 0) {
+            setLoading(false);
+          }
           await coreDashboardRequest;
           setLoading(false);
         })();
