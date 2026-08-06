@@ -43,6 +43,12 @@ import {
   setAccountRecentChannelPinned,
   storeCachedAccountRecentChannels,
 } from "@/lib/account-recent-channels";
+import {
+  finishDashboardRequest,
+  markDashboardMilestone,
+  startDashboardPerformanceTrace,
+  startDashboardRequest,
+} from "@/lib/dashboard-performance";
 
 interface Channel {
   id: string;
@@ -308,6 +314,22 @@ function DashboardPageContent() {
   }, []);
 
   useEffect(() => {
+    startDashboardPerformanceTrace();
+  }, []);
+
+  useEffect(() => {
+    if (status !== "loading") {
+      markDashboardMilestone("session-ready");
+    }
+  }, [status]);
+
+  useEffect(() => {
+    if (!loading) {
+      markDashboardMilestone("usable");
+    }
+  }, [loading]);
+
+  useEffect(() => {
     const syncViewportHeight = () => {
       setViewportHeight(window.innerHeight);
     };
@@ -319,6 +341,7 @@ function DashboardPageContent() {
   const loadChannels = useCallback((): Promise<boolean> => {
     if (loadChannelsInFlightRef.current) return loadChannelsInFlightRef.current;
     const request = (async () => {
+      startDashboardRequest("user-bootstrap");
       const response = await fetch("/api/user", { cache: "no-store" });
       const data = await response.json() as {
         user_id?: string;
@@ -335,8 +358,10 @@ function DashboardPageContent() {
         ...channel,
         profile_image: decorateMediaUrl(channel.profile_image),
       })));
+      markDashboardMilestone("channels-ready");
       return isAdmin;
     })().finally(() => {
+      finishDashboardRequest("user-bootstrap");
       if (loadChannelsInFlightRef.current === request) {
         loadChannelsInFlightRef.current = null;
       }
@@ -377,10 +402,12 @@ function DashboardPageContent() {
 
   const loadAccountRecentChannels = useCallback(async (userId: string) => {
     const migrationKey = `letmetellu_recent_channels_migrated_${userId}`;
+    startDashboardRequest("recent-channels");
     try {
       const accountChannels = await fetchAccountRecentChannels();
       setRecentChannels(accountChannels);
       storeCachedAccountRecentChannels(userId, accountChannels);
+      markDashboardMilestone("recent-channels-ready");
       const migrationState = localStorage.getItem(migrationKey);
       const accountChannelIds = new Set(accountChannels.map((channel) => channel.id));
       const unsyncedLocalChannels = getRecentChannels().filter(
@@ -400,6 +427,8 @@ function DashboardPageContent() {
     } catch {
       // Do not replace account data with device-local history on a transient failure.
       setRecentChannels([]);
+    } finally {
+      finishDashboardRequest("recent-channels");
     }
   }, []);
 
@@ -414,6 +443,7 @@ function DashboardPageContent() {
         return false;
       }
       try {
+        startDashboardRequest("admin-dashboard");
         const result = await fetchPlatformDashboard();
         if (result._status === 403 || result._status === 404) {
           setPlatformAdminRole((current) => current ? { ...current, isAdmin: false } : current);
@@ -448,6 +478,7 @@ function DashboardPageContent() {
             open_pagination: current.open_pagination,
           };
         });
+        markDashboardMilestone("admin-dashboard-ready");
         return true;
       } catch {
         setPlatformDashboard(null);
@@ -455,6 +486,7 @@ function DashboardPageContent() {
         return true;
       }
     })().finally(() => {
+      finishDashboardRequest("admin-dashboard");
       platformDashboardLoadedAtRef.current = Date.now();
       if (loadPlatformDashboardInFlightRef.current === request) {
         loadPlatformDashboardInFlightRef.current = null;
@@ -537,6 +569,7 @@ function DashboardPageContent() {
     }
     if (loadSupportPreviewInFlightRef.current) return loadSupportPreviewInFlightRef.current;
     const request = (async () => {
+      startDashboardRequest("support-preview");
       try {
         const result = await fetchSupportPreview();
         if (result._status >= 400 || !result.thread) {
@@ -555,10 +588,12 @@ function DashboardPageContent() {
         };
         storeSupportTicketPreview(preview);
         setSupportPreview(preview);
+        markDashboardMilestone("support-preview-ready");
       } catch {
         setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
       }
     })().finally(() => {
+      finishDashboardRequest("support-preview");
       supportPreviewLoadedAtRef.current = Date.now();
       if (loadSupportPreviewInFlightRef.current === request) {
         loadSupportPreviewInFlightRef.current = null;
@@ -610,6 +645,7 @@ function DashboardPageContent() {
             : [];
           if (cachedRecentChannels.length > 0) {
             setRecentChannels(cachedRecentChannels);
+            markDashboardMilestone("cached-channels-ready");
           }
           const recentChannelsRequest = userId
             ? loadAccountRecentChannels(userId)
