@@ -17,11 +17,12 @@ Deployment note: this is frontend-only and requires no D1 migration or Worker de
 ### Stable panel-to-message navigation with lazy widgets — 2026-08-06
 
 - Gallery, link and search navigation now places the target message in the viewport before waiting for its lazy widget layout, allowing IntersectionObserver-based embeds to activate immediately.
-- While nearby images and widgets settle, the target message is continuously re-centered instead of receiving only one delayed correction.
+- Nearby images and widgets settle without frame-by-frame forced scrolling; the target receives one final correction after the layout stabilizes.
+- Wheel, touch or pointer interaction cancels the pending correction immediately so automatic positioning never fights a user's manual scroll.
 - Pending media outside the widget preload area is excluded from stability checks, avoiding the previous full timeout caused by intentionally dormant off-screen embeds.
 - Refresh scroll restoration uses the same nearby-content boundary while preserving its saved viewport offset.
 
-Trade-off: programmatic message jumps now use immediate positioning rather than a smooth scroll because deterministic anchoring is required while third-party widgets resize. A slow third-party widget can still cause tiny corrective movements, but the selected message remains centered.
+Trade-off: programmatic message jumps use immediate positioning rather than a smooth scroll. On a very slow network the message may drift while the widget grows and then receive one final snap to center, but it no longer vibrates from competing per-frame corrections.
 
 Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
 

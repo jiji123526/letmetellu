@@ -108,35 +108,47 @@ async function waitForStableMessageLayout(
   }
 }
 
-async function keepMessageCenteredWhileLayoutSettles(
+async function correctMessageAfterLayoutSettles(
   container: HTMLElement,
   target: HTMLElement,
   isCurrent: () => boolean,
-  timeoutMs = 6000,
+  timeoutMs = 12_500,
 ): Promise<void> {
   const startedAt = performance.now();
   let previousSignature = "";
   let stableFrames = 0;
+  let userInterrupted = false;
+  const interrupt = () => { userInterrupted = true; };
 
-  await document.fonts?.ready;
+  container.addEventListener("wheel", interrupt, { passive: true });
+  container.addEventListener("touchstart", interrupt, { passive: true });
+  container.addEventListener("pointerdown", interrupt, { passive: true });
 
-  while (performance.now() - startedAt < timeoutMs) {
-    await nextAnimationFrame();
-    if (!isCurrent()) return;
+  try {
+    await document.fonts?.ready;
+
+    while (performance.now() - startedAt < timeoutMs) {
+      await nextAnimationFrame();
+      if (!isCurrent() || userInterrupted) return;
+      const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
+      const pendingContent = hasPendingPositioningContent(container, target);
+      stableFrames = !pendingContent && signature === previousSignature ? stableFrames + 1 : 0;
+      previousSignature = signature;
+      if (stableFrames >= 3) break;
+    }
+
+    if (!isCurrent() || userInterrupted) return;
     const containerRect = container.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     const alignmentOffset = targetRect.top + targetRect.height / 2
       - (containerRect.top + container.clientHeight / 2);
-    if (Math.abs(alignmentOffset) > 2) {
+    if (Math.abs(alignmentOffset) > 6) {
       container.scrollBy({ top: alignmentOffset, behavior: "auto" });
     }
-    const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
-    const pendingContent = hasPendingPositioningContent(container, target);
-    stableFrames = !pendingContent && signature === previousSignature && Math.abs(alignmentOffset) <= 2
-      ? stableFrames + 1
-      : 0;
-    previousSignature = signature;
-    if (stableFrames >= 3) return;
+  } finally {
+    container.removeEventListener("wheel", interrupt);
+    container.removeEventListener("touchstart", interrupt);
+    container.removeEventListener("pointerdown", interrupt);
   }
 }
 
@@ -366,7 +378,7 @@ export function useChatHistoryNavigation({
     flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
     const container = messagesContainerRef.current;
     if (container) {
-      await keepMessageCenteredWhileLayoutSettles(
+      await correctMessageAfterLayoutSettles(
         container,
         element,
         () => navigationRequest === navigationRequestRef.current,
