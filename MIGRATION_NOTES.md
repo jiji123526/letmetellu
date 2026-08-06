@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Refresh scroll restoration — 2026-08-06
+
+- Chat refreshes now preserve the first visible message and its exact viewport offset per channel and browser tab.
+- Restoration waits for fonts, images, videos and widget placeholders above the anchor to settle before applying the saved offset.
+- If the anchor is older than the initially loaded message window, the client fetches that message's context and restores the historical window instead of falling back to the latest message.
+- Ordinary channel entry and navigation still start at the latest message; saved positions are consumed only after an actual browser refresh and expire after 30 minutes.
+
+Trade-offs: refreshing while far back in history may add one message-context request and can hold the loading state briefly while media layout stabilizes. Scroll state is tab-local and intentionally does not sync across devices.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Default font size — 2026-08-06
 
 - Users without a saved font-size preference now start at 15px instead of 17px.
