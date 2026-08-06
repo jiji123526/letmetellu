@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Adaptive widget preloading and visible-first rendering — 2026-08-06
+
+- When mounted chat history contains X or Instagram links, the corresponding third-party SDK begins downloading during browser idle time without eagerly rendering every widget.
+- Lazy embed activation expands from 600px to 1,000px on normal connections, remains 600px on 3G and drops to 300px for 2G or data-saver users.
+- X render tasks carry a live priority reference, so widgets currently inside the viewport move ahead of off-screen preload work in the pending queue.
+- X concurrency adapts from one render on constrained connections to two on 3G/lower-core devices and three on capable devices.
+
+Trade-offs: normal fast connections perform third-party SDK downloads and begin nearby preview work earlier, increasing background network and CPU use slightly. Data-saver and slow-network users retain conservative limits, and active render work cannot be preempted after it has already started.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Uniform media loading bubble — 2026-08-06
 
 - Image, link-preview and third-party widget loading states now use one compact three-dot bubble regardless of the eventual content width.

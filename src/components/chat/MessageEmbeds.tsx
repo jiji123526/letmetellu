@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 
 interface TwitterWidgets {
@@ -30,15 +30,47 @@ const TWITTER_REGEX = /https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
 const INSTAGRAM_REGEX = /https?:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
 const URL_REGEX = /https?:\/\/[^\s<]+/g;
 const NATIVE_EMBED_WIDTH = 320;
-const EMBED_PRELOAD_MARGIN = "600px 0px";
-const MAX_CONCURRENT_TWITTER_RENDERS = 2;
 const WIDGET_RENDER_TIMEOUT_MS = 12_000;
 
+type EmbedPriority = 1 | 3;
+
+interface NetworkInformationLike {
+  effectiveType?: string;
+  saveData?: boolean;
+}
+
+interface TwitterRenderTask {
+  priorityRef: MutableRefObject<EmbedPriority>;
+  run: () => Promise<void>;
+}
+
 let twitterScriptPromise: Promise<TwitterWidgets | null> | null = null;
-const twitterRenderQueue: Array<() => Promise<void>> = [];
+const twitterRenderQueue: TwitterRenderTask[] = [];
 let activeTwitterRenders = 0;
 let instagramScriptPromise: Promise<InstagramEmbeds | null> | null = null;
 let instagramProcessTimer: ReturnType<typeof setTimeout> | null = null;
+let twitterPreloadScheduled = false;
+let instagramPreloadScheduled = false;
+
+function getNetworkInformation(): NetworkInformationLike | undefined {
+  return (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+}
+
+function getEmbedPreloadMargin() {
+  const connection = getNetworkInformation();
+  if (connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
+    return "300px 0px";
+  }
+  if (connection?.effectiveType === "3g") return "600px 0px";
+  return "1000px 0px";
+}
+
+function getMaxConcurrentTwitterRenders() {
+  const connection = getNetworkInformation();
+  if (connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") return 1;
+  if (connection?.effectiveType === "3g" || navigator.hardwareConcurrency <= 4) return 2;
+  return 3;
+}
 
 function loadTwitterWidgets(): Promise<TwitterWidgets | null> {
   if (window.twttr?.widgets) return Promise.resolve(window.twttr.widgets);
@@ -60,19 +92,20 @@ function loadTwitterWidgets(): Promise<TwitterWidgets | null> {
 }
 
 function drainTwitterRenderQueue() {
-  while (activeTwitterRenders < MAX_CONCURRENT_TWITTER_RENDERS && twitterRenderQueue.length > 0) {
-    const task = twitterRenderQueue.shift();
-    if (!task) return;
+  while (activeTwitterRenders < getMaxConcurrentTwitterRenders() && twitterRenderQueue.length > 0) {
+    twitterRenderQueue.sort((left, right) => right.priorityRef.current - left.priorityRef.current);
+    const entry = twitterRenderQueue.shift();
+    if (!entry) return;
     activeTwitterRenders += 1;
-    void task().finally(() => {
+    void entry.run().finally(() => {
       activeTwitterRenders -= 1;
       drainTwitterRenderQueue();
     });
   }
 }
 
-function queueTwitterRender(task: () => Promise<void>) {
-  twitterRenderQueue.push(task);
+function queueTwitterRender(priorityRef: MutableRefObject<EmbedPriority>, run: () => Promise<void>) {
+  twitterRenderQueue.push({ priorityRef, run });
   drainTwitterRenderQueue();
 }
 
@@ -118,29 +151,62 @@ function scheduleInstagramProcess(embeds: InstagramEmbeds) {
   }, 0);
 }
 
-function LazyEmbed({ children, fillWidth }: { children: ReactNode; fillWidth: boolean }) {
+function scheduleIdleWidgetPreload(type: "twitter" | "instagram") {
+  if (type === "twitter") {
+    if (twitterPreloadScheduled) return;
+    twitterPreloadScheduled = true;
+  } else {
+    if (instagramPreloadScheduled) return;
+    instagramPreloadScheduled = true;
+  }
+
+  const preload = () => {
+    if (type === "twitter") void loadTwitterWidgets();
+    else void loadInstagramEmbeds();
+  };
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(preload, { timeout: 2000 });
+  } else {
+    setTimeout(preload, 500);
+  }
+}
+
+function LazyEmbed({ render, fillWidth }: { render: (priority: EmbedPriority) => ReactNode; fillWidth: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
+  const [priority, setPriority] = useState<EmbedPriority>(1);
 
   useEffect(() => {
     const element = rootRef.current;
     if (!element) return;
     if (!("IntersectionObserver" in window)) {
-      const fallbackTimer = setTimeout(() => setActive(true), 0);
+      const fallbackTimer = setTimeout(() => {
+        setPriority(3);
+        setActive(true);
+      }, 0);
       return () => clearTimeout(fallbackTimer);
     }
-    const observer = new IntersectionObserver((entries) => {
+    const preloadObserver = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       setActive(true);
-      observer.disconnect();
-    }, { rootMargin: EMBED_PRELOAD_MARGIN });
-    observer.observe(element);
-    return () => observer.disconnect();
+      preloadObserver.disconnect();
+    }, { rootMargin: getEmbedPreloadMargin() });
+    const visibleObserver = new IntersectionObserver((entries) => {
+      const visible = entries.some((entry) => entry.isIntersecting);
+      setPriority(visible ? 3 : 1);
+      if (visible) setActive(true);
+    });
+    preloadObserver.observe(element);
+    visibleObserver.observe(element);
+    return () => {
+      preloadObserver.disconnect();
+      visibleObserver.disconnect();
+    };
   }, []);
 
   return (
     <div ref={rootRef} style={{ width: fillWidth ? "100%" : "fit-content", maxWidth: "100%" }}>
-      {active ? children : <MediaLoadingDots />}
+      {active ? render(priority) : <MediaLoadingDots />}
     </div>
   );
 }
@@ -339,10 +405,15 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
   );
 }
 
-function TwitterEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
+function TwitterEmbed({ url, onReady, priority }: { url: string; onReady: (url: string) => void; priority: EmbedPriority }) {
   const tweetId = url.match(/status\/(\d+)/)?.[1];
   const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
   const [loading, setLoading] = useState(true);
+  const priorityRef = useRef(priority);
+
+  useEffect(() => {
+    priorityRef.current = priority;
+  }, [priority]);
 
   useEffect(() => {
     onReady(url);
@@ -358,7 +429,7 @@ function TwitterEmbed({ url, onReady }: { url: string; onReady: (url: string) =>
         if (!cancelled) setLoading(false);
         return;
       }
-      queueTwitterRender(async () => {
+      queueTwitterRender(priorityRef, async () => {
         if (cancelled) return;
         container.replaceChildren();
         try {
@@ -476,19 +547,25 @@ export function MessageEmbeds({
   onEmbedReady: (url: string) => void;
 }) {
   const urls = text.match(URL_REGEX);
-  if (!urls || urls.length === 0) return null;
+  const unique = [...new Set(urls || [])];
+  const hasTwitter = unique.some((url) => TWITTER_REGEX.test(url));
+  const hasInstagram = unique.some((url) => INSTAGRAM_REGEX.test(url));
 
-  // Deduplicate
-  const unique = [...new Set(urls)];
+  useEffect(() => {
+    if (hasTwitter) scheduleIdleWidgetPreload("twitter");
+    if (hasInstagram) scheduleIdleWidgetPreload("instagram");
+  }, [hasInstagram, hasTwitter]);
 
-  const renderEmbed = (url: string) => {
+  if (unique.length === 0) return null;
+
+  const renderEmbed = (url: string, priority: EmbedPriority) => {
     // YouTube — inline iframe
     if (YOUTUBE_REGEX.test(url)) {
       return <YouTubeEmbed url={url} onReady={onEmbedReady} />;
     }
     // Twitter/X — native widget
     if (TWITTER_REGEX.test(url)) {
-      return <TwitterEmbed url={url} onReady={onEmbedReady} />;
+      return <TwitterEmbed url={url} onReady={onEmbedReady} priority={priority} />;
     }
     // Instagram — native widget
     if (INSTAGRAM_REGEX.test(url)) {
@@ -510,9 +587,7 @@ export function MessageEmbeds({
       gap: "6px",
     }}>
       {unique.map((url) => (
-        <LazyEmbed key={url} fillWidth={fillWidth}>
-          {renderEmbed(url)}
-        </LazyEmbed>
+        <LazyEmbed key={url} fillWidth={fillWidth} render={(priority) => renderEmbed(url, priority)} />
       ))}
     </div>
   );
