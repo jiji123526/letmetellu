@@ -142,7 +142,7 @@ export function ChatViewMessagePane({
         ref={messagesContainerRef}
         onScroll={onScroll}
         className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
-        style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", background: "transparent" }}
+        style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", overflowAnchor: "none", background: "transparent" }}
       >
         {isReportsOwnerView && restrictedChannels.length > 0 && (
           <section

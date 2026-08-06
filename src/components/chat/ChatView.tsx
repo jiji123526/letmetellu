@@ -476,6 +476,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     channelId,
     messages,
     historyMode,
+    enabled: !loading && !passcodeGate && !showChannelDeleted,
     messagesContainerRef,
     messagesEndRef,
     inLiveModeRef,
@@ -547,7 +548,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     void restoreRefreshPosition().then((restored) => {
       if (cancelled || restored) return;
       requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        if (!cancelled) {
+          messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        }
       });
     });
     return () => { cancelled = true; };

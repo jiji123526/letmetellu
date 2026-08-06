@@ -16,6 +16,7 @@ interface UseChatHistoryNavigationArgs {
   channelId: string;
   messages: Message[];
   historyMode: HistoryMode;
+  enabled: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   inLiveModeRef: MutableRefObject<boolean>;
@@ -33,6 +34,11 @@ interface UseChatHistoryNavigationResult {
   scrollToBottom: () => void;
   scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
+}
+
+interface ScrollAnchor {
+  id: string;
+  top: number;
 }
 
 interface SavedScrollPosition {
@@ -85,6 +91,23 @@ function hasPendingPositioningContent(container: HTMLElement, target: HTMLElemen
     if (node instanceof HTMLImageElement) return !node.complete;
     return node instanceof HTMLVideoElement && node.readyState < HTMLMediaElement.HAVE_METADATA;
   });
+}
+
+function findScrollAnchor(container: HTMLElement): ScrollAnchor | null {
+  const containerTop = container.getBoundingClientRect().top;
+  const messages = container.querySelectorAll<HTMLElement>('[id^="msg-"]');
+
+  for (const message of messages) {
+    const rect = message.getBoundingClientRect();
+    if (rect.bottom > containerTop + 1) {
+      return {
+        id: message.id,
+        top: rect.top - containerTop,
+      };
+    }
+  }
+
+  return null;
 }
 
 async function waitForStableMessageLayout(
@@ -156,6 +179,7 @@ export function useChatHistoryNavigation({
   channelId,
   messages,
   historyMode,
+  enabled,
   messagesContainerRef,
   messagesEndRef,
   inLiveModeRef,
@@ -171,6 +195,8 @@ export function useChatHistoryNavigation({
   const hasMoreMessagesRef = useRef(true);
   const hasMoreNewerMessagesRef = useRef(false);
   const navigationRequestRef = useRef(0);
+  const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
+  const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
 
   const scrollStorageKey = `chatScrollPosition:${channelId}`;
@@ -215,6 +241,66 @@ export function useChatHistoryNavigation({
     historyModeRef.current = historyMode;
   }, [historyMode]);
 
+  const updateScrollAnchor = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container || isNearBottomRef.current) {
+      scrollAnchorRef.current = null;
+      return;
+    }
+    scrollAnchorRef.current = findScrollAnchor(container);
+  }, [messagesContainerRef]);
+
+  const restoreScrollAnchor = useCallback(() => {
+    const container = messagesContainerRef.current;
+    const anchor = scrollAnchorRef.current;
+    if (!container || !anchor || isNearBottomRef.current || loadingMoreRef.current) return;
+
+    const element = document.getElementById(anchor.id);
+    if (!element) return;
+
+    const containerTop = container.getBoundingClientRect().top;
+    const nextTop = element.getBoundingClientRect().top - containerTop;
+    const delta = nextTop - anchor.top;
+    if (Math.abs(delta) > 1) {
+      container.scrollTop += delta;
+    }
+  }, [messagesContainerRef]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const scheduleRestore = () => {
+      if (restoreAnchorFrameRef.current !== null) {
+        cancelAnimationFrame(restoreAnchorFrameRef.current);
+      }
+      restoreAnchorFrameRef.current = requestAnimationFrame(() => {
+        restoreAnchorFrameRef.current = requestAnimationFrame(() => {
+          restoreScrollAnchor();
+          updateScrollAnchor();
+        });
+      });
+    };
+
+    const observer = new MutationObserver(scheduleRestore);
+    observer.observe(container, { childList: true, subtree: true });
+    container.addEventListener("load", scheduleRestore, true);
+    container.addEventListener("loadedmetadata", scheduleRestore, true);
+    container.addEventListener("error", scheduleRestore, true);
+
+    return () => {
+      observer.disconnect();
+      container.removeEventListener("load", scheduleRestore, true);
+      container.removeEventListener("loadedmetadata", scheduleRestore, true);
+      container.removeEventListener("error", scheduleRestore, true);
+      if (restoreAnchorFrameRef.current !== null) {
+        cancelAnimationFrame(restoreAnchorFrameRef.current);
+        restoreAnchorFrameRef.current = null;
+      }
+    };
+  }, [enabled, messagesContainerRef, restoreScrollAnchor, updateScrollAnchor]);
+
   const returnToLatest = useCallback(async () => {
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
     try {
@@ -226,6 +312,7 @@ export function useChatHistoryNavigation({
       hasMoreNewerMessagesRef.current = false;
       hasMoreMessagesRef.current = (data.messages?.length || 0) >= 50;
       isNearBottomRef.current = true;
+      scrollAnchorRef.current = null;
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       });
@@ -242,6 +329,7 @@ export function useChatHistoryNavigation({
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     isNearBottomRef.current = distanceFromBottom <= 120;
     setShowScrollBtn(distanceFromBottom > 200);
+    updateScrollAnchor();
 
     if (
       element.scrollTop < 50
@@ -331,7 +419,7 @@ export function useChatHistoryNavigation({
           loadingMoreRef.current = false;
         });
     }
-  }, [channelId, inLiveModeRef, messages, messagesContainerRef, setHistoryMode, setMessages, setShowScrollBtn]);
+  }, [channelId, inLiveModeRef, messages, messagesContainerRef, setHistoryMode, setMessages, setShowScrollBtn, updateScrollAnchor]);
 
   const scrollToBottom = useCallback(() => {
     if (historyModeRef.current === "context") {
@@ -339,6 +427,7 @@ export function useChatHistoryNavigation({
       return;
     }
     isNearBottomRef.current = true;
+    scrollAnchorRef.current = null;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setShowScrollBtn(false);
   }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
@@ -442,6 +531,7 @@ export function useChatHistoryNavigation({
     alignToSavedOffset();
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     isNearBottomRef.current = distanceFromBottom <= 120;
+    scrollAnchorRef.current = isNearBottomRef.current ? null : findScrollAnchor(container);
     setShowScrollBtn(distanceFromBottom > 200);
     return true;
   }, [channelId, inLiveModeRef, messagesContainerRef, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn]);
