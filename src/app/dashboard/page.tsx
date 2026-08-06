@@ -586,10 +586,10 @@ function DashboardPageContent() {
             setLoading(false);
             return;
           }
+          void loadSupportPreview();
           await Promise.all([
             loadChannels(),
             loadAccountRecentChannels(userId),
-            loadSupportPreview(),
           ]);
           setLoading(false);
         })();
