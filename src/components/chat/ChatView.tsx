@@ -10,6 +10,7 @@ import { useLocale } from "@/hooks/useLocale";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
+import { readChannelBackground } from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import type { Message } from "./chatTypes";
@@ -78,6 +79,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [viewerBlocked, setViewerBlocked] = useState(false);
   const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cachedBackground] = useState(() => readChannelBackground(channelId));
   const [passcodeGate, setPasscodeGate] = useState<PasscodeGateState | null>(null);
   const [uid, setUid] = useState(getInitialUid);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -805,7 +807,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }
 
   if (loading) {
-    return <ChatViewLoadingState />;
+    return <ChatViewLoadingState background={cachedBackground} />;
   }
 
   const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");

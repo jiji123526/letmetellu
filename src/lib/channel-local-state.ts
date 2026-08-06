@@ -13,6 +13,7 @@ const channelLocalStorageKeys = (channelId: string) => [
   `noticeDismissed_${channelId}_live`,
   `welcomeConfig_${channelId}`,
   `welcome_seen_${channelId}`,
+  `channelBackground_${channelId}`,
   `channelInstance_${channelId}`,
 ];
 

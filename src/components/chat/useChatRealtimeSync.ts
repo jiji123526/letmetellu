@@ -12,6 +12,7 @@ import {
   fetchMessages,
 } from "@/lib/api-chat";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
+import { patchChannelBackground } from "@/lib/channel-background-cache";
 import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { spawnEmoji } from "./EmojiBar";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
@@ -314,6 +315,15 @@ export function useChatRealtimeSync({
           ...(event.name ? { name: event.name as string } : {}),
           ...(nextProfileImage !== undefined ? { profileImage: nextProfileImage } : {}),
           ...(event.bubble_color && !localBubbleColor ? { bubbleColor: event.bubble_color as string } : {}),
+        });
+        patchChannelBackground(channelId, {
+          background_type: event.background_type as Channel["background_type"],
+          background_color: event.background_color as string | null | undefined,
+          background_image: event.background_image as string | null | undefined,
+          background_overlay: event.background_overlay as number | undefined,
+          background_blur: event.background_blur !== undefined
+            ? event.background_blur ? 1 : 0
+            : undefined,
         });
         setChannel((previous) => {
           if (!previous) return null;

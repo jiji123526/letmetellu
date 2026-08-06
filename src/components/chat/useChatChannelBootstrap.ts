@@ -5,6 +5,7 @@ import { fetchInit } from "@/lib/api-chat";
 import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
+import { clearChannelBackground, storeChannelBackground } from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
 import type { Message } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
@@ -109,6 +110,7 @@ export function useChatChannelBootstrap({
     }
 
     const channelBubbleColor = normalizeBubbleColor(data.channel.bubble_color);
+    storeChannelBackground(channelId, data.channel);
     setChannel({ ...data.channel, bubble_color: channelBubbleColor });
 
     const storedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
@@ -228,6 +230,7 @@ export function useChatChannelBootstrap({
         }
 
         if (data.hasPasscode && !data.messages) {
+          clearChannelBackground(channelId);
           setPasscodeGate({
             name: data.channel.name,
             profile_image: data.channel.profile_image,

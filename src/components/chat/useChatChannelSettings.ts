@@ -5,6 +5,7 @@ import { decorateMediaUrl, decorateProtectedMediaUrl, decorateWelcomeConfig } fr
 import { adminAction } from "@/lib/api-chat";
 import { updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { setAccountChannelColor } from "@/lib/account-recent-channels";
+import { patchChannelBackground } from "@/lib/channel-background-cache";
 
 interface BannerState {
   text: string;
@@ -164,6 +165,7 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
       ...background,
       background_image: decoratedBackgroundImage,
     } : null);
+    patchChannelBackground(channelId, background);
     void adminAction("update-profile", channelId, background as Record<string, unknown>);
     flashBanner(text.backgroundChanged, bubbleColor, 2500);
   }, [bubbleColor, channelId, flashBanner, setChannel, text.backgroundChanged]);

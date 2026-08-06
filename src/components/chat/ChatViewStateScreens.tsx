@@ -4,6 +4,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import type { PasscodeGateState } from "./chatViewTypes";
 import type { ExpandedPostState } from "./useChatInteractions";
+import type { ChannelBackgroundSnapshot } from "@/lib/channel-background-cache";
 
 function SkeletonLoading() {
   const rows = [
@@ -85,7 +86,11 @@ export function ChatViewDeletedState({
   );
 }
 
-export function ChatViewLoadingState() {
+export function ChatViewLoadingState({
+  background,
+}: {
+  background: ChannelBackgroundSnapshot | null;
+}) {
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col md:border-x" style={{ background: "var(--bg)", borderColor: "var(--hairline)" }}>
       <header
@@ -103,8 +108,30 @@ export function ChatViewLoadingState() {
           <div className="h-3 w-16 rounded" style={{ background: "var(--gray-bubble)" }} />
         </div>
       </header>
-      <div className="flex-1 overflow-hidden">
-        <SkeletonLoading />
+      <div
+        className="relative flex-1 overflow-hidden"
+        style={{
+          backgroundColor: background?.type === "color"
+            ? (background.color || "var(--bg)")
+            : "var(--bg)",
+        }}
+      >
+        {background?.type === "image" && background.image && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: `linear-gradient(rgba(0,0,0,${background.overlay / 100}), rgba(0,0,0,${background.overlay / 100})), url("${background.image}")`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: background.blur ? "blur(5px)" : "none",
+              transform: background.blur ? "scale(1.04)" : "none",
+            }}
+          />
+        )}
+        <div className="relative">
+          <SkeletonLoading />
+        </div>
       </div>
     </div>
   );
