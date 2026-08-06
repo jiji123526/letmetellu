@@ -15,6 +15,17 @@ import {
 } from "./api-core";
 
 let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
+const MESSAGE_SEND_TIMEOUT_MS = 15_000;
+
+async function fetchMessageMutation(input: RequestInfo | URL, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MESSAGE_SEND_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function loadMockApi() {
   if (!mockApiPromise) {
@@ -258,32 +269,7 @@ export async function submitModerationPetition(channelId: string, text: string) 
 }
 
 export async function sendMessage(payload: {
-  uid: string;
-  nick?: string;
-  text: string;
-  channel_id: string;
-  image?: string;
-  upload_id?: string;
-  reply_to?: string;
-}) {
-  if (IS_MOCK) {
-    const mockApi = await loadMockApi();
-    return mockApi.sendMessage(payload);
-  }
-
-  const res = await fetch("/api/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Auth-Mode": "anonymous",
-      ...roomTokenHeaders(),
-    },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
-}
-
-export async function sendMessageAsAdmin(payload: {
+  client_message_id: string;
   uid: string;
   nick?: string;
   text: string;
@@ -299,7 +285,36 @@ export async function sendMessageAsAdmin(payload: {
     return mockApi.sendMessage(payload);
   }
 
-  const res = await fetch("/api/messages", {
+  const res = await fetchMessageMutation("/api/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Auth-Mode": "anonymous",
+      ...roomTokenHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+export async function sendMessageAsAdmin(payload: {
+  client_message_id: string;
+  uid: string;
+  nick?: string;
+  text: string;
+  channel_id: string;
+  image?: string;
+  upload_id?: string;
+  reply_to?: string;
+  report?: boolean;
+  reported_msg_id?: string;
+}) {
+  if (IS_MOCK) {
+    const mockApi = await loadMockApi();
+    return mockApi.sendMessage(payload);
+  }
+
+  const res = await fetchMessageMutation("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -393,6 +408,7 @@ export async function searchMessages(
 }
 
 export async function sendDm(payload: {
+  client_message_id: string;
   uid: string;
   nick?: string;
   text: string;
@@ -401,7 +417,7 @@ export async function sendDm(payload: {
   upload_id?: string;
 }) {
   if (IS_MOCK) return { ok: true };
-  const res = await fetch("/api/messages", {
+  const res = await fetchMessageMutation("/api/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

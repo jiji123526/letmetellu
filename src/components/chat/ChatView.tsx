@@ -607,6 +607,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   );
   const {
     hasPetitioned,
+    isSending,
     handleSend,
     handleKeyDown,
     handleReaction,
@@ -620,6 +621,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     dmMode,
     inLiveMode,
     input,
+    replyingToId: replyingTo?.id,
     pendingPhotos,
     messages,
     dmMessages,
@@ -933,6 +935,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           send({ type: "emoji-fx", emoji, x, h });
         }}
         onSend={handleSend}
+        isSending={isSending}
         bubbleColor={bubbleColor}
       />
 

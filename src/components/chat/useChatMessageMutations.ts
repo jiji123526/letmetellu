@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type Dispatch, type KeyboardEvent, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import {
   adminAction,
   deleteMessage,
@@ -54,6 +54,7 @@ interface UseChatMessageMutationsArgs {
   dmMode: boolean;
   inLiveMode: boolean;
   input: string;
+  replyingToId?: string;
   pendingPhotos: PendingPhoto[];
   messages: Message[];
   dmMessages: Message[];
@@ -81,6 +82,7 @@ interface UseChatMessageMutationsArgs {
 
 interface UseChatMessageMutationsResult {
   hasPetitioned: boolean;
+  isSending: boolean;
   handleSend: () => Promise<void>;
   handleKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   handleReaction: (messageId: string, emoji: string) => Promise<void>;
@@ -96,6 +98,7 @@ export function useChatMessageMutations({
   dmMode,
   inLiveMode,
   input,
+  replyingToId,
   pendingPhotos,
   messages,
   dmMessages,
@@ -120,6 +123,9 @@ export function useChatMessageMutations({
   consumeComposerState,
   text,
 }: UseChatMessageMutationsArgs): UseChatMessageMutationsResult {
+  const sendInFlightRef = useRef(false);
+  const sendAttemptRef = useRef<{ signature: string; id: string } | null>(null);
+  const [isSending, setIsSending] = useState(false);
   const [petitionSentUid, setPetitionSentUid] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem("petitionSent") || "";
@@ -198,6 +204,24 @@ export function useChatMessageMutations({
       return;
     }
 
+    if (sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    setIsSending(true);
+
+    const submissionSignature = JSON.stringify([
+      inLiveMode ? `${channelId}_live` : channelId,
+      dmMode,
+      nextText,
+      replyingToId || "",
+      pendingPhotos.map((photo) => photo.previewUrl),
+    ]);
+    const submissionId = sendAttemptRef.current?.signature === submissionSignature
+      ? sendAttemptRef.current.id
+      : crypto.randomUUID();
+    sendAttemptRef.current = { signature: submissionSignature, id: submissionId };
+    let retainSubmissionId = false;
+
+    try {
     if (isUserBlocked) {
       if (hasPetitioned || !petitionEnabled) {
         setBanner({ text: text.blocked, color: "#d32f2f" });
@@ -210,6 +234,7 @@ export function useChatMessageMutations({
       const reason = blockEntry?.reason ? `\n[${text.blockReason}: "${blockEntry.reason}"]` : "";
       const petitionText = `[${text.petitionPrefix}] ${nextText}${reason}`;
       const result = await sendDm({
+        client_message_id: submissionId,
         uid,
         text: petitionText,
         channel_id: inLiveMode ? `${channelId}_live` : channelId,
@@ -243,6 +268,7 @@ export function useChatMessageMutations({
       }
 
       const result = await sendDm({
+        client_message_id: submissionId,
         uid,
         text: nextText,
         channel_id: dmChannelId,
@@ -275,6 +301,7 @@ export function useChatMessageMutations({
     try {
       if (photos.length === 0) {
         const result = await sender({
+          client_message_id: submissionId,
           uid: senderUid,
           text: nextText,
           channel_id: activeChannelId,
@@ -293,6 +320,7 @@ export function useChatMessageMutations({
           }
 
           const result = await sender({
+            client_message_id: `${submissionId}:${index}`,
             uid: senderUid,
             text: index === 0 ? nextText : "",
             channel_id: activeChannelId,
@@ -314,6 +342,7 @@ export function useChatMessageMutations({
         }
       }
     } catch {
+      retainSubmissionId = true;
       sendError = "network_error";
       unsentPhotos = photos;
     }
@@ -327,6 +356,17 @@ export function useChatMessageMutations({
     }
 
     resetInput();
+    } catch {
+      retainSubmissionId = true;
+      restoreInput(nextText);
+      if (pendingPhotos.length > 0) setPendingPhotos(pendingPhotos);
+      if (dmMode) setDmMode(true);
+      showMutationError("network_error");
+    } finally {
+      if (!retainSubmissionId) sendAttemptRef.current = null;
+      sendInFlightRef.current = false;
+      setIsSending(false);
+    }
   }, [
     authUserId,
     blockedUsers,
@@ -342,7 +382,9 @@ export function useChatMessageMutations({
     isUserBlocked,
     ownerModerationBlocked,
     pendingPhotos.length,
+    pendingPhotos,
     petitionEnabled,
+    replyingToId,
     resetInput,
     restoreInput,
     setBanner,
@@ -530,6 +572,7 @@ export function useChatMessageMutations({
 
   return {
     hasPetitioned,
+    isSending,
     handleSend,
     handleKeyDown,
     handleReaction,

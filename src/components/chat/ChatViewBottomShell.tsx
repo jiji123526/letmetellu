@@ -104,6 +104,7 @@ interface ChatViewBottomShellProps {
   emojiPresets: string[] | null;
   onBroadcastEmoji: (emoji: string, x: number, h: number) => void;
   onSend: () => Promise<void>;
+  isSending: boolean;
   bubbleColor: string;
 }
 
@@ -150,6 +151,7 @@ export function ChatViewBottomShell({
   emojiPresets,
   onBroadcastEmoji,
   onSend,
+  isSending,
   bubbleColor,
 }: ChatViewBottomShellProps) {
   const viewerInputBlocked = isUserBlocked && (hasPetitioned || !petitionEnabled);
@@ -188,7 +190,7 @@ export function ChatViewBottomShell({
     ? sentToAdminLabel
     : messageInputLabel;
   const inputColor = ownerModerationBlocked || composerFrozenForViewer ? "#999" : "var(--gray-text)";
-  const canSend = (input.trim() || pendingPhotos.length > 0) && !ownerModerationBlocked && !composerFrozenForViewer;
+  const canSend = !!(input.trim() || pendingPhotos.length > 0) && !ownerModerationBlocked && !composerFrozenForViewer;
 
   return (
     <>
@@ -344,7 +346,7 @@ export function ChatViewBottomShell({
             value={input}
             onChange={onInputChange}
             onKeyDown={onKeyDown}
-            disabled={inputDisabled}
+            disabled={inputDisabled || isSending}
             rows={1}
             placeholder={inputPlaceholder}
             className="flex-1 border-none bg-transparent outline-none resize-none"
@@ -362,8 +364,10 @@ export function ChatViewBottomShell({
           {inLiveMode && !isUserBlocked && !ownerModerationBlocked && (
             <EmojiBar channelId={channelId} presets={emojiPresets} onBroadcast={onBroadcastEmoji} />
           )}
-          {canSend && (
+          {(canSend || isSending) && (
             <button
+              type="button"
+              disabled={isSending}
               onClick={() => { void onSend(); }}
               className="flex-none flex items-center justify-center border-none cursor-pointer"
               style={{
@@ -371,6 +375,8 @@ export function ChatViewBottomShell({
                 height: "calc(var(--bubble-font-size) + 9px)",
                 borderRadius: "50%",
                 background: dmMode ? "#7b3fa0" : bubbleColor,
+                opacity: isSending ? 0.55 : 1,
+                cursor: isSending ? "default" : "pointer",
               }}
             >
               <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>

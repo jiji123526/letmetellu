@@ -6,6 +6,7 @@ import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "..
 import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
+import { isValidClientMessageId } from "../lib/message-idempotency";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -28,11 +29,15 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
 export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { nick, text, channel_id, image, upload_id } = body;
+    const { client_message_id, nick, text, channel_id, image, upload_id } = body;
 
     if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
+    if (client_message_id !== undefined && !isValidClientMessageId(client_message_id)) {
+      return Response.json({ error: "invalid_client_message_id" }, { status: 400 });
+    }
+    const clientMessageId = isValidClientMessageId(client_message_id) ? client_message_id : crypto.randomUUID();
     if (text !== undefined && typeof text !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
@@ -74,6 +79,16 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
     if (!requesterDeviceId) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+
+    const existingDm = await env.DB.prepare(
+      "SELECT id, uid, channel_id, created_at FROM dm WHERE client_message_id = ? LIMIT 1"
+    ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+    if (existingDm) {
+      if (existingDm.uid !== requesterUid || existingDm.channel_id !== channel_id) {
+        return Response.json({ error: "client_message_id_conflict" }, { status: 409 });
+      }
+      return Response.json({ ok: true, id: existingDm.id, created_at: existingDm.created_at, duplicate: true });
     }
 
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);
@@ -156,16 +171,26 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
     const created_at = new Date().toISOString();
     const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO dm (id, uid, auth_uid, nick, text, image, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(id, requesterUid, requesterUid, nick || null, rawText, image || null, channel_id, created_at),
-      env.DB.prepare(
-        `INSERT OR REPLACE INTO message_actor_identities
-          (record_id, record_type, channel_id, uid, device_id_hash, created_at)
-         VALUES (?, 'dm', ?, ?, ?, ?)`
-      ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
-    ]);
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO dm (id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(id, clientMessageId, requesterUid, requesterUid, nick || null, rawText, image || null, channel_id, created_at),
+        env.DB.prepare(
+          `INSERT OR REPLACE INTO message_actor_identities
+            (record_id, record_type, channel_id, uid, device_id_hash, created_at)
+           VALUES (?, 'dm', ?, ?, ?, ?)`
+        ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
+      ]);
+    } catch (error) {
+      const duplicate = await env.DB.prepare(
+        "SELECT id, uid, channel_id, created_at FROM dm WHERE client_message_id = ? LIMIT 1"
+      ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+      if (duplicate?.uid === requesterUid && duplicate.channel_id === channel_id) {
+        return Response.json({ ok: true, id: duplicate.id, created_at: duplicate.created_at, duplicate: true });
+      }
+      throw error;
+    }
 
     // Broadcast DM with payload — always use parent channel DO
     const newDm = { id, uid: requesterUid, auth_uid: requesterUid, nick: nick || null, text: rawText, image: image || null, channel_id, created_at };

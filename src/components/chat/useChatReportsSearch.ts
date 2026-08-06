@@ -152,12 +152,13 @@ export function useChatReportsSearch({
 
     const previewText = message.text.length > 50 ? `${message.text.slice(0, 50)}…` : message.text;
     void sendMessageApi({
+      client_message_id: crypto.randomUUID(),
       uid,
       text: `${text.reportPrefix}: "${previewText}"`,
       channel_id: channelId,
       report: true,
       reported_msg_id: messageId,
-    } as never);
+    });
     setBanner({ text: text.reported, color: "#d32f2f" });
     setTimeout(() => setBanner(null), 3000);
   }, [channelId, setBanner, text.reportPrefix, text.reported, uid]);

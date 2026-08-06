@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Idempotent chat and DM sending — 2026-08-05
+
+This frontend, Worker and D1 change prevents repeated Send clicks during a slow or reconnecting network from creating duplicate messages.
+
+- The composer takes a synchronous in-flight lock before the first await, closing the React re-render window in which several clicks could start parallel requests.
+- The send control is unavailable while that submission is in flight.
+- Every text message, DM and photo in a multi-photo submission receives a client-generated message ID.
+- Migration `0033_message_send_idempotency.sql` adds nullable client message IDs and unique partial indexes to `messages` and `dm`.
+- The Worker returns the existing record for a repeated ID belonging to the same sender and channel, and rejects cross-sender/channel ID conflicts.
+- Legacy frontend requests without an ID remain accepted during rollout; the Worker assigns a server-generated ID to those requests.
+
+Trade-offs:
+
+- A user cannot intentionally send a second message until the current submission resolves. On a very slow connection, this favors duplicate prevention over rapid-fire sending.
+- Each message and DM gains one short ID plus a unique-index entry, adding small D1 storage and write-index overhead.
+- The UI lock prevents ordinary repeat clicks; the database constraint is the final guard for concurrent duplicate requests that reach the Worker.
+
+Deployment notes:
+
+- apply D1 migration `0033_message_send_idempotency.sql` before deploying the updated Worker;
+- deploy the Worker, then the Next.js frontend;
+- production migration `0033` and Worker version `00b17abb-9226-46a9-8361-d765a98f861c` were deployed successfully on 2026-08-05.
+
 ### Tenth-visit improvement survey — 2026-08-05
 
 This frontend, Worker and D1 feature asks for improvement feedback once after a user reaches ten qualified dashboard or channel visits.

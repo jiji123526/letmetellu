@@ -9,6 +9,7 @@ import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../l
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { syncMessageLink } from "../lib/message-links";
 import { authorizeRoomToken } from "./passcode";
+import { isValidClientMessageId } from "../lib/message-idempotency";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -30,11 +31,15 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
 export async function handleMessages(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
-    const { nick, text, channel_id, image, upload_id, reply_to, report, reported_msg_id } = body;
+    const { client_message_id, nick, text, channel_id, image, upload_id, reply_to, report, reported_msg_id } = body;
 
     if (!channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
+    if (client_message_id !== undefined && !isValidClientMessageId(client_message_id)) {
+      return Response.json({ error: "invalid_client_message_id" }, { status: 400 });
+    }
+    const clientMessageId = isValidClientMessageId(client_message_id) ? client_message_id : crypto.randomUUID();
 
     // Internal proxy authentication alone does not grant channel-owner rights.
     // Ownership is verified against the target channel below.
@@ -99,6 +104,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
     const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
+
+    const existingMessage = await env.DB.prepare(
+      "SELECT id, uid, channel_id, created_at FROM messages WHERE client_message_id = ? LIMIT 1"
+    ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+    if (existingMessage) {
+      if (existingMessage.uid !== requesterUid || existingMessage.channel_id !== channel_id) {
+        return Response.json({ error: "client_message_id_conflict" }, { status: 409 });
+      }
+      return Response.json({ id: existingMessage.id, created_at: existingMessage.created_at, duplicate: true });
+    }
 
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);
     const chatRoom = env.CHAT_ROOM.get(doId);
@@ -172,9 +187,9 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     const isAdmin = isChannelOwner ? 1 : 0;
     const stmts = [
       env.DB.prepare(`
-        INSERT INTO messages (id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, report, reported_msg_id, gallery_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
+        INSERT INTO messages (id, client_message_id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, report, reported_msg_id, gallery_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, clientMessageId, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
     ];
     if (!isChannelOwner && requesterDeviceId) {
       const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
@@ -192,7 +207,17 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
           .bind(id, image, senderUid, channel_id, created_at)
       );
     }
-    await env.DB.batch(stmts);
+    try {
+      await env.DB.batch(stmts);
+    } catch (error) {
+      const duplicate = await env.DB.prepare(
+        "SELECT id, uid, channel_id, created_at FROM messages WHERE client_message_id = ? LIMIT 1"
+      ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+      if (duplicate?.uid === requesterUid && duplicate.channel_id === channel_id) {
+        return Response.json({ id: duplicate.id, created_at: duplicate.created_at, duplicate: true });
+      }
+      throw error;
+    }
     await syncMessageLink(env, id, channel_id as string, created_at, text as string | undefined);
 
     // Broadcast through the same parent-channel Durable Object used above.
