@@ -577,6 +577,12 @@ function DashboardPageContent() {
       const userId = session?.user?.id;
       if (status === "authenticated" && session?.user?.id) {
         void (async () => {
+          const coreDashboardRequest = userId
+            ? Promise.allSettled([
+                loadChannels(),
+                loadAccountRecentChannels(userId),
+              ])
+            : Promise.resolve([]);
           const hasPlatformDashboard = await loadPlatformDashboard();
           if (hasPlatformDashboard) {
             setLoading(false);
@@ -587,10 +593,7 @@ function DashboardPageContent() {
             return;
           }
           void loadSupportPreview();
-          await Promise.all([
-            loadChannels(),
-            loadAccountRecentChannels(userId),
-          ]);
+          await coreDashboardRequest;
           setLoading(false);
         })();
       } else if (status === "unauthenticated") {
