@@ -4,6 +4,21 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Lazy third-party widget rendering — 2026-08-06
+
+- Chat embeds now mount only when they enter a 600px preload margin around the viewport, avoiding immediate iframe and SDK work for off-screen history.
+- Twitter uses one shared SDK loader and limits native tweet construction to two concurrent renders.
+- A 12-second render guard releases the Twitter queue if a third-party render promise stalls.
+- Instagram uses one shared SDK loader and batches same-tick global `Embeds.process()` calls instead of processing the page once per message.
+- YouTube iframes now use native lazy loading.
+- Generic link-preview requests also begin near the viewport while retaining the existing per-URL request and result cache.
+
+Trade-offs:
+
+- Fast scrolling across a large distance can briefly expose the standard loading bubble while the newly-near widget renders.
+- A queued Twitter widget may start slightly later when two other tweets are already rendering, but this protects main-thread responsiveness and reduces simultaneous third-party traffic.
+- Widget completion time still depends on X, Instagram and YouTube availability; this change removes unnecessary eager work rather than eliminating third-party latency.
+
 ### Delayed reconnect notice — 2026-08-06
 
 - Unexpected WebSocket closure still starts recovery immediately, but the visible reconnect notice now waits for three continuous seconds of disconnection.

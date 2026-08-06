@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 
 interface TwitterWidgets {
@@ -30,6 +30,120 @@ const TWITTER_REGEX = /https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
 const INSTAGRAM_REGEX = /https?:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
 const URL_REGEX = /https?:\/\/[^\s<]+/g;
 const NATIVE_EMBED_WIDTH = 320;
+const EMBED_PRELOAD_MARGIN = "600px 0px";
+const MAX_CONCURRENT_TWITTER_RENDERS = 2;
+const WIDGET_RENDER_TIMEOUT_MS = 12_000;
+
+let twitterScriptPromise: Promise<TwitterWidgets | null> | null = null;
+const twitterRenderQueue: Array<() => Promise<void>> = [];
+let activeTwitterRenders = 0;
+let instagramScriptPromise: Promise<InstagramEmbeds | null> | null = null;
+let instagramProcessTimer: ReturnType<typeof setTimeout> | null = null;
+
+function loadTwitterWidgets(): Promise<TwitterWidgets | null> {
+  if (window.twttr?.widgets) return Promise.resolve(window.twttr.widgets);
+  if (twitterScriptPromise) return twitterScriptPromise;
+
+  twitterScriptPromise = new Promise((resolve) => {
+    window.twttr = window.twttr || { _e: [] };
+    (window.twttr._e ||= []).push(() => resolve(window.twttr?.widgets || null));
+
+    if (document.getElementById("twitter-wjs")) return;
+    const script = document.createElement("script");
+    script.id = "twitter-wjs";
+    script.src = "https://platform.twitter.com/widgets.js";
+    script.async = true;
+    script.onerror = () => resolve(null);
+    document.body.appendChild(script);
+  });
+  return twitterScriptPromise;
+}
+
+function drainTwitterRenderQueue() {
+  while (activeTwitterRenders < MAX_CONCURRENT_TWITTER_RENDERS && twitterRenderQueue.length > 0) {
+    const task = twitterRenderQueue.shift();
+    if (!task) return;
+    activeTwitterRenders += 1;
+    void task().finally(() => {
+      activeTwitterRenders -= 1;
+      drainTwitterRenderQueue();
+    });
+  }
+}
+
+function queueTwitterRender(task: () => Promise<void>) {
+  twitterRenderQueue.push(task);
+  drainTwitterRenderQueue();
+}
+
+async function waitForWidgetRender(task: Promise<unknown>) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      task,
+      new Promise<void>((resolve) => {
+        timeout = setTimeout(resolve, WIDGET_RENDER_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function loadInstagramEmbeds(): Promise<InstagramEmbeds | null> {
+  if (window.instgrm?.Embeds) return Promise.resolve(window.instgrm.Embeds);
+  if (instagramScriptPromise) return instagramScriptPromise;
+
+  instagramScriptPromise = new Promise((resolve) => {
+    const existing = document.getElementById("insta-embed-js") as HTMLScriptElement | null;
+    const script = existing || document.createElement("script");
+    const finish = () => resolve(window.instgrm?.Embeds || null);
+    script.addEventListener("load", finish, { once: true });
+    script.addEventListener("error", () => resolve(null), { once: true });
+    if (!existing) {
+      script.id = "insta-embed-js";
+      script.src = "https://www.instagram.com/embed.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  });
+  return instagramScriptPromise;
+}
+
+function scheduleInstagramProcess(embeds: InstagramEmbeds) {
+  if (instagramProcessTimer) return;
+  instagramProcessTimer = setTimeout(() => {
+    instagramProcessTimer = null;
+    embeds.process();
+  }, 0);
+}
+
+function LazyEmbed({ children, fillWidth }: { children: ReactNode; fillWidth: boolean }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element) return;
+    if (!("IntersectionObserver" in window)) {
+      const fallbackTimer = setTimeout(() => setActive(true), 0);
+      return () => clearTimeout(fallbackTimer);
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setActive(true);
+      observer.disconnect();
+    }, { rootMargin: EMBED_PRELOAD_MARGIN });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={rootRef} style={{ width: fillWidth ? "100%" : "fit-content", maxWidth: "100%" }}>
+      {active ? children : <MediaLoadingDots />}
+    </div>
+  );
+}
 
 interface PreviewData {
   title: string;
@@ -132,6 +246,7 @@ function YouTubeEmbed({ url, onReady }: { url: string; onReady: (url: string) =>
     }}>
       {loading && <MediaLoadingDots />}
       <iframe
+        loading="lazy"
         width="100%"
         height="100%"
         src={`https://www.youtube.com/embed/${videoId}`}
@@ -237,29 +352,27 @@ function TwitterEmbed({ url, onReady }: { url: string; onReady: (url: string) =>
     const container = contentRef.current;
     if (!tweetId || !container) return;
 
-    const render = () => {
-      if (window.twttr?.widgets?.createTweet) {
-        window.twttr.widgets.createTweet(tweetId, container, {
+    let cancelled = false;
+    void loadTwitterWidgets().then((widgets) => {
+      if (!widgets || cancelled) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+      queueTwitterRender(async () => {
+        if (cancelled) return;
+        container.replaceChildren();
+        try {
+          await waitForWidgetRender(widgets.createTweet(tweetId, container, {
           theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
           conversation: "none",
           width: NATIVE_EMBED_WIDTH,
-        }).then(() => setLoading(false)).catch(() => setLoading(false));
-      }
-    };
-
-    if (window.twttr?.widgets) {
-      render();
-    } else {
-      if (!document.getElementById("twitter-wjs")) {
-        const script = document.createElement("script");
-        script.id = "twitter-wjs";
-        script.src = "https://platform.twitter.com/widgets.js";
-        script.async = true;
-        document.body.appendChild(script);
-      }
-      window.twttr = window.twttr || { _e: [] };
-      (window.twttr._e ||= []).push(render);
-    }
+          }));
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      });
+    });
+    return () => { cancelled = true; };
   }, [tweetId, contentRef]);
 
   if (!tweetId) return null;
@@ -317,26 +430,19 @@ function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) 
     });
     observer.observe(container, { childList: true, subtree: true });
 
-    const process = () => {
-      if (window.instgrm?.Embeds?.process) {
-        window.instgrm.Embeds.process();
+    let cancelled = false;
+    void loadInstagramEmbeds().then((embeds) => {
+      if (!embeds || cancelled) {
+        if (!cancelled) setLoading(false);
+        return;
       }
+      scheduleInstagramProcess(embeds);
+    });
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
     };
-
-    if (window.instgrm) {
-      process();
-    } else if (!document.getElementById("insta-embed-js")) {
-      const script = document.createElement("script");
-      script.id = "insta-embed-js";
-      script.src = "https://www.instagram.com/embed.js";
-      script.async = true;
-      script.onload = process;
-      document.body.appendChild(script);
-    } else {
-      setTimeout(process, 1000);
-    }
-
-    return () => observer.disconnect();
   }, [embedUrl, url, contentRef]);
 
   if (!embedUrl) return null;
@@ -404,9 +510,9 @@ export function MessageEmbeds({
       gap: "6px",
     }}>
       {unique.map((url) => (
-        <div key={url} style={{ width: fillWidth ? "100%" : undefined, maxWidth: "100%" }}>
+        <LazyEmbed key={url} fillWidth={fillWidth}>
           {renderEmbed(url)}
-        </div>
+        </LazyEmbed>
       ))}
     </div>
   );
