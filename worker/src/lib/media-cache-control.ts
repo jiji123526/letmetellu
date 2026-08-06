@@ -1,14 +1,14 @@
 export function getMediaCacheControl(
   sourceType: string | null | undefined,
-  channelHasPasscode: boolean,
+  requiresPrivateCache: boolean,
 ): string {
   if (sourceType === "channel-profile") {
     return "public, max-age=31536000, immutable";
   }
   if (sourceType === "channel-background") {
-    return channelHasPasscode
+    return requiresPrivateCache
       ? "private, max-age=900, must-revalidate"
-      : "private, max-age=604800, immutable";
+      : "public, max-age=604800, s-maxage=3600, immutable";
   }
   if (sourceType) {
     return "private, no-store";

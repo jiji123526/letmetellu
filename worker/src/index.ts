@@ -139,7 +139,7 @@ export default {
         response = await handleSurvey(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
-        response = await handleMediaServe(request, env, key);
+        response = await handleMediaServe(request, env, key, ctx);
       } else {
         response = new Response("not found", { status: 404 });
       }

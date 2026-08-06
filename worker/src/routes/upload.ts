@@ -5,6 +5,10 @@ import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../
 import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { matchesImageSignature } from "../lib/image-signature";
 import { getMediaCacheControl } from "../lib/media-cache-control";
+import {
+  readPublicBackgroundCache,
+  storePublicBackgroundCache,
+} from "../lib/public-background-cache";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -200,13 +204,21 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 }
 
 // Serve uploaded media
-export async function handleMediaServe(request: Request, env: Env, key: string): Promise<Response> {
+export async function handleMediaServe(
+  request: Request,
+  env: Env,
+  key: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
   const decodedKey = decodeURIComponent(key);
+  const cachedPublicBackground = await readPublicBackgroundCache(request, decodedKey);
+  if (cachedPublicBackground) return cachedPublicBackground;
+
   const mediaSuffix = `/api/media/${decodedKey}`;
   const inferredChannelId = readChannelIdFromMediaKey(decodedKey);
   let mediaRow: { channel_id: string; source_type: string } | null = null;
   let pendingTicket: { purpose: UploadPurpose; expires_at: string } | null = null;
-  let channelHasPasscode = false;
+  let backgroundRequiresPrivateCache = false;
 
   if (inferredChannelId) {
     // Message and DM uploads already have a unique indexed key in
@@ -308,7 +320,7 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
 
     const parentChannelId = getParentChannelId(mediaRow.channel_id);
     const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
-    channelHasPasscode = Boolean(passcode);
+    backgroundRequiresPrivateCache = Boolean(passcode) || isReportsChannel(parentChannelId, env);
 
     if (passcode) {
       const trustedUserId = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
@@ -334,8 +346,16 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
   headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
   headers.set("Cache-Control", getMediaCacheControl(
     mediaRow?.source_type,
-    channelHasPasscode,
+    backgroundRequiresPrivateCache,
   ));
 
-  return new Response(object.body, { headers });
+  const response = new Response(object.body, { headers });
+  if (
+    mediaRow?.source_type === "channel-background"
+    && !backgroundRequiresPrivateCache
+    && ctx
+  ) {
+    ctx.waitUntil(storePublicBackgroundCache(request, decodedKey, response));
+  }
+  return response;
 }

@@ -5,6 +5,10 @@ import test from "node:test";
 import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
 import { getMediaCacheControl } from "../src/lib/media-cache-control.ts";
+import {
+  canUsePublicBackgroundCache,
+  createPublicBackgroundCacheKey,
+} from "../src/lib/public-background-cache.ts";
 import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
 import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
@@ -131,7 +135,7 @@ test("matchesImageSignature rejects mismatched, truncated and unsupported conten
 test("media cache policy persists backgrounds without caching private message media", () => {
   assert.equal(
     getMediaCacheControl("channel-background", false),
-    "private, max-age=604800, immutable",
+    "public, max-age=604800, s-maxage=3600, immutable",
   );
   assert.equal(
     getMediaCacheControl("channel-background", true),
@@ -139,6 +143,23 @@ test("media cache policy persists backgrounds without caching private message me
   );
   assert.equal(getMediaCacheControl("message", false), "private, no-store");
   assert.equal(getMediaCacheControl("dm", true), "private, no-store");
+});
+
+test("public background edge cache only accepts stable GET requests", () => {
+  const request = new Request("https://worker.example/api/media/room/background.jpg");
+  assert.equal(canUsePublicBackgroundCache(request), true);
+  assert.equal(
+    createPublicBackgroundCacheKey(request, "room/background.jpg").url,
+    "https://worker.example/__public_background_cache/v1?key=room%2Fbackground.jpg",
+  );
+  assert.equal(
+    canUsePublicBackgroundCache(new Request(`${request.url}?media_token=secret`)),
+    false,
+  );
+  assert.equal(
+    canUsePublicBackgroundCache(new Request(request.url, { method: "HEAD" })),
+    false,
+  );
 });
 
 test("operational health windows normalize D1 values and missing counts", () => {
