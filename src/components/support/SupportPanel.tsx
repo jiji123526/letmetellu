@@ -416,7 +416,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
         <button
           type="button"
           className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
-          style={{ color: "var(--bubble-sent, #3b8df0)" }}
+          style={{ color: "var(--bubble-sent, #3598fe)" }}
           onClick={() => void handleClosePanel()}
           aria-label={t("dashboardBack")}
           disabled={closing}
@@ -566,7 +566,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
                           lineHeight: 1.38,
                           overflowWrap: "anywhere",
                           borderRadius: isBot ? "20px 20px 20px 4px" : "20px 20px 4px 20px",
-                          background: isBot ? "var(--gray-bubble)" : "var(--bubble-sent, #3b8df0)",
+                          background: isBot ? "var(--gray-bubble)" : "var(--bubble-sent, #3598fe)",
                           color: isBot ? "var(--gray-text)" : "#fff",
                         }}
                       >
@@ -619,7 +619,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
               type="button"
               onClick={() => router.push(`/support?thread=${encodeURIComponent(supportState.thread?.id || "")}`)}
               className="ml-auto rounded-full border-none px-4 py-2 text-[13px] font-semibold text-white"
-              style={{ background: "var(--bubble-sent, #3b8df0)" }}
+              style={{ background: "var(--bubble-sent, #3598fe)" }}
             >
               {t("supportTicketOpen")}
             </button>
@@ -681,7 +681,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
                     width: "calc(var(--bubble-font-size) + 9px)",
                     height: "calc(var(--bubble-font-size) + 9px)",
                     borderRadius: "50%",
-                    background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)",
+                    background: submitting ? "#9ca3af" : "var(--bubble-sent, #3598fe)",
                   }}
                 >
                   <svg viewBox="0 0 24 24" style={{ width: "calc(var(--bubble-font-size) - 1px)", height: "calc(var(--bubble-font-size) - 1px)" }}>
@@ -699,7 +699,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
               onClick={() => void handleStart()}
               disabled={submitting}
               className="rounded-full border-none px-4 py-2 text-[13px] font-semibold text-white"
-              style={{ background: submitting ? "#9ca3af" : "var(--bubble-sent, #3b8df0)" }}
+              style={{ background: submitting ? "#9ca3af" : "var(--bubble-sent, #3598fe)" }}
             >
               {t("supportRestart")}
             </button>

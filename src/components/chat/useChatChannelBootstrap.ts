@@ -103,7 +103,7 @@ export function useChatChannelBootstrap({
       setLocalBubbleColor(null);
       document.documentElement.style.setProperty(
         "--bubble-sent",
-        data.channel.bubble_color || "#3b8df0",
+        data.channel.bubble_color || "#3598fe",
       );
     }
 
@@ -126,7 +126,7 @@ export function useChatChannelBootstrap({
         id: channelId,
         name: data.channel.name,
         profileImage: data.channel.profile_image,
-        bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3b8df0",
+        bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3598fe",
         hasPasscode: data.hasPasscode === true,
         ownerName: data.channel.owner_name || "",
       });
@@ -264,7 +264,7 @@ export function useChatChannelBootstrap({
     const fallbackGate = {
       name: channel?.name || "",
       profile_image: channel?.profile_image || null,
-      bubble_color: channel?.bubble_color || "#3b8df0",
+      bubble_color: channel?.bubble_color || "#3598fe",
       passcodeHint: channel?.passcode_hint || "",
       notice,
     };

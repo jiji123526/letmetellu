@@ -23,7 +23,7 @@ export default async function OpenGraphImage({ params }: Props) {
   const { slug } = await params;
   const channel = await getPublicChannelPreview(slug);
   const name = channel?.name || "yap.";
-  const color = channel?.bubbleColor || "#3b8df0";
+  const color = channel?.bubbleColor || "#3598fe";
   const initial = name.slice(0, 1).toUpperCase();
 
   return new ImageResponse(

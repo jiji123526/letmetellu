@@ -55,7 +55,7 @@ export async function getPublicChannelPreview(channelId: string): Promise<Public
       : channelId;
     const bubbleColor = typeof channel.bubble_color === "string" && /^#[0-9a-f]{6}$/i.test(channel.bubble_color)
       ? channel.bubble_color
-      : "#3b8df0";
+      : "#3598fe";
 
     return {
       id: channelId,

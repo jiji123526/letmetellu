@@ -74,7 +74,7 @@ export function OwnerChannelsPopup({ currentChannelId, bubbleColor, onClose }: O
                   <span
                     className="w-[52px] h-[52px] rounded-full overflow-hidden flex items-center justify-center text-white text-[18px] font-semibold"
                     style={{
-                      backgroundColor: ownerChannel.bubble_color || "#3b8df0",
+                      backgroundColor: ownerChannel.bubble_color || "#3598fe",
                       backgroundImage: ownerChannel.profile_image ? `url("${ownerChannel.profile_image}")` : undefined,
                       backgroundPosition: "center",
                       backgroundSize: "cover",

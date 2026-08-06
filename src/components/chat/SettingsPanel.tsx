@@ -5,7 +5,7 @@ import { useLocale } from "@/hooks/useLocale";
 import { useSession } from "next-auth/react";
 import { saveFontSize } from "@/components/UserPreferencesSync";
 
-const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
+const BUBBLE_COLORS = ["#3598fe", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 
 function darkenColor(hex: string, amount: number): string {
   const num = parseInt(hex.slice(1), 16);

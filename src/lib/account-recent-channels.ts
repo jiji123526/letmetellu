@@ -22,7 +22,7 @@ export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
     id: channel.id,
     name: channel.name,
     profileImage: decorateMediaUrl(channel.profile_image),
-    bubbleColor: channel.personal_bubble_color || channel.bubble_color || "#3b8df0",
+    bubbleColor: channel.personal_bubble_color || channel.bubble_color || "#3598fe",
     hasPasscode: channel.has_passcode === 1,
     ownerName: channel.owner_name || "",
     ownerUid: channel.owner_uid,

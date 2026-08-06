@@ -271,7 +271,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     ownerChannelCount,
     inLiveMode,
     liveActive,
-    bubbleColor: localBubbleColor || channel?.bubble_color || "#3b8df0",
+    bubbleColor: localBubbleColor || channel?.bubble_color || "#3598fe",
     galleryItems,
     galleryHasMore,
     galleryLoadingRef: galleryLoading,
@@ -411,7 +411,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
-  const bubbleColor = localBubbleColor || channel?.bubble_color || "#3b8df0";
+  const bubbleColor = localBubbleColor || channel?.bubble_color || "#3598fe";
   const settingsActions = useChatChannelSettings({
     channelId,
     bubbleColor,

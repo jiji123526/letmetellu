@@ -55,10 +55,10 @@ export const ReactionBadge = memo(function ReactionBadge({ messageId, reactions:
               borderRadius: "12px",
               border: "1px solid",
               background: data.mine
-                ? "color-mix(in srgb, var(--bubble-sent, #3b8df0) 10%, transparent)"
+                ? "color-mix(in srgb, var(--bubble-sent, #3598fe) 10%, transparent)"
                 : "var(--gray-bubble)",
               borderColor: data.mine
-                ? "var(--bubble-sent, #3b8df0)"
+                ? "var(--bubble-sent, #3598fe)"
                 : "var(--hairline)",
             }}
             onClick={(e) => {
@@ -71,7 +71,7 @@ export const ReactionBadge = memo(function ReactionBadge({ messageId, reactions:
               className="font-normal"
               style={{
                 fontSize: "calc(var(--bubble-font-size) - 5px)",
-                color: data.mine ? "var(--bubble-sent, #3b8df0)" : "var(--meta)",
+                color: data.mine ? "var(--bubble-sent, #3598fe)" : "var(--meta)",
               }}
             >
               {data.count}

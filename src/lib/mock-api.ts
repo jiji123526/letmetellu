@@ -6,7 +6,7 @@ const MOCK_CHANNEL = {
   owner_uid: "owner-001",
   name: "Test Channel",
   profile_image: null,
-  bubble_color: "#3b8df0",
+  bubble_color: "#3598fe",
   passcode: null,
   notice: JSON.stringify([{ title: "채널 규칙", items: ["서로 존중해주세요", "광고/스팸 금지", "개인정보 공유 금지"] }]),
   is_frozen: 0,

@@ -70,7 +70,7 @@ export function LiveTitlePrompt({ onStart, onCancel }: { onStart: (title: string
           type="text"
           placeholder={t("liveEnterPlaceholder")}
           style={{ width: "100%", background: "var(--card)", border: "1.5px solid var(--input-border)", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", boxSizing: "border-box" as const, outline: "none", lineHeight: 1 }}
-          onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
+          onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--bubble-sent, #3598fe)"; }}
           onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--input-border)"; }}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && inputRef?.value.trim()) { onStart(inputRef.value.trim()); } }}
         />

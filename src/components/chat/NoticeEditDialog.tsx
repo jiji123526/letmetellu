@@ -38,7 +38,7 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
           maxLength={NOTICE_TITLE_MAX_LENGTH}
           placeholder={t("noticeTitlePlaceholder")}
           style={{ width: "100%", background: "var(--card)", border: "1.5px solid #e0e0e0", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", boxSizing: "border-box" as const, marginBottom: "8px", outline: "none", lineHeight: 1 }}
-          onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
+          onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "var(--bubble-sent, #3598fe)"; }}
           onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e0e0e0"; }}
         />
 
@@ -49,7 +49,7 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
           rows={4}
           placeholder={t("noticeBodyPlaceholder")}
           style={{ width: "100%", background: "var(--card)", border: "1.5px solid #e0e0e0", borderRadius: "12px", padding: "11px 14px", fontSize: "var(--bubble-font-size, 14px)", fontFamily: "inherit", color: "var(--gray-text)", resize: "none", lineHeight: 1.5, boxSizing: "border-box" as const, outline: "none" }}
-          onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
+          onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "var(--bubble-sent, #3598fe)"; }}
           onBlur={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "#e0e0e0"; }}
         />
         <div style={{ marginTop: "5px", textAlign: "right", fontSize: "calc(var(--bubble-font-size, 14px) - 3px)", color: "var(--meta)" }}>
@@ -58,7 +58,7 @@ export function NoticeEditDialog({ currentTitle, currentBody, onSave, onClose }:
 
         <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
           <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--card)", color: "var(--secondary-text)", lineHeight: 1 }} onClick={onClose}>{t("cancel")}</button>
-          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--bubble-sent, #3b8df0)", color: "#fff", lineHeight: 1 }} onClick={() => { onSave(title.trim(), body.trim()); onClose(); }}>{t("save")}</button>
+          <button style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", background: "var(--bubble-sent, #3598fe)", color: "#fff", lineHeight: 1 }} onClick={() => { onSave(title.trim(), body.trim()); onClose(); }}>{t("save")}</button>
         </div>
       </div>
     </div>

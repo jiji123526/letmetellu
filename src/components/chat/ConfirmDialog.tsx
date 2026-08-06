@@ -28,7 +28,7 @@ export function ConfirmDialog({ title, message, confirmLabel, cancelLabel, confi
         <div style={{ fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", color: "var(--meta, #8e8e93)", marginBottom: "18px", lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: message }} />
         <div style={{ display: "flex", gap: "8px" }}>
           {showCancel && <button disabled={disabled} style={{ flex: 1, border: "none", borderRadius: "12px", padding: "12px", fontSize: "calc(var(--bubble-font-size, 16px) - 2px)", cursor: disabled ? "wait" : "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--card, #f2f2f7)", color: "var(--secondary-text, #3c3c43)", opacity: disabled ? 0.65 : 1 }} onClick={onCancel}>{cancelLabel || t("cancel")}</button>}
-          <button disabled={disabled} style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: disabled ? "wait" : "pointer", fontFamily: "inherit", lineHeight: 1, background: confirmColor || "var(--bubble-sent, #3b8df0)", color: "#fff", opacity: disabled ? 0.65 : 1 }} onClick={() => { onConfirm(); }}>{confirmLabel || t("confirm")}</button>
+          <button disabled={disabled} style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: disabled ? "wait" : "pointer", fontFamily: "inherit", lineHeight: 1, background: confirmColor || "var(--bubble-sent, #3598fe)", color: "#fff", opacity: disabled ? 0.65 : 1 }} onClick={() => { onConfirm(); }}>{confirmLabel || t("confirm")}</button>
         </div>
       </div>
     </div>

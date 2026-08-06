@@ -6,7 +6,7 @@ CREATE TABLE channels (
   owner_uid TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT 'My Channel',
   profile_image TEXT,
-  bubble_color TEXT DEFAULT '#3b8df0',
+  bubble_color TEXT DEFAULT '#3598fe',
   passcode TEXT,
   notice TEXT DEFAULT '[]',
   is_frozen INTEGER DEFAULT 0,

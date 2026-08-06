@@ -49,7 +49,7 @@ export function ChatViewPasscodeGate({
       channelId={channelId}
       channelName={passcodeGate.name}
       profileImage={passcodeGate.profile_image}
-      bubbleColor={passcodeGate.bubble_color || "#3b8df0"}
+      bubbleColor={passcodeGate.bubble_color || "#3598fe"}
       passcodeHint={passcodeGate.passcodeHint}
       notice={passcodeGate.notice}
       onSuccess={onSuccess}

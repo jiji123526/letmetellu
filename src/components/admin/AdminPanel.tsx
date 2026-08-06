@@ -45,7 +45,7 @@ interface AdminPanelProps {
 
 type PanelView = "main" | "channel" | "manage" | "profile" | "color" | "background" | "passcode" | "rules" | "welcome" | "banned-words" | "blocked";
 
-const BUBBLE_COLORS = ["#3b8df0", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
+const BUBBLE_COLORS = ["#3598fe", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 const BACKGROUND_COLORS = ["#f2f2f7", "#eef5ff", "#f2efff", "#eef8f2", "#fff5e8", "#fff0f3", "#202124"];
 const BACKGROUND_IMAGE_MAX_DIMENSION = 1920;
 const BACKGROUND_IMAGE_COMPRESSION_THRESHOLD = 2 * 1024 * 1024;
@@ -246,7 +246,7 @@ export function AdminPanel(props: AdminPanelProps) {
   );
 
   const inputStyle: React.CSSProperties = { width: "100%", border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--gray-text)", borderRadius: "12px", padding: "11px 14px", fontSize: "15px", fontFamily: "inherit", marginBottom: "8px", lineHeight: 1 };
-  const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
+  const saveBtnStyle: React.CSSProperties = { width: "100%", border: "none", cursor: "pointer", background: "var(--bubble-sent, #3598fe)", color: "#fff", fontWeight: 500, fontSize: "15px", borderRadius: "12px", padding: "12px", fontFamily: "inherit", lineHeight: 1 };
 
   const title = { main: t("adminSettingsTitle"), channel: t("channel"), manage: t("manage"), profile: t("profile"), color: t("color"), background: t("chatBackground"), passcode: t("passcode"), rules: t("rules"), welcome: t("welcomePopup"), "banned-words": t("bannedWords"), blocked: t("blockedUsers") }[view];
 
@@ -653,7 +653,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 <option value="30">{ t("days30")}</option>
               </select>
               <button
-                style={{ width: "calc(var(--bubble-font-size) + 19px)", height: "calc(var(--bubble-font-size) + 19px)", borderRadius: "50%", border: "none", background: "var(--bubble-sent, #3b8df0)", color: "#fff", fontSize: "var(--bubble-font-size)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                style={{ width: "calc(var(--bubble-font-size) + 19px)", height: "calc(var(--bubble-font-size) + 19px)", borderRadius: "50%", border: "none", background: "var(--bubble-sent, #3598fe)", color: "#fff", fontSize: "var(--bubble-font-size)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
                 onClick={addBannedWord}
               >+</button>
             </div>

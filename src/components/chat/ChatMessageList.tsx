@@ -206,7 +206,7 @@ const MessageRow = React.memo(function MessageRow({
                 rel="noopener noreferrer"
                 onClick={(event) => event.stopPropagation()}
                 style={{
-                  color: "var(--bubble-sent, #3b8df0)",
+                  color: "var(--bubble-sent, #3598fe)",
                   textDecoration: "underline",
                   textUnderlineOffset: "2px",
                 }}

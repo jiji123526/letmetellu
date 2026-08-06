@@ -107,7 +107,7 @@ export function PlusMenu({
             style={{
               ...itemStyle,
               borderBottom: index === reportFilterItems.length - 1 ? "none" : "0.5px solid var(--hairline)",
-              color: reportFilter === item.key ? "var(--bubble-sent, #3b8df0)" : "var(--gray-text)",
+              color: reportFilter === item.key ? "var(--bubble-sent, #3598fe)" : "var(--gray-text)",
               fontWeight: reportFilter === item.key ? 700 : 500,
             }}
             onClick={() => {

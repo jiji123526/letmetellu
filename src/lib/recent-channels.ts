@@ -49,7 +49,7 @@ export function getRecentChannels(): RecentChannel[] {
       )
       .map((item) => ({
         ...item,
-        bubbleColor: typeof item.bubbleColor === "string" && item.bubbleColor ? item.bubbleColor : "#3b8df0",
+        bubbleColor: typeof item.bubbleColor === "string" && item.bubbleColor ? item.bubbleColor : "#3598fe",
         hasPasscode: item.hasPasscode === true,
         ownerName: typeof item.ownerName === "string" ? item.ownerName : "",
         pinned: item.pinned === true,

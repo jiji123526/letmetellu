@@ -728,7 +728,7 @@ function DashboardPageContent() {
           id: channel.id,
           name: channel.name,
           profileImage: channel.profile_image,
-          bubbleColor: previewColor(channel.id, channel.bubble_color || "#3b8df0"),
+          bubbleColor: previewColor(channel.id, channel.bubble_color || "#3598fe"),
           hasPasscode: channel.has_passcode === 1,
           ownerName: channel.owner_name || "",
           meta: `/ch/${channel.id}`,
@@ -754,7 +754,7 @@ function DashboardPageContent() {
         id: channel.id,
         name: channel.name,
         profileImage: channel.profileImage,
-        bubbleColor: channel.bubbleColor || "#3b8df0",
+        bubbleColor: channel.bubbleColor || "#3598fe",
         hasPasscode: channel.hasPasscode,
         ownerName: channel.ownerName,
         meta: `/ch/${channel.id}`,
@@ -774,7 +774,7 @@ function DashboardPageContent() {
           id: channel.id,
           name: channel.name,
           profileImage: channel.profileImage,
-          bubbleColor: previewColor(channel.id, channel.bubbleColor || "#3b8df0"),
+          bubbleColor: previewColor(channel.id, channel.bubbleColor || "#3598fe"),
           hasPasscode: channel.hasPasscode,
           ownerName: channel.ownerName,
           meta: `/ch/${channel.id}`,
@@ -796,7 +796,7 @@ function DashboardPageContent() {
         id: linkedChannel.id,
         name: linkedChannel.name,
         profileImage: linkedChannel.profile_image,
-        bubbleColor: previewColor(linkedChannel.id, linkedChannel.bubble_color || "#3b8df0"),
+        bubbleColor: previewColor(linkedChannel.id, linkedChannel.bubble_color || "#3598fe"),
         hasPasscode: linkedChannel.has_passcode === 1,
         ownerName: linkedChannel.owner_name || "",
         meta: `/ch/${linkedChannel.id}`,
@@ -1724,7 +1724,7 @@ function DashboardPageContent() {
                       className="w-[50px] h-[50px] rounded-full flex-shrink-0 flex items-center justify-center overflow-hidden"
                       style={{
                         background: item.supportIconBg || "var(--card)",
-                        color: item.supportIconColor || "var(--bubble-sent, #3b8df0)",
+                        color: item.supportIconColor || "var(--bubble-sent, #3598fe)",
                       }}
                       dangerouslySetInnerHTML={{
                         __html: item.supportIcon.replace(/<svg/, `<svg style="width:24px;height:24px"`),

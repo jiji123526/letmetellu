@@ -60,7 +60,7 @@ export function EditDialog({ currentText, onSave, onClose, inline = false }: Edi
           boxSizing: "border-box",
           outline: "none",
         }}
-        onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "var(--bubble-sent, #3b8df0)"; }}
+        onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "var(--bubble-sent, #3598fe)"; }}
         onBlur={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "#e0e0e0"; }}
       />
 
@@ -73,7 +73,7 @@ export function EditDialog({ currentText, onSave, onClose, inline = false }: Edi
           {t("cancel")}
         </button>
         <button
-          style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--bubble-sent, #3b8df0)", color: "#fff" }}
+          style={{ flex: 1, border: "none", borderRadius: "12px", padding: "11px", fontSize: "var(--bubble-font-size, 14px)", cursor: "pointer", fontFamily: "inherit", lineHeight: 1, background: "var(--bubble-sent, #3598fe)", color: "#fff" }}
           onClick={() => { if (text.trim()) { onSave(text.trim()); onClose(); } }}
         >
           {t("save")}

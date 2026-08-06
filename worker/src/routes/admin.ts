@@ -158,8 +158,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       if (existing) return Response.json({ error: "channel already exists" }, { status: 409 });
 
       const result = await env.DB.prepare(`
-        INSERT INTO channels (id, owner_uid, name, instance_id, show_on_profile)
-        SELECT ?, ?, ?, ?, 0
+        INSERT INTO channels (id, owner_uid, name, instance_id, show_on_profile, bubble_color)
+        SELECT ?, ?, ?, ?, 0, '#3598fe'
         WHERE (
           SELECT COUNT(*)
           FROM channels

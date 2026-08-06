@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Default bubble color — 2026-08-06
+
+- The default sent-bubble color is now `#3598fe` across initial CSS, UI fallbacks, channel previews, Open Graph images and both admin/viewer color presets.
+- New channel creation explicitly stores `#3598fe` in D1 instead of depending on the legacy production column default.
+- The initial schema default is updated for fresh installations; no production schema rewrite or data backfill is required.
+- Existing channel colors and per-user channel color overrides remain unchanged.
+
+Trade-off: existing channels that still store the former default continue to display that saved color until an owner changes it. This avoids silently overwriting a channel's persisted appearance.
+
+Deployment note: deploy the Worker and frontend; no D1 migration is required.
+
 ### Adaptive widget preloading and visible-first rendering — 2026-08-06
 
 - When mounted chat history contains X or Instagram links, the corresponding third-party SDK begins downloading during browser idle time without eagerly rendering every widget.

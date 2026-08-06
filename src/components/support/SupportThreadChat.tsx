@@ -68,7 +68,7 @@ export function SupportThreadChat({
   canSend = true,
 }: SupportThreadChatProps) {
   const { t } = useLocale();
-  const selfBubbleColor = selfRole === "platform_admin" ? "#202251" : "var(--bubble-sent, #3b8df0)";
+  const selfBubbleColor = selfRole === "platform_admin" ? "#202251" : "var(--bubble-sent, #3598fe)";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
