@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Default font size — 2026-08-06
+
+- Users without a saved font-size preference now start at 15px instead of 17px.
+- The CSS first-render value, local/account preference fallback and settings-panel fallback use the same 15px default.
+- Existing font-size choices saved in the browser or user account remain unchanged.
+
+Trade-off: new and previously unset profiles show slightly denser dashboard and chat typography; users can still adjust the size from 12px to 20px in general settings.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Reply widget width containment — 2026-08-06
 
 - Wide reply bubbles now stay within the same 85% row limit as ordinary text replies.

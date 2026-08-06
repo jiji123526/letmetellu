@@ -27,8 +27,8 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
   const { locale, setLocale, t } = useLocale();
   const { status } = useSession();
   const [fontSize, setFontSize] = useState(() => {
-    if (typeof window === "undefined") return 17;
-    return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bubble-font-size")) || 17;
+    if (typeof window === "undefined") return 15;
+    return parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bubble-font-size")) || 15;
   });
   const [selectedColor, setSelectedColor] = useState(currentColor);
   const colorInputRef = useRef<HTMLInputElement>(null);

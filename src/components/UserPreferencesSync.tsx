@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 
-const DEFAULT_FONT_SIZE = 17;
+const DEFAULT_FONT_SIZE = 15;
 const DEFAULT_LOCALE = "ko";
 
 function normalizeLocale(value: unknown): "ko" | "en" {
