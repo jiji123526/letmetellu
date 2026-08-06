@@ -3,21 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 
-interface TwitterWidgets {
-  createTweet: (
-    id: string,
-    element: HTMLElement,
-    options: { theme: string; conversation: string; width: number },
-  ) => Promise<unknown>;
-}
-
 interface InstagramEmbeds {
   process: () => void;
 }
 
 declare global {
   interface Window {
-    twttr?: { widgets?: TwitterWidgets; _e?: Array<() => void> };
     instgrm?: { Embeds?: InstagramEmbeds };
   }
 }
@@ -30,6 +21,7 @@ const TWITTER_REGEX = /https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
 const INSTAGRAM_REGEX = /https?:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
 const URL_REGEX = /https?:\/\/[^\s<]+/g;
 const NATIVE_EMBED_WIDTH = 320;
+const EMBED_PREVIEW_ROOT_MARGIN = "720px";
 
 interface PreviewData {
   title: string;
@@ -79,6 +71,32 @@ function normalizeInstagramEmbedUrl(rawUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+function useDeferredEmbedVisibility(rootMargin: string) {
+  const targetRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const target = targetRef.current;
+    if (!target || isVisible) return;
+    if (typeof IntersectionObserver === "undefined") {
+      const frame = requestAnimationFrame(() => setIsVisible(true));
+      return () => cancelAnimationFrame(frame);
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setIsVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin });
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [isVisible, rootMargin]);
+
+  return { targetRef, isVisible };
 }
 
 function useResponsiveEmbedScale() {
@@ -146,30 +164,51 @@ function YouTubeEmbed({ url, onReady }: { url: string; onReady: (url: string) =>
 
 function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolean; onReady: (url: string) => void }) {
   const [data, setData] = useState<PreviewData | null>(previewCache.get(url) || null);
-  const [loading, setLoading] = useState(!previewCache.has(url));
+  const [hasResolved, setHasResolved] = useState(previewCache.has(url));
+  const { targetRef, isVisible } = useDeferredEmbedVisibility(EMBED_PREVIEW_ROOT_MARGIN);
 
   useEffect(() => {
     if (previewCache.has(url)) return;
+    if (!isVisible) return;
 
+    let cancelled = false;
     requestPreview(url)
       .then((result) => {
-        if (result) {
-          setData(result);
-          onReady(url);
-        }
+        if (cancelled) return;
+        setData(result);
+        setHasResolved(true);
       })
-      .finally(() => setLoading(false));
-  }, [onReady, url]);
+      .catch(() => {
+        if (!cancelled) {
+          setHasResolved(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isVisible, url]);
 
   useEffect(() => {
     if (data) onReady(url);
   }, [data, onReady, url]);
 
-  if (loading) return <MediaLoadingDots />;
+  if (!isVisible && !previewCache.has(url)) {
+    return (
+      <div style={{ position: "relative", width: "100%", height: 0, overflow: "visible" }} aria-hidden="true">
+        <div
+          ref={targetRef}
+          style={{ position: "absolute", inset: 0, height: "1px", pointerEvents: "none" }}
+        />
+      </div>
+    );
+  }
+  if (!hasResolved) return null;
   if (!data) return null;
 
   return (
     <a
+      className="link-preview-card"
       href={data.url}
       target="_blank"
       rel="noopener noreferrer"
@@ -221,62 +260,6 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
         )}
       </div>
     </a>
-  );
-}
-
-function TwitterEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
-  const tweetId = url.match(/status\/(\d+)/)?.[1];
-  const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    onReady(url);
-  }, [onReady, url]);
-
-  useEffect(() => {
-    const container = contentRef.current;
-    if (!tweetId || !container) return;
-
-    const render = () => {
-      if (window.twttr?.widgets?.createTweet) {
-        window.twttr.widgets.createTweet(tweetId, container, {
-          theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
-          conversation: "none",
-          width: NATIVE_EMBED_WIDTH,
-        }).then(() => setLoading(false)).catch(() => setLoading(false));
-      }
-    };
-
-    if (window.twttr?.widgets) {
-      render();
-    } else {
-      if (!document.getElementById("twitter-wjs")) {
-        const script = document.createElement("script");
-        script.id = "twitter-wjs";
-        script.src = "https://platform.twitter.com/widgets.js";
-        script.async = true;
-        document.body.appendChild(script);
-      }
-      window.twttr = window.twttr || { _e: [] };
-      (window.twttr._e ||= []).push(render);
-    }
-  }, [tweetId, contentRef]);
-
-  if (!tweetId) return null;
-
-  return (
-    <div
-      ref={frameRef}
-      className="native-chat-embed"
-      style={{ position: "relative", width: loading ? "auto" : `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "calc(var(--bubble-font-size) * 1.38)" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
-    >
-      {loading && <MediaLoadingDots />}
-      <div
-        ref={contentRef}
-        className="native-chat-embed-scale"
-        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left", visibility: loading ? "hidden" : "visible" }}
-      />
-    </div>
   );
 }
 
@@ -380,9 +363,9 @@ export function MessageEmbeds({
     if (YOUTUBE_REGEX.test(url)) {
       return <YouTubeEmbed url={url} onReady={onEmbedReady} />;
     }
-    // Twitter/X — native widget
+    // Twitter/X — lightweight preview card via worker metadata
     if (TWITTER_REGEX.test(url)) {
-      return <TwitterEmbed url={url} onReady={onEmbedReady} />;
+      return <LinkPreviewCard url={url} isMine={isMine} onReady={onEmbedReady} />;
     }
     // Instagram — native widget
     if (INSTAGRAM_REGEX.test(url)) {

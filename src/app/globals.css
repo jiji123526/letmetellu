@@ -204,8 +204,11 @@ body {
   display: none !important;
 }
 
-/* Rectangular widgets look uneven with text bubbles' wider side padding. */
-[data-bubble]:has(.message-embeds):not(:has(.media-loading-dots)) {
+/* Apply tighter padding only once an actual preview/widget is present. */
+[data-bubble]:has(.message-embeds iframe):not(:has(.media-loading-dots)),
+[data-bubble]:has(.message-embeds video):not(:has(.media-loading-dots)),
+[data-bubble]:has(.message-embeds .native-chat-embed):not(:has(.media-loading-dots)),
+[data-bubble]:has(.message-embeds .link-preview-card):not(:has(.media-loading-dots)) {
   padding: calc(var(--bubble-font-size) * 0.588) !important;
 }
 
