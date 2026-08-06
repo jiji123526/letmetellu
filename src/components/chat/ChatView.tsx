@@ -471,10 +471,12 @@ export function ChatView({ channelId }: { channelId: string }) {
     handleScroll,
     scrollToBottom,
     scrollToMessage,
+    restoreRefreshPosition,
   } = useChatHistoryNavigation({
     channelId,
     messages,
     historyMode,
+    enabled: !loading && !passcodeGate && !showChannelDeleted,
     messagesContainerRef,
     messagesEndRef,
     inLiveModeRef,
@@ -542,10 +544,22 @@ export function ChatView({ channelId }: { channelId: string }) {
   useEffect(() => {
     if (loading || passcodeGate || initialScrollDoneRef.current) return;
     initialScrollDoneRef.current = true;
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-    });
-  }, [loading, passcodeGate]);
+    let cancelled = false;
+
+    void (async () => {
+      const restored = await restoreRefreshPosition();
+      if (cancelled || restored) return;
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        }
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, passcodeGate, restoreRefreshPosition]);
 
   // Effective admin state (false when viewing as user)
   const {

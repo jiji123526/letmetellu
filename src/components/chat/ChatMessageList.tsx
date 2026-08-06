@@ -104,6 +104,7 @@ const MessageRow = React.memo(function MessageRow({
   const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const showEmbeds = !!msg.text && !msg.report && !msg.image && !isInboxMessage;
   const hasCaptionedWidget = showEmbeds && hasWidgetCaption(msg.text);
+  const usesWideWidgetBubble = hasCaptionedWidget;
   const reportMeta = msg.report_meta;
   const petitionMeta = msg.petition_meta;
   const inboxChannel = reportMeta

@@ -13,8 +13,6 @@ declare global {
   }
 }
 
-const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
-
 // URL patterns
 const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/;
 const TWITTER_REGEX = /https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
@@ -42,7 +40,7 @@ function requestPreview(url: string): Promise<PreviewData | null> {
   const pending = previewRequests.get(url);
   if (pending) return pending;
 
-  const request = fetch(`${WORKER_URL}/api/preview?url=${encodeURIComponent(url)}`)
+  const request = fetch(`/api/preview?url=${encodeURIComponent(url)}`)
     .then((response) => response.ok ? response.json() as Promise<PreviewData | null> : null)
     .then((result) => {
       const normalized = result && (result.title || result.image) ? result : null;

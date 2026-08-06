@@ -16,6 +16,7 @@ interface UseChatHistoryNavigationArgs {
   channelId: string;
   messages: Message[];
   historyMode: HistoryMode;
+  enabled: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   inLiveModeRef: MutableRefObject<boolean>;
@@ -32,7 +33,22 @@ interface UseChatHistoryNavigationResult {
   handleScroll: () => void;
   scrollToBottom: () => void;
   scrollToMessage: (msgId: string) => Promise<void>;
+  restoreRefreshPosition: () => Promise<boolean>;
 }
+
+interface ScrollAnchor {
+  id: string;
+  top: number;
+}
+
+interface SavedScrollPosition {
+  messageId: string;
+  offset: number;
+  live: boolean;
+  savedAt: number;
+}
+
+const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
 
 function flashBubble(element: HTMLElement | null) {
   if (!element) return;
@@ -70,6 +86,23 @@ function hasPendingPositioningContent(container: HTMLElement, target: HTMLElemen
     if (node instanceof HTMLImageElement) return !node.complete;
     return node instanceof HTMLVideoElement && node.readyState < HTMLMediaElement.HAVE_METADATA;
   });
+}
+
+function findScrollAnchor(container: HTMLElement): ScrollAnchor | null {
+  const containerTop = container.getBoundingClientRect().top;
+  const messages = container.querySelectorAll<HTMLElement>('[id^="msg-"]');
+
+  for (const message of messages) {
+    const rect = message.getBoundingClientRect();
+    if (rect.bottom > containerTop + 1) {
+      return {
+        id: message.id,
+        top: rect.top - containerTop,
+      };
+    }
+  }
+
+  return null;
 }
 
 async function waitForStableMessageLayout(
@@ -113,6 +146,7 @@ export function useChatHistoryNavigation({
   channelId,
   messages,
   historyMode,
+  enabled,
   messagesContainerRef,
   messagesEndRef,
   inLiveModeRef,
@@ -128,10 +162,116 @@ export function useChatHistoryNavigation({
   const hasMoreMessagesRef = useRef(true);
   const hasMoreNewerMessagesRef = useRef(false);
   const navigationRequestRef = useRef(0);
+  const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
+  const restoreAnchorFrameRef = useRef<number | null>(null);
+  const pageExitRef = useRef(false);
+  const scrollStorageKey = `chatScrollPosition:${channelId}`;
 
   useEffect(() => {
     historyModeRef.current = historyMode;
   }, [historyMode]);
+
+  const saveScrollPosition = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const containerTop = container.getBoundingClientRect().top;
+    const messageElements = [...container.querySelectorAll<HTMLElement>('[id^="msg-"]')];
+    const anchor = messageElements.find((element) => element.getBoundingClientRect().bottom > containerTop)
+      || messageElements.at(-1);
+    if (!anchor) return;
+
+    const position: SavedScrollPosition = {
+      messageId: anchor.id.slice(4),
+      offset: anchor.getBoundingClientRect().top - containerTop,
+      live: inLiveModeRef.current,
+      savedAt: Date.now(),
+    };
+
+    sessionStorage.setItem(scrollStorageKey, JSON.stringify(position));
+  }, [inLiveModeRef, messagesContainerRef, scrollStorageKey]);
+
+  useEffect(() => {
+    const handlePageExit = () => {
+      pageExitRef.current = true;
+      saveScrollPosition();
+    };
+
+    const handlePageShow = () => {
+      pageExitRef.current = false;
+    };
+
+    window.addEventListener("beforeunload", handlePageExit);
+    window.addEventListener("pagehide", handlePageExit);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.removeEventListener("beforeunload", handlePageExit);
+      window.removeEventListener("pagehide", handlePageExit);
+      window.removeEventListener("pageshow", handlePageShow);
+      if (!pageExitRef.current) sessionStorage.removeItem(scrollStorageKey);
+    };
+  }, [saveScrollPosition, scrollStorageKey]);
+
+  const updateScrollAnchor = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container || isNearBottomRef.current) {
+      scrollAnchorRef.current = null;
+      return;
+    }
+    scrollAnchorRef.current = findScrollAnchor(container);
+  }, [messagesContainerRef]);
+
+  const restoreScrollAnchor = useCallback(() => {
+    const container = messagesContainerRef.current;
+    const anchor = scrollAnchorRef.current;
+    if (!container || !anchor || isNearBottomRef.current || loadingMoreRef.current) return;
+
+    const element = document.getElementById(anchor.id);
+    if (!element) return;
+
+    const containerTop = container.getBoundingClientRect().top;
+    const nextTop = element.getBoundingClientRect().top - containerTop;
+    const delta = nextTop - anchor.top;
+    if (Math.abs(delta) > 1) {
+      container.scrollTop += delta;
+    }
+  }, [messagesContainerRef]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const scheduleRestore = () => {
+      if (restoreAnchorFrameRef.current !== null) {
+        cancelAnimationFrame(restoreAnchorFrameRef.current);
+      }
+      restoreAnchorFrameRef.current = requestAnimationFrame(() => {
+        restoreAnchorFrameRef.current = requestAnimationFrame(() => {
+          restoreScrollAnchor();
+          updateScrollAnchor();
+        });
+      });
+    };
+
+    const observer = new MutationObserver(scheduleRestore);
+    observer.observe(container, { childList: true, subtree: true });
+    container.addEventListener("load", scheduleRestore, true);
+    container.addEventListener("loadedmetadata", scheduleRestore, true);
+    container.addEventListener("error", scheduleRestore, true);
+
+    return () => {
+      observer.disconnect();
+      container.removeEventListener("load", scheduleRestore, true);
+      container.removeEventListener("loadedmetadata", scheduleRestore, true);
+      container.removeEventListener("error", scheduleRestore, true);
+      if (restoreAnchorFrameRef.current !== null) {
+        cancelAnimationFrame(restoreAnchorFrameRef.current);
+        restoreAnchorFrameRef.current = null;
+      }
+    };
+  }, [enabled, messagesContainerRef, restoreScrollAnchor, updateScrollAnchor]);
 
   const returnToLatest = useCallback(async () => {
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
@@ -144,6 +284,7 @@ export function useChatHistoryNavigation({
       hasMoreNewerMessagesRef.current = false;
       hasMoreMessagesRef.current = (data.messages?.length || 0) >= 50;
       isNearBottomRef.current = true;
+      scrollAnchorRef.current = null;
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       });
@@ -160,6 +301,7 @@ export function useChatHistoryNavigation({
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     isNearBottomRef.current = distanceFromBottom <= 120;
     setShowScrollBtn(distanceFromBottom > 200);
+    updateScrollAnchor();
 
     if (
       element.scrollTop < 50
@@ -249,7 +391,7 @@ export function useChatHistoryNavigation({
           loadingMoreRef.current = false;
         });
     }
-  }, [channelId, inLiveModeRef, messages, messagesContainerRef, setHistoryMode, setMessages, setShowScrollBtn]);
+  }, [channelId, inLiveModeRef, messages, messagesContainerRef, setHistoryMode, setMessages, setShowScrollBtn, updateScrollAnchor]);
 
   const scrollToBottom = useCallback(() => {
     if (historyModeRef.current === "context") {
@@ -257,6 +399,7 @@ export function useChatHistoryNavigation({
       return;
     }
     isNearBottomRef.current = true;
+    scrollAnchorRef.current = null;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setShowScrollBtn(false);
   }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
@@ -310,11 +453,73 @@ export function useChatHistoryNavigation({
     }
   }, [channelId, inLiveModeRef, messagesContainerRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 
+  const restoreRefreshPosition = useCallback(async () => {
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const rawPosition = sessionStorage.getItem(scrollStorageKey);
+    sessionStorage.removeItem(scrollStorageKey);
+    if (navigation?.type !== "reload") return false;
+    if (!rawPosition) return false;
+
+    let position: SavedScrollPosition;
+    try {
+      position = JSON.parse(rawPosition) as SavedScrollPosition;
+    } catch {
+      return false;
+    }
+
+    if (
+      !position.messageId
+      || !Number.isFinite(position.offset)
+      || !Number.isFinite(position.savedAt)
+      || position.live !== inLiveModeRef.current
+      || Date.now() - position.savedAt > SCROLL_POSITION_MAX_AGE_MS
+    ) {
+      return false;
+    }
+
+    let element = document.getElementById(`msg-${position.messageId}`);
+    if (!element) {
+      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+      try {
+        const data = await fetchMessageContext(fetchChannel, position.messageId);
+        if (!data.messages?.some((message: Message) => message.id === position.messageId)) return false;
+        setMessages(data.messages as Message[]);
+        historyModeRef.current = "context";
+        setHistoryMode("context");
+        setNewerMessageCount(0);
+        hasMoreMessagesRef.current = data.has_older !== false;
+        hasMoreNewerMessagesRef.current = data.has_newer !== false;
+        element = await waitForMessageElement(position.messageId);
+      } catch {
+        return false;
+      }
+    }
+
+    const container = messagesContainerRef.current;
+    if (!container || !element) return false;
+
+    const alignToSavedOffset = () => {
+      const containerTop = container.getBoundingClientRect().top;
+      container.scrollTop += element!.getBoundingClientRect().top - containerTop - position.offset;
+    };
+
+    alignToSavedOffset();
+    await waitForStableMessageLayout(container, element);
+    alignToSavedOffset();
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    isNearBottomRef.current = distanceFromBottom <= 120;
+    scrollAnchorRef.current = isNearBottomRef.current ? null : findScrollAnchor(container);
+    setShowScrollBtn(distanceFromBottom > 200);
+    return true;
+  }, [channelId, inLiveModeRef, messagesContainerRef, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn]);
+
   return {
     historyModeRef,
     isNearBottomRef,
     handleScroll,
     scrollToBottom,
     scrollToMessage,
+    restoreRefreshPosition,
   };
 }
