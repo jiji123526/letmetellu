@@ -8,6 +8,12 @@ import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/vali
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
 
+function normalizeBubbleColor(value: unknown): unknown {
+  return typeof value === "string" && value.toLowerCase() === "#3b8df0"
+    ? "#3598fe"
+    : value;
+}
+
 async function isProtectedAdminSender(input: {
   env: Env;
   uid: string | null;
@@ -487,10 +493,14 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const updates: string[] = [];
       const values: unknown[] = [];
       let previousBackgroundImage: string | null = null;
+      const normalizedBubbleColor = normalizeBubbleColor(bubble_color);
 
       if (name !== undefined) { updates.push("name = ?"); values.push(name); }
       if (profile_image !== undefined) { updates.push("profile_image = ?"); values.push(profile_image); }
-      if (bubble_color !== undefined) { updates.push("bubble_color = ?"); values.push(bubble_color); }
+      if (bubble_color !== undefined) {
+        updates.push("bubble_color = ?");
+        values.push(normalizedBubbleColor);
+      }
       if (show_on_profile !== undefined) {
         updates.push("show_on_profile = ?");
         values.push(show_on_profile === true ? 1 : 0);
@@ -564,7 +574,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
             channel_id,
             name,
             profile_image,
-            bubble_color,
+            bubble_color: normalizedBubbleColor,
             show_on_profile,
             background_type,
             background_color,

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { adminAction, uploadAdminImage } from "@/lib/api-chat";
+import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { useLocale } from "@/hooks/useLocale";
 import { ProfileImageCropper } from "./ProfileImageCropper";
 
@@ -373,7 +374,11 @@ export function AdminPanel(props: AdminPanelProps) {
               <button
                 style={{ width: "calc(var(--bubble-font-size, 17px) + 9px)", height: "calc(var(--bubble-font-size, 17px) + 9px)", borderRadius: "50%", background: "conic-gradient(red,orange,yellow,green,cyan,blue,violet,red)", border: "3px solid transparent", outline: !BUBBLE_COLORS.includes(selectedColor) ? `3px solid ${darkenColor(selectedColor, 50)}` : "3px solid transparent", cursor: "pointer", position: "relative", overflow: "hidden" }}
               >
-                <input ref={colorInputRef} type="color" value={selectedColor} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} onChange={(e) => { setSelectedColor(e.target.value); onColorChange(e.target.value); }} />
+                <input ref={colorInputRef} type="color" value={selectedColor} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} onChange={(e) => {
+                  const color = normalizeBubbleColor(e.target.value);
+                  setSelectedColor(color);
+                  onColorChange(color);
+                }} />
               </button>
             </div>
           </div>

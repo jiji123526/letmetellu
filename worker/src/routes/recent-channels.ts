@@ -53,7 +53,9 @@ async function resolveRecentChannelUser(
 }
 
 function validColor(value: unknown): string | null {
-  return typeof value === "string" && COLOR_PATTERN.test(value) ? value.toLowerCase() : null;
+  if (typeof value !== "string" || !COLOR_PATTERN.test(value)) return null;
+  const color = value.toLowerCase();
+  return color === "#3b8df0" ? "#3598fe" : color;
 }
 
 export async function handleRecentChannels(request: Request, env: Env): Promise<Response> {

@@ -1,4 +1,5 @@
 import { decorateMediaUrl } from "./api-core";
+import { normalizeBubbleColor } from "./bubble-color";
 import type { RecentChannel } from "./recent-channels";
 
 interface AccountRecentRow {
@@ -22,7 +23,7 @@ export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
     id: channel.id,
     name: channel.name,
     profileImage: decorateMediaUrl(channel.profile_image),
-    bubbleColor: channel.personal_bubble_color || channel.bubble_color || "#3598fe",
+    bubbleColor: normalizeBubbleColor(channel.personal_bubble_color || channel.bubble_color),
     hasPasscode: channel.has_passcode === 1,
     ownerName: channel.owner_name || "",
     ownerUid: channel.owner_uid,

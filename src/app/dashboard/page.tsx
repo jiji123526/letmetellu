@@ -20,6 +20,7 @@ import {
   type PlatformOperationalHealthResponse,
 } from "@/lib/api-support";
 import { clearRecentChannels, getRecentChannels, markRecentChannelsValidated, removeRecentChannel, shouldValidateRecentChannels, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
 import { FirstChannelOnboarding } from "@/components/dashboard/FirstChannelOnboarding";
@@ -125,9 +126,15 @@ function formatDurationMinutes(minutes: number, locale: "ko" | "en") {
 function getChannelPreviewColor(channelId: string, fallback: string) {
   if (typeof window === "undefined") return fallback;
   try {
-    return localStorage.getItem(`bubbleColor_${channelId}`) || fallback;
+    const storedColor = localStorage.getItem(`bubbleColor_${channelId}`);
+    if (!storedColor) return normalizeBubbleColor(fallback);
+    const normalizedColor = normalizeBubbleColor(storedColor);
+    if (normalizedColor !== storedColor) {
+      localStorage.setItem(`bubbleColor_${channelId}`, normalizedColor);
+    }
+    return normalizedColor;
   } catch {
-    return fallback;
+    return normalizeBubbleColor(fallback);
   }
 }
 

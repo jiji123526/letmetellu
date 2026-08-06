@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { useLocale } from "@/hooks/useLocale";
 import { removeRecentChannel } from "@/lib/recent-channels";
+import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
@@ -120,7 +121,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [viewerAccess, setViewerAccess] = useState<InitData["viewerAccess"]>("standard");
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    return localStorage.getItem(`bubbleColor_${channelId}`);
+    const storedColor = localStorage.getItem(`bubbleColor_${channelId}`);
+    return storedColor ? normalizeBubbleColor(storedColor) : null;
   });
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);

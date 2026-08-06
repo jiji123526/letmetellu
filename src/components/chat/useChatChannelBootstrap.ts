@@ -3,6 +3,7 @@
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { fetchInit } from "@/lib/api-chat";
 import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
+import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { recordRecentChannel } from "@/lib/recent-channels";
 import type { Message } from "./chatTypes";
@@ -103,20 +104,27 @@ export function useChatChannelBootstrap({
       setLocalBubbleColor(null);
       document.documentElement.style.setProperty(
         "--bubble-sent",
-        data.channel.bubble_color || "#3598fe",
+        normalizeBubbleColor(data.channel.bubble_color),
       );
     }
 
-    setChannel(data.channel);
+    const channelBubbleColor = normalizeBubbleColor(data.channel.bubble_color);
+    setChannel({ ...data.channel, bubble_color: channelBubbleColor });
 
-    const savedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
+    const storedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
+    const savedBubbleColor = storedBubbleColor ? normalizeBubbleColor(storedBubbleColor) : null;
+    if (storedBubbleColor && savedBubbleColor && savedBubbleColor !== storedBubbleColor) {
+      setLocalBubbleColor(savedBubbleColor);
+      localStorage.setItem(`bubbleColor_${channelId}`, savedBubbleColor);
+    }
     if (isLoggedIn) {
       void recordAccountRecentChannel(channelId)
         .then(({ record }) => {
           if (!record?.bubble_color) return;
-          setLocalBubbleColor(record.bubble_color);
-          localStorage.setItem(`bubbleColor_${channelId}`, record.bubble_color);
-          document.documentElement.style.setProperty("--bubble-sent", record.bubble_color);
+          const accountBubbleColor = normalizeBubbleColor(record.bubble_color);
+          setLocalBubbleColor(accountBubbleColor);
+          localStorage.setItem(`bubbleColor_${channelId}`, accountBubbleColor);
+          document.documentElement.style.setProperty("--bubble-sent", accountBubbleColor);
         })
         .catch(() => {
           // A temporary sync failure must not block channel entry.
@@ -126,7 +134,7 @@ export function useChatChannelBootstrap({
         id: channelId,
         name: data.channel.name,
         profileImage: data.channel.profile_image,
-        bubbleColor: savedBubbleColor || data.channel.bubble_color || "#3598fe",
+        bubbleColor: savedBubbleColor || channelBubbleColor,
         hasPasscode: data.hasPasscode === true,
         ownerName: data.channel.owner_name || "",
       });
@@ -223,7 +231,7 @@ export function useChatChannelBootstrap({
           setPasscodeGate({
             name: data.channel.name,
             profile_image: data.channel.profile_image,
-            bubble_color: data.channel.bubble_color,
+            bubble_color: normalizeBubbleColor(data.channel.bubble_color),
             passcodeHint: data.passcodeHint,
           });
           setLoading(false);
@@ -264,7 +272,7 @@ export function useChatChannelBootstrap({
     const fallbackGate = {
       name: channel?.name || "",
       profile_image: channel?.profile_image || null,
-      bubble_color: channel?.bubble_color || "#3598fe",
+      bubble_color: normalizeBubbleColor(channel?.bubble_color),
       passcodeHint: channel?.passcode_hint || "",
       notice,
     };
@@ -275,7 +283,7 @@ export function useChatChannelBootstrap({
         setPasscodeGate({
           name: data.channel.name,
           profile_image: data.channel.profile_image,
-          bubble_color: data.channel.bubble_color,
+          bubble_color: normalizeBubbleColor(data.channel.bubble_color),
           passcodeHint: data.passcodeHint,
           notice,
         });

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { useSession } from "next-auth/react";
 import { saveFontSize } from "@/components/UserPreferencesSync";
+import { normalizeBubbleColor } from "@/lib/bubble-color";
 
 const BUBBLE_COLORS = ["#3598fe", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 
@@ -49,10 +50,11 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
   };
 
   const changeColor = (color: string) => {
-    setSelectedColor(color);
-    localStorage.setItem(`bubbleColor_${channelId}`, color);
-    document.documentElement.style.setProperty("--bubble-sent", color);
-    onColorChange(color);
+    const normalizedColor = normalizeBubbleColor(color);
+    setSelectedColor(normalizedColor);
+    localStorage.setItem(`bubbleColor_${channelId}`, normalizedColor);
+    document.documentElement.style.setProperty("--bubble-sent", normalizedColor);
+    onColorChange(normalizedColor);
   };
 
   const isCustomColor = !BUBBLE_COLORS.includes(selectedColor);

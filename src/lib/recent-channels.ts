@@ -1,3 +1,5 @@
+import { normalizeBubbleColor } from "./bubble-color";
+
 export interface RecentChannel {
   id: string;
   name: string;
@@ -40,7 +42,10 @@ export function getRecentChannels(): RecentChannel[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     if (!Array.isArray(parsed)) return [];
-    return parsed
+    const hasReplacedBubbleColor = parsed.some(
+      (item) => typeof item?.bubbleColor === "string" && item.bubbleColor.toLowerCase() === "#3b8df0",
+    );
+    const channels = parsed
       .filter((item): item is RecentChannel =>
         item
         && typeof item.id === "string"
@@ -49,12 +54,16 @@ export function getRecentChannels(): RecentChannel[] {
       )
       .map((item) => ({
         ...item,
-        bubbleColor: typeof item.bubbleColor === "string" && item.bubbleColor ? item.bubbleColor : "#3598fe",
+        bubbleColor: normalizeBubbleColor(item.bubbleColor),
         hasPasscode: item.hasPasscode === true,
         ownerName: typeof item.ownerName === "string" ? item.ownerName : "",
         pinned: item.pinned === true,
       }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastVisitedAt - left.lastVisitedAt);
+    if (hasReplacedBubbleColor) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(channels));
+    }
+    return channels;
   } catch {
     return [];
   }
