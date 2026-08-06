@@ -4,6 +4,7 @@ import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../l
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { matchesImageSignature } from "../lib/image-signature";
+import { getMediaCacheControl } from "../lib/media-cache-control";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 
@@ -205,6 +206,7 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
   const inferredChannelId = readChannelIdFromMediaKey(decodedKey);
   let mediaRow: { channel_id: string; source_type: string } | null = null;
   let pendingTicket: { purpose: UploadPurpose; expires_at: string } | null = null;
+  let channelHasPasscode = false;
 
   if (inferredChannelId) {
     // Message and DM uploads already have a unique indexed key in
@@ -306,6 +308,7 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
 
     const parentChannelId = getParentChannelId(mediaRow.channel_id);
     const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+    channelHasPasscode = Boolean(passcode);
 
     if (passcode) {
       const trustedUserId = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
@@ -329,14 +332,10 @@ export async function handleMediaServe(request: Request, env: Env, key: string):
 
   const headers = new Headers();
   headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
-  headers.set(
-    "Cache-Control",
-    mediaRow?.source_type === "channel-profile"
-      ? "public, max-age=31536000, immutable"
-      : mediaRow?.channel_id
-        ? "private, no-store"
-        : "public, max-age=31536000, immutable",
-  );
+  headers.set("Cache-Control", getMediaCacheControl(
+    mediaRow?.source_type,
+    channelHasPasscode,
+  ));
 
   return new Response(object.body, { headers });
 }

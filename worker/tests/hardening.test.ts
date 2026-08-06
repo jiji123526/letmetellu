@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
+import { getMediaCacheControl } from "../src/lib/media-cache-control.ts";
 import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
 import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
@@ -125,6 +126,19 @@ test("matchesImageSignature rejects mismatched, truncated and unsupported conten
   assert.equal(matchesImageSignature("image/png", pngHeader.subarray(0, 4)), false);
   assert.equal(matchesImageSignature("image/gif", new TextEncoder().encode("<html>")), false);
   assert.equal(matchesImageSignature("application/octet-stream", pngHeader), false);
+});
+
+test("media cache policy persists backgrounds without caching private message media", () => {
+  assert.equal(
+    getMediaCacheControl("channel-background", false),
+    "private, max-age=604800, immutable",
+  );
+  assert.equal(
+    getMediaCacheControl("channel-background", true),
+    "private, max-age=900, must-revalidate",
+  );
+  assert.equal(getMediaCacheControl("message", false), "private, no-store");
+  assert.equal(getMediaCacheControl("dm", true), "private, no-store");
 });
 
 test("operational health windows normalize D1 values and missing counts", () => {

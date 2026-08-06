@@ -81,6 +81,17 @@ export function decorateProtectedMediaUrl(mediaUrl: string | null | undefined): 
   return buildDirectMediaUrl(mediaUrl, { keepSameOrigin: true });
 }
 
+export function decorateBackgroundMediaUrl(mediaUrl: string | null | undefined): string | null {
+  if (!mediaUrl) return null;
+  try {
+    const parsed = new URL(mediaUrl, WORKER_URL);
+    if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
+    return parsed.pathname;
+  } catch {
+    return mediaUrl;
+  }
+}
+
 export function decorateMessageMedia<T extends { image?: string | null }>(message: T): T {
   if (!message.image) return message;
   const image = decorateProtectedMediaUrl(message.image);
@@ -89,7 +100,7 @@ export function decorateMessageMedia<T extends { image?: string | null }>(messag
 
 export function decorateChannelMedia<T extends { profile_image?: string | null; background_image?: string | null }>(channel: T): T {
   const profile_image = decorateMediaUrl(channel.profile_image);
-  const background_image = decorateProtectedMediaUrl(channel.background_image);
+  const background_image = decorateBackgroundMediaUrl(channel.background_image);
   if (profile_image === channel.profile_image && background_image === channel.background_image) return channel;
   return { ...channel, profile_image, background_image };
 }
