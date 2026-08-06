@@ -146,6 +146,9 @@ const MessageRow = React.memo(function MessageRow({
         fontSize: "var(--bubble-font-size)",
         lineHeight: 1.38,
         overflowWrap: "anywhere",
+        boxSizing: "border-box",
+        minWidth: 0,
+        flex: isReply && usesWideWidgetBubble ? "1 1 0%" : undefined,
         width: usesWideWidgetBubble ? "100%" : undefined,
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
@@ -250,7 +253,7 @@ const MessageRow = React.memo(function MessageRow({
   );
 
   const replyArrow = isReply ? (
-    <span className="flex items-center" style={{ color: "var(--meta)", opacity: 0.7, marginTop: "8px", transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)" }}>
+    <span className="flex flex-none items-center" style={{ color: "var(--meta)", opacity: 0.7, marginTop: "8px", transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)" }}>
       <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
         <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -270,16 +273,24 @@ const MessageRow = React.memo(function MessageRow({
       <div
         className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
         style={{
-          width: hasCaptionedWidget
-            ? "calc(320px + var(--bubble-font-size) * 1.176)"
+          width: usesWideWidgetBubble
+            ? isReply
+              ? "85%"
+              : "calc(320px + var(--bubble-font-size) * 1.176)"
             : undefined,
           maxWidth: usesWideWidgetBubble
-            ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
+            ? isReply
+              ? "85%"
+              : "min(100%, calc(74% + var(--bubble-font-size) * 1.648))"
             : isReply ? "85%" : "74%",
+          minWidth: 0,
         }}
       >
         {isReply ? (
-          <div className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}>
+          <div
+            className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}
+            style={{ width: usesWideWidgetBubble ? "100%" : undefined, maxWidth: "100%", minWidth: 0 }}
+          >
             {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
           </div>
         ) : bubble}

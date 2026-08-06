@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Reply widget width containment — 2026-08-06
+
+- Wide reply bubbles now stay within the same 85% row limit as ordinary text replies.
+- The reply arrow is fixed-width and the widget bubble consumes only the remaining flex space.
+- Native 320px widgets continue to use the existing responsive scale calculation, so narrow screens resize the content instead of clipping it.
+
+Trade-off: reply widgets can render smaller than equivalent top-level widgets because the reply indentation and arrow intentionally reserve part of the available row width.
+
 ### Lazy third-party widget rendering — 2026-08-06
 
 - Chat embeds now mount only when they enter a 600px preload margin around the viewport, avoiding immediate iframe and SDK work for off-screen history.
