@@ -43,7 +43,7 @@ interface ChatViewTopChromeProps {
   liveLastMinuteBannerText: string | null;
   liveCountdownNotice: string | null;
   effectiveAdmin: boolean;
-  connected: boolean;
+  showReconnectNotice: boolean;
   onJoinLive: () => void;
   onExitLive: () => void;
 }
@@ -81,7 +81,7 @@ export function ChatViewTopChrome({
   liveLastMinuteBannerText,
   liveCountdownNotice,
   effectiveAdmin,
-  connected,
+  showReconnectNotice,
   onJoinLive,
   onExitLive,
 }: ChatViewTopChromeProps) {
@@ -267,7 +267,7 @@ export function ChatViewTopChrome({
         <LiveCountdownBanner text={liveCountdownNotice} />
       ) : null}
 
-      {!connected && (
+      {showReconnectNotice && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "6px 12px", background: "#fff3e0", borderBottom: "0.5px solid #ffe0b2", flexShrink: 0, fontSize: "calc(var(--bubble-font-size) - 4px)", color: "#e65100", lineHeight: 1 }}>
           <span>{t("connectionLost")}</span>
         </div>

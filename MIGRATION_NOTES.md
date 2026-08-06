@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Delayed reconnect notice — 2026-08-06
+
+- Unexpected WebSocket closure still starts recovery immediately, but the visible reconnect notice now waits for three continuous seconds of disconnection.
+- Successful room synchronization cancels a pending notice and hides an already-visible notice immediately.
+- Initial connection setup, intentional background-tab socket sleep and disconnects recovered within the delay remain invisible to the user.
+- Reconnect timers are cancelled during channel changes and component cleanup to prevent a stale notice from appearing in another channel.
+
+Trade-off: users no longer see sub-three-second realtime interruptions, while sustained interruptions remain visible. Message HTTP sending and realtime recovery behavior are unchanged.
+
 ### Idempotent chat and DM sending — 2026-08-05
 
 This frontend, Worker and D1 change prevents repeated Send clicks during a slow or reconnecting network from creating duplicate messages.

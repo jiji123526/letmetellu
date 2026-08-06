@@ -9,6 +9,7 @@ const RECONNECT_BASE_DELAY_MS = 2000;
 const RECONNECT_MAX_DELAY_MS = 30 * 1000;
 const RECONNECT_JITTER_RATIO = 0.25;
 const HIDDEN_SOCKET_SLEEP_MS = 90 * 1000;
+const RECONNECT_NOTICE_DELAY_MS = 3000;
 
 function reconnectDelay(attempt: number) {
   const exponentialDelay = Math.min(
@@ -24,9 +25,11 @@ export function useRealtime(channelId: string | null, uid: string) {
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
   const [socketConnected, setSocketConnected] = useState(false);
   const [roomAuthenticated, setRoomAuthenticated] = useState(false);
+  const [showReconnectNotice, setShowReconnectNotice] = useState(false);
   const [presence, setPresence] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectNoticeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
   const connectRef = useRef<() => void>(() => {});
   const sleepTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,6 +68,25 @@ export function useRealtime(channelId: string | null, uid: string) {
     if (!reconnectTimeout.current) return;
     clearTimeout(reconnectTimeout.current);
     reconnectTimeout.current = null;
+  }, []);
+
+  const clearReconnectNotice = useCallback(() => {
+    if (reconnectNoticeTimeout.current) {
+      clearTimeout(reconnectNoticeTimeout.current);
+      reconnectNoticeTimeout.current = null;
+    }
+    setShowReconnectNotice(false);
+  }, []);
+
+  const scheduleReconnectNotice = useCallback(() => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (reconnectNoticeTimeout.current) return;
+    reconnectNoticeTimeout.current = setTimeout(() => {
+      reconnectNoticeTimeout.current = null;
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        setShowReconnectNotice(true);
+      }
+    }, RECONNECT_NOTICE_DELAY_MS);
   }, []);
 
   const clearSleepTimeout = useCallback(() => {
@@ -121,6 +143,7 @@ export function useRealtime(channelId: string | null, uid: string) {
       reconnectAttemptRef.current = 0;
       const type = hasSynchronizedRef.current ? "reconnected" : "connected";
       hasSynchronizedRef.current = true;
+      clearReconnectNotice();
       handlersRef.current.forEach((handler) => handler({ type }));
     };
 
@@ -184,11 +207,14 @@ export function useRealtime(channelId: string | null, uid: string) {
       const intentionalClose = intentionalCloseRef.current;
       intentionalCloseRef.current = false;
       if (intentionalClose || sleepingRef.current) {
+        clearReconnectNotice();
         return;
       }
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        clearReconnectNotice();
         return;
       }
+      scheduleReconnectNotice();
       const delay = reconnectDelay(reconnectAttemptRef.current);
       reconnectAttemptRef.current += 1;
       reconnectTimeout.current = setTimeout(() => connectRef.current(), delay);
@@ -197,28 +223,35 @@ export function useRealtime(channelId: string | null, uid: string) {
     ws.onerror = () => {
       ws.close();
     };
-  }, [channelId, uid, clearReconnectTimeout, requestSocketAuthorization]);
+  }, [channelId, uid, clearReconnectNotice, clearReconnectTimeout, requestSocketAuthorization, scheduleReconnectNotice]);
 
   useEffect(() => {
     connectRef.current = connect;
     mountedRef.current = true;
     hasSynchronizedRef.current = false;
     const initialConnectTimer = setTimeout(() => connectRef.current(), 0);
+    const initialNoticeResetTimer = setTimeout(() => clearReconnectNotice(), 0);
     return () => {
       clearTimeout(initialConnectTimer);
+      clearTimeout(initialNoticeResetTimer);
+      if (reconnectNoticeTimeout.current) {
+        clearTimeout(reconnectNoticeTimeout.current);
+        reconnectNoticeTimeout.current = null;
+      }
       mountedRef.current = false;
       clearReconnectTimeout();
       clearSleepTimeout();
       sleepingRef.current = false;
       closeSocket("cleanup");
     };
-  }, [connect, clearReconnectTimeout, clearSleepTimeout, closeSocket]);
+  }, [connect, clearReconnectNotice, clearReconnectTimeout, clearSleepTimeout, closeSocket]);
 
   useEffect(() => {
     if (!channelId) return;
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
+        clearReconnectNotice();
         clearReconnectTimeout();
         clearSleepTimeout();
         const socket = wsRef.current;
@@ -248,7 +281,7 @@ export function useRealtime(channelId: string | null, uid: string) {
       clearSleepTimeout();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [channelId, connect, clearReconnectTimeout, clearSleepTimeout, closeSocket]);
+  }, [channelId, connect, clearReconnectNotice, clearReconnectTimeout, clearSleepTimeout, closeSocket]);
 
   useEffect(() => {
     if (!channelId) return;
@@ -281,5 +314,5 @@ export function useRealtime(channelId: string | null, uid: string) {
   }, []);
 
   const connected = socketConnected && roomAuthenticated;
-  return { connected, socketConnected, roomAuthenticated, presence, liveCount, subscribe, send };
+  return { connected, showReconnectNotice, socketConnected, roomAuthenticated, presence, liveCount, subscribe, send };
 }
