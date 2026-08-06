@@ -123,12 +123,130 @@ interface PreviewData {
   url: string;
 }
 
-const previewCache = new Map<string, PreviewData | null>();
-const previewRequests = new Map<string, Promise<PreviewData | null>>();
+interface StoredPreviewEntry {
+  url: string;
+  data: PreviewData;
+  cachedAt: number;
+  lastAccessedAt: number;
+}
 
-function requestPreview(url: string): Promise<PreviewData | null> {
-  const cached = previewCache.get(url);
-  if (cached !== undefined) return Promise.resolve(cached);
+const PREVIEW_STORAGE_KEY = "letmetellu_link_previews_v1";
+const PREVIEW_STORAGE_VERSION = 1;
+const PREVIEW_STORAGE_LIMIT = 100;
+const PREVIEW_FRESH_TTL_MS = 24 * 60 * 60 * 1000;
+const PREVIEW_MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const previewCache = new Map<string, PreviewData | null>();
+const previewCacheMetadata = new Map<string, { cachedAt: number; lastAccessedAt: number }>();
+const previewRequests = new Map<string, Promise<PreviewData | null>>();
+let previewStorageHydrated = false;
+let previewStorageWriteTimer: ReturnType<typeof setTimeout> | null = null;
+
+function isPreviewData(value: unknown): value is PreviewData {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PreviewData>;
+  return typeof candidate.title === "string"
+    && typeof candidate.description === "string"
+    && typeof candidate.image === "string"
+    && typeof candidate.video === "string"
+    && typeof candidate.siteName === "string"
+    && typeof candidate.url === "string";
+}
+
+function compactPreviewData(data: PreviewData): PreviewData {
+  return {
+    title: data.title.slice(0, 500),
+    description: data.description.slice(0, 1000),
+    image: data.image.slice(0, 4096),
+    video: data.video.slice(0, 4096),
+    siteName: data.siteName.slice(0, 200),
+    url: data.url.slice(0, 4096),
+  };
+}
+
+function persistPreviewCache() {
+  if (typeof window === "undefined") return;
+  const entries = [...previewCacheMetadata.entries()]
+    .flatMap(([url, metadata]) => {
+      const data = previewCache.get(url);
+      if (!data || url.length > 2048) return [];
+      return [{ url, data: compactPreviewData(data), ...metadata }];
+    })
+    .sort((left, right) => right.lastAccessedAt - left.lastAccessedAt)
+    .slice(0, PREVIEW_STORAGE_LIMIT);
+
+  try {
+    localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({
+      version: PREVIEW_STORAGE_VERSION,
+      entries,
+    }));
+  } catch {
+    // Preview persistence is optional and must not block rendering.
+  }
+}
+
+function schedulePreviewCacheWrite() {
+  if (previewStorageWriteTimer || typeof window === "undefined") return;
+  previewStorageWriteTimer = setTimeout(() => {
+    previewStorageWriteTimer = null;
+    persistPreviewCache();
+  }, 250);
+}
+
+function hydratePreviewCache() {
+  if (previewStorageHydrated || typeof window === "undefined") return;
+  previewStorageHydrated = true;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PREVIEW_STORAGE_KEY) || "null") as {
+      version?: unknown;
+      entries?: unknown;
+    } | null;
+    if (parsed?.version !== PREVIEW_STORAGE_VERSION || !Array.isArray(parsed.entries)) return;
+
+    const now = Date.now();
+    const entries = (parsed.entries as StoredPreviewEntry[])
+      .filter((entry) =>
+        entry
+        && typeof entry.url === "string"
+        && entry.url.length <= 2048
+        && isPreviewData(entry.data)
+        && Number.isFinite(entry.cachedAt)
+        && Number.isFinite(entry.lastAccessedAt)
+        && now - entry.cachedAt <= PREVIEW_MAX_STALE_MS
+      )
+      .sort((left, right) => right.lastAccessedAt - left.lastAccessedAt)
+      .slice(0, PREVIEW_STORAGE_LIMIT);
+
+    for (const entry of entries) {
+      previewCache.set(entry.url, compactPreviewData(entry.data));
+      previewCacheMetadata.set(entry.url, {
+        cachedAt: entry.cachedAt,
+        lastAccessedAt: entry.lastAccessedAt,
+      });
+    }
+  } catch {
+    // Ignore malformed or unavailable browser storage.
+  }
+}
+
+function readCachedPreview(url: string): { data: PreviewData; isStale: boolean } | null {
+  hydratePreviewCache();
+  const data = previewCache.get(url);
+  if (!data) return null;
+
+  const now = Date.now();
+  const metadata = previewCacheMetadata.get(url) || { cachedAt: now, lastAccessedAt: now };
+  previewCacheMetadata.set(url, { ...metadata, lastAccessedAt: now });
+  schedulePreviewCacheWrite();
+  return { data, isStale: now - metadata.cachedAt > PREVIEW_FRESH_TTL_MS };
+}
+
+function requestPreview(url: string, forceRefresh = false): Promise<PreviewData | null> {
+  hydratePreviewCache();
+  if (!forceRefresh) {
+    const cached = readCachedPreview(url);
+    if (cached) return Promise.resolve(cached.data);
+    if (previewCache.has(url)) return Promise.resolve(null);
+  }
 
   const pending = previewRequests.get(url);
   if (pending) return pending;
@@ -137,11 +255,18 @@ function requestPreview(url: string): Promise<PreviewData | null> {
     .then((response) => response.ok ? response.json() as Promise<PreviewData | null> : null)
     .then((result) => {
       const normalized = result && (result.title || result.image) ? result : null;
-      previewCache.set(url, normalized);
+      if (normalized) {
+        const now = Date.now();
+        previewCache.set(url, normalized);
+        previewCacheMetadata.set(url, { cachedAt: now, lastAccessedAt: now });
+        schedulePreviewCacheWrite();
+      } else if (!forceRefresh) {
+        previewCache.set(url, null);
+      }
       return normalized;
     })
     .catch(() => {
-      previewCache.set(url, null);
+      if (!forceRefresh) previewCache.set(url, null);
       return null;
     })
     .finally(() => {
@@ -165,7 +290,7 @@ function normalizeInstagramEmbedUrl(rawUrl: string): string | null {
 }
 
 function useDeferredEmbedVisibility(rootMargin: string) {
-  const targetRef = useRef<HTMLDivElement>(null);
+  const targetRef = useRef<HTMLAnchorElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -260,24 +385,37 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
   const { targetRef, isVisible } = useDeferredEmbedVisibility(EMBED_PREVIEW_ROOT_MARGIN);
 
   useEffect(() => {
-    if (previewCache.has(url)) return;
     if (!isVisible) return;
 
     let cancelled = false;
-    requestPreview(url)
-      .then((result) => {
-        if (cancelled) return;
-        setData(result);
+    const resolveTimer = setTimeout(() => {
+      const cached = readCachedPreview(url);
+      if (cached) {
+        setData(cached.data);
         setHasResolved(true);
-      })
-      .catch(() => {
-        if (!cancelled) {
+        if (!cached.isStale) return;
+      } else if (previewCache.has(url)) {
+        setHasResolved(true);
+        return;
+      }
+
+      void requestPreview(url, !!cached)
+        .then((result) => {
+          if (cancelled) return;
+          if (result) setData(result);
+          else if (!cached) setData(null);
           setHasResolved(true);
-        }
-      });
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setHasResolved(true);
+          }
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
+      clearTimeout(resolveTimer);
     };
   }, [isVisible, url]);
 
@@ -287,12 +425,12 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
 
   if (!isVisible && !previewCache.has(url)) {
     return (
-      <div style={{ position: "relative", width: "100%", height: 0, overflow: "visible" }} aria-hidden="true">
-        <div
-          ref={targetRef}
-          style={{ position: "absolute", inset: 0, height: "1px", pointerEvents: "none" }}
-        />
-      </div>
+      <a
+        ref={targetRef}
+        style={{ position: "relative", width: "100%", height: 0, overflow: "visible" }}
+        aria-hidden="true"
+        tabIndex={-1}
+      />
     );
   }
   if (!hasResolved) return null;
@@ -303,6 +441,7 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
 
   return (
     <a
+      ref={targetRef}
       className="link-preview-card"
       href={data.url}
       target="_blank"
