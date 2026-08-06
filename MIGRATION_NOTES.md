@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Uniform media loading bubble — 2026-08-06
+
+- Image, link-preview and third-party widget loading states now use one compact three-dot bubble regardless of the eventual content width.
+- Loading bubbles opt out of the wide reply-widget flex rule, and lazy embed wrappers remain `fit-content` until their real content is ready.
+- Message text continues to stay hidden during media loading, so the bubble changes size only once when the finished content replaces the loading indicator.
+
+Trade-off: the final media or widget can be substantially wider than its loading bubble, so completion intentionally produces one size transition rather than reserving the final layout in advance.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Stable panel-to-message navigation with lazy widgets — 2026-08-06
 
 - Gallery, link and search navigation now places the target message in the viewport before waiting for its lazy widget layout, allowing IntersectionObserver-based embeds to activate immediately.

@@ -196,7 +196,18 @@ body {
 /* While media is loading, use the exact same bubble padding as text. */
 [data-bubble]:has(.media-loading-dots) {
   width: fit-content !important;
+  flex: 0 0 auto !important;
   padding: calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824) !important;
+}
+
+/* Lazy widgets have full-width wrappers once activated. Keep every loading
+   phase at the same compact typing-bubble size until real content is ready. */
+[data-bubble]:has(.media-loading-dots) .message-embeds,
+[data-bubble]:has(.media-loading-dots) .message-embeds > div,
+[data-bubble]:has(.media-loading-dots) .native-chat-embed {
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: none !important;
 }
 
 /* Match the original: show only the loading bubble until media is ready. */
