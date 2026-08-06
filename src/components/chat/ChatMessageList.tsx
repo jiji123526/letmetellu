@@ -102,10 +102,9 @@ const MessageRow = React.memo(function MessageRow({
       ? false
       : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
   const isMine = (isInboxMessage || isFallbackInboxMessage) ? false : (effectiveAdmin ? !!msg.is_admin : !msg.is_admin);
-  const hasNativeEmbed = !!msg.text && /https?:\/\/(?:(?:twitter\.com|x\.com)\/\w+\/status\/\d+|(?:www\.)?instagram\.com\/(?:p|reel)\/[\w-]+)/i.test(msg.text);
   const showEmbeds = !!msg.text && !msg.report && !msg.image && !isInboxMessage;
   const hasCaptionedWidget = showEmbeds && hasWidgetCaption(msg.text);
-  const usesWideWidgetBubble = hasNativeEmbed || hasCaptionedWidget;
+  const usesWideWidgetBubble = hasCaptionedWidget;
   const reportMeta = msg.report_meta;
   const petitionMeta = msg.petition_meta;
   const inboxChannel = reportMeta
@@ -148,8 +147,6 @@ const MessageRow = React.memo(function MessageRow({
         overflowWrap: "anywhere",
         boxSizing: "border-box",
         minWidth: 0,
-        flex: isReply && usesWideWidgetBubble ? "1 1 0%" : undefined,
-        width: usesWideWidgetBubble ? "100%" : undefined,
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
           : "20px",
@@ -265,7 +262,7 @@ const MessageRow = React.memo(function MessageRow({
       id={`msg-${msg.id}`}
       className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
       style={{
-        paddingTop: "calc(var(--bubble-font-size) * 0.18)",
+        paddingTop: "calc(var(--bubble-font-size) * 0.32)",
         paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
         paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
       }}
@@ -273,15 +270,11 @@ const MessageRow = React.memo(function MessageRow({
       <div
         className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
         style={{
-          width: usesWideWidgetBubble
-            ? isReply
-              ? "85%"
-              : "calc(320px + var(--bubble-font-size) * 1.176)"
+          width: hasCaptionedWidget
+            ? "calc(320px + var(--bubble-font-size) * 1.176)"
             : undefined,
           maxWidth: usesWideWidgetBubble
-            ? isReply
-              ? "85%"
-              : "min(100%, calc(74% + var(--bubble-font-size) * 1.648))"
+            ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
             : isReply ? "85%" : "74%",
           minWidth: 0,
         }}
@@ -289,7 +282,7 @@ const MessageRow = React.memo(function MessageRow({
         {isReply ? (
           <div
             className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}
-            style={{ width: usesWideWidgetBubble ? "100%" : undefined, maxWidth: "100%", minWidth: 0 }}
+            style={{ maxWidth: "100%", minWidth: 0 }}
           >
             {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
           </div>

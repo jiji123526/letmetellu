@@ -187,7 +187,9 @@ export async function fetchLinks(channelId: string, cursor?: string) {
 }
 
 export async function fetchPreview(url: string) {
-  const res = await fetch(`${getWorkerUrl()}/api/preview?url=${encodeURIComponent(url)}`);
+  const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`, {
+    cache: "no-store",
+  });
   if (!res.ok) return null;
   return res.json();
 }
