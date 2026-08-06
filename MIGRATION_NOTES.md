@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Stable panel-to-message navigation with lazy widgets — 2026-08-06
+
+- Gallery, link and search navigation now places the target message in the viewport before waiting for its lazy widget layout, allowing IntersectionObserver-based embeds to activate immediately.
+- While nearby images and widgets settle, the target message is continuously re-centered instead of receiving only one delayed correction.
+- Pending media outside the widget preload area is excluded from stability checks, avoiding the previous full timeout caused by intentionally dormant off-screen embeds.
+- Refresh scroll restoration uses the same nearby-content boundary while preserving its saved viewport offset.
+
+Trade-off: programmatic message jumps now use immediate positioning rather than a smooth scroll because deterministic anchoring is required while third-party widgets resize. A slow third-party widget can still cause tiny corrective movements, but the selected message remains centered.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Refresh scroll restoration — 2026-08-06
 
 - Chat refreshes now preserve the first visible message and its exact viewport offset per channel and browser tab.

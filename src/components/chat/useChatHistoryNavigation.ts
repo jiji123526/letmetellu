@@ -73,9 +73,14 @@ function isBeforeOrInsideTarget(node: Element, target: Element): boolean {
 }
 
 function hasPendingPositioningContent(container: HTMLElement, target: HTMLElement): boolean {
+  const containerRect = container.getBoundingClientRect();
+  const preloadTop = containerRect.top - 600;
+  const preloadBottom = containerRect.bottom + 600;
   const pendingElements = container.querySelectorAll(".media-loading-dots, img, video");
   return [...pendingElements].some((node) => {
     if (!isBeforeOrInsideTarget(node, target)) return false;
+    const nodeRect = node.getBoundingClientRect();
+    if (!target.contains(node) && (nodeRect.bottom < preloadTop || nodeRect.top > preloadBottom)) return false;
     if (node.classList.contains("media-loading-dots")) return true;
     if (node instanceof HTMLImageElement) return !node.complete;
     return node instanceof HTMLVideoElement && node.readyState < HTMLMediaElement.HAVE_METADATA;
@@ -92,30 +97,46 @@ async function waitForStableMessageLayout(
   let stableFrames = 0;
 
   await document.fonts?.ready;
-
   while (performance.now() - startedAt < timeoutMs) {
     await nextAnimationFrame();
     const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
-    const pendingContent = hasPendingPositioningContent(container, target);
-    stableFrames = !pendingContent && signature === previousSignature ? stableFrames + 1 : 0;
+    stableFrames = !hasPendingPositioningContent(container, target) && signature === previousSignature
+      ? stableFrames + 1
+      : 0;
     previousSignature = signature;
     if (stableFrames >= 3) return;
   }
 }
 
-async function correctMessageAlignment(
+async function keepMessageCenteredWhileLayoutSettles(
   container: HTMLElement,
   target: HTMLElement,
   isCurrent: () => boolean,
+  timeoutMs = 6000,
 ): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  if (!isCurrent()) return;
-  const containerRect = container.getBoundingClientRect();
-  const targetRect = target.getBoundingClientRect();
-  const offset = targetRect.top + targetRect.height / 2
-    - (containerRect.top + container.clientHeight / 2);
-  if (Math.abs(offset) > 2) {
-    container.scrollBy({ top: offset, behavior: "auto" });
+  const startedAt = performance.now();
+  let previousSignature = "";
+  let stableFrames = 0;
+
+  await document.fonts?.ready;
+
+  while (performance.now() - startedAt < timeoutMs) {
+    await nextAnimationFrame();
+    if (!isCurrent()) return;
+    const containerRect = container.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const alignmentOffset = targetRect.top + targetRect.height / 2
+      - (containerRect.top + container.clientHeight / 2);
+    if (Math.abs(alignmentOffset) > 2) {
+      container.scrollBy({ top: alignmentOffset, behavior: "auto" });
+    }
+    const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
+    const pendingContent = hasPendingPositioningContent(container, target);
+    stableFrames = !pendingContent && signature === previousSignature && Math.abs(alignmentOffset) <= 2
+      ? stableFrames + 1
+      : 0;
+    previousSignature = signature;
+    if (stableFrames >= 3) return;
   }
 }
 
@@ -339,16 +360,13 @@ export function useChatHistoryNavigation({
       return;
     }
 
-    const container = messagesContainerRef.current;
-    if (container) {
-      await waitForStableMessageLayout(container, element);
-    }
     if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.scrollIntoView({ behavior: "auto", block: "center" });
     flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
+    const container = messagesContainerRef.current;
     if (container) {
-      await correctMessageAlignment(
+      await keepMessageCenteredWhileLayoutSettles(
         container,
         element,
         () => navigationRequest === navigationRequestRef.current,
