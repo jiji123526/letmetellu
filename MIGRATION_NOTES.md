@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Old-thread context now includes the full visible root thread — 2026-08-07
+
+- Jumping to an older message no longer relies only on a fixed chronological slice around the target when building the thread view.
+- The Worker now resolves the target message's visible root ancestor and includes that root plus all visible descendants in the `message-context` response.
+- Older conversations therefore keep direct owner/admin replies and other thread replies visible even when those replies sit outside the previous `before/after` time window.
+
+Trade-off: opening an older message can now return a larger payload for dense threads because the endpoint prioritizes thread completeness over a strict fixed-size context slice.
+
+Deployment note: this is Worker-only and requires no D1 migration.
+
 ### Single-depth thread rendering now keeps nested replies visible — 2026-08-07
 
 - Chat thread derivation now collapses reply chains onto the nearest visible top-level ancestor instead of only grouping direct children.
