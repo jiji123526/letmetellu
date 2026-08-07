@@ -201,6 +201,74 @@ function getSupportTopicVisual(topic: string | null | undefined) {
   }
 }
 
+function DashboardLoadingSkeleton({ label }: { label: string }) {
+  const rows = [
+    { title: "44%", meta: "62%" },
+    { title: "36%", meta: "48%" },
+    { title: "52%", meta: "70%" },
+    { title: "40%", meta: "55%" },
+    { title: "47%", meta: "64%" },
+    { title: "34%", meta: "46%" },
+  ];
+
+  return (
+    <main
+      className="dashboard-font-scaled min-h-dvh"
+      style={{ background: "var(--bg)", color: "var(--gray-text)" }}
+      aria-busy="true"
+      aria-label={label}
+    >
+      <div
+        className="mx-auto flex min-h-dvh max-w-[480px] flex-col md:border-x"
+        style={{ borderColor: "var(--hairline)" }}
+      >
+        <header className="sticky top-0 z-30" style={{ background: "var(--header-bg)" }}>
+          <div className="flex h-[64px] items-center justify-between px-4">
+            <div className="min-w-[72px]">
+              <div className="h-3.5 w-10 rounded-full animate-pulse" style={{ background: "var(--gray-bubble)" }} />
+            </div>
+            <div className="h-12 w-12 rounded-full animate-pulse" style={{ background: "var(--gray-bubble)" }} />
+            <div className="flex min-w-[72px] justify-end">
+              <div className="h-6 w-6 rounded-full animate-pulse" style={{ background: "var(--gray-bubble)" }} />
+            </div>
+          </div>
+          <div className="px-4 pb-3">
+            <div className="h-10 w-full rounded-[12px] animate-pulse" style={{ background: "var(--input-bg)" }} />
+          </div>
+        </header>
+
+        <section>
+          <div className="px-4 pb-1.5 pt-3">
+            <div className="h-3 w-20 rounded-full animate-pulse" style={{ background: "var(--gray-bubble)" }} />
+          </div>
+          {rows.map((row, index) => (
+            <div key={index} className="flex min-h-[74px] items-center pl-4">
+              <div className="h-[50px] w-[50px] shrink-0 rounded-full animate-pulse" style={{ background: "var(--gray-bubble)" }} />
+              <div
+                className="ml-3.5 flex min-w-0 flex-1 flex-col justify-center self-stretch border-b py-2 pr-4"
+                style={{ borderColor: "var(--hairline)" }}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div
+                    className="h-4 rounded-full animate-pulse"
+                    style={{ width: row.title, background: "var(--gray-bubble)" }}
+                  />
+                  <div className="h-3 w-9 shrink-0 rounded-full animate-pulse" style={{ background: "var(--gray-bubble)" }} />
+                </div>
+                <div
+                  className="mt-2 h-3 rounded-full animate-pulse"
+                  style={{ width: row.meta, background: "var(--gray-bubble)" }}
+                />
+              </div>
+            </div>
+          ))}
+        </section>
+      </div>
+      <span className="sr-only">{label}</span>
+    </main>
+  );
+}
+
 function DashboardPageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -1383,7 +1451,7 @@ function DashboardPageContent() {
   };
 
   if (status === "loading" || loading) {
-    return <main className="dashboard-font-scaled min-h-dvh flex items-center justify-center" style={{ background: "var(--bg)", color: "var(--gray-text)" }}><span className="text-[14px]" style={{ color: "var(--meta)" }}>{t("loading")}</span></main>;
+    return <DashboardLoadingSkeleton label={t("loading")} />;
   }
 
   const isLoggedIn = !!session;
