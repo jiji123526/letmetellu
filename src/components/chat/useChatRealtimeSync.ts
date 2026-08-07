@@ -11,6 +11,12 @@ import {
   fetchInit,
   fetchMessages,
 } from "@/lib/api-chat";
+import {
+  completeChatPerformanceCycle,
+  finishChatPerformanceRequest,
+  startChatPerformanceCycle,
+  startChatPerformanceRequest,
+} from "@/lib/chat-performance";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { patchChannelBackground } from "@/lib/channel-background-cache";
 import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
@@ -147,25 +153,45 @@ export function useChatRealtimeSync({
     return inLiveModeRef.current ? `${channelId}_live` : channelId;
   }, [channelId, inLiveModeRef]);
 
-  const refreshLatestMessages = useCallback(() => {
+  const refreshLatestMessages = useCallback(async (traceCycleId?: string) => {
     const fetchChannel = getViewingChannelId();
-    fetchMessages(fetchChannel).then((data) => {
+    if (traceCycleId) {
+      startChatPerformanceRequest(channelId, traceCycleId, "messages");
+    }
+    try {
+      const data = await fetchMessages(fetchChannel);
       if (data.messages) {
         setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages));
       }
-    }).catch(() => {});
-  }, [getViewingChannelId, setMessages]);
+    } finally {
+      if (traceCycleId) {
+        finishChatPerformanceRequest(channelId, traceCycleId, "messages");
+      }
+    }
+  }, [channelId, getViewingChannelId, setMessages]);
 
-  const refreshCurrentChannelInit = useCallback(() => {
+  const refreshCurrentChannelInit = useCallback(async (traceCycleId?: string) => {
     const fetchChannel = getViewingChannelId();
-    fetchInit(fetchChannel).then((data: InitData) => {
+    if (traceCycleId) {
+      startChatPerformanceRequest(channelId, traceCycleId, "init");
+    }
+    try {
+      const data = await fetchInit(fetchChannel) as InitData;
       applyInitData(data);
-    }).catch(() => {});
-  }, [applyInitData, getViewingChannelId]);
+    } finally {
+      if (traceCycleId) {
+        finishChatPerformanceRequest(channelId, traceCycleId, "init");
+      }
+    }
+  }, [applyInitData, channelId, getViewingChannelId]);
 
-  const refreshViewerChannelState = useCallback(() => {
+  const refreshViewerChannelState = useCallback(async (traceCycleId?: string) => {
     const fetchChannel = getViewingChannelId();
-    fetchInit(fetchChannel).then((data: InitData) => {
+    if (traceCycleId) {
+      startChatPerformanceRequest(channelId, traceCycleId, "init");
+    }
+    try {
+      const data = await fetchInit(fetchChannel) as InitData;
       if (!data.channel || data.messages === undefined) return;
       setChannel(data.channel);
       if (historyModeRef.current === "latest") {
@@ -177,8 +203,13 @@ export function useChatRealtimeSync({
       if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
       setOwnerModeration(data.ownerModeration);
       setViewerModerationStatus(data.viewerModerationStatus ?? null);
-    }).catch(() => {});
+    } finally {
+      if (traceCycleId) {
+        finishChatPerformanceRequest(channelId, traceCycleId, "init");
+      }
+    }
   }, [
+    channelId,
     getViewingChannelId,
     historyModeRef,
     setActiveNotice,
@@ -193,6 +224,14 @@ export function useChatRealtimeSync({
 
   useEffect(() => {
     return subscribe((event) => {
+      const settleTraceRequest = (traceCycleId: string | null, request: Promise<void>) => {
+        if (!traceCycleId) return;
+        void request.then(
+          () => completeChatPerformanceCycle(channelId, traceCycleId, "settled"),
+          () => completeChatPerformanceCycle(channelId, traceCycleId, "failed"),
+        );
+      };
+
       if (event.type === "message-new") {
         const msg = decorateMessageMedia(event.message as Message);
         const viewingChannel = getViewingChannelId();
@@ -253,16 +292,19 @@ export function useChatRealtimeSync({
       }
 
       if (event.type === "messages-sync" && historyModeRef.current === "latest") {
-        refreshLatestMessages();
+        void refreshLatestMessages().catch(() => {});
       }
 
       if (event.type === "reconnected") {
+        const traceCycleId = typeof event.traceCycleId === "string" ? event.traceCycleId : null;
         if (isOwner) {
-          refreshCurrentChannelInit();
+          settleTraceRequest(traceCycleId, refreshCurrentChannelInit(traceCycleId || undefined));
         } else if (!isAdmin) {
-          refreshViewerChannelState();
+          settleTraceRequest(traceCycleId, refreshViewerChannelState(traceCycleId || undefined));
         } else if (historyModeRef.current === "latest") {
-          refreshLatestMessages();
+          settleTraceRequest(traceCycleId, refreshLatestMessages(traceCycleId || undefined));
+        } else if (traceCycleId) {
+          completeChatPerformanceCycle(channelId, traceCycleId, "settled");
         }
         if (inLiveModeRef.current) {
           send({ type: "join-live" });
@@ -386,7 +428,7 @@ export function useChatRealtimeSync({
       if (event.type === "room-access-opened") {
         clearRoomAccessBanner();
         setPasscodeGate(null);
-        refreshCurrentChannelInit();
+        void refreshCurrentChannelInit().catch(() => {});
       }
 
       if (event.type === "room-access-revoked") {
@@ -522,12 +564,19 @@ export function useChatRealtimeSync({
         lastHidden = Date.now();
         return;
       }
-      if (!lastHidden || Date.now() - lastHidden <= 5 * 60 * 1000) return;
+      const hiddenDurationMs = Date.now() - lastHidden;
+      if (!lastHidden || hiddenDurationMs <= 5 * 60 * 1000) return;
       if (!connected) return;
       if (historyModeRef.current === "context") return;
-      refreshLatestMessages();
+      const traceCycleId = startChatPerformanceCycle(channelId, "visibility-resume", {
+        hiddenForMs: hiddenDurationMs,
+      });
+      void refreshLatestMessages(traceCycleId).then(
+        () => completeChatPerformanceCycle(channelId, traceCycleId, "settled"),
+        () => completeChatPerformanceCycle(channelId, traceCycleId, "failed"),
+      );
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
-  }, [connected, historyModeRef, refreshLatestMessages]);
+  }, [channelId, connected, historyModeRef, refreshLatestMessages]);
 }

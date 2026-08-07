@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { fetchInit } from "@/lib/api-chat";
+import {
+  completeChatPerformanceCycle,
+  finishChatPerformanceRequest,
+  startChatPerformanceCycle,
+  startChatPerformanceRequest,
+} from "@/lib/chat-performance";
 import { recordAccountRecentChannel, updateCachedAccountRecentChannelVisit } from "@/lib/account-recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
@@ -203,7 +209,9 @@ export function useChatChannelBootstrap({
     text.adminDataAuthFailed,
   ]);
 
-  applyInitDataRef.current = applyInitData;
+  useEffect(() => {
+    applyInitDataRef.current = applyInitData;
+  }, [applyInitData, applyInitDataRef]);
 
   const loadNormalChannelData = useCallback(async () => {
     const data = await fetchInit(channelId) as InitData;
@@ -235,9 +243,14 @@ export function useChatChannelBootstrap({
       localStorage.getItem(`liveActive_${channelId}`) === "true";
     const initChannel = shouldResumeLive ? `${channelId}_live` : channelId;
     const requestId = ++initRequestIdRef.current;
+    const traceCycleId = startChatPerformanceCycle(channelId, "bootstrap", {
+      resumedLive: initChannel !== channelId,
+    });
 
+    startChatPerformanceRequest(channelId, traceCycleId, "init");
     fetchInit(initChannel)
       .then(async (data: InitData) => {
+        finishChatPerformanceRequest(channelId, traceCycleId, "init");
         if (requestId !== initRequestIdRef.current) return;
         if (typeof data.anonymousUid === "string" && data.anonymousUid) {
           setUid(data.anonymousUid);
@@ -252,6 +265,7 @@ export function useChatChannelBootstrap({
             passcodeHint: data.passcodeHint,
           });
           setLoading(false);
+          completeChatPerformanceCycle(channelId, traceCycleId, "passcode-gated");
           return;
         }
 
@@ -259,14 +273,18 @@ export function useChatChannelBootstrap({
         applyInitData(data);
 
         if (!data.live?.active && initChannel !== channelId) {
+          startChatPerformanceRequest(channelId, traceCycleId, "init");
           const normalData = await fetchInit(channelId) as InitData;
+          finishChatPerformanceRequest(channelId, traceCycleId, "init");
           if (requestId !== initRequestIdRef.current) return;
           applyInitData(normalData);
         }
 
         setLoading(false);
+        completeChatPerformanceCycle(channelId, traceCycleId, "settled");
       })
       .catch((error) => {
+        finishChatPerformanceRequest(channelId, traceCycleId, "init");
         if (requestId !== initRequestIdRef.current) return;
         console.error(error);
         if (error instanceof Error && error.message.includes("Init failed: 404")) {
@@ -274,6 +292,7 @@ export function useChatChannelBootstrap({
           setShowChannelDeleted(true);
         }
         setLoading(false);
+        completeChatPerformanceCycle(channelId, traceCycleId, "failed");
       });
   }, [
     applyInitData,

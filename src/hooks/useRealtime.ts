@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { getWebSocketUrl } from "@/lib/api-chat";
+import {
+  finishChatPerformanceRequest,
+  incrementChatReconnectAttempt,
+  markChatSocketSynchronized,
+  startChatPerformanceCycle,
+  startChatPerformanceRequest,
+} from "@/lib/chat-performance";
 
 type MessageHandler = (event: { type: string; [key: string]: unknown }) => void;
 
@@ -38,9 +45,14 @@ export function useRealtime(channelId: string | null, uid: string) {
   const intentionalCloseRef = useRef(false);
   const sleepingRef = useRef(false);
   const hasSynchronizedRef = useRef(false);
+  const reconnectTraceIdRef = useRef<string | null>(null);
 
   const requestSocketAuthorization = useCallback(async (socket: WebSocket) => {
     if (!channelId) return;
+    const reconnectTraceId = reconnectTraceIdRef.current;
+    if (reconnectTraceId) {
+      startChatPerformanceRequest(channelId, reconnectTraceId, "ws-token");
+    }
     try {
       const response = await fetch(`/api/ws-token?channel=${encodeURIComponent(channelId)}`, {
         cache: "no-store",
@@ -61,6 +73,10 @@ export function useRealtime(channelId: string | null, uid: string) {
       }
     } catch {
       // The next reconnect or room-access change will retry.
+    } finally {
+      if (reconnectTraceId) {
+        finishChatPerformanceRequest(channelId, reconnectTraceId, "ws-token");
+      }
     }
   }, [channelId]);
 
@@ -141,10 +157,17 @@ export function useRealtime(channelId: string | null, uid: string) {
       if (synchronized) return;
       synchronized = true;
       reconnectAttemptRef.current = 0;
+      const reconnectTraceId = hasSynchronizedRef.current ? reconnectTraceIdRef.current : null;
       const type = hasSynchronizedRef.current ? "reconnected" : "connected";
       hasSynchronizedRef.current = true;
+      if (channelId && reconnectTraceId) {
+        markChatSocketSynchronized(channelId, reconnectTraceId);
+      }
       clearReconnectNotice();
-      handlersRef.current.forEach((handler) => handler({ type }));
+      handlersRef.current.forEach((handler) => handler(
+        reconnectTraceId ? { type, traceCycleId: reconnectTraceId } : { type },
+      ));
+      reconnectTraceIdRef.current = null;
     };
 
     ws.onopen = () => {
@@ -215,6 +238,12 @@ export function useRealtime(channelId: string | null, uid: string) {
         return;
       }
       scheduleReconnectNotice();
+      if (channelId && !reconnectTraceIdRef.current) {
+        reconnectTraceIdRef.current = startChatPerformanceCycle(channelId, "reconnect");
+      }
+      if (channelId && reconnectTraceIdRef.current) {
+        incrementChatReconnectAttempt(channelId, reconnectTraceIdRef.current);
+      }
       const delay = reconnectDelay(reconnectAttemptRef.current);
       reconnectAttemptRef.current += 1;
       reconnectTimeout.current = setTimeout(() => connectRef.current(), delay);
@@ -239,6 +268,7 @@ export function useRealtime(channelId: string | null, uid: string) {
         reconnectNoticeTimeout.current = null;
       }
       mountedRef.current = false;
+      reconnectTraceIdRef.current = null;
       clearReconnectTimeout();
       clearSleepTimeout();
       sleepingRef.current = false;

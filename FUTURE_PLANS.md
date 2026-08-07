@@ -83,9 +83,10 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Completed on 2026-08-07: `/api/ws-token` now uses a narrow Worker socket-auth endpoint instead of calling full `/api/init` on every socket open or reconnect just to decide admin, reports-owner or room-viewer auth mode.
 - Completed on 2026-08-07: owner-channel popup reads now flow through the existing same-origin `/api/user` proxy instead of fetching the Worker directly from the browser, so preview and production share one request path and avoid CORS-specific behavior.
 - Completed on 2026-08-07: reply-parent recovery now uses a narrow batched parent lookup and merges each resolved batch in one pass instead of issuing one `message-context` request and one full message-window re-sort per missing parent.
+- Completed on 2026-08-07: browser-local diagnostics now record chat bootstrap, reconnect and visibility-resume request counts plus settle time, and the dashboard trace now records per-request counts and durations, including repeated `/api/user` bootstrap reads across a session.
 - The owner-channel-count lookup is already keyed only to channel identity and profile-visibility changes, while the owner-channel popup fetches on demand. Do not broaden either dependency set during later refactors.
 - Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
-- Measure initial-load and reconnect request counts, post-reconnect settle time and visibility-resume behavior before calling Phase 3 complete.
+- Remaining Phase 3 validation is to collect representative baselines from those local diagnostics before calling the phase complete.
 
 #### Phase 4: support dashboard query tuning
 

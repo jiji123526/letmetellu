@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Local chat and dashboard performance diagnostics now include request counts — 2026-08-07
+
+- Dashboard startup tracing now records not only milestone timings but also per-request counts and durations for `/api/user`, recent-channels, support-preview and platform-dashboard reads across the current page session.
+- Chat tracing now records bounded per-channel cycles for bootstrap, reconnect and long-hidden visibility resume, including request counts for `init`, `messages` and `/api/ws-token`, reconnect-attempt counts, socket-sync timing and overall settle time.
+- The snapshots are exposed in the browser through `window.__letmetelluDashboardPerf` and `window.__letmetelluChatPerf[channelId]`, so the next optimization pass can use local devtools evidence instead of inferring request churn from code structure alone.
+
+Trade-off: these diagnostics add a small amount of client-only bookkeeping and extra Performance API entries in exchange for better local observability. They are intentionally browser-local and do not send analytics or change runtime fetch behavior.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Batched reply-parent recovery avoids per-parent context churn — 2026-08-07
 
 - Reply-parent recovery previously reused `message-context` once for every missing parent id and re-sorted the mounted message window after each individual parent insertion.
