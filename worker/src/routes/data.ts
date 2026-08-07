@@ -4,7 +4,6 @@ import {
   readVisibleMessagePage,
   type VisibleMessageRow,
   VISIBLE_MESSAGE_CONDITION,
-  visibleMessageConditionForAlias,
 } from "../lib/visible-messages";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
@@ -198,6 +197,37 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         target_id: target.id,
         has_older: hasOlder,
         has_newer: hasNewer,
+      });
+    }
+
+    case "reply-parents": {
+      const parentIds = [...new Set(
+        url.searchParams
+          .getAll("parent_id")
+          .map((parentId) => parentId.trim())
+          .filter(Boolean),
+      )].slice(0, 20);
+      if (parentIds.length === 0) {
+        return Response.json({ error: "missing parent ids" }, { status: 400 });
+      }
+
+      const placeholders = parentIds.map(() => "?").join(", ");
+      const parentResult = await env.DB.prepare(`
+        SELECT * FROM messages
+        WHERE id IN (${placeholders})
+          AND ${VISIBLE_MESSAGE_CONDITION}
+        ORDER BY created_at ASC, id ASC
+      `).bind(...parentIds, channelId, channelId).all<VisibleMessageRow>();
+
+      const foundMessages = parentResult.results || [];
+      const foundIds = new Set(foundMessages.map((message) => String(message.id)));
+      const responseMessages = isReportsChannel(parentChannelId, env) && isOwner
+        ? await hydrateReportInboxMessages(foundMessages as Array<{ id: string }>, env, reportsOwnerLocale)
+        : foundMessages;
+
+      return Response.json({
+        messages: responseMessages,
+        missing_ids: parentIds.filter((parentId) => !foundIds.has(parentId)),
       });
     }
 

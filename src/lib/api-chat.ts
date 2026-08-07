@@ -159,6 +159,41 @@ export async function fetchMessageContext(channelId: string, messageId: string) 
   return data;
 }
 
+export async function fetchReplyParents(channelId: string, parentIds: string[]) {
+  const uniqueParentIds = [...new Set(parentIds.map((parentId) => parentId.trim()).filter(Boolean))];
+  if (uniqueParentIds.length === 0) {
+    return { messages: [], missing_ids: [] as string[] };
+  }
+
+  if (IS_MOCK) {
+    const mockApi = await loadMockApi();
+    const data = await mockApi.fetchMessages(channelId);
+    const messages = (data.messages || [])
+      .filter((message: { id: string }) => uniqueParentIds.includes(message.id))
+      .map(decorateMessageMedia);
+    const foundIds = new Set(messages.map((message: { id: string }) => message.id));
+    return {
+      messages,
+      missing_ids: uniqueParentIds.filter((parentId) => !foundIds.has(parentId)),
+    };
+  }
+
+  const params = new URLSearchParams({
+    type: "reply-parents",
+    channel: channelId,
+  });
+  for (const parentId of uniqueParentIds) {
+    params.append("parent_id", parentId);
+  }
+  const res = await fetch(`/api/data?${params}`, {
+    headers: roomTokenHeaders(),
+  });
+  if (!res.ok) throw new Error(`Reply parents failed: ${res.status}`);
+  const data = await res.json();
+  if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
+  return data;
+}
+
 export async function fetchGallery(channelId: string, cursor?: string) {
   if (IS_MOCK) return { gallery: [] };
   const params = new URLSearchParams({ type: "gallery", channel: channelId });

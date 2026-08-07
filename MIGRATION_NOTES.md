@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Batched reply-parent recovery avoids per-parent context churn — 2026-08-07
+
+- Reply-parent recovery previously reused `message-context` once for every missing parent id and re-sorted the mounted message window after each individual parent insertion.
+- Dense older threads could therefore fan out into multiple overlapping context requests and repeated whole-list client work even though the UI only needed the missing parent rows themselves.
+- The Worker now exposes a narrow `reply-parents` data path that accepts a bounded list of parent ids and returns only the visible parent rows plus the ids that are confirmed unavailable in that channel.
+- The chat reply-parent hook now resolves missing parents in batches, merges each batch into the mounted message list with one update pass, and marks unresolved ids unavailable without rerunning full message-context reconstruction for each parent.
+
+Trade-off: reply-parent recovery still favors correctness over immediate fallback, so replies with off-window parents can remain briefly delayed while a batch lookup completes. The difference is that the delay no longer multiplies into one heavy request and one full list re-sort per parent.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
 ### WebSocket auth no longer depends on full channel init — 2026-08-07
 
 - `/api/ws-token` previously called Worker `/api/init` on every socket open or reconnect just to determine whether the client should authenticate as owner admin, reports-owner viewer or passcode-room viewer.
