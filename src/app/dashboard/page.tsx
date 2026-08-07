@@ -737,9 +737,6 @@ function DashboardPageContent() {
             setRecentChannels(cachedRecentChannels);
             markDashboardMilestone("cached-channels-ready");
           }
-          const recentChannelsRequest = userId
-            ? loadAccountRecentChannels(userId, { skipListAnimation: true })
-            : Promise.resolve();
           const roleResult = await Promise.allSettled([loadChannels()]);
           const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
           if (isAdmin) {
@@ -752,6 +749,7 @@ function DashboardPageContent() {
             listAnimationsEnabledRef.current = true;
             return;
           }
+          const recentChannelsRequest = loadAccountRecentChannels(userId, { skipListAnimation: true });
           const supportPreviewRequest = loadSupportPreview();
           if (cachedRecentChannels.length > 0) {
             setLoading(false);
