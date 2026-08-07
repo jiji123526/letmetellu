@@ -24,6 +24,10 @@ async function resolveRecentChannelUser(
     ? await env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
       .bind(identity.userId).first<{ id: string; email: string }>()
     : null;
+  if (userById && (!identity.userEmail || normalizeEmail(userById.email) === identity.userEmail)) {
+    return userById.id;
+  }
+
   const userByEmail = identity.userEmail
     ? await env.DB.prepare("SELECT id, email FROM users WHERE lower(email) = ?")
       .bind(identity.userEmail).first<{ id: string; email: string }>()
