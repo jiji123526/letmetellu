@@ -14,7 +14,20 @@ function getInternalHeaders(session: { user: { id: string; email?: string | null
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const workerUrl = getWorkerUrl();
+  const url = new URL(request.url);
+  const channelId = url.searchParams.get("channel");
+
+  if (channelId) {
+    const readRes = await fetch(`${workerUrl}/api/user?channel=${encodeURIComponent(channelId)}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+    const readData = await readRes.json();
+    return NextResponse.json(readData, { status: readRes.status });
+  }
+
   const session = await auth();
   const user = session?.user;
 
@@ -22,7 +35,6 @@ export async function GET() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const workerUrl = getWorkerUrl();
   const headers = getInternalHeaders({ user: { id: user.id, email: user.email } });
 
   const readRes = await fetch(`${workerUrl}/api/user`, {

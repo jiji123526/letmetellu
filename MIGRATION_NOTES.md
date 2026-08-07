@@ -10,6 +10,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - That reused the full bootstrap path even though socket authorization only needed channel ownership, reports-owner override and room-token validation, so reconnect churn paid for message/config reads that were unrelated to the auth decision.
 - The Worker now exposes a narrow `socket-auth` route that validates exactly those socket auth modes and refreshes anonymous or device identity only when a room viewer actually needs it.
 - The Next.js `/api/ws-token` route now uses that lightweight Worker endpoint instead of `init`, reducing reconnect request cost without changing the existing admin, reports-owner or room-viewer WebSocket token model.
+- The owner-channel popup now also uses a same-origin `/api/user?channel=...` proxy instead of calling the Worker directly from the browser, so preview and production share one fetch path and avoid cross-origin/CORS-specific behavior for that read.
 
 Trade-off: socket authorization now depends on a dedicated Worker route instead of piggybacking on `init`, so future auth-mode changes must keep both the page bootstrap and socket-auth contracts aligned. The narrower endpoint is intentional because reconnect paths should not pull full channel state.
 
