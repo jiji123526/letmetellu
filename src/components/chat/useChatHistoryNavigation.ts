@@ -50,15 +50,6 @@ interface SavedScrollPosition {
 
 const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
 
-function flashBubble(element: HTMLElement | null) {
-  if (!element) return;
-  element.style.transition = "box-shadow .2s";
-  element.style.boxShadow = "0 0 0 2.5px var(--bubble-sent)";
-  setTimeout(() => {
-    element.style.boxShadow = "";
-  }, 800);
-}
-
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
@@ -544,7 +535,6 @@ export function useChatHistoryNavigation({
       ? element.querySelector<HTMLElement>("[data-message-media]") || element
       : element;
     alignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
-    flashBubble(element.querySelector("[data-bubble]") as HTMLElement | null);
     const container = messagesContainerRef.current;
     if (container) {
       await correctMessageAfterLayoutSettles(
