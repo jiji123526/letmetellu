@@ -332,6 +332,8 @@ function DashboardPageContent() {
   const channelItemRefs = useRef(new Map<string, HTMLDivElement>());
   const previousItemPositionsRef = useRef(new Map<string, number>());
   const skipNextListAnimationRef = useRef(false);
+  const rowAnimationsRef = useRef(new Map<string, Animation>());
+  const listAnimationsEnabledRef = useRef(false);
   const loadChannelsInFlightRef = useRef<Promise<boolean> | null>(null);
   const loadPlatformDashboardInFlightRef = useRef<Promise<boolean> | null>(null);
   const platformDashboardLoadedAtRef = useRef(0);
@@ -355,6 +357,19 @@ function DashboardPageContent() {
     authenticatedUserId && platformAdminRole?.userId === authenticatedUserId
   );
   const isPlatformAdmin = hasResolvedPlatformRole && platformAdminRole?.isAdmin === true;
+
+  useEffect(() => {
+    listAnimationsEnabledRef.current = false;
+    previousItemPositionsRef.current = new Map();
+    rowAnimationsRef.current.forEach((animation) => animation.cancel());
+    rowAnimationsRef.current.clear();
+  }, [authenticatedUserId, status]);
+
+  useEffect(() => () => {
+    rowAnimationsRef.current.forEach((animation) => animation.cancel());
+    rowAnimationsRef.current.clear();
+  }, []);
+
   const togglePlatformTicketFilter = useCallback((nextFilter: Exclude<PlatformTicketFilter, null>) => {
     skipNextListAnimationRef.current = true;
     setPlatformTicketFilter((current) => current === nextFilter ? null : nextFilter);
@@ -468,11 +483,17 @@ function DashboardPageContent() {
     }
   }, []);
 
-  const loadAccountRecentChannels = useCallback(async (userId: string) => {
+  const loadAccountRecentChannels = useCallback(async (
+    userId: string,
+    options?: { skipListAnimation?: boolean },
+  ) => {
     const migrationKey = `letmetellu_recent_channels_migrated_${userId}`;
     startDashboardRequest("recent-channels");
     try {
       const accountChannels = await fetchAccountRecentChannels();
+      if (options?.skipListAnimation) {
+        skipNextListAnimationRef.current = true;
+      }
       setRecentChannels(accountChannels);
       storeCachedAccountRecentChannels(userId, accountChannels);
       markDashboardMilestone("recent-channels-ready");
@@ -712,11 +733,12 @@ function DashboardPageContent() {
             ? readCachedAccountRecentChannels(userId)
             : [];
           if (cachedRecentChannels.length > 0) {
+            skipNextListAnimationRef.current = true;
             setRecentChannels(cachedRecentChannels);
             markDashboardMilestone("cached-channels-ready");
           }
           const recentChannelsRequest = userId
-            ? loadAccountRecentChannels(userId)
+            ? loadAccountRecentChannels(userId, { skipListAnimation: true })
             : Promise.resolve();
           const roleResult = await Promise.allSettled([loadChannels()]);
           const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
@@ -727,20 +749,24 @@ function DashboardPageContent() {
           }
           if (!userId) {
             setLoading(false);
+            listAnimationsEnabledRef.current = true;
             return;
           }
-          void loadSupportPreview();
+          const supportPreviewRequest = loadSupportPreview();
           if (cachedRecentChannels.length > 0) {
             setLoading(false);
           }
           await Promise.allSettled([recentChannelsRequest]);
           setLoading(false);
+          await Promise.allSettled([supportPreviewRequest]);
+          listAnimationsEnabledRef.current = true;
         })();
       } else if (status === "unauthenticated") {
-        void Promise.all([
-          loadLocalRecentChannels(),
-          loadSupportPreview(),
-        ]);
+        const localRecentChannelsRequest = loadLocalRecentChannels();
+        const supportPreviewRequest = loadSupportPreview();
+        void Promise.allSettled([localRecentChannelsRequest, supportPreviewRequest]).finally(() => {
+          listAnimationsEnabledRef.current = true;
+        });
         setPlatformAdminRole(null);
         setPlatformDashboard(null);
         setLoading(false);
@@ -1070,14 +1096,26 @@ function DashboardPageContent() {
 
   useLayoutEffect(() => {
     const nextPositions = new Map<string, number>();
-    const skipAnimation = skipNextListAnimationRef.current || isPlatformAdmin;
+    const activeIds = new Set(channelItemRefs.current.keys());
+    rowAnimationsRef.current.forEach((animation, id) => {
+      if (!activeIds.has(id)) {
+        animation.cancel();
+        rowAnimationsRef.current.delete(id);
+      }
+    });
+    const skipAnimation = skipNextListAnimationRef.current || isPlatformAdmin || !listAnimationsEnabledRef.current;
     channelItemRefs.current.forEach((element, id) => {
+      const runningAnimation = rowAnimationsRef.current.get(id);
+      if (runningAnimation) {
+        runningAnimation.cancel();
+        rowAnimationsRef.current.delete(id);
+      }
       const nextTop = element.getBoundingClientRect().top + window.scrollY;
       nextPositions.set(id, nextTop);
       if (skipAnimation) return;
       const previousTop = previousItemPositionsRef.current.get(id);
       if (previousTop === undefined || previousTop === nextTop) return;
-      element.animate(
+      const animation = element.animate(
         [
           { transform: `translateY(${previousTop - nextTop}px)` },
           { transform: "translateY(0)" },
@@ -1087,6 +1125,14 @@ function DashboardPageContent() {
           easing: "cubic-bezier(.22,.8,.36,1)",
         },
       );
+      rowAnimationsRef.current.set(id, animation);
+      const clearAnimation = () => {
+        if (rowAnimationsRef.current.get(id) === animation) {
+          rowAnimationsRef.current.delete(id);
+        }
+      };
+      animation.addEventListener("finish", clearAnimation, { once: true });
+      animation.addEventListener("cancel", clearAnimation, { once: true });
     });
     previousItemPositionsRef.current = nextPositions;
     skipNextListAnimationRef.current = false;

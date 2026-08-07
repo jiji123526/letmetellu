@@ -394,6 +394,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   } = useChatChannelBootstrap({
     channelId,
     channel,
+    authUserId,
     isLoggedIn,
     isOwner,
     inLiveModeRef,

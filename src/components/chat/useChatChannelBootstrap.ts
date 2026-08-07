@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { fetchInit } from "@/lib/api-chat";
-import { recordAccountRecentChannel } from "@/lib/account-recent-channels";
+import { recordAccountRecentChannel, updateCachedAccountRecentChannelVisit } from "@/lib/account-recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { clearChannelBackground, storeChannelBackground } from "@/lib/channel-background-cache";
@@ -18,6 +18,7 @@ interface BannerState {
 interface UseChatChannelBootstrapArgs {
   channelId: string;
   channel: Channel | null;
+  authUserId: string | null;
   isLoggedIn: boolean;
   isOwner: boolean;
   inLiveModeRef: MutableRefObject<boolean>;
@@ -65,6 +66,7 @@ interface UseChatChannelBootstrapResult {
 export function useChatChannelBootstrap({
   channelId,
   channel,
+  authUserId,
   isLoggedIn,
   isOwner,
   inLiveModeRef,
@@ -120,6 +122,17 @@ export function useChatChannelBootstrap({
       localStorage.setItem(`bubbleColor_${channelId}`, savedBubbleColor);
     }
     if (isLoggedIn) {
+      if (authUserId) {
+        updateCachedAccountRecentChannelVisit(authUserId, {
+          id: channelId,
+          name: data.channel.name,
+          profileImage: data.channel.profile_image,
+          bubbleColor: savedBubbleColor || channelBubbleColor,
+          hasPasscode: data.hasPasscode === true,
+          ownerName: data.channel.owner_name || "",
+          ownerUid: data.channel.owner_uid,
+        });
+      }
       void recordAccountRecentChannel(channelId)
         .then(({ record }) => {
           if (!record?.bubble_color) return;
@@ -166,6 +179,7 @@ export function useChatChannelBootstrap({
   }, [
     applyEmojiPresetsSnapshot,
     applyLiveSnapshot,
+    authUserId,
     channelId,
     isLoggedIn,
     setActiveNotice,

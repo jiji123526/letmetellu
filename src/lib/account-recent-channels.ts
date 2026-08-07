@@ -61,6 +61,31 @@ export function storeCachedAccountRecentChannels(userId: string, channels: Recen
   }
 }
 
+export function updateCachedAccountRecentChannelVisit(
+  userId: string,
+  channel: Omit<RecentChannel, "lastVisitedAt" | "pinned">,
+) {
+  if (typeof window === "undefined" || !userId) return;
+  try {
+    const existingChannels = readCachedAccountRecentChannels(userId);
+    const existing = existingChannels.find((item) => item.id === channel.id);
+    const nextChannels = [
+      {
+        ...channel,
+        bubbleColor: normalizeBubbleColor(channel.bubbleColor),
+        pinned: existing?.pinned ?? false,
+        lastVisitedAt: Date.now(),
+      },
+      ...existingChannels.filter((item) => item.id !== channel.id),
+    ]
+      .sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.lastVisitedAt - left.lastVisitedAt)
+      .slice(0, ACCOUNT_RECENT_CACHE_LIMIT);
+    storeCachedAccountRecentChannels(userId, nextChannels);
+  } catch {
+    // Dashboard snapshots are optional.
+  }
+}
+
 export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
   const response = await fetch("/api/recent-channels", { cache: "no-store" });
   if (!response.ok) throw new Error("recent channels unavailable");
