@@ -6,13 +6,13 @@ This file tracks remaining product and platform work. Implemented behavior and d
 
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
-1. Complete custom-domain, authentication, email and realtime smoke tests, then remove transition origins.
+1. Remove transition origins after rollback readiness, then complete the nonce-based CSP hardening sequence.
 2. Add regression coverage for the recent chat refactors plus support, reports and dashboard state transitions.
 3. Calibrate the existing operational-health view from production baselines, then add alert delivery and response procedures.
 4. Add explicit monitoring for production email and legacy credential-upgrade paths.
 5. Move deletion, cleanup and retention toward retryable, observable workflows.
 6. Expand durable abuse controls beyond the current first pass.
-7. Pursue larger performance redesigns only after measurement, starting with precomputed channel activity if `/api/user` remains a proven hotspot.
+7. Use the new dashboard startup measurements to decide whether any larger derived-activity redesign is justified.
 
 ## Remaining Ship Work
 
@@ -71,7 +71,8 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Completed on 2026-08-05: replaced the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
 - The consolidated scheduler retains in-flight dedupe and independently enforces 30-second admin-dashboard, 60-second support-preview and five-minute operational-health freshness windows.
 - Follow-up validation fixed two edge cases before merge: request locale now reaches the document-level `lang`, and support-preview polling remains active from an empty state so another tab or device can create a ticket that this dashboard later discovers.
-- Add lightweight measurement for dashboard refresh count and network fan-out before and after the consolidation so the change is validated with real request reductions, not just cleaner code.
+- Startup timing is now measurable through local `letmetellu:dashboard:*` Performance API entries. Remaining validation is to collect representative production baselines for request fan-out and usable-state timing.
+- The 2026-08-07 startup follow-up parallelized required reads, moved normal-user support preview loading off the blocking path, folded platform-admin role into `/api/user`, restored a bounded 24-hour recent-channel snapshot and added a geometry-matched skeleton.
 - Keep the custom support-ticket event as an explicit forced refresh for known mutations rather than treating it as polling.
 
 #### Phase 3: chat init and reconnect shaping
@@ -108,6 +109,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - The highest-upside remaining dashboard performance change is to stop deriving owned-channel activity from `messages` and live-config rows on every `/api/user` read.
 - The intermediate 2026-08-05 optimization added an indexed latest-visible-message lookup, replacing the full per-owner message aggregation. Measure that rollout before pursuing this larger redesign.
+- The 2026-08-07 dashboard startup pass removed serial client waits and the separate role probe. Use its `letmetellu:dashboard:*` measurements to distinguish frontend wait time from `/api/user` database time before changing the schema.
 - Do not start this migration until latency and D1 query measurements show that the optimized `/api/user` query is still a material bottleneck.
 - The likely shape is a dedicated `channel_activity` table keyed by `channel_id`, or equivalent derived fields on `channels`, that stores precomputed `last_activity_at`, `last_message_at`, and live-state fields.
 - This should be treated as a data-consistency project, not a small hot-path tweak. All message creation, latest-message deletion/moderation, live start, live end, live expiry, channel creation, and channel deletion paths would need to keep the derived state correct.

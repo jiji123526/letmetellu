@@ -18,7 +18,10 @@ Production: [yapndot.com](https://yapndot.com)
 - Append-only moderation audit logs plus operational event logging for `429`, `403`, `5xx` and unhandled exceptions
 - The 2026-07-31 bandwidth spike was reduced by moving eligible media reads off the Next.js proxy and by tightening dashboard/support polling and duplicate request paths
 - Reduced dashboard and support traffic overhead through bounded polling, lighter support-preview reads and deduped preview/version requests
+- Faster returning-dashboard startup through parallel requests, a 24-hour account-scoped recent-channel snapshot, role data in the main user bootstrap and a geometry-matched loading skeleton
 - The latest Worker cost pass replaces wildcard link-panel scans with an indexed `message_links` table and uses an R2-key media lookup fast path before any legacy reverse-lookup fallback
+- Returning channels restore cached background settings immediately, reuse stable browser-cached image URLs and serve eligible public backgrounds through a bounded Cloudflare edge cache
+- Loaded link-preview metadata persists asynchronously in the browser Cache API with a 200-entry limit, 24-hour freshness and seven-day stale fallback
 - Live sessions now auto-expire after 8 hours, and connected viewers are forced through a real expiry recheck at the deadline so the room ends visibly without waiting for a manual refresh
 - Locale-aware legal pages now render only the active app language and treat a manual locale choice as higher priority than device language
 - Explicit Worker-side security headers in addition to the existing Next.js app headers
@@ -79,6 +82,8 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 - The bottom-left help entry opens the user guide and guided `1:1` platform support for everyone.
 - Logged-in users also get the admin guide from that same dashboard help entry.
 - Logged-in users sync recent channels, pinned state, personal bubble colors, font size and locale through their account.
+- Returning authenticated users can render a 24-hour, user-keyed recent-channel snapshot while the account response refreshes it; authoritative server data still replaces the cached rows.
+- Dashboard startup exposes local `letmetellu:dashboard:*` Performance API measurements and uses a layout-matched skeleton while required data loads.
 - Manual locale selection overrides device language for both guests and members, and the legal pages follow that active locale instead of rendering both languages together.
 - Guest users keep recent channels and personal UI preferences in the current browser only.
 - Exact channel address lookup supports a `/ch/...` path or a full URL, and the dashboard triggers that lookup on paste, `Enter` or mobile keyboard close.
@@ -87,10 +92,14 @@ Normal chat and live-session traffic share the parent channel's Durable Object. 
 
 - Real-time channel chat over WebSockets with one Durable Object per channel.
 - Replies, reactions, edit/delete, long-message expansion and full-text search.
+- Replies wait for an unloaded parent context before rendering, avoiding temporary top-level placement and thread reflow.
 - Multi-image messages, R2-backed media, gallery view and link panel.
-- Native YouTube, X/Twitter and Instagram embeds plus Open Graph previews for other links.
+- Lazy YouTube and Instagram widgets, lightweight X/Twitter metadata cards and Open Graph previews for other links.
+- Successful preview metadata persists in the browser Cache API and can render without another network response on later visits while stale entries refresh in the background.
 - Cursor-based loading for messages, gallery items and links.
 - Historical message-context loading for older gallery or link references without forcing a jump to the newest messages.
+- Refreshing a channel restores the tab's visible message position, while leaving and re-entering intentionally starts at the newest message.
+- Versioned background metadata restores the last channel appearance during bootstrap; stable background image URLs rely on normal browser HTTP caching rather than storing image bytes in local storage.
 - Korean and English UI support.
 
 ### Owner and moderation features
@@ -282,6 +291,13 @@ Recent schema additions:
 - `0025`: guided support sessions, escalated support threads and support messages
 - `0026`: support read state, support audit logs and operator triage signals
 - `0027`: support audit retention index and support-dashboard load shaping support
+- `0028`: indexed message-link lookup and backfill
+- `0029`: latest visible-message and ordered channel-activity lookup
+- `0030`: user acknowledgement state for closed support threads
+- `0031`: support-dashboard pagination and message lookup indexes
+- `0032`: tenth-visit improvement survey responses
+- `0033`: idempotent message and DM client IDs
+- `0034`: normalization of legacy `#3b8df0` bubble colors to `#3598fe`
 
 Frontend deployment is triggered by pushing `main`:
 
@@ -304,6 +320,9 @@ Recent deployment notes:
 - `Fix dashboard request loop for admin support` and `Reduce dashboard and support traffic overhead` were the main fixes for the edge-request spike: admin polling was reduced, user support preview is now conditional, support-thread refresh is visibility-aware, `/api/user` became read-first, and duplicate preview/version/locale writes were removed.
 - `Reduce dashboard and support traffic overhead` required both Worker and frontend deploys, but no new D1 migration.
 - `Optimize media lookup and links indexing` adds D1 migration `0028_media_lookup_and_message_links.sql`, moves the links panel onto an indexed lookup table, reduces protected-media D1 lookup work on the hot path, and further slows background dashboard/support polling.
+- `Normalize default bubble color` adds D1 migration `0034_normalize_bubble_color.sql`; apply it before deploying the matching Worker and frontend.
+- Dashboard startup, background restoration and public-background edge caching span both runtimes but add no schema migration.
+- Browser preview persistence is frontend-only; it stores bounded metadata in Cache API while the Worker remains authoritative for preview fetching and policy.
 - `Refine locale-specific legal pages` is frontend-only and does not require a Worker deploy or migration.
 
 See [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for the full migration inventory, deployment notes and implementation history, including recent frontend-only support/report/dashboard polish that required no schema changes.

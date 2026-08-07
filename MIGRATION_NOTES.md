@@ -4,6 +4,77 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Dashboard startup cache, request shaping and skeleton — 2026-08-07
+
+- The dashboard now starts its user bootstrap and recent-channel reads without serially waiting for unrelated support work. The support preview loads in the background for normal users.
+- `/api/user` now returns `is_platform_admin`, removing the extra role-probe request from normal authenticated startup. Platform admins still wait for their administrative dashboard because that data defines their primary view.
+- Authenticated recent-channel rows are mirrored in a user-keyed local snapshot capped at 100 entries and 24 hours. A valid snapshot can render immediately while the authoritative account request refreshes it.
+- Startup timing is exposed through `performance` entries under `letmetellu:dashboard:*`, including request durations and milestones for session, cached channels, network channels, recent channels, admin data, support preview and usable state.
+- The blocking dashboard loader is now a full geometry-matched skeleton for the header, search field and channel rows instead of a blank or minimally informative loading state.
+
+Trade-offs:
+
+- Cached rows can be briefly stale after a channel is renamed, deleted or changed on another device. The network response remains authoritative and replaces the snapshot.
+- The local snapshot contains channel-list metadata for the authenticated account on that browser. It is namespaced by user ID and stores no passcodes or message content, but it persists until browser storage is cleared or the entry is overwritten.
+- Performance entries are local browser diagnostics rather than centralized telemetry. They make bottlenecks inspectable without adding analytics traffic, but production aggregation still requires a separate monitoring decision.
+
+Deployment note: deploy the Worker and frontend together for the `/api/user` response change. No D1 migration is required.
+
+### Persistent channel backgrounds and cache-safe media delivery — 2026-08-06
+
+- The browser stores versioned channel background metadata in `localStorage`, including type, color, stable image path, overlay, blur and channel instance ID. The loading state can restore that appearance before `/api/init` finishes.
+- `/api/init` remains authoritative. Owner setting changes and realtime background updates refresh the local snapshot, while channel deletion, recreation, passcode gating and instance mismatches invalidate it.
+- Background image URLs now normalize to stable same-origin `/api/media/...` paths so normal browser HTTP caching can reuse image bytes across channel entries without persisting binary data in synchronous storage.
+- Public channel backgrounds use `public, max-age=604800, s-maxage=3600, immutable` and are also stored in Cloudflare's regional cache after the first authorized R2/D1 lookup.
+- Passcode-protected and reports-channel backgrounds use private caching and bypass the shared edge cache. Message images, DMs, signed media and other protected uploads retain their private or no-store behavior.
+
+Trade-offs:
+
+- A returning visitor can see the last cached background briefly before current settings arrive. Instance checks and authoritative init reduce stale reuse but cannot make cross-device changes synchronous.
+- Public background replacement must use a new media key because immutable browser caching intentionally favors reuse over in-place mutation.
+- Cloudflare's Cache API is regional and eviction is provider-controlled. A miss still performs the normal authorization and storage lookup, and public cache population adds bounded edge storage.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
+### Persistent link-preview metadata cache — 2026-08-06
+
+- Successfully loaded generic and X/Twitter preview metadata is stored asynchronously in the browser Cache API under `letmetellu-link-previews-v2`; the earlier `localStorage` preview cache is removed on first use.
+- The cache keeps at most 200 responses, treats entries as fresh for 24 hours and serves entries for up to seven days while stale data is refreshed in the background.
+- In-memory request deduplication remains active within a page session. Failed and metadata-empty responses are not persisted, so a later channel entry can retry.
+- Preview requests use the same-origin Next.js `/api/preview` route, which avoids preview-deployment CORS failures while the Worker continues to enforce URL policy, rate limits, response-size bounds and its own one-hour edge metadata cache.
+- X/Twitter links use the lightweight metadata card rather than constructing the full third-party widget. Image-only metadata remains visible without forcing a cropped text-card layout.
+
+Trade-offs:
+
+- Cache API reads are asynchronous, so a restored card may still appear a frame or more after its message. Browser eviction is outside application control.
+- Persisted preview metadata reveals which linked pages were rendered in that browser profile until eviction or cache clearing. The cache stores metadata and source URLs, not the rendered React tree.
+- Stale-while-refresh behavior favors immediate cards over perfectly current titles and images. Upstream changes may take up to the refresh window to appear.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
+### Reply-parent-first rendering — 2026-08-06
+
+- Replies whose parent is outside the loaded message window are held back while the client fetches the parent's message context.
+- Resolved parents are inserted chronologically before thread derivation, so replies no longer appear temporarily as top-level messages and then jump under a parent.
+- Parent lookups are deduplicated per channel/live scope and bounded by a four-second timeout. A confirmed unavailable parent releases its replies as top-level fallback content rather than hiding them indefinitely.
+- Deleted parent rows remain context-fetchable when they still have visible replies, preserving thread structure without making unrelated deleted messages visible.
+- If the viewer is already following the newest messages, inserting a fetched parent keeps the viewport at the bottom; historical readers retain their current position.
+
+Trade-off: a reply can appear a few seconds later than surrounding top-level messages when its parent requires another request. This favors stable thread structure over showing an incorrectly positioned reply immediately.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
+### Chat bubble spacing and asynchronous layout stability — 2026-08-06
+
+- Message-row top spacing increased from `0.18` to `0.32` times the selected bubble font size, improving separation without adding a fixed pixel gap that ignores accessibility sizing.
+- When images, previews, widgets or reply parents change layout above a reader who is away from the bottom, the chat preserves the first visible message and its viewport offset.
+- Readers already following the newest messages continue following the bottom as content resolves. Manual wheel, touch and pointer input cancels pending programmatic corrections.
+- Widget and reply bubbles retain responsive row limits so reply indentation and arrows do not create right-side clipping on narrow screens.
+
+Trade-off: asynchronous content can still change bubble dimensions when it finishes, but the viewport anchor prevents that growth from moving the reader to unrelated messages.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Refresh-only chat scroll restoration — 2026-08-06
 
 - A channel preserves its visible message position only for an actual browser refresh of that same channel.
@@ -29,21 +100,22 @@ Deployment note: this is frontend-only and requires no D1 migration or Worker de
 
 - The default sent-bubble color is now `#3598fe` across initial CSS, UI fallbacks, channel previews, Open Graph images and both admin/viewer color presets.
 - New channel creation explicitly stores `#3598fe` in D1 instead of depending on the legacy production column default.
-- The initial schema default is updated for fresh installations; no production schema rewrite or data backfill is required.
-- Existing channel colors and per-user channel color overrides remain unchanged.
+- The initial schema default is updated for fresh installations.
+- Migration `0034_normalize_bubble_color.sql` rewrites the superseded `#3b8df0` value to `#3598fe` in both `channels` and `user_recent_channels`.
+- Runtime normalization also maps missing values and legacy `#3b8df0` responses to `#3598fe`. Any other channel or per-user custom color remains unchanged.
 
-Trade-off: existing channels that still store the former default continue to display that saved color until an owner changes it. This avoids silently overwriting a channel's persisted appearance.
+Trade-off: users who deliberately selected the exact old default `#3b8df0` are migrated with indistinguishable untouched defaults. Preserving every other color avoids broad appearance overrides.
 
-Deployment note: deploy the Worker and frontend; no D1 migration is required.
+Deployment note: apply D1 migration `0034_normalize_bubble_color.sql`, then deploy the Worker and frontend.
 
-### Adaptive widget preloading and visible-first rendering — 2026-08-06
+### Adaptive widget preloading — 2026-08-06
 
-- When mounted chat history contains X or Instagram links, the corresponding third-party SDK begins downloading during browser idle time without eagerly rendering every widget.
-- Lazy embed activation expands from 600px to 1,000px on normal connections, remains 600px on 3G and drops to 300px for 2G or data-saver users.
-- X render tasks carry a live priority reference, so widgets currently inside the viewport move ahead of off-screen preload work in the pending queue.
-- X concurrency adapts from one render on constrained connections to two on 3G/lower-core devices and three on capable devices.
+- YouTube and Instagram activation expands to 1,000px around the viewport on normal connections, stays at 600px on 3G and drops to 300px for 2G or data-saver users.
+- When mounted chat history contains an Instagram link, its shared third-party SDK begins downloading during browser idle time without eagerly processing every off-screen post.
+- Generic and X/Twitter metadata-card requests begin within a fixed 720px preview margin and share per-URL request deduplication.
+- X/Twitter no longer loads the native widget SDK or constructs tweet iframes; it uses the same lightweight metadata-card path as other previews.
 
-Trade-offs: normal fast connections perform third-party SDK downloads and begin nearby preview work earlier, increasing background network and CPU use slightly. Data-saver and slow-network users retain conservative limits, and active render work cannot be preempted after it has already started.
+Trade-offs: normal fast connections perform nearby preview work and Instagram SDK download earlier, increasing background network use slightly. Data-saver and slow-network users retain conservative native-widget limits, while metadata-card timing remains fixed.
 
 Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
 
@@ -100,18 +172,17 @@ Trade-off: reply widgets can render smaller than equivalent top-level widgets be
 
 ### Lazy third-party widget rendering — 2026-08-06
 
-- Chat embeds now mount only when they enter a 600px preload margin around the viewport, avoiding immediate iframe and SDK work for off-screen history.
-- Twitter uses one shared SDK loader and limits native tweet construction to two concurrent renders.
-- A 12-second render guard releases the Twitter queue if a third-party render promise stalls.
+- YouTube and Instagram embeds mount only when they enter the connection-aware preload margin around the viewport, avoiding immediate iframe and SDK work for off-screen history.
 - Instagram uses one shared SDK loader and batches same-tick global `Embeds.process()` calls instead of processing the page once per message.
 - YouTube iframes now use native lazy loading.
+- X/Twitter uses a first-party metadata card and therefore has no native widget queue, render timeout or third-party iframe lifecycle.
 - Generic link-preview requests also begin near the viewport while retaining the existing per-URL request and result cache.
 
 Trade-offs:
 
 - Fast scrolling across a large distance can briefly expose the standard loading bubble while the newly-near widget renders.
-- A queued Twitter widget may start slightly later when two other tweets are already rendering, but this protects main-thread responsiveness and reduces simultaneous third-party traffic.
-- Widget completion time still depends on X, Instagram and YouTube availability; this change removes unnecessary eager work rather than eliminating third-party latency.
+- X cards are lighter and more persistent than native widgets but do not reproduce every interactive tweet control.
+- Widget completion time still depends on Instagram and YouTube availability; this change removes unnecessary eager work rather than eliminating third-party latency.
 
 ### Delayed reconnect notice — 2026-08-06
 
@@ -1864,7 +1935,7 @@ Media bubbles, embedded widgets and loading bubbles intentionally use their own 
 
 - Added R2 uploads, gallery, DMs, reactions, reports and FTS5 search.
 - Added multiple-image sending and media loading states.
-- Added native X/Twitter and Instagram widgets plus link previews.
+- Originally added native X/Twitter and Instagram widgets plus link previews. Instagram remains native; X/Twitter now uses the lighter persistent metadata-card path documented above.
 - Added temporary live channels, live presence, emoji presets and automatic cleanup.
 - Replaced event-wide refetches with payload-based local patches for normal realtime events.
 - Added cursor pagination and on-demand gallery/link loading.
@@ -2264,10 +2335,12 @@ Trade-offs:
 
 ## Current follow-up work
 
-- complete the 2026-07-26 security-audit remediation in the documented order;
-- verify a production Resend sending domain and monitor verification/reset delivery;
-- finish monitored legacy-password migration;
-- consider message-list virtualization for exceptionally long historical browsing sessions;
-- add typing indicators;
-- implement the documented operational metrics, alerts, cleanup jobs and retention policy;
-- continue mobile and accessibility testing for widgets, dialogs and dashboard gestures.
+- remove legacy transition origins after rollback readiness and complete nonce-based CSP hardening;
+- add focused regression coverage for chat history/reply behavior and support, reports and dashboard state transitions;
+- calibrate production health baselines before adding external alert delivery;
+- monitor production Resend delivery and the legacy-password upgrade path;
+- move cross-store deletion and retention toward bounded, observable and retryable workflows;
+- use the new dashboard timing entries before pursuing precomputed channel activity or another broad performance redesign;
+- continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures.
+
+The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTURE_PLANS.md).
