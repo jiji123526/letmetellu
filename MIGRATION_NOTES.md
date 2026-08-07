@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Background overlay and blur persistence with reused images — 2026-08-07
+
+- Admin background updates now accept both absolute Worker/app media URLs and the normalized same-origin `/api/media/...` paths already stored in channel state and the local background snapshot.
+- Reusing the same uploaded background image while changing only darkening or blur no longer fails Worker validation, so those settings persist correctly without forcing the owner to reupload the image.
+
+Trade-off: background-image validation still stays scoped to the app's own media paths rather than allowing arbitrary external image URLs. The fix broadens accepted path forms for the same asset, not the product policy for channel backgrounds.
+
+Deployment note: this is Worker-only and requires no D1 migration.
+
 ### Adaptive reply-arrow tone by background heuristic — 2026-08-07
 
 - Reply arrows now use two contrast variants instead of one fixed stroke across every channel surface.

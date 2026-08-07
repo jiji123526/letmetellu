@@ -14,6 +14,30 @@ function normalizeBubbleColor(value: unknown): unknown {
     : value;
 }
 
+function isAllowedBackgroundImageUrl(
+  value: unknown,
+  env: Env,
+): boolean {
+  if (typeof value !== "string") return false;
+  if (value.startsWith("/api/media/")) {
+    return !/["'\\\s]/.test(value);
+  }
+
+  try {
+    const imageUrl = new URL(value);
+    if (!imageUrl.pathname.startsWith("/api/media/")) return false;
+    const appOrigin = new URL(env.APP_ORIGIN);
+    return (
+      imageUrl.origin === appOrigin.origin
+      || imageUrl.hostname === "letsplay-api.letmetellu.workers.dev"
+      || imageUrl.hostname === "localhost"
+      || imageUrl.hostname === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function isProtectedAdminSender(input: {
   env: Env;
   uid: string | null;
@@ -525,19 +549,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         ).bind(channel_id).first<{ background_image: string | null }>();
         previousBackgroundImage = previousBackground?.background_image || null;
         if (background_image !== null) {
-          let validBackgroundImage = false;
-          if (typeof background_image === "string") {
-            try {
-              const imageUrl = new URL(background_image);
-              validBackgroundImage = imageUrl.pathname.startsWith("/api/media/")
-                && (
-                  imageUrl.hostname === "letsplay-api.letmetellu.workers.dev"
-                  || imageUrl.hostname === "localhost"
-                  || imageUrl.hostname === "127.0.0.1"
-                );
-            } catch {}
-          }
-          if (!validBackgroundImage) {
+          if (!isAllowedBackgroundImageUrl(background_image, env)) {
             return Response.json({ error: "invalid background image" }, { status: 400 });
           }
         }
