@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Newer history pages preserve the visible viewport anchor — 2026-08-07
+
+- Scrolling down through a contextual history window previously anchored newer-page loads to the old newest mounted message for only one animation frame.
+- Once the mounted history exceeded 300 messages, trimming older rows from the top could therefore move the reader upward while newer rows were appended below.
+- Older and newer page loads now share the same locked viewport-anchor lifecycle: capture the first visible message and its exact offset, retain it through message merging and window trimming, then release it after layout above the anchor settles.
+- A locked anchor can restore while the reader is near the bottom of a contextual window, while ordinary latest-message behavior still follows the bottom normally.
+- Async mutations below the locked anchor remain ignored during stabilization, so newly appended previews or media do not compete with the position correction.
+
+Trade-off: paging briefly prioritizes the current visible message over bottom-follow behavior while the history window settles. The lock is released after stabilization, and ordinary latest-room scrolling is unchanged.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Local chat and dashboard performance diagnostics now include request counts — 2026-08-07
 
 - Dashboard startup tracing now records not only milestone timings but also per-request counts and durations for `/api/user`, recent-channels, support-preview and platform-dashboard reads across the current page session.

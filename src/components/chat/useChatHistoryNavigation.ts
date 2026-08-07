@@ -214,7 +214,7 @@ export function useChatHistoryNavigation({
   const navigationRequestRef = useRef(0);
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
   const lockedScrollAnchorRef = useRef<ScrollAnchor | null>(null);
-  const prependAnchorRequestRef = useRef(0);
+  const historyLoadAnchorRequestRef = useRef(0);
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
 
@@ -272,8 +272,14 @@ export function useChatHistoryNavigation({
 
   const restoreScrollAnchor = useCallback(() => {
     const container = messagesContainerRef.current;
-    const anchor = lockedScrollAnchorRef.current || scrollAnchorRef.current;
-    if (!container || !anchor || isNearBottomRef.current || loadingMoreRef.current) return;
+    const lockedAnchor = lockedScrollAnchorRef.current;
+    const anchor = lockedAnchor || scrollAnchorRef.current;
+    if (
+      !container
+      || !anchor
+      || (!lockedAnchor && isNearBottomRef.current)
+      || loadingMoreRef.current
+    ) return;
 
     const nextTop = getAnchorTop(container, anchor.id);
     if (nextTop === null) return;
@@ -284,7 +290,7 @@ export function useChatHistoryNavigation({
   }, [messagesContainerRef]);
 
   const releaseLockedScrollAnchor = useCallback((requestId: number) => {
-    if (prependAnchorRequestRef.current !== requestId) return;
+    if (historyLoadAnchorRequestRef.current !== requestId) return;
     lockedScrollAnchorRef.current = null;
     updateScrollAnchor();
   }, [updateScrollAnchor]);
@@ -390,7 +396,7 @@ export function useChatHistoryNavigation({
       if (!oldest?.created_at) return;
 
       loadingMoreRef.current = true;
-      const prependRequestId = ++prependAnchorRequestRef.current;
+      const prependRequestId = ++historyLoadAnchorRequestRef.current;
       const viewportAnchor = findScrollAnchor(element);
       lockedScrollAnchorRef.current = viewportAnchor;
       if (viewportAnchor) {
@@ -454,8 +460,12 @@ export function useChatHistoryNavigation({
       if (!newest?.created_at) return;
 
       loadingMoreRef.current = true;
-      const anchorId = newest.id;
-      const previousAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
+      const appendRequestId = ++historyLoadAnchorRequestRef.current;
+      const viewportAnchor = findScrollAnchor(element);
+      lockedScrollAnchorRef.current = viewportAnchor;
+      if (viewportAnchor) {
+        scrollAnchorRef.current = viewportAnchor;
+      }
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
 
       fetchMessagePage(fetchChannel, "after", { createdAt: newest.created_at, id: newest.id })
@@ -477,20 +487,45 @@ export function useChatHistoryNavigation({
               return trimMessageWindow(combined, "newer");
             });
             requestAnimationFrame(() => {
-              const nextAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
-              if (previousAnchorTop !== null && nextAnchorTop !== null) {
-                element.scrollTop += nextAnchorTop - previousAnchorTop;
+              const anchor = lockedScrollAnchorRef.current;
+              const nextAnchorTop = anchor ? getAnchorTop(element, anchor.id) : null;
+              if (anchor && nextAnchorTop !== null) {
+                element.scrollTop += nextAnchorTop - anchor.top;
               }
+              const anchorElement = anchor ? document.getElementById(anchor.id) as HTMLElement | null : null;
+              if (!anchorElement) {
+                releaseLockedScrollAnchor(appendRequestId);
+                return;
+              }
+              void waitForStableMessageLayout(element, anchorElement).finally(() => {
+                restoreScrollAnchor();
+                releaseLockedScrollAnchor(appendRequestId);
+              });
             });
           } else {
             hasMoreNewerMessagesRef.current = false;
+            releaseLockedScrollAnchor(appendRequestId);
           }
+        })
+        .catch(() => {
+          releaseLockedScrollAnchor(appendRequestId);
         })
         .finally(() => {
           loadingMoreRef.current = false;
         });
     }
-  }, [channelId, inLiveModeRef, messages, messagesContainerRef, setHistoryMode, setMessages, setShowScrollBtn, updateScrollAnchor]);
+  }, [
+    channelId,
+    inLiveModeRef,
+    messages,
+    messagesContainerRef,
+    releaseLockedScrollAnchor,
+    restoreScrollAnchor,
+    setHistoryMode,
+    setMessages,
+    setShowScrollBtn,
+    updateScrollAnchor,
+  ]);
 
   const scrollToBottom = useCallback(() => {
     if (historyModeRef.current === "context") {
