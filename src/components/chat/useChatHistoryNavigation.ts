@@ -507,26 +507,24 @@ export function useChatHistoryNavigation({
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
-    const shouldHydrateExistingContext = !!element && historyModeRef.current === "context";
+    const fallbackElement = element;
 
-    if (!element || shouldHydrateExistingContext) {
-      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-      try {
-        const data = await fetchMessageContext(fetchChannel, msgId);
-        if (navigationRequest !== navigationRequestRef.current) return;
-        if (!data.messages?.some((message: Message) => message.id === msgId)) {
-          throw new Error("message not found");
-        }
-        setMessages(data.messages as Message[]);
-        historyModeRef.current = "context";
-        setHistoryMode("context");
-        setNewerMessageCount(0);
-        hasMoreMessagesRef.current = data.has_older !== false;
-        hasMoreNewerMessagesRef.current = data.has_newer !== false;
-        element = await waitForMessageElement(msgId);
-      } catch {
-        element = null;
+    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+    try {
+      const data = await fetchMessageContext(fetchChannel, msgId);
+      if (navigationRequest !== navigationRequestRef.current) return;
+      if (!data.messages?.some((message: Message) => message.id === msgId)) {
+        throw new Error("message not found");
       }
+      setMessages(data.messages as Message[]);
+      historyModeRef.current = "context";
+      setHistoryMode("context");
+      setNewerMessageCount(0);
+      hasMoreMessagesRef.current = data.has_older !== false;
+      hasMoreNewerMessagesRef.current = data.has_newer !== false;
+      element = await waitForMessageElement(msgId);
+    } catch {
+      element = fallbackElement || null;
     }
 
     if (!element) {

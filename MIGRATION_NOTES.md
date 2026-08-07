@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Explicit message navigation now rehydrates thread context — 2026-08-07
+
+- Navigating to a message by id now refreshes `message-context` even when the target message is already mounted in the current client window.
+- This prevents partially loaded old-history slices from keeping a mounted root message while silently omitting sibling replies that do exist in the authoritative context payload.
+- If the context refresh fails, navigation still falls back to the already-mounted target so direct jumps remain usable under transient network failures.
+
+Trade-off: explicit message jumps can now issue an extra context request even when the target is already visible. The additional fetch is intentional because navigation now prioritizes thread completeness over avoiding that round trip.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### History page loads now keep visible root threads intact — 2026-08-07
 
 - Chronological `/api/data?type=messages` pages now expand the visible root threads touched by the page instead of returning only the raw 50-row time slice.
