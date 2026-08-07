@@ -82,7 +82,15 @@ export function decorateProtectedMediaUrl(mediaUrl: string | null | undefined): 
 }
 
 export function decorateBackgroundMediaUrl(mediaUrl: string | null | undefined): string | null {
-  return buildDirectMediaUrl(mediaUrl, { keepSameOrigin: true });
+  if (!mediaUrl) return null;
+
+  try {
+    const parsed = new URL(mediaUrl, WORKER_URL);
+    if (!parsed.pathname.startsWith("/api/media/")) return mediaUrl;
+    return parsed.pathname;
+  } catch {
+    return mediaUrl;
+  }
 }
 
 export function decorateMessageMedia<T extends { image?: string | null }>(message: T): T {

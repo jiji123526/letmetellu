@@ -32,7 +32,7 @@ Deployment note: deploy the Worker and frontend together. No D1 migration is req
 
 Trade-off: opening an older message can now return a larger payload for dense threads because the endpoint prioritizes thread completeness over a strict fixed-size context slice.
 
-Deployment note: this is Worker-only and requires no D1 migration.
+Deployment note: background-save canonicalization is Worker-side and the re-entry no-flash alignment is frontend-side. No D1 migration is required.
 
 ### Single-depth thread rendering now keeps nested replies visible — 2026-08-07
 
@@ -60,10 +60,11 @@ Deployment note: this is frontend-only and requires no D1 migration or Worker de
 - Reusing the same uploaded background image while changing only darkening or blur no longer fails Worker validation, so those settings persist correctly without forcing the owner to reupload the image.
 - Background saves now canonicalize channel-image URLs back to a stable `/api/media/...` path before storing them, and replacement cleanup compares the extracted media key instead of the raw URL string.
 - This prevents the same background asset from being mistaken for a new file just because it arrived as a Worker URL, an app URL or a signed URL variant. Without that normalization, a settings-only save could delete the current R2 object and leave fresh devices with a `404` background fetch.
+- Channel bootstrap now normalizes authoritative `background_image` values to the same stable `/api/media/...` path that the loading-state cache already uses. Re-entering a channel no longer swaps from a cached path to a different signed Worker URL for the same image, which avoids the gray flash caused by a second cache miss and decode cycle.
 
 Trade-off: background-image validation still stays scoped to the app's own media paths rather than allowing arbitrary external image URLs. The fix broadens accepted path forms for the same asset, not the product policy for channel backgrounds.
 
-Deployment note: this is Worker-only and requires no D1 migration.
+Deployment note: background-save canonicalization is Worker-side and the re-entry no-flash alignment is frontend-side. No D1 migration is required.
 
 ### Adaptive reply-arrow tone by background heuristic — 2026-08-07
 
