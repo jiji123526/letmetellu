@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Dashboard reorder hydration stability — 2026-08-07
+
+- Returning to the dashboard now updates the authenticated recent-channel snapshot immediately when a channel is opened, so the cached list order usually already reflects the just-visited channel before the authoritative `/api/recent-channels` response arrives.
+- The dashboard's FLIP-style row reordering is suppressed during the initial cached-to-authoritative hydration window for both authenticated and guest startup. This avoids animating server reconciliation that does not represent a direct user action.
+- In-flight row animations are cancelled before any new measurement pass runs, preventing a second reorder from starting from a temporarily transformed position and producing the previous move-then-bounce effect.
+- Explicit list-state changes such as pinning can still animate after the initial dashboard load has settled.
+
+Trade-off: returning to the dashboard after visiting a channel no longer shows a reorder animation during hydration, even when the authoritative server ordering differs from the first cached render. This is intentional because the movement was not useful feedback and was the source of the visible bounce.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Dashboard startup cache, request shaping and skeleton — 2026-08-07
 
 - The dashboard now starts its user bootstrap and recent-channel reads without serially waiting for unrelated support work. The support preview loads in the background for normal users.

@@ -165,6 +165,32 @@ Add a separate request inbox, modeled on Spin-Spin's receive, answer and publish
 4. Add sender history, notifications and multi-message threading only if the MVP demonstrates demand.
 5. Evaluate migration of legacy DMs after retention, consent and rollback behavior have been tested.
 
+## Notice Comments
+
+Add a separate flat comment section for channel notices, but treat it as its own lightweight discussion surface rather than extending the current notice string/blob format.
+
+### Product shape
+
+- Keep the existing floating notice banner as the summary surface and place comments in the expanded notice panel or a dedicated notice-detail view instead of inside the small banner itself.
+- Start with flat text-only comments: no replies, no reactions, no attachments and no cross-channel notification system.
+- Bind comments to a specific notice version or notice id so clearing or replacing a notice resets the discussion cleanly instead of carrying unrelated history forward.
+- Show owner controls to delete comments and, if needed, lock further notice comments without deleting the notice itself.
+
+### Data and authorization constraints
+
+- Do not store comments inside the existing `config.notice_*` text payload. Use separate rows such as `channel_notice_comments` keyed by channel plus notice version/id.
+- Reuse the existing signed anonymous/device identity model and authenticated ownership checks. Do not authorize reads or deletes from raw comment ids alone.
+- Apply the same moderation expectations as chat and DMs: rate limits, blocked-user enforcement, deletion behavior and protected identity handling where appropriate.
+- Define what happens when a notice is edited, deleted, or replaced before launch. The cleanest MVP is usually "new notice, new comment thread."
+
+### MVP delivery shape
+
+1. Add notice ids or versions plus a dedicated comments table.
+2. Add owner/viewer read APIs and text-only comment creation/deletion.
+3. Render the list in the notice panel with simple pagination or a bounded recent window.
+4. Add realtime updates only if polling or refresh-on-open is not sufficient for the first release.
+5. Reevaluate replies, reactions, unread state and alerts only after actual usage shows they are needed.
+
 ## Guided Support Follow-up
 
 The implemented guided-support and operator-dashboard shape is recorded in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md). Remaining work:
