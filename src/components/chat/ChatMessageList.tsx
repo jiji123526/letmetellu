@@ -19,6 +19,7 @@ interface MessageRowProps {
   msg: Message;
   isReply: boolean;
   parentIsAdmin: boolean | null;
+  parentBubbleColor?: string;
   effectiveAdmin: boolean;
   uid: string;
   authUserId?: string | null;
@@ -65,10 +66,39 @@ interface MessageListProps {
   onEmojiPicker: MessageRowProps["onEmojiPicker"];
 }
 
+function resolveMessageBubbleBackground(input: {
+  msg: Message;
+  effectiveAdmin: boolean;
+  isMine: boolean;
+  bubbleColor: string;
+  isReported: boolean;
+  isReportedTarget: boolean;
+}): string {
+  if (input.msg.report_meta) {
+    if (input.msg.report_meta.status === "resolved") return "#dff6e8";
+    if (input.msg.report_meta.status === "dismissed") return "#f7ead7";
+    return "#eef2ff";
+  }
+  if (input.msg.petition_meta) {
+    if (input.msg.petition_meta.status === "accepted") return "#dff6e8";
+    if (input.msg.petition_meta.status === "rejected") return "#f9e2e2";
+    return "#eef6ff";
+  }
+  if (input.msg.report) return "#ffeaea";
+  if (input.isReported || (input.effectiveAdmin && !input.msg.report && input.isReportedTarget)) {
+    return "#ffe0e0";
+  }
+  if (input.msg.dm) {
+    return input.isMine ? "#7b3fa0" : "#ddc8ed";
+  }
+  return input.isMine ? input.bubbleColor : "var(--gray-bubble)";
+}
+
 const MessageRow = React.memo(function MessageRow({
   msg,
   isReply,
   parentIsAdmin,
+  parentBubbleColor,
   effectiveAdmin,
   uid,
   authUserId,
@@ -131,9 +161,17 @@ const MessageRow = React.memo(function MessageRow({
     : petitionMeta?.status === "rejected"
       ? { background: "#f9e2e2", color: "#7f1d1d", borderColor: "#df8f8f" }
       : petitionMeta
-        ? { background: "#eef6ff", color: "#1d4f77", borderColor: "#9cc4ea" }
-        : null;
+      ? { background: "#eef6ff", color: "#1d4f77", borderColor: "#9cc4ea" }
+      : null;
   const inboxBubbleStyle = reportBubbleStyle || petitionBubbleStyle;
+  const bubbleBackground = resolveMessageBubbleBackground({
+    msg,
+    effectiveAdmin,
+    isMine,
+    bubbleColor,
+    isReported,
+    isReportedTarget,
+  });
 
   const bubble = (
     <div
@@ -151,13 +189,7 @@ const MessageRow = React.memo(function MessageRow({
         borderRadius: !isReply
           ? isSent ? "20px 20px 4px 20px" : "20px 20px 20px 4px"
           : "20px",
-        background: inboxBubbleStyle?.background || (msg.report
-          ? "#ffeaea"
-          : isReported || (effectiveAdmin && !msg.report && isReportedTarget)
-            ? "#ffe0e0"
-            : msg.dm
-              ? (isMine ? "#7b3fa0" : "#ddc8ed")
-              : isMine ? bubbleColor : "var(--gray-bubble)"),
+        background: bubbleBackground,
         color: inboxBubbleStyle?.color || (msg.report
           ? "#c00"
           : isReported || isReportedTarget
@@ -251,7 +283,15 @@ const MessageRow = React.memo(function MessageRow({
   );
 
   const replyArrow = isReply ? (
-    <span className="flex flex-none items-center" style={{ color: "var(--meta)", opacity: 0.7, marginTop: "8px", transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)" }}>
+    <span
+      className="flex flex-none items-center"
+      style={{
+        color: parentBubbleColor || "var(--meta)",
+        opacity: parentBubbleColor ? 1 : 0.7,
+        marginTop: "8px",
+        transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
+      }}
+    >
       <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
         <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -356,6 +396,18 @@ export const MessageList = React.memo(function MessageList({
     const previousMessage = threadedMessages.topLevel[messageIndex - 1];
     const currentDateKey = chatDateKey(message.created_at, timeZone);
     const parentMessage = message.reply_to ? messagesById.get(message.reply_to) : undefined;
+    const parentBubbleColor = parentMessage
+      ? resolveMessageBubbleBackground({
+          msg: parentMessage,
+          effectiveAdmin,
+          isMine: (parentMessage.report_meta || parentMessage.petition_meta || isInboxModerationMessage(parentMessage))
+            ? false
+            : (effectiveAdmin ? !!parentMessage.is_admin : !parentMessage.is_admin),
+          bubbleColor,
+          isReported: reportedMsgIds.has(parentMessage.id),
+          isReportedTarget: reportedTargetIds.has(parentMessage.id),
+        })
+      : undefined;
     const showDate = Boolean(currentDateKey) && (
       !previousMessage || chatDateKey(previousMessage.created_at, timeZone) !== currentDateKey
     );
@@ -375,6 +427,7 @@ export const MessageList = React.memo(function MessageList({
         msg={message}
         isReply={!!message.reply_to}
         parentIsAdmin={parentMessage ? !!parentMessage.is_admin : null}
+        parentBubbleColor={parentBubbleColor}
         isReported={reportedMsgIds.has(message.id)}
         isReportedTarget={reportedTargetIds.has(message.id)}
         isBlockedSender={blockedUidSet.has(message.uid)}
@@ -392,6 +445,16 @@ export const MessageList = React.memo(function MessageList({
           msg={reply}
           isReply
           parentIsAdmin={!!message.is_admin}
+          parentBubbleColor={resolveMessageBubbleBackground({
+            msg: message,
+            effectiveAdmin,
+            isMine: (message.report_meta || message.petition_meta || isInboxModerationMessage(message))
+              ? false
+              : (effectiveAdmin ? !!message.is_admin : !message.is_admin),
+            bubbleColor,
+            isReported: reportedMsgIds.has(message.id),
+            isReportedTarget: reportedTargetIds.has(message.id),
+          })}
           isReported={reportedMsgIds.has(reply.id)}
           isReportedTarget={reportedTargetIds.has(reply.id)}
           isBlockedSender={blockedUidSet.has(reply.uid)}

@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Dashboard recent-channel query bounding and startup pruning — 2026-08-07
+
+- `/api/recent-channels` now returns at most the newest 100 rows per user, ordered by pinned state and visit time, matching the bounded dashboard snapshot shape instead of sorting an unbounded per-user history forever.
+- Recent-channel writes now prune overflow rows back to that same 100-row limit so long-lived accounts do not keep growing dashboard history indefinitely when the UI only benefits from a recent window.
+- Migration `0035_recent_channels_dashboard_limit.sql` replaces the older visit-only user index with an ordering-aware recent-channel index and trims any already-oversized histories during rollout.
+- Authenticated dashboard startup no longer starts the recent-channel fetch before `/api/user` determines whether the viewer is a platform admin, avoiding a wasted recent-channel query on the admin dashboard path.
+- The recent-channel Worker route now skips the steady-state extra email-based user lookup when the authenticated user id already resolves to the same account.
+
+Trade-off: authenticated users now keep only the top 100 recent-channel rows on the server, matching the existing browser cache limit. Very old joined-channel history falls out of the recent list instead of remaining queryable through the dashboard path indefinitely.
+
+Deployment note: apply D1 migration `0035_recent_channels_dashboard_limit.sql`, then deploy the Worker and frontend together.
+
 ### Dashboard reorder hydration stability — 2026-08-07
 
 - Returning to the dashboard now updates the authenticated recent-channel snapshot immediately when a channel is opened, so the cached list order usually already reflects the just-visited channel before the authoritative `/api/recent-channels` response arrives.
