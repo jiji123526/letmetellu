@@ -129,6 +129,40 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Validate the legacy SHA-256 to PBKDF2 upgrade path end to end in production-like conditions.
 - The beta dependency pass is currently clean under both production-only and full `npm audit`; repeat the audit before broader releases and continue normal upgrades without `npm audit fix --force`.
 
+## Channel Request Inbox
+
+Add a separate request inbox, modeled on Spin-Spin's receive, answer and publish flow, instead of turning owner-only DMs into ordinary channel replies.
+
+### Product shape
+
+- Treat each incoming DM as an inbox request with its own lifecycle: unread, opened, answered and archived.
+- Keep the original request and owner answer together in a dedicated thread rather than mixing the answer into the channel message tree.
+- Add an owner-only `/ch/[channel]/inbox` surface and, if public answers are enabled, a separate `/ch/[channel]/answers` archive.
+- Start with one owner answer per request. Add multi-message conversations only if real usage demonstrates that they are needed.
+- Let the owner explicitly choose whether an answer remains private or is published. Private should be the safe default unless product policy establishes clear sender expectations otherwise.
+
+### Privacy and identity constraints
+
+- Do not auto-publish existing DMs. Current product copy promises owner-only visibility, so public reuse requires explicit sender consent and clear submission-time disclosure.
+- Keep anonymous private-answer access bound to the same signed browser identity used for submission. Require login for reliable cross-device access and recovery.
+- Do not expose raw request IDs as authorization. Every sender and owner read must be authorized by the existing signed actor or authenticated ownership boundary.
+- Define retention, deletion, blocking and moderation behavior before launch, including what happens to published answers when the source request or channel is deleted.
+
+### Proposed storage
+
+- Add `channel_inbox_threads` for channel, sender identity, lifecycle state, visibility, consent and timestamps.
+- Add `channel_inbox_messages` for the original request and owner answer while retaining sender role and attachment metadata.
+- Add `channel_inbox_reads` only when sender-side history or notifications require durable unread state.
+- Preserve existing DMs as legacy private records initially. Migrate them into unanswered inbox requests only through an explicit, reversible migration after privacy behavior is finalized.
+
+### Delivery phases
+
+1. Build the owner-only inbox around new incoming requests while preserving the current DM path during rollout.
+2. Add one-answer private responses and sender-side retrieval bound to signed identity.
+3. Add explicit sender consent and owner-selected public publishing with a separate answered archive.
+4. Add sender history, notifications and multi-message threading only if the MVP demonstrates demand.
+5. Evaluate migration of legacy DMs after retention, consent and rollback behavior have been tested.
+
 ## Guided Support Follow-up
 
 The implemented guided-support and operator-dashboard shape is recorded in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md). Remaining work:
