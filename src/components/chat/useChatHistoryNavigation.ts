@@ -112,6 +112,25 @@ function getAnchorTop(container: HTMLElement, anchorId: string): number | null {
   return element.getBoundingClientRect().top - containerTop;
 }
 
+function getComparableElement(node: EventTarget | Node | null): Element | null {
+  if (!node) return null;
+  if (node instanceof Element) return node;
+  if (node instanceof Node) return node.parentElement;
+  return null;
+}
+
+function isRelevantToLockedAnchor(
+  container: HTMLElement,
+  anchorId: string,
+  node: EventTarget | Node | null,
+): boolean {
+  const anchorElement = document.getElementById(anchorId);
+  if (!anchorElement) return true;
+  const element = getComparableElement(node);
+  if (!element || element === container) return true;
+  return isBeforeOrInsideTarget(element, anchorElement);
+}
+
 async function waitForStableMessageLayout(
   container: HTMLElement,
   target: HTMLElement,
@@ -268,17 +287,41 @@ export function useChatHistoryNavigation({
       });
     };
 
-    const observer = new MutationObserver(scheduleRestore);
+    const scheduleRestoreForMutations = (records: MutationRecord[]) => {
+      const lockedAnchor = lockedScrollAnchorRef.current;
+      if (lockedAnchor) {
+        const hasRelevantMutation = records.some((record) => (
+          isRelevantToLockedAnchor(container, lockedAnchor.id, record.target)
+          || [...record.addedNodes].some((node) =>
+            isRelevantToLockedAnchor(container, lockedAnchor.id, node))
+        ));
+        if (!hasRelevantMutation) return;
+      }
+      scheduleRestore();
+    };
+
+    const scheduleRestoreForEvent = (event: Event) => {
+      const lockedAnchor = lockedScrollAnchorRef.current;
+      if (
+        lockedAnchor
+        && !isRelevantToLockedAnchor(container, lockedAnchor.id, event.target)
+      ) {
+        return;
+      }
+      scheduleRestore();
+    };
+
+    const observer = new MutationObserver(scheduleRestoreForMutations);
     observer.observe(container, { childList: true, subtree: true });
-    container.addEventListener("load", scheduleRestore, true);
-    container.addEventListener("loadedmetadata", scheduleRestore, true);
-    container.addEventListener("error", scheduleRestore, true);
+    container.addEventListener("load", scheduleRestoreForEvent, true);
+    container.addEventListener("loadedmetadata", scheduleRestoreForEvent, true);
+    container.addEventListener("error", scheduleRestoreForEvent, true);
 
     return () => {
       observer.disconnect();
-      container.removeEventListener("load", scheduleRestore, true);
-      container.removeEventListener("loadedmetadata", scheduleRestore, true);
-      container.removeEventListener("error", scheduleRestore, true);
+      container.removeEventListener("load", scheduleRestoreForEvent, true);
+      container.removeEventListener("loadedmetadata", scheduleRestoreForEvent, true);
+      container.removeEventListener("error", scheduleRestoreForEvent, true);
       if (restoreAnchorFrameRef.current !== null) {
         cancelAnimationFrame(restoreAnchorFrameRef.current);
         restoreAnchorFrameRef.current = null;
