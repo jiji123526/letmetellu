@@ -14,6 +14,17 @@ Trade-off: explicit message jumps can now issue an extra context request even wh
 
 Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
 
+### Initial channel bootstrap now preserves the same visible root threads as history pages — 2026-08-07
+
+- The Worker `init` path previously returned a raw latest-50 visible-message slice, while `/api/data?type=messages` already expanded whole visible root threads after selecting the page window.
+- That mismatch meant some older replies, including specific admin replies, could be absent on first channel entry even though the same message appeared later through search, context fetches or paged history loads.
+- Visible-message page selection and root-thread expansion are now shared through `worker/src/lib/visible-messages.ts`, and both `init` and `data` use that same helper.
+- Initial channel entry therefore mounts the same thread-complete window shape that later history requests use, eliminating bootstrap-only missing replies caused by inconsistent server slicing.
+
+Trade-off: `/api/init` can now return more than the base 50 rows when the newest visible window intersects several active root threads. Payload size grows somewhat, but bootstrap and later history views now agree on which replies belong in the mounted window.
+
+Deployment note: this is Worker-only and requires a Worker deploy, but no D1 migration.
+
 ### History page loads now keep visible root threads intact — 2026-08-07
 
 - Chronological `/api/data?type=messages` pages now expand the visible root threads touched by the page instead of returning only the raw 50-row time slice.
