@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { fetchCurrentUserState } from "@/lib/current-user-state";
 
 const DEFAULT_FONT_SIZE = 15;
 const DEFAULT_LOCALE = "ko";
@@ -60,12 +61,15 @@ export function UserPreferencesSync() {
       applyFontSize(localStorage.getItem("fontSize") || DEFAULT_FONT_SIZE);
       return;
     }
+    const userId = session?.user?.id;
+    if (!userId) return;
 
     const controller = new AbortController();
-    fetch("/api/user", { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then(async (data: { font_size?: number | null; locale?: string | null } | null) => {
-        if (!data) return;
+    let active = true;
+    fetchCurrentUserState(userId)
+      .then(async (result) => {
+        if (!active || !result.ok) return;
+        const data = result.data;
         const browserLocale = navigator.language.toLowerCase().startsWith("ko") ? "ko" : "en";
         const localLocale = normalizeLocale(localStorage.getItem("locale") || browserLocale || DEFAULT_LOCALE);
         const syncedLocale = data.locale === "ko" || data.locale === "en" ? data.locale : null;
@@ -100,7 +104,10 @@ export function UserPreferencesSync() {
         }
       })
       .catch(() => {});
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [status, session?.user?.id]);
 
   useEffect(() => {

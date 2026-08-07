@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Dashboard and preference sync now share the current-user read — 2026-08-07
+
+- Resource Timing showed two `/api/user` GET requests starting at the same millisecond during authenticated dashboard entry: one loaded channels and platform role while `UserPreferencesSync` independently loaded font size and locale.
+- Both consumers now use a client-side request broker keyed by authenticated user id. Concurrent consumers receive the same parsed `/api/user` result, whose existing payload already contains channels, role and preferences.
+- The broker retains only an active promise and removes it after the request settles. It does not persist user data or reuse a settled response, so later reads still receive fresh server state.
+- Consumer-specific cleanup no longer aborts the shared GET. Preference PATCH requests remain independently abortable when their component unmounts.
+- Expected authenticated dashboard entry now produces one `/api/user` network request while preserving one `user-bootstrap` diagnostic request.
+
+Trade-off: request sharing depends on consumers using the common broker; future direct `/api/user` GET call sites can bypass deduplication. Avoiding a settled-response cache also means sequential reads remain separate by design.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Dashboard startup no longer repeats role-dependent requests — 2026-08-07
 
 - Browser diagnostics showed normal authenticated dashboard startup issuing `user-bootstrap`, `recent-channels` and `support-preview` twice instead of once.

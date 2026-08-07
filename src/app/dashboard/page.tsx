@@ -49,6 +49,7 @@ import {
   startDashboardPerformanceTrace,
   startDashboardRequest,
 } from "@/lib/dashboard-performance";
+import { fetchCurrentUserState } from "@/lib/current-user-state";
 
 interface Channel {
   id: string;
@@ -422,15 +423,12 @@ function DashboardPageContent() {
   }, []);
 
   const loadChannels = useCallback((): Promise<boolean> => {
+    if (!authenticatedUserId) return Promise.resolve(false);
     if (loadChannelsInFlightRef.current) return loadChannelsInFlightRef.current;
     const request = (async () => {
       startDashboardRequest("user-bootstrap");
-      const response = await fetch("/api/user", { cache: "no-store" });
-      const data = await response.json() as {
-        user_id?: string;
-        channels?: Channel[];
-        is_platform_admin?: boolean;
-      };
+      const response = await fetchCurrentUserState<Channel>(authenticatedUserId);
+      const data = response.data;
       if (!response.ok) throw new Error("user dashboard unavailable");
       const isAdmin = data.is_platform_admin === true;
       setPlatformAdminRole({
