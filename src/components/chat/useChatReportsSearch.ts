@@ -9,6 +9,11 @@ import {
   type ThreadedMessages,
 } from "./chatMessageSelectors";
 import type { Message } from "./chatTypes";
+import {
+  getConfiguredDebugMessageId,
+  summarizeMessageForTrace,
+  traceConfiguredMessage,
+} from "./messageDebug";
 
 interface BannerState {
   text: string;
@@ -127,6 +132,42 @@ export function useChatReportsSearch({
     () => new Set(searchState.resultIds),
     [searchState.resultIds],
   );
+
+  useEffect(() => {
+    const targetId = getConfiguredDebugMessageId();
+    if (!targetId) return;
+
+    const sourceMessage = messages.find((message) => message.id === targetId)
+      || dmMessages.find((message) => message.id === targetId)
+      || null;
+    traceConfiguredMessage("raw-state", {
+      inMessages: messages.some((message) => message.id === targetId),
+      inDmMessages: dmMessages.some((message) => message.id === targetId),
+      sourceMessage: summarizeMessageForTrace(sourceMessage),
+      messagesCount: messages.length,
+      dmMessagesCount: dmMessages.length,
+      directParentUnavailable: sourceMessage?.reply_to
+        ? unavailableReplyParentIds.has(sourceMessage.reply_to)
+        : false,
+      searchState: {
+        query: searchState.query,
+        activeId: searchState.activeId,
+        resultCount: searchState.resultIds.length,
+        containsTarget: searchState.resultIds.includes(targetId),
+      },
+      effectiveAdmin,
+      isReportsChannelView,
+      reportsOwnerFilter,
+    });
+  }, [
+    dmMessages,
+    effectiveAdmin,
+    isReportsChannelView,
+    messages,
+    reportsOwnerFilter,
+    searchState,
+    unavailableReplyParentIds,
+  ]);
 
   const toggleSearch = useCallback(() => {
     setShowSearch((current) => !current);

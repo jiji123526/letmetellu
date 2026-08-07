@@ -7,6 +7,12 @@ import { MemoizedMessageTextWithEmbeds, MessageImage } from "./ChatMessageConten
 import { isInboxModerationMessage } from "./messageActionRules";
 import { stripInboxChannelLine } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
+import {
+  getConfiguredDebugMessageId,
+  isConfiguredDebugMessage,
+  summarizeMessageForTrace,
+  traceConfiguredMessage,
+} from "./messageDebug";
 
 const EMBED_URL_REGEX = /https?:\/\/[^\s<]+/g;
 
@@ -219,6 +225,28 @@ const MessageRow = React.memo(function MessageRow({
     isReportedTarget,
   });
 
+  React.useEffect(() => {
+    if (!isConfiguredDebugMessage(msg.id)) return;
+    traceConfiguredMessage("message-row-mounted", {
+      sourceMessage: summarizeMessageForTrace(msg),
+      isReply,
+      parentIsAdmin,
+      isSent,
+      isMine,
+      isSearchMatch,
+      isActiveMatch,
+      hasImage: !!msg.image,
+    });
+  }, [
+    isActiveMatch,
+    isMine,
+    isReply,
+    isSearchMatch,
+    isSent,
+    msg,
+    parentIsAdmin,
+  ]);
+
   const bubble = (
     <div
       data-bubble
@@ -430,6 +458,31 @@ export const MessageList = React.memo(function MessageList({
     for (const reply of replies) {
       messagesById.set(reply.id, reply);
     }
+  }
+
+  const debugMessageId = getConfiguredDebugMessageId();
+  if (debugMessageId) {
+    let replyBucketParentId: string | null = null;
+    let replyBucketIndex = -1;
+    for (const [parentId, replies] of Object.entries(threadedMessages.repliesMap)) {
+      const nextIndex = replies.findIndex((message) => message.id === debugMessageId);
+      if (nextIndex >= 0) {
+        replyBucketParentId = parentId;
+        replyBucketIndex = nextIndex;
+        break;
+      }
+    }
+    traceConfiguredMessage("message-list-input", {
+      topLevelCount: threadedMessages.topLevel.length,
+      repliesBucketCount: Object.keys(threadedMessages.repliesMap).length,
+      topLevelIndex: threadedMessages.topLevel.findIndex((message) => message.id === debugMessageId),
+      replyBucketParentId,
+      replyBucketIndex,
+      parentMessage: replyBucketParentId
+        ? summarizeMessageForTrace(messagesById.get(replyBucketParentId))
+        : null,
+      targetMessage: summarizeMessageForTrace(messagesById.get(debugMessageId)),
+    });
   }
 
   const commonProps = {

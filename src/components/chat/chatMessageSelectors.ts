@@ -1,4 +1,9 @@
 import type { Message } from "./chatTypes";
+import {
+  getConfiguredDebugMessageId,
+  summarizeMessageForTrace,
+  traceConfiguredMessage,
+} from "./messageDebug";
 
 export interface RestrictedChannelSummaryItem {
   channelId: string;
@@ -48,38 +53,64 @@ export function getDisplayMessages(
   isReportsOwnerView: boolean,
   reportsOwnerFilter: ReportsOwnerFilter,
 ): Message[] {
-  if (!effectiveAdmin) return messages.filter((message) => !message.report);
-  const adminMessages = [...messages, ...dmMessages];
-  if (!isReportsOwnerView) {
-    return adminMessages.sort((left, right) => (left.created_at || "").localeCompare(right.created_at || ""));
+  let displayMessages: Message[];
+  if (!effectiveAdmin) {
+    displayMessages = messages.filter((message) => !message.report);
+  } else {
+    const adminMessages = [...messages, ...dmMessages];
+    if (!isReportsOwnerView) {
+      displayMessages = adminMessages.sort((left, right) => (left.created_at || "").localeCompare(right.created_at || ""));
+    } else {
+      const orderedMessages = adminMessages
+        .map((message, index) => ({ message, index }))
+        .sort((left, right) => {
+          const leftOpenReport = left.message.report_meta?.status === "open" ? 1 : 0;
+          const rightOpenReport = right.message.report_meta?.status === "open" ? 1 : 0;
+          if (leftOpenReport !== rightOpenReport) return leftOpenReport - rightOpenReport;
+          const timeCompare = (left.message.created_at || "").localeCompare(right.message.created_at || "");
+          if (timeCompare !== 0) return timeCompare;
+          return left.index - right.index;
+        })
+        .map(({ message }) => message);
+
+      displayMessages = !reportsOwnerFilter
+        ? orderedMessages
+        : orderedMessages.filter((message) => {
+          const moderationStatus = message.report_meta?.moderation_status;
+          if (reportsOwnerFilter === "open") {
+            return message.report_meta?.status === "open";
+          }
+          if (reportsOwnerFilter === "warned") {
+            return moderationStatus === "warned";
+          }
+          if (reportsOwnerFilter === "frozen") {
+            return moderationStatus === "frozen";
+          }
+          return true;
+        });
+    }
   }
 
-  const orderedMessages = adminMessages
-    .map((message, index) => ({ message, index }))
-    .sort((left, right) => {
-      const leftOpenReport = left.message.report_meta?.status === "open" ? 1 : 0;
-      const rightOpenReport = right.message.report_meta?.status === "open" ? 1 : 0;
-      if (leftOpenReport !== rightOpenReport) return leftOpenReport - rightOpenReport;
-      const timeCompare = (left.message.created_at || "").localeCompare(right.message.created_at || "");
-      if (timeCompare !== 0) return timeCompare;
-      return left.index - right.index;
-    })
-    .map(({ message }) => message);
+  const debugMessageId = getConfiguredDebugMessageId();
+  if (debugMessageId) {
+    const sourceMessage = messages.find((message) => message.id === debugMessageId)
+      || dmMessages.find((message) => message.id === debugMessageId)
+      || null;
+    const displayIndex = displayMessages.findIndex((message) => message.id === debugMessageId);
+    traceConfiguredMessage("display-messages", {
+      inMessages: messages.some((message) => message.id === debugMessageId),
+      inDmMessages: dmMessages.some((message) => message.id === debugMessageId),
+      sourceMessage: summarizeMessageForTrace(sourceMessage),
+      includedInDisplay: displayIndex >= 0,
+      displayIndex,
+      totalDisplayMessages: displayMessages.length,
+      effectiveAdmin,
+      isReportsOwnerView,
+      reportsOwnerFilter,
+    });
+  }
 
-  if (!reportsOwnerFilter) return orderedMessages;
-  return orderedMessages.filter((message) => {
-    const moderationStatus = message.report_meta?.moderation_status;
-    if (reportsOwnerFilter === "open") {
-      return message.report_meta?.status === "open";
-    }
-    if (reportsOwnerFilter === "warned") {
-      return moderationStatus === "warned";
-    }
-    if (reportsOwnerFilter === "frozen") {
-      return moderationStatus === "frozen";
-    }
-    return true;
-  });
+  return displayMessages;
 }
 
 export function getRestrictedChannels(
@@ -161,6 +192,40 @@ export function getThreadedMessages(
   const repliesMap: Record<string, Message[]> = {};
   const messageIds = new Set(displayMessages.map((message) => message.id));
   const messagesById = new Map(displayMessages.map((message) => [message.id, message]));
+  const debugMessageId = getConfiguredDebugMessageId();
+
+  function buildReplyChain(messageId: string) {
+    const chain: Array<Record<string, unknown>> = [];
+    let currentId: string | null = messageId;
+    const visited = new Set<string>();
+
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const currentMessage = messagesById.get(currentId);
+      if (currentMessage) {
+        chain.push({
+          id: currentMessage.id,
+          reply_to: currentMessage.reply_to,
+          created_at: currentMessage.created_at,
+          is_admin: !!currentMessage.is_admin,
+          deleted: !!currentMessage.deleted,
+          presentInDisplay: true,
+        });
+        currentId = currentMessage.reply_to;
+        continue;
+      }
+
+      chain.push({
+        id: currentId,
+        presentInDisplay: false,
+        knownMessageId: knownMessageIds.has(currentId),
+        markedUnavailable: unavailableReplyParentIds.has(currentId),
+      });
+      currentId = null;
+    }
+
+    return chain;
+  }
 
   function resolveRenderableParentId(message: Message): string | null | undefined {
     if (!message.reply_to) return null;
@@ -192,26 +257,89 @@ export function getThreadedMessages(
   for (const message of displayMessages) {
     if (!message.reply_to) {
       topLevel.push(message);
+      if (message.id === debugMessageId) {
+        traceConfiguredMessage("thread-placement", {
+          sourceMessage: summarizeMessageForTrace(message),
+          placement: "top-level-without-parent",
+          replyChain: buildReplyChain(message.id),
+        });
+      }
       continue;
     }
 
     const renderParentId = resolveRenderableParentId(message);
+    if (message.id === debugMessageId) {
+      traceConfiguredMessage("thread-parent-resolution", {
+        sourceMessage: summarizeMessageForTrace(message),
+        renderParentId,
+        replyChain: buildReplyChain(message.id),
+      });
+    }
     if (renderParentId === undefined) {
+      if (message.id === debugMessageId) {
+        traceConfiguredMessage("thread-placement", {
+          sourceMessage: summarizeMessageForTrace(message),
+          placement: "skipped-missing-parent-chain",
+          replyChain: buildReplyChain(message.id),
+        });
+      }
       continue;
     }
 
     if (renderParentId === null) {
       topLevel.push(message);
+      if (message.id === debugMessageId) {
+        traceConfiguredMessage("thread-placement", {
+          sourceMessage: summarizeMessageForTrace(message),
+          placement: "top-level-null-parent",
+          replyChain: buildReplyChain(message.id),
+        });
+      }
       continue;
     }
 
     if (!messageIds.has(renderParentId)) {
       topLevel.push(message);
+      if (message.id === debugMessageId) {
+        traceConfiguredMessage("thread-placement", {
+          sourceMessage: summarizeMessageForTrace(message),
+          placement: "top-level-render-parent-not-mounted",
+          renderParentId,
+          replyChain: buildReplyChain(message.id),
+        });
+      }
       continue;
     }
 
     if (!repliesMap[renderParentId]) repliesMap[renderParentId] = [];
     repliesMap[renderParentId].push(message);
+    if (message.id === debugMessageId) {
+      traceConfiguredMessage("thread-placement", {
+        sourceMessage: summarizeMessageForTrace(message),
+        placement: "reply-bucket",
+        renderParentId,
+        siblingReplyIds: repliesMap[renderParentId].map((reply) => reply.id),
+      });
+    }
+  }
+
+  if (debugMessageId) {
+    let replyBucketParentId: string | null = null;
+    let replyBucketIds: string[] = [];
+    for (const [parentId, replies] of Object.entries(repliesMap)) {
+      if (replies.some((message) => message.id === debugMessageId)) {
+        replyBucketParentId = parentId;
+        replyBucketIds = replies.map((message) => message.id);
+        break;
+      }
+    }
+    traceConfiguredMessage("thread-summary", {
+      inDisplayMessages: messageIds.has(debugMessageId),
+      topLevel: topLevel.some((message) => message.id === debugMessageId),
+      replyBucketParentId,
+      replyBucketIds,
+      topLevelWindow: topLevel.slice(Math.max(0, topLevel.length - 8)).map((message) => message.id),
+    });
   }
 
   return { topLevel, repliesMap };
