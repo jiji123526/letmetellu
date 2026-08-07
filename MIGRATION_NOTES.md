@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Single-depth thread rendering now keeps nested replies visible — 2026-08-07
+
+- Chat thread derivation now collapses reply chains onto the nearest visible top-level ancestor instead of only grouping direct children.
+- In the one-depth chat UI, replies to replies now render under the same root parent message rather than being assigned to an unrendered intermediate reply bucket.
+- Older threaded conversations no longer selectively drop some owner/admin replies just because those replies targeted another reply instead of the root post.
+
+Trade-off: the UI still presents a single reply depth. Nested reply relationships are flattened to the visible root thread for consistency rather than rendered as a multi-level tree.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Search highlighting now respects hidden link previews — 2026-08-07
 
 - Search-hit rendering now highlights the already-processed message content instead of re-rendering from the raw message text.

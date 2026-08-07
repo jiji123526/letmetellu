@@ -160,19 +160,58 @@ export function getThreadedMessages(
   const topLevel: Message[] = [];
   const repliesMap: Record<string, Message[]> = {};
   const messageIds = new Set(displayMessages.map((message) => message.id));
+  const messagesById = new Map(displayMessages.map((message) => [message.id, message]));
+
+  function resolveRenderableParentId(message: Message): string | null | undefined {
+    if (!message.reply_to) return null;
+
+    let parentId: string | null = message.reply_to;
+    let lastVisibleAncestorId: string | null = null;
+    const visitedIds = new Set<string>([message.id]);
+
+    while (parentId) {
+      if (visitedIds.has(parentId)) return lastVisibleAncestorId;
+      visitedIds.add(parentId);
+
+      const parent = messagesById.get(parentId);
+      if (!parent) {
+        if (unavailableReplyParentIds.has(parentId) || knownMessageIds.has(parentId)) {
+          return lastVisibleAncestorId;
+        }
+        return undefined;
+      }
+
+      lastVisibleAncestorId = parent.id;
+      if (!parent.reply_to) return parent.id;
+      parentId = parent.reply_to;
+    }
+
+    return lastVisibleAncestorId;
+  }
 
   for (const message of displayMessages) {
     if (!message.reply_to) {
       topLevel.push(message);
-    } else if (messageIds.has(message.reply_to)) {
-      if (!repliesMap[message.reply_to]) repliesMap[message.reply_to] = [];
-      repliesMap[message.reply_to].push(message);
-    } else if (
-      unavailableReplyParentIds.has(message.reply_to)
-      || knownMessageIds.has(message.reply_to)
-    ) {
-      topLevel.push(message);
+      continue;
     }
+
+    const renderParentId = resolveRenderableParentId(message);
+    if (renderParentId === undefined) {
+      continue;
+    }
+
+    if (renderParentId === null) {
+      topLevel.push(message);
+      continue;
+    }
+
+    if (!messageIds.has(renderParentId)) {
+      topLevel.push(message);
+      continue;
+    }
+
+    if (!repliesMap[renderParentId]) repliesMap[renderParentId] = [];
+    repliesMap[renderParentId].push(message);
   }
 
   return { topLevel, repliesMap };
