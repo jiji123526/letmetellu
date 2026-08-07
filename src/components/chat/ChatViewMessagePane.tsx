@@ -257,6 +257,9 @@ export function ChatViewMessagePane({
 
         <MessageList
           threadedMessages={threadedMessages}
+          backgroundType={backgroundType}
+          backgroundColor={backgroundColor}
+          backgroundOverlay={backgroundOverlay}
           effectiveAdmin={effectiveAdmin}
           uid={uid}
           authUserId={authUserId}

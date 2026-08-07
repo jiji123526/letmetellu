@@ -19,6 +19,7 @@ interface MessageRowProps {
   msg: Message;
   isReply: boolean;
   parentIsAdmin: boolean | null;
+  replyArrowTone: "default" | "bright";
   effectiveAdmin: boolean;
   uid: string;
   authUserId?: string | null;
@@ -42,6 +43,9 @@ interface MessageRowProps {
 
 interface MessageListProps {
   threadedMessages: { topLevel: Message[]; repliesMap: Record<string, Message[]> };
+  backgroundType: "default" | "color" | "image";
+  backgroundColor: string | null;
+  backgroundOverlay: number;
   effectiveAdmin: boolean;
   uid: string;
   authUserId?: string | null;
@@ -63,6 +67,49 @@ interface MessageListProps {
   onExpand: MessageRowProps["onExpand"];
   onReaction: MessageRowProps["onReaction"];
   onEmojiPicker: MessageRowProps["onEmojiPicker"];
+}
+
+function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.trim();
+  const match = normalized.match(/^#([0-9a-f]{6})$/i);
+  if (!match) return null;
+  const value = match[1];
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  };
+}
+
+function toLinearChannel(value: number): number {
+  const normalized = value / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : ((normalized + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(color: { r: number; g: number; b: number }): number {
+  return (
+    0.2126 * toLinearChannel(color.r)
+    + 0.7152 * toLinearChannel(color.g)
+    + 0.0722 * toLinearChannel(color.b)
+  );
+}
+
+function getReplyArrowTone(input: {
+  backgroundType: "default" | "color" | "image";
+  backgroundColor: string | null;
+  backgroundOverlay: number;
+}): "default" | "bright" {
+  if (input.backgroundType === "color") {
+    const parsed = input.backgroundColor ? parseHexColor(input.backgroundColor) : null;
+    if (!parsed) return "default";
+    return relativeLuminance(parsed) < 0.42 ? "bright" : "default";
+  }
+  if (input.backgroundType === "image") {
+    return input.backgroundOverlay >= 28 ? "bright" : "default";
+  }
+  return "default";
 }
 
 function resolveMessageBubbleBackground(input: {
@@ -97,6 +144,7 @@ const MessageRow = React.memo(function MessageRow({
   msg,
   isReply,
   parentIsAdmin,
+  replyArrowTone,
   effectiveAdmin,
   uid,
   authUserId,
@@ -284,20 +332,13 @@ const MessageRow = React.memo(function MessageRow({
     <span
       className="flex flex-none items-center"
       style={{
-        color: "var(--meta)",
-        opacity: 0.7,
+        color: replyArrowTone === "bright" ? "rgba(255,255,255,0.92)" : "var(--meta)",
+        opacity: replyArrowTone === "bright" ? 0.92 : 0.7,
         marginTop: "8px",
         transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
       }}
     >
-      <svg
-        viewBox="0 0 16 16"
-        style={{
-          width: "var(--bubble-font-size)",
-          height: "var(--bubble-font-size)",
-          filter: "drop-shadow(0 0 2px rgba(255,255,255,0.95)) drop-shadow(0 0 5px rgba(255,255,255,0.75))",
-        }}
-      >
+      <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
         <path
           d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3"
           fill="none"
@@ -356,6 +397,9 @@ const MessageRow = React.memo(function MessageRow({
 
 export const MessageList = React.memo(function MessageList({
   threadedMessages,
+  backgroundType,
+  backgroundColor,
+  backgroundOverlay,
   effectiveAdmin,
   uid,
   authUserId,
@@ -393,6 +437,11 @@ export const MessageList = React.memo(function MessageList({
     uid,
     authUserId,
     bubbleColor,
+    replyArrowTone: getReplyArrowTone({
+      backgroundType,
+      backgroundColor,
+      backgroundOverlay,
+    }),
     deletedMessageLabel,
     editedMessageLabel,
     onLongPress,

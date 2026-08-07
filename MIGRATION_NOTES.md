@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Adaptive reply-arrow tone by background heuristic — 2026-08-07
+
+- Reply arrows now use two contrast variants instead of one fixed stroke across every channel surface.
+- Default app backgrounds and bright custom color backgrounds keep the existing muted `var(--meta)` arrow tone.
+- Dark custom color backgrounds switch to a brighter arrow tone using a simple luminance check on the configured `background_color`.
+- Image backgrounds now choose between the same two arrow tones from the owner-configured darkening overlay level instead of trying to inspect image pixels during render or scroll.
+
+Trade-off: image-background adaptation is intentionally heuristic. A locally bright area inside an otherwise darkened image can still reduce arrow contrast, but the implementation stays deterministic and avoids expensive per-pixel analysis or scroll-time sampling.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Dashboard recent-channel query bounding and startup pruning — 2026-08-07
 
 - `/api/recent-channels` now returns at most the newest 100 rows per user, ordered by pinned state and visit time, matching the bounded dashboard snapshot shape instead of sorting an unbounded per-user history forever.
