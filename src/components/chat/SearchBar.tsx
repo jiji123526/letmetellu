@@ -22,6 +22,8 @@ interface SearchBarProps {
   onClose: () => void;
 }
 
+const SEARCH_URL_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))(?:\/[^\s<]*)?)/gi;
+
 function mergeSearchResults(
   existing: SearchMessage[],
   incoming: MessageSearchResult[],
@@ -32,6 +34,16 @@ function mergeSearchResults(
     const dateOrder = (left.created_at || "").localeCompare(right.created_at || "");
     return dateOrder || left.id.localeCompare(right.id);
   });
+}
+
+function stripLinksForSearch(text: string): string {
+  return text.replace(SEARCH_URL_REGEX, " ").replace(/\s+/g, " ").trim();
+}
+
+function filterSearchResults<T extends SearchMessage>(messages: T[], normalizedQuery: string): T[] {
+  const queryLower = normalizedQuery.toLowerCase();
+  return messages.filter((message) =>
+    !!message.text && stripLinksForSearch(message.text).toLowerCase().includes(queryLower));
 }
 
 export function SearchBar({ channelId, messages, onNavigate, onSearchState, onClose }: SearchBarProps) {
@@ -57,6 +69,30 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
     });
   };
 
+  const loadVisibleServerResults = async (
+    normalizedQuery: string,
+    cursor?: MessageSearchCursor | null,
+  ): Promise<{
+    results: MessageSearchResult[];
+    has_more: boolean;
+    next_cursor: MessageSearchCursor | null;
+  }> => {
+    let pageCursor = cursor ?? null;
+
+    while (true) {
+      const serverData = await searchMessages(channelId, normalizedQuery, pageCursor);
+      const visibleResults = filterSearchResults(serverData.results, normalizedQuery);
+      if (visibleResults.length > 0 || !serverData.has_more || !serverData.next_cursor) {
+        return {
+          results: visibleResults,
+          has_more: serverData.has_more,
+          next_cursor: serverData.next_cursor,
+        };
+      }
+      pageCursor = serverData.next_cursor;
+    }
+  };
+
   const performSearch = async (q: string) => {
     const normalizedQuery = q.trim();
     const requestId = ++searchRequestIdRef.current;
@@ -69,13 +105,12 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
       return;
     }
 
-    const queryLower = normalizedQuery.toLowerCase();
-    let matched = messages.filter((m) => m.text && m.text.toLowerCase().includes(queryLower));
+    let matched = filterSearchResults(messages, normalizedQuery);
     let nextHasMore = false;
     let nextPageCursor: MessageSearchCursor | null = null;
 
     try {
-      const serverData = await searchMessages(channelId, normalizedQuery);
+      const serverData = await loadVisibleServerResults(normalizedQuery);
       if (requestId !== searchRequestIdRef.current) return;
       matched = mergeSearchResults(matched, serverData.results);
       nextHasMore = serverData.has_more;
@@ -112,7 +147,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
       const requestId = searchRequestIdRef.current;
       const currentId = results[index]?.id;
       try {
-        const serverData = await searchMessages(channelId, query.trim(), nextCursor);
+        const serverData = await loadVisibleServerResults(query.trim(), nextCursor);
         if (requestId !== searchRequestIdRef.current) return;
         const merged = mergeSearchResults(results, serverData.results);
         const currentIndex = Math.max(0, merged.findIndex((message) => message.id === currentId));
