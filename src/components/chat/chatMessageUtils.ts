@@ -23,6 +23,25 @@ export interface ChatMessageSnapshot {
 export const LIVE_WARNING_THRESHOLDS_MS = [60 * 60 * 1000, 30 * 60 * 1000, 10 * 60 * 1000, 5 * 60 * 1000] as const;
 export const MAX_MOUNTED_HISTORY_MESSAGES = 300;
 
+function resolveVisibleRootId<T extends Pick<ChatMessageSnapshot, "id" | "reply_to">>(
+  message: T,
+  messagesById: Map<string, T>,
+): string {
+  let current = message;
+  let rootId = message.id;
+  const visitedIds = new Set<string>([message.id]);
+
+  while (current.reply_to) {
+    const parent = messagesById.get(current.reply_to);
+    if (!parent || visitedIds.has(parent.id)) break;
+    visitedIds.add(parent.id);
+    rootId = parent.id;
+    current = parent;
+  }
+
+  return rootId;
+}
+
 export function trimMessageWindow<T extends Pick<ChatMessageSnapshot, "id" | "reply_to" | "created_at">>(
   messages: T[],
   edgeToKeep: "older" | "newer",
@@ -31,22 +50,21 @@ export function trimMessageWindow<T extends Pick<ChatMessageSnapshot, "id" | "re
   const selected = edgeToKeep === "older"
     ? messages.slice(0, MAX_MOUNTED_HISTORY_MESSAGES)
     : messages.slice(-MAX_MOUNTED_HISTORY_MESSAGES);
-  if (edgeToKeep === "older") return selected;
+  const messagesById = new Map(messages.map((message) => [message.id, message]));
+  const rootIdsByMessageId = new Map<string, string>();
+  for (const message of messages) {
+    rootIdsByMessageId.set(message.id, resolveVisibleRootId(message, messagesById));
+  }
 
-  // Keep a reply's parent mounted even when the chronological cut falls between
-  // them. The limit is intentionally soft by the number of required parents.
-  const selectedIds = new Set(selected.map((message) => message.id));
-  const missingParentIds = new Set(
-    selected
-      .map((message) => message.reply_to)
-      .filter((parentId): parentId is string => !!parentId && !selectedIds.has(parentId)),
+  // Keep whole visible root-thread groups mounted so sibling replies are not
+  // selectively dropped when the chronological cut lands in the middle of a thread.
+  const selectedRootIds = new Set(
+    selected.map((message) => rootIdsByMessageId.get(message.id) || message.id),
   );
-  if (missingParentIds.size === 0) return selected;
-  const parents = messages.filter((message) => missingParentIds.has(message.id));
-  return [...parents, ...selected].sort((left, right) => {
-    const timeDifference = (left.created_at || "").localeCompare(right.created_at || "");
-    return timeDifference || left.id.localeCompare(right.id);
-  });
+
+  return messages.filter((message) =>
+    selectedRootIds.has(rootIdsByMessageId.get(message.id) || message.id)
+  );
 }
 
 export function formatLiveThresholdLabel(locale: "ko" | "en", thresholdMs: number): string {
