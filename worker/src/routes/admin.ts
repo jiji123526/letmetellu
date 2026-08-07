@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
-import { deleteMediaByUrl, extractMediaKey } from "../lib/media";
+import { deleteMediaByUrl, extractMediaKey, normalizeManagedMediaUrl } from "../lib/media";
 import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
 import { getReportsChannelOwnerId } from "../lib/special-channels";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
@@ -517,6 +517,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       const updates: string[] = [];
       const values: unknown[] = [];
       let previousBackgroundImage: string | null = null;
+      let normalizedBackgroundImage: string | null | undefined;
       const normalizedBubbleColor = normalizeBubbleColor(bubble_color);
 
       if (name !== undefined) { updates.push("name = ?"); values.push(name); }
@@ -549,12 +550,15 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         ).bind(channel_id).first<{ background_image: string | null }>();
         previousBackgroundImage = previousBackground?.background_image || null;
         if (background_image !== null) {
-          if (!isAllowedBackgroundImageUrl(background_image, env)) {
+          normalizedBackgroundImage = normalizeManagedMediaUrl(background_image);
+          if (!normalizedBackgroundImage || !isAllowedBackgroundImageUrl(background_image, env)) {
             return Response.json({ error: "invalid background image" }, { status: 400 });
           }
+        } else {
+          normalizedBackgroundImage = null;
         }
         updates.push("background_image = ?");
-        values.push(background_image);
+        values.push(normalizedBackgroundImage);
       }
       if (background_overlay !== undefined) {
         const overlay = Number(background_overlay);
@@ -590,24 +594,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
             show_on_profile,
             background_type,
             background_color,
-            background_image,
+            background_image: normalizedBackgroundImage,
             background_overlay,
             background_blur,
           }),
         }));
 
+        const previousBackgroundKey = extractMediaKey(previousBackgroundImage);
+        const nextBackgroundKey = extractMediaKey(normalizedBackgroundImage);
         if (
           background_image !== undefined
-          && previousBackgroundImage
-          && previousBackgroundImage !== background_image
+          && previousBackgroundKey
+          && previousBackgroundKey !== nextBackgroundKey
         ) {
-          try {
-            const previousUrl = new URL(previousBackgroundImage);
-            const key = decodeURIComponent(previousUrl.pathname.replace(/^\/api\/media\//, ""));
-            if (key && previousUrl.pathname.startsWith("/api/media/")) {
-              await env.MEDIA.delete(key);
-            }
-          } catch {}
+          await env.MEDIA.delete(previousBackgroundKey).catch(() => {});
         }
       }
 

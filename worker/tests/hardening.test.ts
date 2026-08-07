@@ -12,6 +12,7 @@ import {
 import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
 import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
+import { buildManagedMediaPath, extractMediaKey, normalizeManagedMediaUrl } from "../src/lib/media.ts";
 
 function expectPreviewError(fn: () => unknown, message: string): void {
   let thrown: unknown;
@@ -160,6 +161,20 @@ test("public background edge cache only accepts stable GET requests", () => {
     canUsePublicBackgroundCache(new Request(request.url, { method: "HEAD" })),
     false,
   );
+});
+
+test("managed media URLs normalize to one stable same-origin path", () => {
+  const key = "zziks/09f9bdf8-da7c-4577-a343-a05cd32aacea.jpg";
+  const stablePath = buildManagedMediaPath(key);
+  const signedWorkerUrl = `https://letsplay-api.letmetellu.workers.dev${stablePath}?media_token=secret`;
+  const sameOriginUrl = `https://yapndot.com${stablePath}`;
+
+  assert.equal(normalizeManagedMediaUrl(stablePath), stablePath);
+  assert.equal(normalizeManagedMediaUrl(`${stablePath}?media_token=secret`), stablePath);
+  assert.equal(normalizeManagedMediaUrl(signedWorkerUrl), stablePath);
+  assert.equal(normalizeManagedMediaUrl(sameOriginUrl), stablePath);
+  assert.equal(extractMediaKey(signedWorkerUrl), key);
+  assert.equal(extractMediaKey(stablePath), key);
 });
 
 test("operational health windows normalize D1 values and missing counts", () => {

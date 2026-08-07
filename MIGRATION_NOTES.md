@@ -58,6 +58,8 @@ Deployment note: this is frontend-only and requires no D1 migration or Worker de
 
 - Admin background updates now accept both absolute Worker/app media URLs and the normalized same-origin `/api/media/...` paths already stored in channel state and the local background snapshot.
 - Reusing the same uploaded background image while changing only darkening or blur no longer fails Worker validation, so those settings persist correctly without forcing the owner to reupload the image.
+- Background saves now canonicalize channel-image URLs back to a stable `/api/media/...` path before storing them, and replacement cleanup compares the extracted media key instead of the raw URL string.
+- This prevents the same background asset from being mistaken for a new file just because it arrived as a Worker URL, an app URL or a signed URL variant. Without that normalization, a settings-only save could delete the current R2 object and leave fresh devices with a `404` background fetch.
 
 Trade-off: background-image validation still stays scoped to the app's own media paths rather than allowing arbitrary external image URLs. The fix broadens accepted path forms for the same asset, not the product policy for channel backgrounds.
 
