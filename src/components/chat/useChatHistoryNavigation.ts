@@ -110,6 +110,32 @@ function findScrollAnchor(container: HTMLElement): ScrollAnchor | null {
   return null;
 }
 
+function getAnchorTop(container: HTMLElement, anchorId: string): number | null {
+  const element = document.getElementById(anchorId);
+  if (!element) return null;
+  const containerTop = container.getBoundingClientRect().top;
+  return element.getBoundingClientRect().top - containerTop;
+}
+
+function getComparableElement(node: EventTarget | Node | null): Element | null {
+  if (!node) return null;
+  if (node instanceof Element) return node;
+  if (node instanceof Node) return node.parentElement;
+  return null;
+}
+
+function isRelevantToLockedAnchor(
+  container: HTMLElement,
+  anchorId: string,
+  node: EventTarget | Node | null,
+): boolean {
+  const anchorElement = document.getElementById(anchorId);
+  if (!anchorElement) return true;
+  const element = getComparableElement(node);
+  if (!element || element === container) return true;
+  return isBeforeOrInsideTarget(element, anchorElement);
+}
+
 async function waitForStableMessageLayout(
   container: HTMLElement,
   target: HTMLElement,
@@ -196,6 +222,8 @@ export function useChatHistoryNavigation({
   const hasMoreNewerMessagesRef = useRef(false);
   const navigationRequestRef = useRef(0);
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
+  const lockedScrollAnchorRef = useRef<ScrollAnchor | null>(null);
+  const prependAnchorRequestRef = useRef(0);
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
 
@@ -242,6 +270,7 @@ export function useChatHistoryNavigation({
   }, [historyMode]);
 
   const updateScrollAnchor = useCallback(() => {
+    if (lockedScrollAnchorRef.current) return;
     const container = messagesContainerRef.current;
     if (!container || isNearBottomRef.current) {
       scrollAnchorRef.current = null;
@@ -252,19 +281,22 @@ export function useChatHistoryNavigation({
 
   const restoreScrollAnchor = useCallback(() => {
     const container = messagesContainerRef.current;
-    const anchor = scrollAnchorRef.current;
+    const anchor = lockedScrollAnchorRef.current || scrollAnchorRef.current;
     if (!container || !anchor || isNearBottomRef.current || loadingMoreRef.current) return;
 
-    const element = document.getElementById(anchor.id);
-    if (!element) return;
-
-    const containerTop = container.getBoundingClientRect().top;
-    const nextTop = element.getBoundingClientRect().top - containerTop;
+    const nextTop = getAnchorTop(container, anchor.id);
+    if (nextTop === null) return;
     const delta = nextTop - anchor.top;
     if (Math.abs(delta) > 1) {
       container.scrollTop += delta;
     }
   }, [messagesContainerRef]);
+
+  const releaseLockedScrollAnchor = useCallback((requestId: number) => {
+    if (prependAnchorRequestRef.current !== requestId) return;
+    lockedScrollAnchorRef.current = null;
+    updateScrollAnchor();
+  }, [updateScrollAnchor]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -283,17 +315,41 @@ export function useChatHistoryNavigation({
       });
     };
 
-    const observer = new MutationObserver(scheduleRestore);
+    const scheduleRestoreForMutations = (records: MutationRecord[]) => {
+      const lockedAnchor = lockedScrollAnchorRef.current;
+      if (lockedAnchor) {
+        const hasRelevantMutation = records.some((record) => (
+          isRelevantToLockedAnchor(container, lockedAnchor.id, record.target)
+          || [...record.addedNodes].some((node) =>
+            isRelevantToLockedAnchor(container, lockedAnchor.id, node))
+        ));
+        if (!hasRelevantMutation) return;
+      }
+      scheduleRestore();
+    };
+
+    const scheduleRestoreForEvent = (event: Event) => {
+      const lockedAnchor = lockedScrollAnchorRef.current;
+      if (
+        lockedAnchor
+        && !isRelevantToLockedAnchor(container, lockedAnchor.id, event.target)
+      ) {
+        return;
+      }
+      scheduleRestore();
+    };
+
+    const observer = new MutationObserver(scheduleRestoreForMutations);
     observer.observe(container, { childList: true, subtree: true });
-    container.addEventListener("load", scheduleRestore, true);
-    container.addEventListener("loadedmetadata", scheduleRestore, true);
-    container.addEventListener("error", scheduleRestore, true);
+    container.addEventListener("load", scheduleRestoreForEvent, true);
+    container.addEventListener("loadedmetadata", scheduleRestoreForEvent, true);
+    container.addEventListener("error", scheduleRestoreForEvent, true);
 
     return () => {
       observer.disconnect();
-      container.removeEventListener("load", scheduleRestore, true);
-      container.removeEventListener("loadedmetadata", scheduleRestore, true);
-      container.removeEventListener("error", scheduleRestore, true);
+      container.removeEventListener("load", scheduleRestoreForEvent, true);
+      container.removeEventListener("loadedmetadata", scheduleRestoreForEvent, true);
+      container.removeEventListener("error", scheduleRestoreForEvent, true);
       if (restoreAnchorFrameRef.current !== null) {
         cancelAnimationFrame(restoreAnchorFrameRef.current);
         restoreAnchorFrameRef.current = null;
@@ -341,8 +397,12 @@ export function useChatHistoryNavigation({
       if (!oldest?.created_at) return;
 
       loadingMoreRef.current = true;
-      const anchorId = oldest.id;
-      const previousAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
+      const prependRequestId = ++prependAnchorRequestRef.current;
+      const viewportAnchor = findScrollAnchor(element);
+      lockedScrollAnchorRef.current = viewportAnchor;
+      if (viewportAnchor) {
+        scrollAnchorRef.current = viewportAnchor;
+      }
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
 
       fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id })
@@ -360,14 +420,28 @@ export function useChatHistoryNavigation({
               return trimMessageWindow(combined, "older");
             });
             requestAnimationFrame(() => {
-              const nextAnchorTop = document.getElementById(`msg-${anchorId}`)?.offsetTop ?? null;
-              if (previousAnchorTop !== null && nextAnchorTop !== null) {
-                element.scrollTop += nextAnchorTop - previousAnchorTop;
+              const anchor = lockedScrollAnchorRef.current;
+              const nextAnchorTop = anchor ? getAnchorTop(element, anchor.id) : null;
+              if (anchor && nextAnchorTop !== null) {
+                element.scrollTop += nextAnchorTop - anchor.top;
               }
+              const anchorElement = anchor ? document.getElementById(anchor.id) as HTMLElement | null : null;
+              if (!anchorElement) {
+                releaseLockedScrollAnchor(prependRequestId);
+                return;
+              }
+              void waitForStableMessageLayout(element, anchorElement).finally(() => {
+                restoreScrollAnchor();
+                releaseLockedScrollAnchor(prependRequestId);
+              });
             });
           } else {
             hasMoreMessagesRef.current = false;
+            releaseLockedScrollAnchor(prependRequestId);
           }
+        })
+        .catch(() => {
+          releaseLockedScrollAnchor(prependRequestId);
         })
         .finally(() => {
           loadingMoreRef.current = false;
