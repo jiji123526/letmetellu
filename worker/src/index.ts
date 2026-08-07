@@ -5,6 +5,7 @@ import { handleData } from "./routes/data";
 import { handleInit } from "./routes/init";
 import { handleAdmin } from "./routes/admin";
 import { handleUser } from "./routes/user";
+import { handleSocketAuth } from "./routes/socket-auth";
 import { handleAuth } from "./routes/auth";
 import { handleDm } from "./routes/dm";
 import { handleUpload, handleMediaServe } from "./routes/upload";
@@ -117,6 +118,8 @@ export default {
         response = await handleAdmin(request, env);
       } else if (url.pathname.startsWith("/api/user")) {
         response = await handleUser(request, env);
+      } else if (url.pathname.startsWith("/api/socket-auth")) {
+        response = await handleSocketAuth(request, env);
       } else if (url.pathname.startsWith("/api/recent-channels")) {
         response = await handleRecentChannels(request, env);
       } else if (url.pathname.startsWith("/api/auth")) {

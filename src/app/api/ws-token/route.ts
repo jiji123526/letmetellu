@@ -48,63 +48,52 @@ export async function GET(request: Request) {
   }
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
-  if (session?.user?.id) {
-    const ownerRes = await fetch(`${workerUrl}/api/init?channel=${channelId}`, {
-      headers: {
-        "X-Internal-Token": process.env.INTERNAL_SECRET || "",
-        "X-User-Id": session.user.id,
-      },
-      cache: "no-store",
-    });
-    const ownerData = await ownerRes.json() as { channel?: { owner_uid: string }; viewerAccess?: "owner" | "reports_owner" | "standard" };
-    if (ownerRes.ok && ownerData.channel) {
-      if (ownerData.viewerAccess === "owner" && ownerData.channel.owner_uid === session.user.id) {
-        const token = await createWsToken("admin-ws", channelId, session.user.id);
-        return NextResponse.json({ token, mode: "admin" });
-      }
-      if (ownerData.viewerAccess === "reports_owner") {
-        const token = await createWsToken("viewer-ws", channelId, session.user.id);
-        return NextResponse.json({ token, mode: "viewer" });
-      }
-    }
-  }
-
   const parentChannelId = getParentChannelId(channelId);
   const roomToken = readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
-  if (!roomToken) {
+  if (!session?.user?.id && !roomToken) {
     return new NextResponse(null, { status: 204 });
   }
 
   const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
-  const headers: Record<string, string> = { "X-Room-Token": roomToken };
+  const headers: Record<string, string> = {};
+  if (session?.user?.id) {
+    headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
+    headers["X-User-Id"] = session.user.id;
+  }
+  if (roomToken) headers["X-Room-Token"] = roomToken;
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
-  const roomRes = await fetch(`${workerUrl}/api/init?channel=${channelId}`, {
+  const authRes = await fetch(`${workerUrl}/api/socket-auth?channel=${channelId}`, {
     headers,
     cache: "no-store",
   });
-  const roomData = await roomRes.json().catch(() => ({})) as {
-    channel?: { id: string };
+  if (authRes.status === 204) {
+    return new NextResponse(null, { status: 204 });
+  }
+  const authData = await authRes.json().catch(() => ({})) as {
+    mode?: "admin" | "viewer" | "room";
+    userId?: string;
     anonymousUid?: string;
     anonymousToken?: string;
     deviceToken?: string;
   };
-  if (!roomRes.ok || !roomData.channel) {
+  if (!authRes.ok || !authData.mode || !authData.userId) {
     const response = NextResponse.json({ error: "not authorized" }, { status: 403 });
     clearRoomTokenResponseCookie(response, request, parentChannelId);
     return response;
   }
 
-  const token = await createWsToken(
-    "room-viewer-ws",
-    channelId,
-    typeof roomData.anonymousUid === "string" && roomData.anonymousUid ? roomData.anonymousUid : "viewer",
-  );
-  const response = NextResponse.json({ token, mode: "room" });
+  const tokenType = authData.mode === "admin"
+    ? "admin-ws"
+    : authData.mode === "viewer"
+      ? "viewer-ws"
+      : "room-viewer-ws";
+  const token = await createWsToken(tokenType, channelId, authData.userId);
+  const response = NextResponse.json({ token, mode: authData.mode });
   setIdentityCookies(response, request, {
-    anonymousToken: typeof roomData.anonymousToken === "string" ? roomData.anonymousToken : null,
-    deviceToken: typeof roomData.deviceToken === "string" ? roomData.deviceToken : null,
+    anonymousToken: typeof authData.anonymousToken === "string" ? authData.anonymousToken : null,
+    deviceToken: typeof authData.deviceToken === "string" ? authData.deviceToken : null,
   });
   return response;
 }

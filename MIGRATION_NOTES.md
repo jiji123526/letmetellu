@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### WebSocket auth no longer depends on full channel init — 2026-08-07
+
+- `/api/ws-token` previously called Worker `/api/init` on every socket open or reconnect just to determine whether the client should authenticate as owner admin, reports-owner viewer or passcode-room viewer.
+- That reused the full bootstrap path even though socket authorization only needed channel ownership, reports-owner override and room-token validation, so reconnect churn paid for message/config reads that were unrelated to the auth decision.
+- The Worker now exposes a narrow `socket-auth` route that validates exactly those socket auth modes and refreshes anonymous or device identity only when a room viewer actually needs it.
+- The Next.js `/api/ws-token` route now uses that lightweight Worker endpoint instead of `init`, reducing reconnect request cost without changing the existing admin, reports-owner or room-viewer WebSocket token model.
+
+Trade-off: socket authorization now depends on a dedicated Worker route instead of piggybacking on `init`, so future auth-mode changes must keep both the page bootstrap and socket-auth contracts aligned. The narrower endpoint is intentional because reconnect paths should not pull full channel state.
+
+Deployment note: deploy the Worker and frontend together, or deploy the Worker first. No D1 migration is required.
+
 ### Explicit message navigation now rehydrates thread context — 2026-08-07
 
 - Navigating to a message by id now refreshes `message-context` even when the target message is already mounted in the current client window.
