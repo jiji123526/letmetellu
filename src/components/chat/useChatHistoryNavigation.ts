@@ -357,7 +357,9 @@ export function useChatHistoryNavigation({
       setHistoryMode("latest");
       setNewerMessageCount(0);
       hasMoreNewerMessagesRef.current = false;
-      hasMoreMessagesRef.current = (data.messages?.length || 0) >= 50;
+      hasMoreMessagesRef.current = typeof data.has_more === "boolean"
+        ? data.has_more
+        : (data.messages?.length || 0) >= 50;
       isNearBottomRef.current = true;
       scrollAnchorRef.current = null;
       requestAnimationFrame(() => {
@@ -399,7 +401,9 @@ export function useChatHistoryNavigation({
       fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id })
         .then((data) => {
           if (data.messages && data.messages.length > 0) {
-            if (data.messages.length < 50) hasMoreMessagesRef.current = false;
+            hasMoreMessagesRef.current = typeof data.has_more === "boolean"
+              ? data.has_more
+              : data.messages.length >= 50;
             setMessages((previous) => {
               const ids = new Set(previous.map((message) => message.id));
               const older = data.messages.filter((message: Message) => !ids.has(message.id));
@@ -457,7 +461,9 @@ export function useChatHistoryNavigation({
       fetchMessagePage(fetchChannel, "after", { createdAt: newest.created_at, id: newest.id })
         .then((data) => {
           if (data.messages?.length) {
-            if (data.messages.length < 50) hasMoreNewerMessagesRef.current = false;
+            hasMoreNewerMessagesRef.current = typeof data.has_more === "boolean"
+              ? data.has_more
+              : data.messages.length >= 50;
             setMessages((previous) => {
               const byId = new Map(previous.map((message) => [message.id, message]));
               for (const message of data.messages as Message[]) {

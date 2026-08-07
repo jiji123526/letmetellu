@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### History page loads now keep visible root threads intact — 2026-08-07
+
+- Chronological `/api/data?type=messages` pages now expand the visible root threads touched by the page instead of returning only the raw 50-row time slice.
+- Older history browsing therefore keeps earlier direct replies, including owner/admin replies, visible when later sibling replies from the same root thread were already inside the page window.
+- The chat history loader now uses an explicit `has_more` flag from the Worker so thread-expanded pages do not break older/newer pagination heuristics.
+
+Trade-off: history pages can now contain more than the base 50 rows when several loaded messages belong to the same active threads. This increases payload size somewhat in exchange for thread completeness while browsing history.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
 ### Old-thread context now includes the full visible root thread — 2026-08-07
 
 - Jumping to an older message no longer relies only on a fixed chronological slice around the target when building the thread view.
