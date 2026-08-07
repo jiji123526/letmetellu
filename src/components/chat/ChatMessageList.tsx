@@ -290,15 +290,14 @@ const MessageRow = React.memo(function MessageRow({
         transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
       }}
     >
-      <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
-        <path
-          d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3"
-          fill="none"
-          stroke="rgba(255,255,255,0.95)"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+      <svg
+        viewBox="0 0 16 16"
+        style={{
+          width: "var(--bubble-font-size)",
+          height: "var(--bubble-font-size)",
+          filter: "drop-shadow(0 0 2px rgba(255,255,255,0.95)) drop-shadow(0 0 5px rgba(255,255,255,0.75))",
+        }}
+      >
         <path
           d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3"
           fill="none"
