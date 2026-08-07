@@ -507,8 +507,9 @@ export function useChatHistoryNavigation({
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
+    const shouldHydrateExistingContext = !!element && historyModeRef.current === "context";
 
-    if (!element) {
+    if (!element || shouldHydrateExistingContext) {
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
       try {
         const data = await fetchMessageContext(fetchChannel, msgId);
