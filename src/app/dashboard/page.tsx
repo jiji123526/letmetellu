@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Providers } from "@/components/Providers";
 import { useLocale } from "@/hooks/useLocale";
 import { useForegroundPolling } from "@/hooks/useForegroundPolling";
@@ -648,11 +648,15 @@ function DashboardPageContent() {
     return request;
   }, []);
 
-  const loadSupportPreview = useCallback((): Promise<void> => {
+  const loadSupportPreview = useCallback((resolvedRole?: {
+    isPlatformAdmin: boolean;
+  }): Promise<void> => {
+    const effectivePlatformAdmin = resolvedRole?.isPlatformAdmin ?? isPlatformAdmin;
+    const effectiveHasResolvedRole = resolvedRole !== undefined || hasResolvedPlatformRole;
     if (
       status === "loading"
-      || isPlatformAdmin
-      || (status === "authenticated" && !hasResolvedPlatformRole)
+      || effectivePlatformAdmin
+      || (status === "authenticated" && !effectiveHasResolvedRole)
     ) {
       return Promise.resolve();
     }
@@ -724,54 +728,57 @@ function DashboardPageContent() {
     setPendingLocalChannels(null);
   };
 
+  const runDashboardStartup = useEffectEvent((
+    startupStatus: typeof status,
+    userId: string | undefined,
+  ) => {
+    if (startupStatus === "authenticated" && userId) {
+      void (async () => {
+        const cachedRecentChannels = readCachedAccountRecentChannels(userId);
+        if (cachedRecentChannels.length > 0) {
+          skipNextListAnimationRef.current = true;
+          setRecentChannels(cachedRecentChannels);
+          markDashboardMilestone("cached-channels-ready");
+        }
+        const roleResult = await Promise.allSettled([loadChannels()]);
+        const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
+        if (isAdmin) {
+          const platformDashboardRequest = loadPlatformDashboard();
+          void loadOperationalHealth();
+          await platformDashboardRequest;
+          setLoading(false);
+          return;
+        }
+        const recentChannelsRequest = loadAccountRecentChannels(userId, { skipListAnimation: true });
+        const supportPreviewRequest = loadSupportPreview({ isPlatformAdmin: false });
+        if (cachedRecentChannels.length > 0) {
+          setLoading(false);
+        }
+        await Promise.allSettled([recentChannelsRequest]);
+        setLoading(false);
+        await Promise.allSettled([supportPreviewRequest]);
+        listAnimationsEnabledRef.current = true;
+      })();
+      return;
+    }
+    if (startupStatus === "unauthenticated") {
+      const localRecentChannelsRequest = loadLocalRecentChannels();
+      const supportPreviewRequest = loadSupportPreview();
+      void Promise.allSettled([localRecentChannelsRequest, supportPreviewRequest]).finally(() => {
+        listAnimationsEnabledRef.current = true;
+      });
+      setPlatformAdminRole(null);
+      setPlatformDashboard(null);
+      setLoading(false);
+    }
+  });
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const userId = session?.user?.id;
-      if (status === "authenticated" && session?.user?.id) {
-        void (async () => {
-          const cachedRecentChannels = userId
-            ? readCachedAccountRecentChannels(userId)
-            : [];
-          if (cachedRecentChannels.length > 0) {
-            skipNextListAnimationRef.current = true;
-            setRecentChannels(cachedRecentChannels);
-            markDashboardMilestone("cached-channels-ready");
-          }
-          const roleResult = await Promise.allSettled([loadChannels()]);
-          const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
-          if (isAdmin) {
-            await loadPlatformDashboard();
-            setLoading(false);
-            return;
-          }
-          if (!userId) {
-            setLoading(false);
-            listAnimationsEnabledRef.current = true;
-            return;
-          }
-          const recentChannelsRequest = loadAccountRecentChannels(userId, { skipListAnimation: true });
-          const supportPreviewRequest = loadSupportPreview();
-          if (cachedRecentChannels.length > 0) {
-            setLoading(false);
-          }
-          await Promise.allSettled([recentChannelsRequest]);
-          setLoading(false);
-          await Promise.allSettled([supportPreviewRequest]);
-          listAnimationsEnabledRef.current = true;
-        })();
-      } else if (status === "unauthenticated") {
-        const localRecentChannelsRequest = loadLocalRecentChannels();
-        const supportPreviewRequest = loadSupportPreview();
-        void Promise.allSettled([localRecentChannelsRequest, supportPreviewRequest]).finally(() => {
-          listAnimationsEnabledRef.current = true;
-        });
-        setPlatformAdminRole(null);
-        setPlatformDashboard(null);
-        setLoading(false);
-      }
+      runDashboardStartup(status, session?.user?.id);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [status, session?.user?.id, loadChannels, loadLocalRecentChannels, loadAccountRecentChannels, loadPlatformDashboard, loadSupportPreview]);
+  }, [status, session?.user?.id]);
 
   useEffect(() => {
     if (!isPlatformAdmin) {
@@ -798,7 +805,7 @@ function DashboardPageContent() {
   useForegroundPolling({
     enabled: status !== "loading",
     pollMs: DASHBOARD_REFRESH_TICK_MS,
-    runImmediately: true,
+    runImmediately: false,
     onRefresh: refreshForegroundDashboard,
   });
 

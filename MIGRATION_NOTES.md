@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Dashboard startup no longer repeats role-dependent requests — 2026-08-07
+
+- Browser diagnostics showed normal authenticated dashboard startup issuing `user-bootstrap`, `recent-channels` and `support-preview` twice instead of once.
+- Resolving the platform role changed the support-preview callback identity, which restarted the startup effect after `/api/user` completed. Foreground polling also ran an immediate role-sensitive refresh alongside startup.
+- Startup orchestration is now keyed only to authentication status and session user id. It uses the role returned by the initial user bootstrap directly and explicitly owns the initial recent-channel, support-preview, platform-dashboard and operational-health requests.
+- Foreground polling no longer performs an immediate duplicate refresh; its interval and focus/visibility refresh behavior remain active after startup.
+- Expected normal authenticated startup counts are now `user-bootstrap: 1`, `recent-channels: 1`, `support-preview: 1` and `admin-dashboard: 0`.
+
+Trade-off: startup and recurring freshness now have clearer ownership, but any new initial dashboard resource must be added explicitly to the startup path instead of relying on polling's immediate invocation.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Newer history pages preserve the visible viewport anchor — 2026-08-07
 
 - Scrolling down through a contextual history window previously anchored newer-page loads to the old newest mounted message for only one animation frame.
