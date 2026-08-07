@@ -85,6 +85,34 @@ function linkifyText(text: string, isMine: boolean, hiddenEmbedUrls: Set<string>
   return parts;
 }
 
+function highlightRenderedPart(part: React.ReactNode, query: string, isActive: boolean): React.ReactNode {
+  if (typeof part === "string") {
+    return highlightText(part, query, isActive);
+  }
+
+  if (!React.isValidElement(part)) return part;
+
+  const element = part as React.ReactElement<{ children?: React.ReactNode }>;
+  if (element.props.children === undefined) return element;
+
+  return React.cloneElement(element, {
+    children: React.Children.map(element.props.children, (child) =>
+      highlightRenderedPart(child, query, isActive)),
+  });
+}
+
+function highlightRenderedText(
+  parts: (string | React.ReactElement)[],
+  query: string,
+  isActive: boolean,
+): React.ReactNode[] {
+  return parts.map((part, index) => (
+    <React.Fragment key={`search-part-${index}`}>
+      {highlightRenderedPart(part, query, isActive)}
+    </React.Fragment>
+  ));
+}
+
 export function MessageImage({ src, onOpen }: MessageImageProps) {
   const { t } = useLocale();
   const [loaded, setLoaded] = useState(false);
@@ -152,7 +180,7 @@ function MessageText({
   if (parts.length === 0 && hiddenEmbedUrls.size > 0) return null;
 
   const content = searchQuery && isSearchMatch
-    ? highlightText(displayText, searchQuery, isActiveMatch)
+    ? highlightRenderedText(parts, searchQuery, isActiveMatch)
     : parts;
 
   return (

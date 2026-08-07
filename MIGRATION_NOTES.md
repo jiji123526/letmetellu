@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Search highlighting now respects hidden link previews — 2026-08-07
+
+- Search-hit rendering now highlights the already-processed message content instead of re-rendering from the raw message text.
+- Messages with resolved link previews keep suppressing their original URL text during search navigation, so preview cards no longer re-expose the raw link string just because the message is a search match.
+- Visible non-embedded links still participate in search highlighting, preserving the previous search affordance for messages that intentionally show their URL text.
+
+Trade-off: search matching still runs against the original stored `message.text`, so hidden preview URLs remain searchable even though the rendered bubble may only show the preview card. This keeps search recall intact while aligning the displayed result with normal message rendering.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Background overlay and blur persistence with reused images — 2026-08-07
 
 - Admin background updates now accept both absolute Worker/app media URLs and the normalized same-origin `/api/media/...` paths already stored in channel state and the local background snapshot.
