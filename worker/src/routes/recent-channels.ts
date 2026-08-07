@@ -2,6 +2,7 @@ import { Env } from "../types";
 
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+const RECENT_CHANNEL_LIMIT = 100;
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -58,6 +59,20 @@ function validColor(value: unknown): string | null {
   return color === "#3b8df0" ? "#3598fe" : color;
 }
 
+async function pruneRecentChannels(env: Env, userId: string) {
+  await env.DB.prepare(`
+    DELETE FROM user_recent_channels
+    WHERE user_id = ?
+      AND channel_id NOT IN (
+        SELECT channel_id
+        FROM user_recent_channels
+        WHERE user_id = ?
+        ORDER BY pinned DESC, last_visited_at DESC, channel_id DESC
+        LIMIT ?
+      )
+  `).bind(userId, userId, RECENT_CHANNEL_LIMIT).run();
+}
+
 export async function handleRecentChannels(request: Request, env: Env): Promise<Response> {
   const identity = authorize(request, env);
   if (!identity) return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -74,8 +89,9 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
       INNER JOIN channels c ON c.id = r.channel_id AND c.id NOT LIKE '%_live'
       LEFT JOIN users u ON u.id = c.owner_uid
       WHERE r.user_id = ?
-      ORDER BY r.pinned DESC, r.last_visited_at DESC
-    `).bind(userId).all();
+      ORDER BY r.pinned DESC, r.last_visited_at DESC, r.channel_id DESC
+      LIMIT ?
+    `).bind(userId, RECENT_CHANNEL_LIMIT).all();
     return Response.json({ channels: results });
   }
 
@@ -128,6 +144,7 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
         validColor(channel.bubbleColor),
       ));
     if (statements.length) await env.DB.batch(statements);
+    await pruneRecentChannels(env, userId);
     return Response.json({ ok: true });
   }
 
@@ -159,6 +176,8 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   } else {
     return Response.json({ error: "unknown action" }, { status: 400 });
   }
+
+  await pruneRecentChannels(env, userId);
 
   const record = await env.DB.prepare(
     "SELECT bubble_color, pinned, last_visited_at FROM user_recent_channels WHERE user_id = ? AND channel_id = ?"
