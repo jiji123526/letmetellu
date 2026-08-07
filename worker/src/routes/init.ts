@@ -4,6 +4,7 @@ import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
 import { getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { readVisibleMessagePage } from "../lib/visible-messages";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
@@ -109,9 +110,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   // Collect independent reads into one D1 batch. This removes the accumulated
   // latency of issuing messages, settings and moderation queries one by one.
   const statements: D1PreparedStatement[] = [
-    env.DB.prepare(
-      "SELECT * FROM (SELECT * FROM messages WHERE channel_id = ? AND (deleted = 0 OR (deleted = 1 AND id IN (SELECT reply_to FROM messages WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL))) ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC"
-    ).bind(channelId, channelId),
     env.DB.prepare(`
       SELECT id, text, updated_at FROM config
       WHERE (channel_id = ? AND id = ?)
@@ -162,17 +160,18 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   // the single D1 batch instead of extending the critical path.
   const doId = env.CHAT_ROOM.idFromName(parentChannelId);
   const stub = env.CHAT_ROOM.get(doId);
-  const [batchResults, presenceRes] = await Promise.all([
+  const [messagePage, batchResults, presenceRes] = await Promise.all([
+    readVisibleMessagePage(env, channelId, { limit: 50 }),
     env.DB.batch(statements),
     stub.fetch(new Request("http://internal/presence")),
   ]);
   const presence = await presenceRes.json() as { count: number };
 
-  const rawMessages = batchResults[0].results || [];
-  const configRows = (batchResults[1].results || []) as { id: string; text: string; updated_at?: string | null }[];
+  const rawMessages = messagePage.messages;
+  const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
   const config = new Map(configRows.map((row) => [row.id, row.text]));
-  const liveRow = batchResults[2].results?.[0] as { is_frozen?: number } | undefined;
-  const moderationRow = batchResults[3].results?.[0] as { status?: string } | undefined;
+  const liveRow = batchResults[1].results?.[0] as { is_frozen?: number } | undefined;
+  const moderationRow = batchResults[2].results?.[0] as { status?: string } | undefined;
   const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
   const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
   const viewerBlocked = viewerBlockedIndex === null
