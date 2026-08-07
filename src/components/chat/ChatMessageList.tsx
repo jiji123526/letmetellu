@@ -284,14 +284,29 @@ const MessageRow = React.memo(function MessageRow({
     <span
       className="flex flex-none items-center"
       style={{
-        color: "var(--gray-bubble)",
-        opacity: 1,
+        color: "var(--meta)",
+        opacity: 0.7,
         marginTop: "8px",
         transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
       }}
     >
       <svg viewBox="0 0 16 16" style={{ width: "var(--bubble-font-size)", height: "var(--bubble-font-size)" }}>
-        <path d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3"
+          fill="none"
+          stroke="rgba(255,255,255,0.95)"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M14 12C14 8 11 5 7 5H3M3 5l3-3M3 5l3 3"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </span>
   ) : null;
