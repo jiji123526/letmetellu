@@ -4,7 +4,21 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Older-message prepends settle before one final anchor correction — 2026-08-09
+
+- The first visible message and its viewport offset remain locked as the anchor while older messages load above it.
+- One immediate post-render adjustment accounts for the synchronous height of inserted rows; mutation and media-load observers then remain disabled for the entire `older` phase.
+- Deferred embeds are activated and only content at or above the anchor is checked for loading markers, incomplete images, video metadata and offset changes.
+- After the anchor offset stays unchanged for 900ms, its saved viewport position is restored exactly once and the lock is released. A second older-page request cannot start while this phase is active.
+- Newer-message appends retain their independent observer behavior, and the message container continues to disable native browser `overflow-anchor` so it cannot compete with explicit corrections.
+
+Trade-off: the anchor can drift while slow media above it expands, then snap back once after settlement. A 45-second timeout prevents failed external embeds from blocking history loading forever, while direct user interaction cancels the final correction.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Older and newer history loads use separate anchor correction phases — 2026-08-09
+
+This intermediate approach was superseded by the single-final-correction strategy above after continued upward-scroll jitter was observed.
 
 - Prepending older messages now marks an explicit `older` anchor phase and temporarily suppresses mutation/load observer corrections until the first post-prepend anchor restoration finishes.
 - This prevents the observer and the manual prepend correction from moving the same visible anchor during the same render cycle, which caused upward-history scrolling to jump.

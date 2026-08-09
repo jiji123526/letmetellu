@@ -152,6 +152,7 @@ async function waitForCompleteHistoryWindow(
   container: HTMLElement,
   isCurrent: () => boolean,
   timeoutMs = 45_000,
+  boundary?: HTMLElement,
 ): Promise<"ready" | "timeout" | "cancelled"> {
   const startedAt = performance.now();
   let userInterrupted = false;
@@ -171,15 +172,18 @@ async function waitForCompleteHistoryWindow(
       await nextAnimationFrame();
       if (!isCurrent() || userInterrupted) return "cancelled";
 
-      const pendingMarker = container.querySelector(".media-loading-dots, [data-history-layout-pending]");
+      const isRelevant = (node: Element) => !boundary || isBeforeOrInsideTarget(node, boundary);
+      const pendingMarker = [...container.querySelectorAll(".media-loading-dots, [data-history-layout-pending]")]
+        .some(isRelevant);
       const pendingImage = [...container.querySelectorAll("img")]
-        .some((node) => node instanceof HTMLImageElement && !node.complete);
+        .some((node) => isRelevant(node) && node instanceof HTMLImageElement && !node.complete);
       const pendingVideo = [...container.querySelectorAll("video")]
-        .some((node) => node instanceof HTMLVideoElement
+        .some((node) => isRelevant(node)
+          && node instanceof HTMLVideoElement
           && node.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE
           && node.readyState < HTMLMediaElement.HAVE_METADATA);
-      const height = container.scrollHeight;
-      const pending = Boolean(pendingMarker) || pendingImage || pendingVideo;
+      const height = boundary ? boundary.offsetTop : container.scrollHeight;
+      const pending = pendingMarker || pendingImage || pendingVideo;
       const now = performance.now();
 
       if (pending || height !== previousHeight) {
@@ -222,7 +226,6 @@ export function useChatHistoryNavigation({
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
   const lockedScrollAnchorRef = useRef<ScrollAnchor | null>(null);
   const lockedScrollDirectionRef = useRef<"older" | "newer" | null>(null);
-  const initialPrependRestorePendingRef = useRef(false);
   const historyLoadAnchorRequestRef = useRef(0);
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
@@ -286,6 +289,7 @@ export function useChatHistoryNavigation({
     if (
       !container
       || !anchor
+      || (lockedAnchor && lockedScrollDirectionRef.current === "older")
       || (!lockedAnchor && isNearBottomRef.current)
       || loadingMoreRef.current
     ) return;
@@ -302,7 +306,6 @@ export function useChatHistoryNavigation({
     if (historyLoadAnchorRequestRef.current !== requestId) return;
     lockedScrollAnchorRef.current = null;
     lockedScrollDirectionRef.current = null;
-    initialPrependRestorePendingRef.current = false;
     updateScrollAnchor();
   }, [updateScrollAnchor]);
 
@@ -328,7 +331,6 @@ export function useChatHistoryNavigation({
       if (
         lockedAnchor
         && lockedScrollDirectionRef.current === "older"
-        && initialPrependRestorePendingRef.current
       ) return;
       if (lockedAnchor) {
         const hasRelevantMutation = records.some((record) => (
@@ -346,7 +348,6 @@ export function useChatHistoryNavigation({
       if (
         lockedAnchor
         && lockedScrollDirectionRef.current === "older"
-        && initialPrependRestorePendingRef.current
       ) return;
       if (
         lockedAnchor
@@ -421,14 +422,13 @@ export function useChatHistoryNavigation({
       const viewportAnchor = findScrollAnchor(element);
       lockedScrollAnchorRef.current = viewportAnchor;
       lockedScrollDirectionRef.current = "older";
-      initialPrependRestorePendingRef.current = Boolean(viewportAnchor);
       if (viewportAnchor) {
         scrollAnchorRef.current = viewportAnchor;
       }
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
 
       fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id })
-        .then((data) => {
+        .then(async (data) => {
           if (data.messages && data.messages.length > 0) {
             hasMoreMessagesRef.current = typeof data.has_more === "boolean"
               ? data.has_more
@@ -443,23 +443,35 @@ export function useChatHistoryNavigation({
               hasMoreNewerMessagesRef.current = true;
               return trimMessageWindow(combined, "older");
             });
-            requestAnimationFrame(() => {
-              const anchor = lockedScrollAnchorRef.current;
-              const nextAnchorTop = anchor ? getAnchorTop(element, anchor.id) : null;
-              if (anchor && nextAnchorTop !== null) {
-                element.scrollTop += nextAnchorTop - anchor.top;
-              }
-              initialPrependRestorePendingRef.current = false;
-              const anchorElement = anchor ? document.getElementById(anchor.id) as HTMLElement | null : null;
-              if (!anchorElement) {
-                releaseLockedScrollAnchor(prependRequestId);
-                return;
-              }
-              void waitForStableMessageLayout(element, anchorElement).finally(() => {
-                restoreScrollAnchor();
-                releaseLockedScrollAnchor(prependRequestId);
-              });
-            });
+            await nextAnimationFrame();
+            const anchor = lockedScrollAnchorRef.current;
+            const nextAnchorTop = anchor ? getAnchorTop(element, anchor.id) : null;
+            if (anchor && nextAnchorTop !== null) {
+              element.scrollTop += nextAnchorTop - anchor.top;
+            }
+            const anchorElement = anchor ? document.getElementById(anchor.id) as HTMLElement | null : null;
+            if (!anchorElement) {
+              releaseLockedScrollAnchor(prependRequestId);
+              return;
+            }
+            await nextAnimationFrame();
+            window.dispatchEvent(new Event("chat-history-preload"));
+            const readiness = await waitForCompleteHistoryWindow(
+              element,
+              () => historyLoadAnchorRequestRef.current === prependRequestId,
+              45_000,
+              anchorElement,
+            );
+            if (readiness === "cancelled") {
+              releaseLockedScrollAnchor(prependRequestId);
+              return;
+            }
+            const finalAnchor = lockedScrollAnchorRef.current;
+            const finalTop = finalAnchor ? getAnchorTop(element, finalAnchor.id) : null;
+            if (finalAnchor && finalTop !== null) {
+              element.scrollTop += finalTop - finalAnchor.top;
+            }
+            releaseLockedScrollAnchor(prependRequestId);
           } else {
             hasMoreMessagesRef.current = false;
             releaseLockedScrollAnchor(prependRequestId);
@@ -488,7 +500,6 @@ export function useChatHistoryNavigation({
       const viewportAnchor = findScrollAnchor(element);
       lockedScrollAnchorRef.current = viewportAnchor;
       lockedScrollDirectionRef.current = "newer";
-      initialPrependRestorePendingRef.current = false;
       if (viewportAnchor) {
         scrollAnchorRef.current = viewportAnchor;
       }
