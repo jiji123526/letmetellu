@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import { fetchMessageContext, fetchMessagePage, fetchMessages } from "@/lib/api-chat";
 import { MAX_MOUNTED_HISTORY_MESSAGES, trimMessageWindow } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
@@ -30,9 +30,6 @@ interface UseChatHistoryNavigationArgs {
 interface UseChatHistoryNavigationResult {
   historyModeRef: MutableRefObject<HistoryMode>;
   isNearBottomRef: MutableRefObject<boolean>;
-  hasMoreOlderMessages: boolean;
-  isLoadingOlderMessages: boolean;
-  loadOlderMessages: () => void;
   handleScroll: () => void;
   scrollToBottom: () => void;
   scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
@@ -224,8 +221,6 @@ export function useChatHistoryNavigation({
   const historyModeRef = useRef<HistoryMode>(historyMode);
   const loadingMoreRef = useRef(false);
   const hasMoreMessagesRef = useRef(true);
-  const [hasMoreOlderMessages, setHasMoreOlderMessages] = useState(true);
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const hasMoreNewerMessagesRef = useRef(false);
   const navigationRequestRef = useRef(0);
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
@@ -393,7 +388,6 @@ export function useChatHistoryNavigation({
       hasMoreMessagesRef.current = typeof data.has_more === "boolean"
         ? data.has_more
         : (data.messages?.length || 0) >= 50;
-      setHasMoreOlderMessages(hasMoreMessagesRef.current);
       isNearBottomRef.current = true;
       scrollAnchorRef.current = null;
       requestAnimationFrame(() => {
@@ -405,19 +399,25 @@ export function useChatHistoryNavigation({
     }
   }, [channelId, inLiveModeRef, messagesEndRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 
-  const loadOlderMessages = useCallback(() => {
+  const handleScroll = useCallback(() => {
     const element = messagesContainerRef.current;
+    if (!element) return;
+
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    isNearBottomRef.current = distanceFromBottom <= 120;
+    setShowScrollBtn(distanceFromBottom > 200);
+    updateScrollAnchor();
+
     if (
-      !element
-      || loadingMoreRef.current
-      || !hasMoreMessagesRef.current
-      || messages.length === 0
-    ) return;
+      element.scrollTop < 50
+      && !loadingMoreRef.current
+      && hasMoreMessagesRef.current
+      && messages.length > 0
+    ) {
       const oldest = messages[0];
       if (!oldest?.created_at) return;
 
       loadingMoreRef.current = true;
-      setIsLoadingOlderMessages(true);
       const prependRequestId = ++historyLoadAnchorRequestRef.current;
       const viewportAnchor = findScrollAnchor(element);
       lockedScrollAnchorRef.current = viewportAnchor;
@@ -433,7 +433,6 @@ export function useChatHistoryNavigation({
             hasMoreMessagesRef.current = typeof data.has_more === "boolean"
               ? data.has_more
               : data.messages.length >= 50;
-            setHasMoreOlderMessages(hasMoreMessagesRef.current);
             setMessages((previous) => {
               const ids = new Set(previous.map((message) => message.id));
               const older = data.messages.filter((message: Message) => !ids.has(message.id));
@@ -475,7 +474,6 @@ export function useChatHistoryNavigation({
             releaseLockedScrollAnchor(prependRequestId);
           } else {
             hasMoreMessagesRef.current = false;
-            setHasMoreOlderMessages(false);
             releaseLockedScrollAnchor(prependRequestId);
           }
         })
@@ -484,18 +482,8 @@ export function useChatHistoryNavigation({
         })
         .finally(() => {
           loadingMoreRef.current = false;
-          setIsLoadingOlderMessages(false);
         });
-  }, [channelId, inLiveModeRef, messages, messagesContainerRef, releaseLockedScrollAnchor, setHistoryMode, setMessages]);
-
-  const handleScroll = useCallback(() => {
-    const element = messagesContainerRef.current;
-    if (!element) return;
-
-    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-    isNearBottomRef.current = distanceFromBottom <= 120;
-    setShowScrollBtn(distanceFromBottom > 200);
-    updateScrollAnchor();
+    }
 
     if (
       historyModeRef.current === "context"
@@ -570,6 +558,7 @@ export function useChatHistoryNavigation({
     messagesContainerRef,
     releaseLockedScrollAnchor,
     restoreScrollAnchor,
+    setHistoryMode,
     setMessages,
     setShowScrollBtn,
     updateScrollAnchor,
@@ -604,7 +593,6 @@ export function useChatHistoryNavigation({
       setHistoryMode("context");
       setNewerMessageCount(0);
       hasMoreMessagesRef.current = data.has_older !== false;
-      setHasMoreOlderMessages(hasMoreMessagesRef.current);
       hasMoreNewerMessagesRef.current = data.has_newer !== false;
       element = await waitForMessageElement(msgId);
     } catch {
@@ -670,7 +658,6 @@ export function useChatHistoryNavigation({
         setHistoryMode("context");
         setNewerMessageCount(0);
         hasMoreMessagesRef.current = data.has_older !== false;
-        setHasMoreOlderMessages(hasMoreMessagesRef.current);
         hasMoreNewerMessagesRef.current = data.has_newer !== false;
         element = await waitForMessageElement(position.messageId);
       } catch {
@@ -697,9 +684,6 @@ export function useChatHistoryNavigation({
   return {
     historyModeRef,
     isNearBottomRef,
-    hasMoreOlderMessages,
-    isLoadingOlderMessages,
-    loadOlderMessages,
     handleScroll,
     scrollToBottom,
     scrollToMessage,

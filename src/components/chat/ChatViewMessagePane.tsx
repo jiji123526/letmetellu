@@ -20,11 +20,6 @@ interface ChatViewMessagePaneProps {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   onScroll: () => void;
-  hasMoreOlderMessages: boolean;
-  isLoadingOlderMessages: boolean;
-  loadOlderMessagesLabel: string;
-  loadingOlderMessagesLabel: string;
-  onLoadOlderMessages: () => void;
   isReportsOwnerView: boolean;
   restrictedChannels: RestrictedChannelSummaryItem[];
   restrictedChannelsTitle: string;
@@ -71,11 +66,6 @@ export function ChatViewMessagePane({
   messagesContainerRef,
   messagesEndRef,
   onScroll,
-  hasMoreOlderMessages,
-  isLoadingOlderMessages,
-  loadOlderMessagesLabel,
-  loadingOlderMessagesLabel,
-  onLoadOlderMessages,
   isReportsOwnerView,
   restrictedChannels,
   restrictedChannelsTitle,
@@ -154,32 +144,6 @@ export function ChatViewMessagePane({
         className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
         style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", overflowAnchor: "none", background: "transparent" }}
       >
-        {hasMoreOlderMessages && (
-          <div className="flex-none flex justify-center" style={{ padding: "2px 0 12px" }}>
-            <button
-              type="button"
-              disabled={isLoadingOlderMessages}
-              onClick={onLoadOlderMessages}
-              style={{
-                border: "none",
-                borderRadius: "999px",
-                padding: "8px 14px",
-                background: "color-mix(in srgb, var(--card) 88%, transparent)",
-                color: "var(--tint)",
-                fontSize: "calc(var(--bubble-font-size) - 3px)",
-                fontFamily: "inherit",
-                fontWeight: 500,
-                cursor: isLoadingOlderMessages ? "wait" : "pointer",
-                opacity: isLoadingOlderMessages ? 0.65 : 1,
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-              }}
-            >
-              {isLoadingOlderMessages ? loadingOlderMessagesLabel : loadOlderMessagesLabel}
-            </button>
-          </div>
-        )}
-
         {isReportsOwnerView && restrictedChannels.length > 0 && (
           <section
             style={{

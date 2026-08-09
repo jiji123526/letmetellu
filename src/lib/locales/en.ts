@@ -9,7 +9,6 @@ export const en: Record<LocaleKeys, string> = {
   delete: "Delete",
   send: "Send",
   loading: "Loading...",
-  loadOlderMessages: "Load earlier messages",
   or: "or",
   needHelp: "Need help?",
 

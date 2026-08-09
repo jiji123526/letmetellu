@@ -7,7 +7,6 @@ export const ko = {
   delete: "삭제",
   send: "보내기",
   loading: "불러오는 중...",
-  loadOlderMessages: "이전 메시지 더보기",
   or: "또는",
   needHelp: "도움이 필요하신가요?",
 
