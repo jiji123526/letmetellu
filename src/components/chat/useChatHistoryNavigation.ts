@@ -148,17 +148,17 @@ async function waitForStableMessageLayout(
   }
 }
 
-async function correctMessageAfterLayoutSettles(
+async function waitForCompleteHistoryWindow(
   container: HTMLElement,
-  target: HTMLElement,
   isCurrent: () => boolean,
-  timeoutMs = 20_000,
-): Promise<void> {
+  timeoutMs = 45_000,
+): Promise<"ready" | "timeout" | "cancelled"> {
   const startedAt = performance.now();
   let userInterrupted = false;
   const interrupt = () => { userInterrupted = true; };
-  const quietPeriodMs = 600;
-  const maxCorrections = 2;
+  const quietPeriodMs = 900;
+  let previousHeight = -1;
+  let quietSince: number | null = null;
 
   container.addEventListener("wheel", interrupt, { passive: true });
   container.addEventListener("touchstart", interrupt, { passive: true });
@@ -167,37 +167,31 @@ async function correctMessageAfterLayoutSettles(
   try {
     await document.fonts?.ready;
 
-    for (let correction = 0; correction < maxCorrections; correction += 1) {
-      let previousSignature = "";
-      let quietSince: number | null = null;
+    while (performance.now() - startedAt < timeoutMs) {
+      await nextAnimationFrame();
+      if (!isCurrent() || userInterrupted) return "cancelled";
 
-      while (performance.now() - startedAt < timeoutMs) {
-        await nextAnimationFrame();
-        if (!isCurrent() || userInterrupted) return;
+      const pendingMarker = container.querySelector(".media-loading-dots, [data-history-layout-pending]");
+      const pendingImage = [...container.querySelectorAll("img")]
+        .some((node) => node instanceof HTMLImageElement && !node.complete);
+      const pendingVideo = [...container.querySelectorAll("video")]
+        .some((node) => node instanceof HTMLVideoElement
+          && node.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE
+          && node.readyState < HTMLMediaElement.HAVE_METADATA);
+      const height = container.scrollHeight;
+      const pending = Boolean(pendingMarker) || pendingImage || pendingVideo;
+      const now = performance.now();
 
-        const now = performance.now();
-        const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
-        const pendingContent = hasPendingPositioningContent(container, target);
-        if (pendingContent || signature !== previousSignature) {
-          quietSince = null;
-        } else if (quietSince === null) {
-          quietSince = now;
-        } else if (now - quietSince >= quietPeriodMs) {
-          break;
-        }
-        previousSignature = signature;
+      if (pending || height !== previousHeight) {
+        quietSince = null;
+      } else if (quietSince === null) {
+        quietSince = now;
+      } else if (now - quietSince >= quietPeriodMs) {
+        return "ready";
       }
-
-      if (!isCurrent() || userInterrupted) return;
-      const containerRect = container.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const alignmentOffset = targetRect.top + targetRect.height / 2
-        - (containerRect.top + container.clientHeight / 2);
-      if (Math.abs(alignmentOffset) <= 6) return;
-
-      container.scrollBy({ top: alignmentOffset, behavior: "auto" });
-      if (performance.now() - startedAt >= timeoutMs) return;
+      previousHeight = height;
     }
+    return "timeout";
   } finally {
     container.removeEventListener("wheel", interrupt);
     container.removeEventListener("touchstart", interrupt);
@@ -584,18 +578,22 @@ export function useChatHistoryNavigation({
 
     if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
-    const alignmentElement = alignment === "media"
-      ? element.querySelector<HTMLElement>("[data-message-media]") || element
-      : element;
-    alignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
     const container = messagesContainerRef.current;
     if (container) {
-      await correctMessageAfterLayoutSettles(
+      await nextAnimationFrame();
+      window.dispatchEvent(new Event("chat-history-preload"));
+      const readiness = await waitForCompleteHistoryWindow(
         container,
-        alignmentElement,
         () => navigationRequest === navigationRequestRef.current,
       );
+      if (readiness === "cancelled") return;
     }
+    if (navigationRequest !== navigationRequestRef.current) return;
+    element = document.getElementById(`msg-${msgId}`) || element;
+    const finalAlignmentElement = alignment === "media"
+      ? element.querySelector<HTMLElement>("[data-message-media]") || element
+      : element;
+    finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
   }, [channelId, inLiveModeRef, messagesContainerRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 
   const restoreRefreshPosition = useCallback(async () => {

@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation waits for the complete mounted history window — 2026-08-09
+
+- Context navigation now activates every deferred widget and link preview in the newly mounted message window before positioning the selected message.
+- The navigation waits until loading indicators and preview requests are gone, all mounted images are complete, videos have metadata, and the full container height remains unchanged for 900ms.
+- Only then does it perform one final center alignment, replacing the previous approach that moved immediately and corrected the position repeatedly while content continued rendering.
+- A 45-second upper bound prevents an unresponsive third-party embed from blocking navigation forever, and wheel, touch or pointer input still cancels the wait.
+
+Trade-off: media-heavy windows can take noticeably longer to navigate and can initiate more image, preview and third-party embed requests at once. The change intentionally favors stable positioning over immediate movement.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Close controls share the notice-banner X icon — 2026-08-09
 
 - Close controls across chat panels, guides, search, reply UI, expanded posts, login and admin settings now use the same SVG geometry, size and rounded stroke as the notice banner.

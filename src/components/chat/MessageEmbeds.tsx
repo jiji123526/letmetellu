@@ -90,6 +90,12 @@ function LazyEmbed({ render, fillWidth }: { render: () => ReactNode; fillWidth: 
   const [active, setActive] = useState(false);
 
   useEffect(() => {
+    const activateForNavigation = () => setActive(true);
+    window.addEventListener("chat-history-preload", activateForNavigation);
+    return () => window.removeEventListener("chat-history-preload", activateForNavigation);
+  }, []);
+
+  useEffect(() => {
     const element = rootRef.current;
     if (!element) return;
     if (!("IntersectionObserver" in window)) {
@@ -295,6 +301,12 @@ function useDeferredEmbedVisibility(rootMargin: string) {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    const activateForNavigation = () => setIsVisible(true);
+    window.addEventListener("chat-history-preload", activateForNavigation);
+    return () => window.removeEventListener("chat-history-preload", activateForNavigation);
+  }, []);
+
+  useEffect(() => {
     const target = targetRef.current;
     if (!target || isVisible) return;
     if (typeof IntersectionObserver === "undefined") {
@@ -432,7 +444,9 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
       />
     );
   }
-  if (!hasResolved) return null;
+  if (!hasResolved) {
+    return <span data-history-layout-pending aria-hidden="true" />;
+  }
   if (!data) return null;
 
   const hasTextMetadata = !!(data.title || data.description || data.siteName);
