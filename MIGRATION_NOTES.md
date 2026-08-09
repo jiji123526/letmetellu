@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Long-history panel navigation waits for a real layout quiet period — 2026-08-09
+
+- Gallery, link and search jumps no longer treat three unchanged animation frames as a settled destination.
+- Navigation now waits for 600ms with no relevant height change and no pending nearby media, allowing delayed images and third-party widgets above the target to finish their cascading layout work.
+- The overall stabilization window increases from 12.5 to 20 seconds for slow networks and large historical windows.
+- After the first correction, the destination can run one additional quiet-period check and final correction if newly visible lazy content changes the layout again.
+- Corrections remain limited to two, ignore offsets of 6px or less, and stop immediately on wheel, touch or pointer input.
+
+Trade-offs: on a slow connection the selected message may remain temporarily displaced for longer before receiving its final correction. Fast connections add roughly a 600ms quiet-period confirmation, while user interaction always takes priority and cancels pending automatic alignment.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Dashboard and preference sync now share the current-user read — 2026-08-07
 
 - Resource Timing showed two `/api/user` GET requests starting at the same millisecond during authenticated dashboard entry: one loaded channels and platform role while `UserPreferencesSync` independently loaded font size and locale.

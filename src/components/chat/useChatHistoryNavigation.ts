@@ -152,13 +152,13 @@ async function correctMessageAfterLayoutSettles(
   container: HTMLElement,
   target: HTMLElement,
   isCurrent: () => boolean,
-  timeoutMs = 12_500,
+  timeoutMs = 20_000,
 ): Promise<void> {
   const startedAt = performance.now();
-  let previousSignature = "";
-  let stableFrames = 0;
   let userInterrupted = false;
   const interrupt = () => { userInterrupted = true; };
+  const quietPeriodMs = 600;
+  const maxCorrections = 2;
 
   container.addEventListener("wheel", interrupt, { passive: true });
   container.addEventListener("touchstart", interrupt, { passive: true });
@@ -167,23 +167,36 @@ async function correctMessageAfterLayoutSettles(
   try {
     await document.fonts?.ready;
 
-    while (performance.now() - startedAt < timeoutMs) {
-      await nextAnimationFrame();
-      if (!isCurrent() || userInterrupted) return;
-      const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
-      const pendingContent = hasPendingPositioningContent(container, target);
-      stableFrames = !pendingContent && signature === previousSignature ? stableFrames + 1 : 0;
-      previousSignature = signature;
-      if (stableFrames >= 3) break;
-    }
+    for (let correction = 0; correction < maxCorrections; correction += 1) {
+      let previousSignature = "";
+      let quietSince: number | null = null;
 
-    if (!isCurrent() || userInterrupted) return;
-    const containerRect = container.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-    const alignmentOffset = targetRect.top + targetRect.height / 2
-      - (containerRect.top + container.clientHeight / 2);
-    if (Math.abs(alignmentOffset) > 6) {
+      while (performance.now() - startedAt < timeoutMs) {
+        await nextAnimationFrame();
+        if (!isCurrent() || userInterrupted) return;
+
+        const now = performance.now();
+        const signature = `${container.scrollHeight}:${target.offsetTop}:${target.offsetHeight}`;
+        const pendingContent = hasPendingPositioningContent(container, target);
+        if (pendingContent || signature !== previousSignature) {
+          quietSince = null;
+        } else if (quietSince === null) {
+          quietSince = now;
+        } else if (now - quietSince >= quietPeriodMs) {
+          break;
+        }
+        previousSignature = signature;
+      }
+
+      if (!isCurrent() || userInterrupted) return;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const alignmentOffset = targetRect.top + targetRect.height / 2
+        - (containerRect.top + container.clientHeight / 2);
+      if (Math.abs(alignmentOffset) <= 6) return;
+
       container.scrollBy({ top: alignmentOffset, behavior: "auto" });
+      if (performance.now() - startedAt >= timeoutMs) return;
     }
   } finally {
     container.removeEventListener("wheel", interrupt);
