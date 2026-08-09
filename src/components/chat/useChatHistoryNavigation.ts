@@ -221,6 +221,8 @@ export function useChatHistoryNavigation({
   const navigationRequestRef = useRef(0);
   const scrollAnchorRef = useRef<ScrollAnchor | null>(null);
   const lockedScrollAnchorRef = useRef<ScrollAnchor | null>(null);
+  const lockedScrollDirectionRef = useRef<"older" | "newer" | null>(null);
+  const initialPrependRestorePendingRef = useRef(false);
   const historyLoadAnchorRequestRef = useRef(0);
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
@@ -299,6 +301,8 @@ export function useChatHistoryNavigation({
   const releaseLockedScrollAnchor = useCallback((requestId: number) => {
     if (historyLoadAnchorRequestRef.current !== requestId) return;
     lockedScrollAnchorRef.current = null;
+    lockedScrollDirectionRef.current = null;
+    initialPrependRestorePendingRef.current = false;
     updateScrollAnchor();
   }, [updateScrollAnchor]);
 
@@ -321,6 +325,11 @@ export function useChatHistoryNavigation({
 
     const scheduleRestoreForMutations = (records: MutationRecord[]) => {
       const lockedAnchor = lockedScrollAnchorRef.current;
+      if (
+        lockedAnchor
+        && lockedScrollDirectionRef.current === "older"
+        && initialPrependRestorePendingRef.current
+      ) return;
       if (lockedAnchor) {
         const hasRelevantMutation = records.some((record) => (
           isRelevantToLockedAnchor(container, lockedAnchor.id, record.target)
@@ -334,6 +343,11 @@ export function useChatHistoryNavigation({
 
     const scheduleRestoreForEvent = (event: Event) => {
       const lockedAnchor = lockedScrollAnchorRef.current;
+      if (
+        lockedAnchor
+        && lockedScrollDirectionRef.current === "older"
+        && initialPrependRestorePendingRef.current
+      ) return;
       if (
         lockedAnchor
         && !isRelevantToLockedAnchor(container, lockedAnchor.id, event.target)
@@ -406,6 +420,8 @@ export function useChatHistoryNavigation({
       const prependRequestId = ++historyLoadAnchorRequestRef.current;
       const viewportAnchor = findScrollAnchor(element);
       lockedScrollAnchorRef.current = viewportAnchor;
+      lockedScrollDirectionRef.current = "older";
+      initialPrependRestorePendingRef.current = Boolean(viewportAnchor);
       if (viewportAnchor) {
         scrollAnchorRef.current = viewportAnchor;
       }
@@ -433,6 +449,7 @@ export function useChatHistoryNavigation({
               if (anchor && nextAnchorTop !== null) {
                 element.scrollTop += nextAnchorTop - anchor.top;
               }
+              initialPrependRestorePendingRef.current = false;
               const anchorElement = anchor ? document.getElementById(anchor.id) as HTMLElement | null : null;
               if (!anchorElement) {
                 releaseLockedScrollAnchor(prependRequestId);
@@ -470,6 +487,8 @@ export function useChatHistoryNavigation({
       const appendRequestId = ++historyLoadAnchorRequestRef.current;
       const viewportAnchor = findScrollAnchor(element);
       lockedScrollAnchorRef.current = viewportAnchor;
+      lockedScrollDirectionRef.current = "newer";
+      initialPrependRestorePendingRef.current = false;
       if (viewportAnchor) {
         scrollAnchorRef.current = viewportAnchor;
       }

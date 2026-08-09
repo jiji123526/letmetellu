@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Older and newer history loads use separate anchor correction phases — 2026-08-09
+
+- Prepending older messages now marks an explicit `older` anchor phase and temporarily suppresses mutation/load observer corrections until the first post-prepend anchor restoration finishes.
+- This prevents the observer and the manual prepend correction from moving the same visible anchor during the same render cycle, which caused upward-history scrolling to jump.
+- Once the initial prepend offset is restored, observer-based corrections resume for delayed images, widgets and media above the anchor.
+- Appending newer messages keeps its separate `newer` phase and existing behavior because content added below the visible anchor does not require the prepend suppression.
+
+Trade-off: layout events that finish during the short initial prepend frame are handled immediately after the first anchor restoration instead of independently during that frame. This intentionally serializes corrections to avoid competing writes to `scrollTop`.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Gallery navigation waits for the complete mounted history window — 2026-08-09
 
 - Context navigation now activates every deferred widget and link preview in the newly mounted message window before positioning the selected message.
