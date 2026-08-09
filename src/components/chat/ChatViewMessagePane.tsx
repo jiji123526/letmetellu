@@ -120,21 +120,38 @@ export function ChatViewMessagePane({
         />
       )}
 
-      {activeNotice && (
-        <NoticeBanner
-          channelId={inLiveMode ? `${channelId}_live` : channelId}
-          notice={activeNotice}
-          onDismiss={onDismissNotice}
-        />
-      )}
+      {(activeNotice || inLiveMode) && (
+        <div
+          style={{
+            position: "absolute",
+            top: activeNotice ? "12px" : "14px",
+            left: "12px",
+            right: activeNotice ? "12px" : "14px",
+            zIndex: 12,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: "8px",
+            pointerEvents: "none",
+          }}
+        >
+          {activeNotice && (
+            <NoticeBanner
+              channelId={inLiveMode ? `${channelId}_live` : channelId}
+              notice={activeNotice}
+              onDismiss={onDismissNotice}
+            />
+          )}
 
-      {inLiveMode && (
-        <div style={{ position: "absolute", top: "14px", right: "14px", zIndex: 11, display: "inline-flex", alignItems: "center", gap: "0.28em", padding: "0.28em 0.58em", borderRadius: "999px", background: "rgba(60,60,67,.10)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", color: "rgba(60,60,67,.68)", fontSize: "var(--bubble-font-size, 13px)", fontWeight: 600, lineHeight: 1, pointerEvents: "none" }}>
-          <svg viewBox="0 0 24 24" style={{ width: "1.05em", height: "1.05em" }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="3.25" />
-            <path d="M5.75 19c.45-4 2.55-6 6.25-6s5.8 2 6.25 6" />
-          </svg>
-          <span>{liveCount}</span>
+          {inLiveMode && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.28em", padding: "0.28em 0.58em", borderRadius: "999px", background: "rgba(60,60,67,.10)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", color: "rgba(60,60,67,.68)", fontSize: "var(--bubble-font-size, 13px)", fontWeight: 600, lineHeight: 1, pointerEvents: "none" }}>
+              <svg viewBox="0 0 24 24" style={{ width: "1.05em", height: "1.05em" }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="3.25" />
+                <path d="M5.75 19c.45-4 2.55-6 6.25-6s5.8 2 6.25 6" />
+              </svg>
+              <span>{liveCount}</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -54,7 +54,7 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
   };
 
   return (
-    <div style={{ position: "absolute", top: "12px", left: "12px", right: "12px", zIndex: 12, pointerEvents: "none" }}>
+    <div style={{ width: "100%", pointerEvents: "none" }}>
       <div
         style={{
           width: "100%",

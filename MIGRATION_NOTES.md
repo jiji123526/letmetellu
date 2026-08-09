@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Live viewer count follows the notice banner height — 2026-08-09
+
+- The channel notice and live viewer-count badge now share one top overlay stack instead of using independent absolute positions.
+- When a notice is visible, the viewer count sits below its actual rendered height and continues to follow it when the notice is expanded or collapsed.
+- Without a notice, the viewer count retains its previous top-right placement.
+
+Trade-off: an expanded notice intentionally pushes the viewer badge farther into the message viewport, but the badge remains visible instead of being covered.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Report view state is scoped to the active channel — 2026-08-09
 
 - The report-channel view and owner filter now retain the channel ID they belong to instead of being reset by an effect after navigation.
