@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { deleteMessage, sendMessage as sendMessageApi } from "@/lib/api-chat";
 import {
   deriveChatMessageCollections,
@@ -13,6 +13,12 @@ import type { Message } from "./chatTypes";
 interface BannerState {
   text: string;
   color: string;
+}
+
+interface ReportsViewState {
+  channelId: string;
+  isChannelView: boolean;
+  ownerFilter: ReportsOwnerFilter;
 }
 
 export interface ChatSearchState {
@@ -95,14 +101,16 @@ export function useChatReportsSearch({
 }: UseChatReportsSearchArgs): UseChatReportsSearchResult {
   const [showSearch, setShowSearch] = useState(false);
   const [searchState, setSearchState] = useState<ChatSearchState>(EMPTY_SEARCH_STATE);
-  const [isReportsChannelView, setIsReportsChannelView] = useState(false);
-  const [reportsOwnerFilter, setReportsOwnerFilter] = useState<ReportsOwnerFilter>(null);
+  const [reportsViewState, setReportsViewState] = useState<ReportsViewState>(() => ({
+    channelId,
+    isChannelView: false,
+    ownerFilter: null,
+  }));
   const [reportedMsgIds, setReportedMsgIds] = useState<Set<string>>(readReportedMessageIds);
 
-  useEffect(() => {
-    setIsReportsChannelView(false);
-    setReportsOwnerFilter(null);
-  }, [channelId]);
+  const isCurrentReportsState = reportsViewState.channelId === channelId;
+  const isReportsChannelView = isCurrentReportsState ? reportsViewState.isChannelView : false;
+  const reportsOwnerFilter = isCurrentReportsState ? reportsViewState.ownerFilter : null;
 
   const {
     isReportsOwnerView,
@@ -137,12 +145,26 @@ export function useChatReportsSearch({
   }, []);
 
   const setReportsChannelView = useCallback((nextValue: boolean) => {
-    setIsReportsChannelView(nextValue);
-  }, []);
+    setReportsViewState((current) => {
+      if (current.channelId === channelId && current.isChannelView === nextValue) return current;
+      return {
+        channelId,
+        isChannelView: nextValue,
+        ownerFilter: current.channelId === channelId ? current.ownerFilter : null,
+      };
+    });
+  }, [channelId]);
 
   const toggleReportsOwnerFilter = useCallback((filter: Exclude<ReportsOwnerFilter, null>) => {
-    setReportsOwnerFilter((current) => current === filter ? null : filter);
-  }, []);
+    setReportsViewState((current) => {
+      const currentFilter = current.channelId === channelId ? current.ownerFilter : null;
+      return {
+        channelId,
+        isChannelView: current.channelId === channelId ? current.isChannelView : false,
+        ownerFilter: currentFilter === filter ? null : filter,
+      };
+    });
+  }, [channelId]);
 
   const reportMessage = useCallback((message: Message) => {
     const messageId = message.id;

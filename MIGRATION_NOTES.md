@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Report view state is scoped to the active channel — 2026-08-09
+
+- The report-channel view and owner filter now retain the channel ID they belong to instead of being reset by an effect after navigation.
+- A newly opened channel treats stale state from the previous channel as the default immediately, so report filters cannot briefly leak across channels.
+- Report-view actions rebase the state onto the active channel, removing the synchronous state writes and extra render previously triggered by every channel change.
+
+Trade-off: the related values are now grouped in a slightly more complex state object. Any future report-view field must follow the same channel-scoped reset behavior.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Live message reports stay inside the live session — 2026-08-09
 
 - Reporting a message while viewing live mode now creates the admin-only report relay in `${channelId}_live` instead of the parent channel.
