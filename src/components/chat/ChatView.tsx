@@ -7,7 +7,6 @@ import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { useLocale } from "@/hooks/useLocale";
-import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
@@ -74,7 +73,6 @@ function getImageDimensions(file: File): Promise<{ width: number; height: number
 }
 
 export function ChatView({ channelId }: { channelId: string }) {
-  const visualViewportHeight = useVisualViewportHeight();
   const [messages, setMessages] = useState<Message[]>([]);
   const [channel, setChannel] = useState<Channel | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
@@ -815,15 +813,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");
 
   return (
-    <div
-      className="max-w-[480px] mx-auto flex flex-col relative md:border-x"
-      style={{
-        height: visualViewportHeight === null ? "100dvh" : `${visualViewportHeight}px`,
-        background: "var(--bg)",
-        color: "var(--gray-text)",
-        borderColor: "var(--hairline)",
-      }}
-    >
+    <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
       <ChatViewTopChrome
         channelId={channelId}
         channelName={channel?.name || ""}

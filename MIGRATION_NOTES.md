@@ -14,13 +14,13 @@ Trade-off: compact removal controls now have a visually larger X, but their surr
 
 Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
 
-### Mobile chat composer follows the visible viewport after keyboard dismissal — 2026-08-09
+### Mobile keyboard dismissal uses a blur-only scroll reset — 2026-08-09
 
-- The chat shell now tracks `visualViewport` height and offset instead of relying only on `100dvh` while the mobile keyboard opens and closes.
-- Resize, viewport scroll, orientation and focus transitions trigger remeasurement; short delayed checks cover mobile browsers that report the restored viewport in multiple steps after the keyboard-close button is pressed.
-- The composer therefore returns to the physical bottom of the screen after keyboard dismissal instead of retaining the keyboard-height gap.
+- The `visualViewport` height tracker introduced in `493618a` was removed because repeated viewport corrections could make the mobile chat layout jump severely.
+- The chat shell uses its original `100dvh` layout again.
+- When the message textarea loses focus, one animation-frame callback resets the page scroll offset to zero so the browser can place the composer back at the bottom after dismissing the keyboard.
 
-Trade-off: opening or closing the keyboard can cause a small number of tightly bounded viewport measurements over the following 500ms. State updates are deduplicated when the measured height has not changed.
+Trade-off: this intentionally handles only keyboard dismissals that produce a textarea `blur` event. It avoids viewport measurement, resize listeners, delayed timers and competing layout corrections.
 
 Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
 

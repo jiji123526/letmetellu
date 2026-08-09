@@ -346,6 +346,9 @@ export function ChatViewBottomShell({
             value={input}
             onChange={onInputChange}
             onKeyDown={onKeyDown}
+            onBlur={() => {
+              requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+            }}
             disabled={inputDisabled || isSending}
             rows={1}
             placeholder={inputPlaceholder}
