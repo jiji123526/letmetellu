@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Selected reaction badges retain their filled background — 2026-08-09
+
+- Reactions selected by the current user now keep the same gray filled background as the other reaction badges.
+- The selected state remains identifiable through the channel-colored border and count, without becoming visually transparent against the chat background.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Live viewer count follows the notice banner height — 2026-08-09
 
 - The channel notice and live viewer-count badge now share one top overlay stack instead of using independent absolute positions.
