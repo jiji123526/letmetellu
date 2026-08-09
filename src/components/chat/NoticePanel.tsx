@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useLocale } from "@/hooks/useLocale";
 
 interface NoticeSection {
@@ -36,10 +37,10 @@ export function NoticePanel({ notice, onClose }: NoticePanelProps) {
           <h3 className="m-0 font-medium" style={{ fontSize: "var(--bubble-font-size, 16px)" }}>{t("noticePanelTitle")}</h3>
           <button
             className="bg-transparent border-none cursor-pointer"
-            style={{ fontSize: "18px", color: "var(--meta)", padding: "4px 8px" }}
+            style={{ color: "var(--meta)", padding: "4px 8px" }}
             onClick={onClose}
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
 

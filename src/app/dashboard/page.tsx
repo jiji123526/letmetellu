@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import Image from "next/image";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -1651,11 +1652,11 @@ function DashboardPageContent() {
                 <button
                   type="button"
                   className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 rounded-full"
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", lineHeight: 1 }}
                   onClick={() => { setQuery(""); setSubmittedLinkedChannelId(null); }}
                   aria-label="Clear"
                 >
-                  ✕
+                  <CloseIcon />
                 </button>
               )}
             </div>

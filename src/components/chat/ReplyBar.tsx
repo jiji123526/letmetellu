@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useLocale } from "@/hooks/useLocale";
 
 interface ReplyBarProps {
@@ -30,10 +31,10 @@ export function ReplyBar({ replyingTo, onClose }: ReplyBarProps) {
       </span>
       <button
         className="bg-transparent border-none cursor-pointer p-[2px_6px]"
-        style={{ color: "var(--meta)", fontSize: "16px" }}
+        style={{ color: "var(--meta)" }}
         onClick={onClose}
       >
-        ✕
+        <CloseIcon />
       </button>
     </div>
   );

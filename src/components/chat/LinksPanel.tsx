@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useEffect, useState, useRef, useCallback, type RefObject } from "react";
 import { fetchLinks, fetchPreview } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
@@ -288,10 +289,10 @@ export function LinksPanel({ channelId, onClose }: LinksPanelProps) {
           </h3>
           <button
             className="bg-transparent border-none cursor-pointer"
-            style={{ fontSize: "18px", color: "var(--meta)", padding: "4px 8px" }}
+            style={{ color: "var(--meta)", padding: "4px 8px" }}
             onClick={onClose}
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
 

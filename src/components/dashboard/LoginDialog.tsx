@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
@@ -148,7 +149,7 @@ export function LoginDialog({ onClose, initialError = "", initialTab = "login" }
             <h2 className="m-0 text-[21px] font-semibold">{t(tab === "login" ? "loginTab" : tab === "signup" ? "signupTab" : "forgotPassword")}</h2>
             <p className="mt-1 mb-0 text-[12px]" style={{ color: "var(--meta)" }}>{t("appDesc")}</p>
           </div>
-          <button type="button" disabled={submitting} className="w-8 h-8 rounded-full border-none cursor-pointer text-[20px]" style={{ background: "var(--card)", color: "var(--meta)" }} onClick={onClose} aria-label={t("close")}>×</button>
+          <button type="button" disabled={submitting} className="w-8 h-8 rounded-full border-none cursor-pointer flex items-center justify-center" style={{ background: "var(--card)", color: "var(--meta)" }} onClick={onClose} aria-label={t("close")}><CloseIcon /></button>
         </div>
 
         {tab !== "forgot" && <div className="relative flex rounded-[9px] p-[2px] mb-5" style={{ background: "var(--gray-bubble)" }}>

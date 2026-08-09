@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useRef, useCallback } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { chatDateLabel } from "@/lib/chat-date";
@@ -57,10 +58,10 @@ export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose 
           </h3>
           <button
             className="bg-transparent border-none cursor-pointer"
-            style={{ fontSize: "18px", color: "var(--meta)", padding: "4px 8px" }}
+            style={{ color: "var(--meta)", padding: "4px 8px" }}
             onClick={onClose}
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
 

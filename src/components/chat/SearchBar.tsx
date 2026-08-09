@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useState, useRef, useEffect } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import {
@@ -237,9 +238,9 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
       <button
         onClick={handleClose}
         aria-label={t("close")}
-        style={{ background: "none", border: "none", color: "var(--meta)", cursor: "pointer", fontSize: "18px", padding: "4px 8px", lineHeight: 1 }}
+        style={{ background: "none", border: "none", color: "var(--meta)", cursor: "pointer", padding: "4px 8px", lineHeight: 1 }}
       >
-        ✕
+        <CloseIcon />
       </button>
     </div>
   );

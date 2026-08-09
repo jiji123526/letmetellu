@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { adminAction } from "@/lib/api-chat";
@@ -301,7 +302,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)", flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500 }}>{ t("emojiPresets")}</h3>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px" }} onClick={onClose}>✕</button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", padding: "4px 8px" }} onClick={onClose}><CloseIcon /></button>
         </div>
 
         {/* Body */}
@@ -336,7 +337,7 @@ export function EmojiPresetPanel({ channelId, onClose }: EmojiPresetPanelProps) 
                   ☰
                 </button>
                 <span style={{ flex: 1, fontSize: "calc(var(--bubble-font-size) + 4px)" }}>{emoji}</span>
-                <button style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b", fontSize: "var(--bubble-font-size, 14px)", padding: "0 4px", lineHeight: 1 }} onClick={() => removeEmoji(i)}>✕</button>
+                <button style={{ background: "none", border: "none", cursor: "pointer", color: "#c0392b", padding: "4px", lineHeight: 1 }} onClick={() => removeEmoji(i)}><CloseIcon /></button>
               </div>
             ))}
           </div>

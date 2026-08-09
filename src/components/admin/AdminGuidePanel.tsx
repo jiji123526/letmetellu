@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useLocale } from "@/hooks/useLocale";
 import { AdminGuideContent } from "./AdminGuideContent";
 
@@ -15,7 +16,7 @@ export function AdminGuidePanel({ onClose }: { onClose: () => void }) {
       <div style={{ width: "100%", maxWidth: "320px", background: "var(--bg)", color: "var(--gray-text)", borderRadius: "16px", overflow: "hidden", boxShadow: "0 12px 40px rgba(0,0,0,.25)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)" }}>
           <h3 style={{ margin: 0, fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500 }}>{t("guide")}</h3>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px" }} onClick={onClose}>✕</button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", padding: "4px 8px" }} onClick={onClose}><CloseIcon /></button>
         </div>
         <AdminGuideContent />
       </div>

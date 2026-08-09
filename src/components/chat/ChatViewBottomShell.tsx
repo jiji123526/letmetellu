@@ -7,6 +7,7 @@ import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
 import type { PendingPhoto } from "./useChatComposerState";
 import type { Message } from "./chatTypes";
+import { CloseIcon } from "@/components/ui/CloseIcon";
 
 interface BannerState {
   text: string;
@@ -232,12 +233,11 @@ export function ChatViewBottomShell({
                     borderRadius: "50%",
                     background: "rgba(0,0,0,.6)",
                     color: "#fff",
-                    fontSize: "11px",
                     lineHeight: 1,
                   }}
                   onClick={() => onRemovePendingPhoto(index)}
                 >
-                  ✕
+                  <CloseIcon />
                 </button>
               </div>
             ))}

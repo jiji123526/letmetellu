@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Close controls share the notice-banner X icon — 2026-08-09
+
+- Close controls across chat panels, guides, search, reply UI, expanded posts, login and admin settings now use the same SVG geometry, size and rounded stroke as the notice banner.
+- Small removal controls for pending photos, rules, banned words and emoji presets use the same icon as well while retaining their existing hit areas and destructive colors.
+- A shared `CloseIcon` component prevents individual screens from drifting back to differently sized text glyphs.
+
+Trade-off: compact removal controls now have a visually larger X, but their surrounding button dimensions and layout remain unchanged.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Mobile chat composer follows the visible viewport after keyboard dismissal — 2026-08-09
 
 - The chat shell now tracks `visualViewport` height and offset instead of relying only on `100dvh` while the mobile keyboard opens and closes.

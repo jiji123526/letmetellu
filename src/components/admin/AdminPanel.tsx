@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useEffect, useState, useRef } from "react";
 import { adminAction, uploadAdminImage } from "@/lib/api-chat";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
@@ -261,7 +262,7 @@ export function AdminPanel(props: AdminPanelProps) {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "0.5px solid var(--hairline)" }}>
           <h3 style={{ margin: 0, fontSize: "var(--bubble-font-size, 16px)", fontWeight: 500 }}>{title}</h3>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px" }} onClick={goBack}>✕</button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", padding: "4px 8px" }} onClick={goBack}><CloseIcon /></button>
         </div>
 
         {/* Content */}
@@ -604,7 +605,7 @@ export function AdminPanel(props: AdminPanelProps) {
               <div key={i} style={{ marginBottom: "16px", padding: "12px", borderRadius: "12px", border: "1px solid var(--hairline)" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
                   <input style={{ ...inputStyle, flex: 1, marginRight: "8px", marginBottom: 0 }} value={section.title} placeholder={t("sectionTitle")} onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], title: e.target.value }; setRules(r); }} />
-                  <button style={{ background: "none", border: "none", color: "#c0392b", cursor: "pointer", fontSize: "18px" }} onClick={() => setRules(rules.filter((_, j) => j !== i))}>✕</button>
+                  <button style={{ background: "none", border: "none", color: "#c0392b", cursor: "pointer", padding: "4px" }} onClick={() => setRules(rules.filter((_, j) => j !== i))}><CloseIcon /></button>
                 </div>
                 <textarea style={{ ...inputStyle, marginBottom: 0, resize: "vertical" }} rows={3} placeholder={t("sectionItems")} value={section.items.join("\n")} onChange={(e) => { const r = [...rules]; r[i] = { ...r[i], items: e.target.value.split("\n") }; setRules(r); }} />
               </div>
@@ -633,7 +634,7 @@ export function AdminPanel(props: AdminPanelProps) {
                       setBannedWords(next);
                       localStorage.setItem(`bannedWords_${channelId}`, JSON.stringify(next));
                       if (removed) adminAction("remove-banned-word", channelId, { word: removed.word });
-                    }}>✕</button>
+                    }}><CloseIcon /></button>
                   </div>
                 </div>
               ))}

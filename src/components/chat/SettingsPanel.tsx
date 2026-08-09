@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useEffect, useState, useRef } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { useSession } from "next-auth/react";
@@ -78,10 +79,10 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
           <h3 className="m-0 font-medium" style={{ fontSize: "var(--bubble-font-size, 16px)" }}>{t("settings")}</h3>
           <button
             className="bg-transparent border-none cursor-pointer"
-            style={{ fontSize: "18px", color: "var(--meta)", padding: "4px 8px" }}
+            style={{ color: "var(--meta)", padding: "4px 8px" }}
             onClick={onClose}
           >
-            ✕
+            <CloseIcon />
           </button>
         </div>
 

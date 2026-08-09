@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { CloseIcon } from "@/components/ui/CloseIcon";
 
 interface NoticeBannerProps {
   channelId: string;
@@ -100,9 +101,7 @@ export function NoticeBanner({ channelId, notice, onDismiss }: NoticeBannerProps
             </button>
           )}
           <button type="button" style={controlButtonStyle} onClick={handleDismiss} aria-label="Dismiss notice">
-            <svg viewBox="0 0 16 16" style={{ width: controlIconGlyphSize, height: controlIconGlyphSize }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-              <path d="m3.5 3.5 9 9M12.5 3.5l-9 9" />
-            </svg>
+            <CloseIcon size={controlIconGlyphSize} />
           </button>
         </div>
 

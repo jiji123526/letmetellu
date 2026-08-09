@@ -1,5 +1,6 @@
 "use client";
 
+import { CloseIcon } from "@/components/ui/CloseIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PasscodeOverlay } from "./PasscodeOverlay";
 import type { PasscodeGateState } from "./chatViewTypes";
@@ -168,7 +169,7 @@ export function ChatViewExpandedPostOverlay({
         onClick={(event) => event.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "12px 16px", borderBottom: "1px solid var(--hairline)" }}>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", fontSize: "18px", lineHeight: 1 }} onClick={onClose}>✕</button>
+          <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--meta)", padding: "4px 8px", lineHeight: 1 }} onClick={onClose}><CloseIcon /></button>
         </div>
         <div style={{ padding: "16px", fontSize: "var(--bubble-font-size)", lineHeight: 1.6, color: "var(--gray-text)", overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
           {expandedPost.text}
