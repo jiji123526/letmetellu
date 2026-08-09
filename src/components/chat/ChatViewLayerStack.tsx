@@ -219,7 +219,6 @@ export function ChatViewLayerStack({
         onLoadMoreGallery={adminUi.loadMoreGallery}
         onViewGalleryImage={overlayCallbacks.viewGalleryImage}
         onCloseGallery={adminUi.closeGallery}
-        onNavigateFromLinks={overlayCallbacks.navigateFromLinks}
         onCloseLinks={adminUi.closeLinks}
         onToggleView={settingsActions.handleToggleView}
         onPetitionToggle={settingsActions.handlePetitionToggle}

@@ -20,7 +20,6 @@ interface UseChatOverlayCallbacksArgs {
   photoInputRef: RefObject<HTMLInputElement | null>;
   submittingModerationPetition: boolean;
   openGalleryImage: (src: string, meta: GalleryMeta, caption?: string) => void;
-  closeLinks: () => void;
   scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
   handleReaction: (messageId: string, emoji: string) => Promise<void>;
   closeEmojiPicker: () => void;
@@ -49,7 +48,6 @@ interface UseChatOverlayCallbacksArgs {
 export interface UseChatOverlayCallbacksResult {
   closeModerationPetitionDialog: () => void;
   viewGalleryImage: (src: string, meta: GalleryMeta) => void;
-  navigateFromLinks: (msgId: string) => void;
   handleOverlayEmojiSelect: (emoji: string, messageId: string) => void;
   openPlusPhotoPicker: () => void;
   togglePlusDmMode: () => void;
@@ -70,7 +68,6 @@ export function useChatOverlayCallbacks({
   photoInputRef,
   submittingModerationPetition,
   openGalleryImage,
-  closeLinks,
   scrollToMessage,
   handleReaction,
   closeEmojiPicker,
@@ -110,11 +107,6 @@ export function useChatOverlayCallbacks({
     const message = messages.find((item) => item.id === meta.id);
     openGalleryImage(src, meta, message?.text || undefined);
   }, [messages, openGalleryImage]);
-
-  const navigateFromLinks = useCallback((msgId: string) => {
-    closeLinks();
-    void scrollToMessage(msgId);
-  }, [closeLinks, scrollToMessage]);
 
   const handleOverlayEmojiSelect = useCallback((emoji: string, messageId: string) => {
     void handleReaction(messageId, emoji);
@@ -193,7 +185,6 @@ export function useChatOverlayCallbacks({
   return {
     closeModerationPetitionDialog,
     viewGalleryImage,
-    navigateFromLinks,
     handleOverlayEmojiSelect,
     openPlusPhotoPicker,
     togglePlusDmMode,

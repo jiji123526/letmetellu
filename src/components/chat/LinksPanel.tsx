@@ -17,7 +17,6 @@ interface LinkItem {
 
 interface LinksPanelProps {
   channelId: string;
-  onNavigate?: (msgId: string) => void;
   onClose: () => void;
 }
 
@@ -188,7 +187,7 @@ function LinkPreviewCard({
   );
 }
 
-export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) {
+export function LinksPanel({ channelId, onClose }: LinksPanelProps) {
   const { t, locale, timeZone } = useLocale();
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [hasMore, setHasMore] = useState(true);
@@ -322,13 +321,7 @@ export function LinksPanel({ channelId, onNavigate, onClose }: LinksPanelProps) 
                       eager={i < 6}
                       scrollRootRef={scrollRef}
                       onPreview={applyPreview}
-                      onClick={() => {
-                        if (onNavigate) {
-                          onNavigate(link.msgId);
-                        } else {
-                          window.open(link.url, "_blank");
-                        }
-                      }}
+                      onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
                     />,
                   ];
                 });

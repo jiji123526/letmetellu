@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Link panel cards open their destinations directly — 2026-08-09
+
+- Selecting a card in the link panel now opens that URL in a new browser tab instead of navigating the chat to the message that contained it.
+- New tabs use `noopener` and `noreferrer` so the destination cannot control the yap. tab through `window.opener`.
+- Gallery and search-result navigation remain unchanged.
+
+Trade-off: the link panel now prioritizes reaching the shared page. A user who wants the original conversation context must locate the message through chat history or search instead of using the link card.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Long-history panel navigation waits for a real layout quiet period — 2026-08-09
 
 - Gallery, link and search jumps no longer treat three unchanged animation frames as a settled destination.

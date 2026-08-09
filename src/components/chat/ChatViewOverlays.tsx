@@ -113,7 +113,6 @@ interface ChatViewOverlaysProps {
   onLoadMoreGallery: () => void;
   onViewGalleryImage: (src: string, meta: { id: string; created_at: string }) => void;
   onCloseGallery: () => void;
-  onNavigateFromLinks: (msgId: string) => void;
   onCloseLinks: () => void;
   onToggleView: () => void;
   onPetitionToggle: () => void;
@@ -256,7 +255,6 @@ export function ChatViewOverlays({
   onLoadMoreGallery,
   onViewGalleryImage,
   onCloseGallery,
-  onNavigateFromLinks,
   onCloseLinks,
   onToggleView,
   onPetitionToggle,
@@ -363,7 +361,6 @@ export function ChatViewOverlays({
       {showLinks && (
         <LinksPanel
           channelId={linksChannelId}
-          onNavigate={onNavigateFromLinks}
           onClose={onCloseLinks}
         />
       )}

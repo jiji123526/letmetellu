@@ -729,7 +729,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     photoInputRef,
     submittingModerationPetition,
     openGalleryImage,
-    closeLinks,
     scrollToMessage,
     handleReaction,
     closeEmojiPicker,
