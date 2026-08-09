@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat header icons use full-height touch targets — 2026-08-09
+
+- Back, channel-rules, share, search and menu buttons now use the full header height as their vertical click area.
+- Their visible icons remain in the same positions and sizes, while each invisible horizontal hit target is widened to 36px without overlapping adjacent controls.
+
+Trade-off: clicking the otherwise empty vertical space directly above or below an icon now activates that icon instead of the header's scroll-to-top action. This is intentional for easier mobile use.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Selected reaction badges retain their filled background — 2026-08-09
 
 - Reactions selected by the current user now keep the same gray filled background as the other reaction badges.

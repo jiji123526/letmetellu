@@ -107,7 +107,7 @@ export function ChatViewTopChrome({
       >
         <button
           type="button"
-          className="absolute left-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          className="absolute left-[7px] top-0 bottom-0 w-9 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
           style={{ color: bubbleColor }}
           onClick={onDashboard}
           aria-label={t("dashboardChats")}
@@ -120,7 +120,7 @@ export function ChatViewTopChrome({
         {hasChannelRules && (
           <button
             type="button"
-            className="absolute left-[50px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+            className="absolute left-[41px] top-0 bottom-0 w-9 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
             style={{ color: bubbleColor }}
             onClick={onOpenNotice}
             aria-label={t("rules")}
@@ -160,7 +160,7 @@ export function ChatViewTopChrome({
 
         <button
           type="button"
-          className="absolute right-[88px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          className="absolute right-[79px] top-0 bottom-0 w-9 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
           style={{ color: bubbleColor }}
           onClick={onShareChannel}
           aria-label={t("shareChannel")}
@@ -173,7 +173,7 @@ export function ChatViewTopChrome({
 
         <button
           type="button"
-          className="absolute right-[52px] top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          className="absolute right-[43px] top-0 bottom-0 w-9 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
           style={{ color: bubbleColor }}
           onClick={onToggleSearch}
         >
@@ -185,7 +185,7 @@ export function ChatViewTopChrome({
 
         <button
           type="button"
-          className="absolute right-4 top-1/2 -translate-y-1/2 p-0 border-none bg-transparent cursor-pointer flex items-center"
+          className="absolute right-[7px] top-0 bottom-0 w-9 p-0 border-none bg-transparent cursor-pointer flex items-center justify-center"
           style={{ color: bubbleColor }}
           onClick={(event) => onOpenHeaderMenu(event.currentTarget.getBoundingClientRect())}
         >
