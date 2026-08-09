@@ -158,13 +158,13 @@ export function useChatReportsSearch({
       client_message_id: crypto.randomUUID(),
       uid,
       text: `${text.reportPrefix}: "${previewText}"`,
-      channel_id: channelId,
+      channel_id: inLiveMode ? `${channelId}_live` : channelId,
       report: true,
       reported_msg_id: messageId,
     });
     setBanner({ text: text.reported, color: "#d32f2f" });
     setTimeout(() => setBanner(null), 3000);
-  }, [channelId, setBanner, text.reportPrefix, text.reported, uid]);
+  }, [channelId, inLiveMode, setBanner, text.reportPrefix, text.reported, uid]);
 
   const unreportMessage = useCallback((message: Message) => {
     const messageId = message.id;

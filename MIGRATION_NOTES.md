@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Live message reports stay inside the live session — 2026-08-09
+
+- Reporting a message while viewing live mode now creates the admin-only report relay in `${channelId}_live` instead of the parent channel.
+- The channel Durable Object already broadcasts live-channel messages to connected clients, and realtime filtering displays the report only to an admin currently viewing that live session.
+- Non-live reports continue to use the parent channel, while the existing unreport path already targets the matching live or normal channel.
+- Live report relays are intentionally deleted with all other live-session messages when the session ends.
+
+Trade-off: an admin who does not review the report before the live session ends cannot recover it afterward. This matches the accepted ephemeral live-session policy.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Older-message prepends settle before one final anchor correction — 2026-08-09
 
 - The first visible message and its viewport offset remain locked as the anchor while older messages load above it.
