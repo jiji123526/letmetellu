@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Mobile chat composer follows the visible viewport after keyboard dismissal — 2026-08-09
+
+- The chat shell now tracks `visualViewport` height and offset instead of relying only on `100dvh` while the mobile keyboard opens and closes.
+- Resize, viewport scroll, orientation and focus transitions trigger remeasurement; short delayed checks cover mobile browsers that report the restored viewport in multiple steps after the keyboard-close button is pressed.
+- The composer therefore returns to the physical bottom of the screen after keyboard dismissal instead of retaining the keyboard-height gap.
+
+Trade-off: opening or closing the keyboard can cause a small number of tightly bounded viewport measurements over the following 500ms. State updates are deduplicated when the measured height has not changed.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Link panel cards open their destinations directly — 2026-08-09
 
 - Selecting a card in the link panel now opens that URL in a new browser tab instead of navigating the chat to the message that contained it.
