@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Older history loads from an explicit button — 2026-08-09
+
+- Reaching the top of chat no longer starts an older-message request automatically.
+- A localized `이전 메시지 더보기` / `Load earlier messages` control appears before the oldest mounted message and starts exactly one older-page request when selected.
+- The control shows a loading state and remains disabled through fetch, media settlement and final anchor restoration; it disappears when the server reports no older page.
+- Downward navigation through newer contextual history remains automatic near the bottom.
+- The existing first-visible-message anchor and single final correction continue to protect the viewport after a manual load.
+
+Trade-off: browsing far into history requires an explicit selection per page, but accidental requests, overlapping prepend corrections and network usage from merely touching the top are eliminated.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Older-message prepends settle before one final anchor correction — 2026-08-09
 
 - The first visible message and its viewport offset remain locked as the anchor while older messages load above it.

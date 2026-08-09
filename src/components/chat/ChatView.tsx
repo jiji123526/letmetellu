@@ -487,6 +487,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const {
     historyModeRef,
     isNearBottomRef,
+    hasMoreOlderMessages,
+    isLoadingOlderMessages,
+    loadOlderMessages,
     handleScroll,
     scrollToBottom,
     scrollToMessage,
@@ -883,6 +886,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         messagesContainerRef={messagesContainerRef}
         messagesEndRef={messagesEndRef}
         onScroll={handleScroll}
+        hasMoreOlderMessages={hasMoreOlderMessages}
+        isLoadingOlderMessages={isLoadingOlderMessages}
+        loadOlderMessagesLabel={t("loadOlderMessages")}
+        loadingOlderMessagesLabel={t("loading")}
+        onLoadOlderMessages={loadOlderMessages}
         isReportsOwnerView={isReportsOwnerView}
         restrictedChannels={restrictedChannels}
         restrictedChannelsTitle={t("restrictedChannelsTitle")}
