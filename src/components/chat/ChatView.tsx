@@ -935,17 +935,7 @@ export function ChatView({ channelId }: { channelId: string }) {
           className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6"
           aria-live="polite"
         >
-          <div
-            className="flex items-center justify-center rounded-full p-4"
-            role="status"
-            aria-label={t("loading")}
-            style={{
-              background: "color-mix(in srgb, var(--header-bg) 92%, transparent)",
-              boxShadow: "0 18px 40px rgba(15,23,42,.16)",
-              backdropFilter: "saturate(180%) blur(16px)",
-              WebkitBackdropFilter: "saturate(180%) blur(16px)",
-            }}
-          >
+          <div className="flex items-center justify-center" role="status" aria-label={t("loading")}>
             <div className="relative h-9 w-9 animate-spin" aria-hidden="true">
               {Array.from({ length: 8 }).map((_, index) => {
                 const angle = (index / 8) * Math.PI * 2;
@@ -958,7 +948,7 @@ export function ChatView({ channelId }: { channelId: string }) {
                     style={{
                       left: `calc(50% + ${x}px - 3px)`,
                       top: `calc(50% + ${y}px - 3px)`,
-                      background: "var(--tint)",
+                      background: "var(--bubble-sent, #3598fe)",
                       opacity: 0.28 + index * 0.08,
                     }}
                   />
