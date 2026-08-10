@@ -143,7 +143,7 @@ test("matchesImageSignature rejects mismatched, truncated and unsupported conten
   assert.equal(matchesImageSignature("application/octet-stream", pngHeader), false);
 });
 
-test("media cache policy persists backgrounds without caching private message media", () => {
+test("media cache policy keeps shared assets public and chat media browser-private", () => {
   assert.equal(
     getMediaCacheControl("channel-background", false),
     "public, max-age=604800, s-maxage=3600, immutable",
@@ -152,8 +152,10 @@ test("media cache policy persists backgrounds without caching private message me
     getMediaCacheControl("channel-background", true),
     "private, max-age=900, must-revalidate",
   );
-  assert.equal(getMediaCacheControl("message", false), "private, no-store");
-  assert.equal(getMediaCacheControl("dm", true), "private, no-store");
+  assert.equal(getMediaCacheControl("message", false), "private, max-age=300, must-revalidate");
+  assert.equal(getMediaCacheControl("gallery", true), "private, max-age=300, must-revalidate");
+  assert.equal(getMediaCacheControl("dm", true), "private, max-age=300, must-revalidate");
+  assert.equal(getMediaCacheControl("channel-config", true), "private, no-store");
 });
 
 test("public background edge cache only accepts stable GET requests", () => {

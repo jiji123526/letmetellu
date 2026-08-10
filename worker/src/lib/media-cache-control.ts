@@ -10,6 +10,9 @@ export function getMediaCacheControl(
       ? "private, max-age=900, must-revalidate"
       : "public, max-age=604800, s-maxage=3600, immutable";
   }
+  if (sourceType === "message" || sourceType === "gallery" || sourceType === "dm") {
+    return "private, max-age=300, must-revalidate";
+  }
   if (sourceType) {
     return "private, no-store";
   }

@@ -2749,3 +2749,11 @@ Trade-off: simultaneous consumers now receive the same success or failure. This 
 - Cloudflare path analytics can now separate profile-popup traffic from authenticated dashboard state reads before any caching or broader user-state optimization is considered.
 
 Trade-off: historical `/api/user` analytics and new measurements are not directly comparable until the profile-channel share is accounted for. This is intentionally a measurement-only split and does not reduce requests by itself.
+
+### Five-minute private browser cache for chat media — 2026-08-09
+
+- Authorized message, legacy-gallery and DM media responses now use `private, max-age=300, must-revalidate` instead of `private, no-store`.
+- Only the browser that successfully fetched the protected media may reuse it for five minutes; Cloudflare and other shared caches remain prohibited from storing the response.
+- Channel configuration assets retain `private, no-store`, while the existing profile and background cache policies remain unchanged.
+
+Trade-off: after a photo is deleted or the viewer loses access, a copy already fetched by that browser can remain reusable from its private cache for up to five minutes. New requests after expiration must revalidate, and users who never passed channel authorization cannot populate this cache.
