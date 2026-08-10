@@ -4,6 +4,66 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+
+### D1 variable-bound thread expansion and accurate 5xx counting — 2026-08-10
+
+- Five real `/api/data` failures were recorded twice as ten route errors because each thrown request emitted both `unhandled_exception` and `request_failed`. Unhandled requests now emit only the more specific event.
+- The failures occurred when a 50-message page contained 50 unique thread roots. The flat-thread query repeated all root placeholders for roots and children, producing 102 bound variables and exceeding D1's statement limit.
+- Root IDs now enter the query once through a `requested_roots` values CTE and are joined for both root and child lookups. A full 50-root page uses 52 variables while retaining non-recursive indexed lookups.
+- Regression coverage verifies the maximum page case remains below 100 bound variables and that unhandled failures are not counted twice.
+
+Trade-off: the values CTE adds a small amount of SQL planning structure, but removes duplicated bindings and preserves the same returned thread rows and ordering.
+
+### Bounded Worker cache for failed link previews — 2026-08-09
+
+- The Worker preview route now caches unsupported or stable client failures for 15 minutes, transient upstream gateway and timeout failures for 60 seconds, and successful responses without usable title/image metadata for five minutes.
+- Successful metadata keeps the existing one-hour cache. Rate-limit responses, internal failures and URL-policy rejection before a cache key is accepted are not cached.
+- This prevents repeatedly rendered unsupported, empty or temporarily unavailable links from triggering another outbound metadata fetch on every visit while retaining prompt recovery from temporary upstream failures.
+
+Trade-off: a link that begins returning valid metadata immediately after a cached failure can keep its fallback card for at most the applicable one- or fifteen-minute window. The bounded TTLs intentionally favor lower outbound traffic without turning failures into long-lived browser-session state.
+
+### In-flight channel-init request deduplication — 2026-08-09
+
+- Client calls for the same normal or live channel now share one in-flight `/api/init` request instead of issuing parallel copies when bootstrap, reconnect and state-refresh triggers overlap.
+- The broker retains no completed response, so a later refresh still reaches the server and receives current notice, passcode, moderation, live and channel-setting state.
+- Successful passcode verification explicitly drops any matching normal/live in-flight entry before the authenticated refresh begins.
+
+Trade-off: simultaneous consumers now receive the same success or failure. This only coalesces an already-running request and does not introduce a freshness window, so it reduces burst duplication without delaying later state changes.
+
+### Distinct Worker path for profile-channel reads — 2026-08-09
+
+- The same-origin `/api/user?channel=...` proxy now forwards public owner-profile channel reads to `/api/user/profile-channels` while authenticated dashboard bootstrap remains on `/api/user`.
+- The Worker already routes the namespaced path through the same validated handler, so response shape, authorization behavior and UI remain unchanged.
+- Cloudflare path analytics can now separate profile-popup traffic from authenticated dashboard state reads before any caching or broader user-state optimization is considered.
+
+Trade-off: historical `/api/user` analytics and new measurements are not directly comparable until the profile-channel share is accounted for. This is intentionally a measurement-only split and does not reduce requests by itself.
+
+### Five-minute private browser cache for chat media — 2026-08-09
+
+- Authorized message, legacy-gallery and DM media responses now use `private, max-age=300, must-revalidate` instead of `private, no-store`.
+- Only the browser that successfully fetched the protected media may reuse it for five minutes; Cloudflare and other shared caches remain prohibited from storing the response.
+- Channel configuration assets retain `private, no-store`, while the existing profile and background cache policies remain unchanged.
+
+Trade-off: after a photo is deleted or the viewer loses access, a copy already fetched by that browser can remain reusable from its private cache for up to five minutes. New requests after expiration must revalidate, and users who never passed channel authorization cannot populate this cache.
+
+### Lower super-admin dashboard and support-thread polling cost — 2026-08-09
+
+- The visible super-admin dashboard now refreshes its full reports, ticket lists and support-stat aggregation every 60 seconds instead of every 30 seconds. Operational health retains its independent five-minute freshness window.
+- An open platform-support thread still checks for new messages every 30 seconds, but its linked guided-session transcript is fetched only once per `source_session_id` instead of on every poll.
+- Focus and visibility events within ten seconds of a successful thread read no longer issue another identical request. Sending a reply or closing a thread forces a fresh read and waits behind any request already in flight.
+
+Trade-offs: a new report or ticket can take up to 60 seconds to appear in the super-admin list rather than 30 seconds. Linked guided-session data is treated as immutable after ticket escalation; message-thread state remains independently refreshed every 30 seconds.
+
+### Event-sensitive super-admin reads and incremental support polling — 2026-08-09
+
+- The super-admin dashboard now polls a lightweight `dashboard-version` response once per minute. Full reports and ticket lists reload only when support-thread or channel-report activity changes, or after an explicit local action/manual refresh.
+- Support statistics were split into a dedicated endpoint and refresh independently every five minutes instead of running their message rollup on every list refresh.
+- Operational health performs no startup read. Its card is collapsed initially, loads on first expansion, and only then participates in the existing five-minute visible-tab refresh cycle.
+- Closed platform-support threads stop polling. Open threads send their last `(created_at, id)` cursor and receive only newer immutable messages, while thread status continues to refresh every 30 seconds.
+- Linked guided-session transcripts remain one read per source session, and bounded cursor validation prevents oversized or malformed incremental-read parameters.
+
+Trade-offs: the full admin list can be up to 60 seconds behind a remote change, statistics can be up to five minutes behind, and operational health is unavailable until the administrator expands its card. The lightweight version query still performs two small indexed/aggregate reads per minute, but avoids repeated ticket serialization and message-rollup work when nothing changed.
+
 ### Worker security checks run continuously in GitHub Actions — 2026-08-09
 
 - Added a least-privilege GitHub Actions workflow for Worker changes on `main`, pull requests targeting `main`, and manual dispatch.
@@ -2726,61 +2786,4 @@ Trade-offs:
 
 The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTURE_PLANS.md).
 
-### Bounded Worker cache for failed link previews — 2026-08-09
 
-- The Worker preview route now caches unsupported or stable client failures for 15 minutes, transient upstream gateway and timeout failures for 60 seconds, and successful responses without usable title/image metadata for five minutes.
-- Successful metadata keeps the existing one-hour cache. Rate-limit responses, internal failures and URL-policy rejection before a cache key is accepted are not cached.
-- This prevents repeatedly rendered unsupported, empty or temporarily unavailable links from triggering another outbound metadata fetch on every visit while retaining prompt recovery from temporary upstream failures.
-
-Trade-off: a link that begins returning valid metadata immediately after a cached failure can keep its fallback card for at most the applicable one- or fifteen-minute window. The bounded TTLs intentionally favor lower outbound traffic without turning failures into long-lived browser-session state.
-
-### In-flight channel-init request deduplication — 2026-08-09
-
-- Client calls for the same normal or live channel now share one in-flight `/api/init` request instead of issuing parallel copies when bootstrap, reconnect and state-refresh triggers overlap.
-- The broker retains no completed response, so a later refresh still reaches the server and receives current notice, passcode, moderation, live and channel-setting state.
-- Successful passcode verification explicitly drops any matching normal/live in-flight entry before the authenticated refresh begins.
-
-Trade-off: simultaneous consumers now receive the same success or failure. This only coalesces an already-running request and does not introduce a freshness window, so it reduces burst duplication without delaying later state changes.
-
-### Distinct Worker path for profile-channel reads — 2026-08-09
-
-- The same-origin `/api/user?channel=...` proxy now forwards public owner-profile channel reads to `/api/user/profile-channels` while authenticated dashboard bootstrap remains on `/api/user`.
-- The Worker already routes the namespaced path through the same validated handler, so response shape, authorization behavior and UI remain unchanged.
-- Cloudflare path analytics can now separate profile-popup traffic from authenticated dashboard state reads before any caching or broader user-state optimization is considered.
-
-Trade-off: historical `/api/user` analytics and new measurements are not directly comparable until the profile-channel share is accounted for. This is intentionally a measurement-only split and does not reduce requests by itself.
-
-### Five-minute private browser cache for chat media — 2026-08-09
-
-- Authorized message, legacy-gallery and DM media responses now use `private, max-age=300, must-revalidate` instead of `private, no-store`.
-- Only the browser that successfully fetched the protected media may reuse it for five minutes; Cloudflare and other shared caches remain prohibited from storing the response.
-- Channel configuration assets retain `private, no-store`, while the existing profile and background cache policies remain unchanged.
-
-Trade-off: after a photo is deleted or the viewer loses access, a copy already fetched by that browser can remain reusable from its private cache for up to five minutes. New requests after expiration must revalidate, and users who never passed channel authorization cannot populate this cache.
-
-### Lower super-admin dashboard and support-thread polling cost — 2026-08-09
-
-- The visible super-admin dashboard now refreshes its full reports, ticket lists and support-stat aggregation every 60 seconds instead of every 30 seconds. Operational health retains its independent five-minute freshness window.
-- An open platform-support thread still checks for new messages every 30 seconds, but its linked guided-session transcript is fetched only once per `source_session_id` instead of on every poll.
-- Focus and visibility events within ten seconds of a successful thread read no longer issue another identical request. Sending a reply or closing a thread forces a fresh read and waits behind any request already in flight.
-
-Trade-offs: a new report or ticket can take up to 60 seconds to appear in the super-admin list rather than 30 seconds. Linked guided-session data is treated as immutable after ticket escalation; message-thread state remains independently refreshed every 30 seconds.
-
-### Event-sensitive super-admin reads and incremental support polling — 2026-08-09
-
-- The super-admin dashboard now polls a lightweight `dashboard-version` response once per minute. Full reports and ticket lists reload only when support-thread or channel-report activity changes, or after an explicit local action/manual refresh.
-- Support statistics were split into a dedicated endpoint and refresh independently every five minutes instead of running their message rollup on every list refresh.
-- Operational health performs no startup read. Its card is collapsed initially, loads on first expansion, and only then participates in the existing five-minute visible-tab refresh cycle.
-- Closed platform-support threads stop polling. Open threads send their last `(created_at, id)` cursor and receive only newer immutable messages, while thread status continues to refresh every 30 seconds.
-- Linked guided-session transcripts remain one read per source session, and bounded cursor validation prevents oversized or malformed incremental-read parameters.
-
-Trade-offs: the full admin list can be up to 60 seconds behind a remote change, statistics can be up to five minutes behind, and operational health is unavailable until the administrator expands its card. The lightweight version query still performs two small indexed/aggregate reads per minute, but avoids repeated ticket serialization and message-rollup work when nothing changed.
-
-### D1 variable-bound thread expansion and accurate 5xx counting — 2026-08-10
-
-- Five real `/api/data` failures were recorded twice as ten route errors because each thrown request emitted both `unhandled_exception` and `request_failed`. Unhandled requests now emit only the more specific event.
-- The failures occurred when a 50-message page contained 50 unique thread roots. The flat-thread query repeated all root placeholders for roots and children, producing 102 bound variables and exceeding D1's statement limit.
-- Root IDs now enter the query once through a `requested_roots` values CTE and are joined for both root and child lookups. A full 50-root page uses 52 variables while retaining non-recursive indexed lookups.
-- Regression coverage verifies the maximum page case remains below 100 bound variables and that unhandled failures are not counted twice.
-
-Trade-off: the values CTE adds a small amount of SQL planning structure, but removes duplicated bindings and preserves the same returned thread rows and ordering.
