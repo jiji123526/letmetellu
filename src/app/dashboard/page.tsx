@@ -2208,7 +2208,7 @@ function DashboardPageContent() {
             bottom: "max(20px, env(safe-area-inset-bottom))",
             background: "rgba(0,122,255,.82)",
             border: "none",
-            boxShadow: "none",
+            boxShadow: "0 12px 24px rgba(15,23,42,.14)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
           }}
