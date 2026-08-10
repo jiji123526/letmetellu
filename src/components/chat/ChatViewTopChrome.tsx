@@ -19,7 +19,7 @@ interface ChatViewTopChromeProps {
   hasChannelRules: boolean;
   showSearch: boolean;
   searchMessages: SearchMessage[];
-  onSearchNavigate: (msgId: string) => void;
+  onSearchNavigate: (msgId: string, options?: { anchorMessageId?: string | null }) => void;
   onSearchState: (state: { query: string; activeId: string | null; resultIds: string[] }) => void;
   onCloseSearch: () => void;
   onDashboard: () => void;

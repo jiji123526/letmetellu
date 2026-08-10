@@ -18,7 +18,7 @@ interface SearchMessage {
 interface SearchBarProps {
   channelId: string;
   messages: SearchMessage[];
-  onNavigate: (msgId: string) => void;
+  onNavigate: (msgId: string, options?: { anchorMessageId?: string | null }) => void;
   onSearchState: (state: { query: string; activeId: string | null; resultIds: string[] }) => void;
   onClose: () => void;
 }
@@ -162,7 +162,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
         setHasMore(serverData.has_more);
         setNextCursor(serverData.next_cursor);
         resultIdsRef.current = merged.map((message) => message.id);
-        onNavigate(merged[nextIndex].id);
+        onNavigate(merged[nextIndex].id, { anchorMessageId: currentId });
         updateState(query.trim(), resultIdsRef.current, nextIndex);
       } catch {
         // Keep the current result page available when loading older matches fails.
@@ -177,7 +177,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
     if (next < 0) next = 0;
     if (next >= results.length) next = results.length - 1;
     setIndex(next);
-    onNavigate(results[next].id);
+    onNavigate(results[next].id, { anchorMessageId: results[index]?.id || null });
     updateState(query, resultIdsRef.current, next);
   };
 

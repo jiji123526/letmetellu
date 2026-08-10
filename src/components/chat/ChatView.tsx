@@ -37,6 +37,7 @@ import {
 } from "./ChatViewStateScreens";
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
+import { MediaLoadingDots } from "./MediaLoadingDots";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -489,6 +490,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const {
     historyModeRef,
     isNearBottomRef,
+    isMessageNavigationPending,
     handleScroll,
     scrollToBottom,
     positionAtLatest,
@@ -831,10 +833,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         hasChannelRules={hasChannelRules}
         showSearch={showSearch}
         searchMessages={searchMessages}
-        onSearchNavigate={(msgId) => {
+        onSearchNavigate={(msgId, options) => {
           void scrollToMessage(msgId, "message", {
             preferMounted: true,
             preserveViewportUntilReady: true,
+            anchorMessageId: options?.anchorMessageId,
           });
         }}
         onSearchState={setSearchState}
@@ -926,6 +929,28 @@ export function ChatView({ channelId }: { channelId: string }) {
       />
 
       <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
+
+      {isMessageNavigationPending && (
+        <div
+          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6"
+          aria-live="polite"
+        >
+          <div
+            className="flex flex-col items-center gap-3 rounded-[18px] px-5 py-4"
+            style={{
+              background: "color-mix(in srgb, var(--header-bg) 92%, transparent)",
+              boxShadow: "0 18px 40px rgba(15,23,42,.16)",
+              backdropFilter: "saturate(180%) blur(16px)",
+              WebkitBackdropFilter: "saturate(180%) blur(16px)",
+            }}
+          >
+            <MediaLoadingDots minHeight="18px" />
+            <span style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", color: "var(--meta)" }}>
+              {t("loading")}
+            </span>
+          </div>
+        </div>
+      )}
 
       <ChatViewBottomShell
         channelId={channelId}

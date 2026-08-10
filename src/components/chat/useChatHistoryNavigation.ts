@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import { fetchMessageContext, fetchMessagePage, fetchMessages } from "@/lib/api-chat";
 import { MAX_MOUNTED_HISTORY_MESSAGES, trimMessageWindow } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
@@ -30,13 +30,18 @@ interface UseChatHistoryNavigationArgs {
 interface UseChatHistoryNavigationResult {
   historyModeRef: MutableRefObject<HistoryMode>;
   isNearBottomRef: MutableRefObject<boolean>;
+  isMessageNavigationPending: boolean;
   handleScroll: () => void;
   scrollToBottom: () => void;
   positionAtLatest: () => void;
   scrollToMessage: (
     msgId: string,
     alignment?: "message" | "media",
-    options?: { preferMounted?: boolean; preserveViewportUntilReady?: boolean },
+    options?: {
+      preferMounted?: boolean;
+      preserveViewportUntilReady?: boolean;
+      anchorMessageId?: string | null;
+    },
   ) => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
 }
@@ -61,17 +66,40 @@ function nextAnimationFrame(): Promise<void> {
 
 function holdViewportPosition(
   container: HTMLElement,
-  scrollTop: number,
+  input: { scrollTop: number; anchorMessageId?: string | null },
   shouldContinue: () => boolean,
 ): () => void {
   let frameId: number | null = null;
+  let fallbackScrollTop = input.scrollTop;
+  let anchorTop: number | null = null;
+
+  if (input.anchorMessageId) {
+    const anchorElement = document.getElementById(`msg-${input.anchorMessageId}`);
+    if (anchorElement) {
+      const containerTop = container.getBoundingClientRect().top;
+      anchorTop = anchorElement.getBoundingClientRect().top - containerTop;
+    }
+  }
 
   const tick = () => {
     if (!shouldContinue()) return;
-    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-    const clampedScrollTop = Math.min(scrollTop, maxScrollTop);
-    if (Math.abs(container.scrollTop - clampedScrollTop) > 1) {
-      container.scrollTop = clampedScrollTop;
+    const anchorElement = input.anchorMessageId
+      ? document.getElementById(`msg-${input.anchorMessageId}`)
+      : null;
+    if (anchorElement && anchorTop !== null) {
+      const containerTop = container.getBoundingClientRect().top;
+      const nextTop = anchorElement.getBoundingClientRect().top - containerTop;
+      const delta = nextTop - anchorTop;
+      if (Math.abs(delta) > 1) {
+        container.scrollTop += delta;
+      }
+      fallbackScrollTop = container.scrollTop;
+    } else {
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      const clampedScrollTop = Math.min(fallbackScrollTop, maxScrollTop);
+      if (Math.abs(container.scrollTop - clampedScrollTop) > 1) {
+        container.scrollTop = clampedScrollTop;
+      }
     }
     frameId = requestAnimationFrame(tick);
   };
@@ -246,6 +274,7 @@ export function useChatHistoryNavigation({
   setShowScrollBtn,
   setBanner,
 }: UseChatHistoryNavigationArgs): UseChatHistoryNavigationResult {
+  const [isMessageNavigationPending, setIsMessageNavigationPending] = useState(false);
   const isNearBottomRef = useRef(true);
   const historyModeRef = useRef<HistoryMode>(historyMode);
   const loadingMoreRef = useRef(false);
@@ -258,6 +287,7 @@ export function useChatHistoryNavigation({
   const historyLoadAnchorRequestRef = useRef(0);
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
+  const pendingNavigationRequestRef = useRef(0);
 
   const scrollStorageKey = `chatScrollPosition:${channelId}`;
 
@@ -622,7 +652,11 @@ export function useChatHistoryNavigation({
   const scrollToMessage = useCallback(async (
     msgId: string,
     alignment: "message" | "media" = "message",
-    options?: { preferMounted?: boolean; preserveViewportUntilReady?: boolean },
+    options?: {
+      preferMounted?: boolean;
+      preserveViewportUntilReady?: boolean;
+      anchorMessageId?: string | null;
+    },
   ) => {
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
@@ -630,63 +664,80 @@ export function useChatHistoryNavigation({
     const fallbackElement = element;
     const useMountedFastPath = options?.preferMounted === true && !!element;
     const container = messagesContainerRef.current;
+    const needsPendingIndicator = !useMountedFastPath;
+    if (needsPendingIndicator) {
+      pendingNavigationRequestRef.current = navigationRequest;
+      setIsMessageNavigationPending(true);
+    }
     const releaseHeldViewport = !useMountedFastPath && options?.preserveViewportUntilReady && container
       ? holdViewportPosition(
           container,
-          container.scrollTop,
+          {
+            scrollTop: container.scrollTop,
+            anchorMessageId: options?.anchorMessageId,
+          },
           () => navigationRequest === navigationRequestRef.current,
         )
       : null;
+    const finishPendingIndicator = () => {
+      if (pendingNavigationRequestRef.current !== navigationRequest) return;
+      pendingNavigationRequestRef.current = 0;
+      setIsMessageNavigationPending(false);
+    };
 
-    const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    if (!useMountedFastPath) {
-      try {
-        const data = await fetchMessageContext(fetchChannel, msgId);
-        if (navigationRequest !== navigationRequestRef.current) return;
-        if (!data.messages?.some((message: Message) => message.id === msgId)) {
-          throw new Error("message not found");
+    try {
+      const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
+      if (!useMountedFastPath) {
+        try {
+          const data = await fetchMessageContext(fetchChannel, msgId);
+          if (navigationRequest !== navigationRequestRef.current) return;
+          if (!data.messages?.some((message: Message) => message.id === msgId)) {
+            throw new Error("message not found");
+          }
+          setMessages(data.messages as Message[]);
+          historyModeRef.current = "context";
+          setHistoryMode("context");
+          setNewerMessageCount(0);
+          hasMoreMessagesRef.current = data.has_older !== false;
+          hasMoreNewerMessagesRef.current = data.has_newer !== false;
+          element = await waitForMessageElement(msgId);
+        } catch {
+          element = fallbackElement || null;
         }
-        setMessages(data.messages as Message[]);
-        historyModeRef.current = "context";
-        setHistoryMode("context");
-        setNewerMessageCount(0);
-        hasMoreMessagesRef.current = data.has_older !== false;
-        hasMoreNewerMessagesRef.current = data.has_newer !== false;
-        element = await waitForMessageElement(msgId);
-      } catch {
-        element = fallbackElement || null;
       }
-    }
 
-    if (!element) {
-      releaseHeldViewport?.();
-      if (navigationRequest !== navigationRequestRef.current) return;
-      setBanner({ text: "Message not found", color: "var(--meta)" });
-      setTimeout(() => setBanner(null), 2000);
-      return;
-    }
-
-    if (navigationRequest !== navigationRequestRef.current) return;
-    element = document.getElementById(`msg-${msgId}`) || element;
-    if (container && !useMountedFastPath) {
-      await nextAnimationFrame();
-      window.dispatchEvent(new Event("chat-history-preload"));
-      const readiness = await waitForCompleteHistoryWindow(
-        container,
-        () => navigationRequest === navigationRequestRef.current,
-      );
-      if (readiness === "cancelled") {
+      if (!element) {
         releaseHeldViewport?.();
+        if (navigationRequest !== navigationRequestRef.current) return;
+        setBanner({ text: "Message not found", color: "var(--meta)" });
+        setTimeout(() => setBanner(null), 2000);
         return;
       }
+
+      if (navigationRequest !== navigationRequestRef.current) return;
+      element = document.getElementById(`msg-${msgId}`) || element;
+      if (container && !useMountedFastPath) {
+        await nextAnimationFrame();
+        window.dispatchEvent(new Event("chat-history-preload"));
+        const readiness = await waitForCompleteHistoryWindow(
+          container,
+          () => navigationRequest === navigationRequestRef.current,
+        );
+        if (readiness === "cancelled") {
+          releaseHeldViewport?.();
+          return;
+        }
+      }
+      if (navigationRequest !== navigationRequestRef.current) return;
+      element = document.getElementById(`msg-${msgId}`) || element;
+      const finalAlignmentElement = alignment === "media"
+        ? element.querySelector<HTMLElement>("[data-message-media]") || element
+        : element;
+      releaseHeldViewport?.();
+      finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
+    } finally {
+      finishPendingIndicator();
     }
-    if (navigationRequest !== navigationRequestRef.current) return;
-    element = document.getElementById(`msg-${msgId}`) || element;
-    const finalAlignmentElement = alignment === "media"
-      ? element.querySelector<HTMLElement>("[data-message-media]") || element
-      : element;
-    releaseHeldViewport?.();
-    finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
   }, [channelId, inLiveModeRef, messagesContainerRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 
   const restoreRefreshPosition = useCallback(async () => {
@@ -747,6 +798,7 @@ export function useChatHistoryNavigation({
   return {
     historyModeRef,
     isNearBottomRef,
+    isMessageNavigationPending,
     handleScroll,
     scrollToBottom,
     positionAtLatest,
