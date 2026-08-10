@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### New replies are flattened onto their visible root message — 2026-08-09
+
+- The Worker now resolves every submitted `reply_to` chain to its top-level message before inserting and broadcasting a new chat message.
+- Reply targets must be bounded strings, belong to the same normal or live channel, exist as a visible message at send time, and lead to a real top-level root; missing, cross-channel, deleted-target, broken and cyclic chains are rejected.
+- A reply written from another reply therefore stores the root id directly (`A <- B`, `A <- C`) instead of creating a deeper chain (`A <- B <- C`).
+- Normal top-level messages add no D1 lookup. Only reply sends perform the temporary recursive root resolution required while legacy nested data still exists.
+- Focused Worker tests cover input normalization, channel binding, visible-target enforcement, root selection and invalid-chain rejection.
+
+Trade-off: the service intentionally discards which child reply the sender clicked and preserves only the flat root-thread relationship. Reply sends add one indexed recursive read until legacy rows are backfilled; this is the accepted first rollout phase before simplifying page reads.
+
+Deployment note: this is Worker-only and requires a Worker deploy, but no D1 migration in this phase. Existing nested replies remain readable through the current recursive compatibility queries.
+
 ### Recursive thread reads reuse one visible-parent set — 2026-08-09
 
 - Root-thread expansion now computes the channel's visible `reply_to` parent ids once in a shared recursive-query CTE.

@@ -10,6 +10,7 @@ import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { syncMessageLink } from "../lib/message-links";
 import { authorizeRoomToken } from "./passcode";
 import { isValidClientMessageId } from "../lib/message-idempotency";
+import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -38,6 +39,10 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     }
     if (client_message_id !== undefined && !isValidClientMessageId(client_message_id)) {
       return Response.json({ error: "invalid_client_message_id" }, { status: 400 });
+    }
+    const requestedReplyTo = normalizeRequestedReplyId(reply_to);
+    if (requestedReplyTo === undefined) {
+      return Response.json({ error: "invalid_reply_target" }, { status: 400 });
     }
     const clientMessageId = isValidClientMessageId(client_message_id) ? client_message_id : crypto.randomUUID();
 
@@ -158,6 +163,13 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
+    const resolvedReplyTo = requestedReplyTo
+      ? await resolveReplyRootId(env, channel_id as string, requestedReplyTo)
+      : null;
+    if (requestedReplyTo && !resolvedReplyTo) {
+      return Response.json({ error: "invalid_reply_target" }, { status: 400 });
+    }
+
     // Insert message (+ gallery if image) in a single batch
     const id = crypto.randomUUID();
     if (image) {
@@ -189,7 +201,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       env.DB.prepare(`
         INSERT INTO messages (id, client_message_id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, report, reported_msg_id, gallery_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, clientMessageId, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, reply_to || null, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
+      `).bind(id, clientMessageId, senderUid, senderUid, nick || null, text || "", isAdmin, channel_id, image || null, resolvedReplyTo, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
     ];
     if (!isChannelOwner && requesterDeviceId) {
       const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
@@ -223,7 +235,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
     // Broadcast through the same parent-channel Durable Object used above.
     const newMessage = {
       id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
-      channel_id, image: image || null, reply_to: reply_to || null,
+      channel_id, image: image || null, reply_to: resolvedReplyTo,
       report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
       deleted: 0, edited: 0, reactions: "{}", created_at,
     };
