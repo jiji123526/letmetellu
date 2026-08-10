@@ -37,10 +37,25 @@ export async function expandVisibleRootThreads(
   const rootIds = [...new Set(pageMessages
     .map((message) => String(message.reply_to || message.id))
     .filter(Boolean))];
-  if (rootIds.length === 0) return sortVisibleMessages(pageMessages);
+  const threadRows = await readVisibleFlatThreads(env, channelId, rootIds);
+
+  const byId = new Map<string, VisibleMessageRow>();
+  for (const message of [...pageMessages, ...threadRows]) {
+    byId.set(String(message.id), message);
+  }
+  return sortVisibleMessages([...byId.values()]);
+}
+
+export async function readVisibleFlatThreads(
+  env: Env,
+  channelId: string,
+  requestedRootIds: string[],
+): Promise<VisibleMessageRow[]> {
+  const rootIds = [...new Set(requestedRootIds.map(String).filter(Boolean))];
+  if (rootIds.length === 0) return [];
 
   const rootPlaceholders = rootIds.map(() => "?").join(", ");
-  const threadRows = await env.DB.prepare(`
+  const { results } = await env.DB.prepare(`
     SELECT * FROM (
       SELECT *
       FROM messages
@@ -54,12 +69,7 @@ export async function expandVisibleRootThreads(
     )
     ORDER BY created_at ASC, id ASC
   `).bind(channelId, ...rootIds, channelId, ...rootIds).all<VisibleMessageRow>();
-
-  const byId = new Map<string, VisibleMessageRow>();
-  for (const message of [...pageMessages, ...(threadRows.results || [])]) {
-    byId.set(String(message.id), message);
-  }
-  return sortVisibleMessages([...byId.values()]);
+  return results || [];
 }
 
 export async function readVisibleMessagePage(

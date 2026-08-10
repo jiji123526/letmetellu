@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message context reuses flat direct thread reads — 2026-08-09
+
+- Gallery navigation, search navigation, direct message links and refresh-position recovery now derive the target thread root directly as `target.reply_to || target.id`.
+- The endpoint reuses the same indexed flat-thread reader as normal message paging: one root lookup plus direct children by `(channel_id, reply_to)`.
+- This removes the separate ancestor lookup request and the descendant recursive CTE from `message-context`.
+- The surrounding context contract is unchanged: up to 25 older messages, the target, up to 25 newer messages, and the target's complete visible flat reply group are merged and returned chronologically.
+
+Trade-off: `message-context` now relies on the same depth-one reply invariant as normal paging. The production audit found no nested legacy rows and the write path normalizes every new reply to its root, but the reusable audit remains the safeguard against manual or out-of-band invalid writes.
+
+Deployment note: this is Worker-only and requires a Worker deploy, but no D1 migration.
+
 ### Normal message pages expand flat threads without recursion — 2026-08-09
 
 - `readVisibleMessagePage` now derives each page row's root directly as `reply_to || id`, relying on the audited depth-one invariant and the Worker write normalization.
@@ -12,7 +23,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Deleted roots referenced by a visible page reply remain present, while deleted child replies remain excluded; chronological ordering and whole-root-thread page expansion are unchanged.
 - The focused query test now verifies one direct D1 call, deduplicated root ids, placeholder order, indexed child filtering and the absence of recursive SQL.
 
-Trade-off: this hot path now depends on the enforced flat-reply invariant. The production audit script and root-normalizing write path are required safeguards; the separate `message-context` endpoint retains its compatibility recursion until its own focused conversion.
+Trade-off: this hot path now depends on the enforced flat-reply invariant. The production audit script and root-normalizing write path are required safeguards; `message-context` now shares the same direct flat-thread reader.
 
 Deployment note: this is Worker-only and requires a Worker deploy, but no D1 migration.
 

@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { getUserLocale } from "../lib/channel-moderation";
 import {
+  readVisibleFlatThreads,
   readVisibleMessagePage,
   type VisibleMessageRow,
   VISIBLE_MESSAGE_CONDITION,
@@ -111,38 +112,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           )
         )
       `;
-      const visibleMessageConditionWithAlias = (alias: string) => `
-        ${alias}.channel_id = ?
-        AND (
-          ${alias}.deleted = 0
-          OR (
-            ${alias}.deleted = 1
-            AND ${alias}.id IN (
-              SELECT reply_to FROM messages
-              WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
-            )
-          )
-        )
-      `;
-      const threadRoot = await env.DB.prepare(`
-        WITH RECURSIVE ancestors(id, reply_to, depth) AS (
-          SELECT id, reply_to, 0
-          FROM messages
-          WHERE id = ? AND ${visibleMessageCondition}
-          UNION ALL
-          SELECT parent.id, parent.reply_to, ancestors.depth + 1
-          FROM messages parent
-          INNER JOIN ancestors ON ancestors.reply_to = parent.id
-          WHERE ${visibleMessageConditionWithAlias("parent")}
-        )
-        SELECT id
-        FROM ancestors
-        ORDER BY depth DESC
-        LIMIT 1
-      `).bind(messageId, channelId, channelId, channelId, channelId).first<{ id: string }>();
-      const threadRootId = threadRoot?.id || target.id;
+      const threadRootId = target.reply_to || target.id;
 
-      const [beforeResult, afterResult, threadResult] = await Promise.all([
+      const [beforeResult, afterResult, threadMessages] = await Promise.all([
         env.DB.prepare(`
           SELECT * FROM messages
           WHERE ${visibleMessageCondition}
@@ -157,21 +129,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           ORDER BY created_at ASC, id ASC
           LIMIT 26
         `).bind(channelId, channelId, target.created_at, target.created_at, target.id).all(),
-        env.DB.prepare(`
-          WITH RECURSIVE thread(id) AS (
-            SELECT id
-            FROM messages
-            WHERE id = ? AND ${visibleMessageCondition}
-            UNION ALL
-            SELECT child.id
-            FROM messages child
-            INNER JOIN thread parent_thread ON child.reply_to = parent_thread.id
-            WHERE ${visibleMessageConditionWithAlias("child")}
-          )
-          SELECT * FROM messages
-          WHERE id IN (SELECT id FROM thread)
-          ORDER BY created_at ASC, id ASC
-        `).bind(threadRootId, channelId, channelId, channelId, channelId).all(),
+        readVisibleFlatThreads(env, channelId, [threadRootId]),
       ]);
 
       const hasOlder = beforeResult.results.length > 26;
@@ -182,7 +140,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       for (const message of [
         ...beforeMessages,
         ...afterMessages,
-        ...threadResult.results,
+        ...threadMessages,
       ] as Record<string, unknown>[]) {
         byId.set(String(message.id), message);
       }
