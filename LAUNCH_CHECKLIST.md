@@ -4,28 +4,62 @@ This checklist is for shipping **yap.** beyond ad hoc internal testing.
 It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
 backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
+## Status snapshot — 2026-08-09
+
+### Completed and verified
+
+- [x] The limited-beta production gate and core smoke-test pass were completed on 2026-08-04.
+- [x] `yapndot.com` is the canonical production origin and `www.yapndot.com` permanently redirects to it.
+- [x] Google login/signup callbacks and Resend delivery use the production domain.
+- [x] Email signup verification and password reset were exercised in production during the beta setup.
+- [x] The super-admin operational-health view and bounded operational-event retention are deployed.
+- [x] Worker hardening coverage currently passes 37 focused tests covering origin checks, upload and preview validation, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
+- [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
+- [x] New replies are normalized to their top-level message. The production audit found 747 replies with no nested, broken, cross-channel or cyclic relationships.
+- [x] Normal history paging and `message-context` now use indexed root/direct-child reads instead of recursive thread traversal.
+- [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
+
+### Still required before a broad public launch
+
+- [ ] Add behavior-level regression coverage for guided support, support ticket synchronization, report filtering and super-admin dashboard state transitions.
+- [ ] Collect normal production health baselines, calibrate thresholds and document an operator response procedure; add external alerts for degraded/critical states after calibration.
+- [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
+- [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
+- [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
+- [ ] Move cross-store channel/account/media deletion toward retryable, observable cleanup so partial D1/R2/Durable Object failures can recover.
+- [ ] Expand durable abuse controls and validate direct-API report evidence/targets before materially widening access.
+
+### Operational follow-up, not a current blocker
+
+- [ ] After representative traffic, rerun `worker/scripts/audit-flat-replies.sql` and D1 Insights. Confirm the former recursive query stops accumulating executions and compare the replacement query's rows read and duration.
+- [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
+- [ ] Measure widget/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
+
 ## Public-launch blockers
 
 Do not treat the app as public-launch ready until these are complete:
 
 1. Regression coverage for state-heavy flows
+- Existing Worker hardening and query-shape tests are useful but do not exercise the complete browser-visible state transitions.
 - Add automated tests for guided support reset/escalation, support ticket visibility and reports inbox filtering.
 - Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
 2. Monitoring and operator alerting
+- The health dashboard and local performance diagnostics exist; baseline calibration and external alert delivery do not.
 - Calibrate the existing super-admin operational-health dashboard against production baselines, then add alert delivery for degraded or critical states.
 - Add bounded operator summaries for moderation/support audit trends.
 - Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 
 3. Production email hardening
 - Resend production delivery is enabled through `yap. <noreply@send.yapndot.com>`.
-- Rehearse signup verification, password reset and legacy password-hash upgrade flows in production-like conditions, including a non-owner recipient address.
+- Signup verification and password reset have been exercised. Rehearse and monitor the legacy password-hash upgrade path separately, including a non-owner recipient address where email delivery is involved.
 
 4. Custom production domain
 - `yapndot.com` is attached to Vercel and frontend/Auth.js/Worker origins use `https://yapndot.com`.
-- Confirm `www.yapndot.com` redirects to the apex domain instead of serving a second independent app origin.
-- Google OAuth must include `https://yapndot.com` as an authorized JavaScript origin and both `/api/auth/callback/google-login` and `/api/auth/callback/google-signup` redirect URIs.
-- Verify login cookies, email verification links, password-reset links and Worker CORS on the custom domain after DNS caches settle.
+- `www.yapndot.com` permanently redirects to the apex domain instead of serving a second independent app origin.
+- Google OAuth includes `https://yapndot.com` as an authorized JavaScript origin and both `/api/auth/callback/google-login` and `/api/auth/callback/google-signup` redirect URIs.
+- Login cookies, email verification links, password-reset links and Worker CORS were smoke-tested on the custom domain.
+- Temporary legacy origins remain only for rollback readiness and must be removed before broad public launch.
 
 ## Current limited-beta gate
 
