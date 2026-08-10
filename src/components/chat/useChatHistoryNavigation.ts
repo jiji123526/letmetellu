@@ -36,7 +36,7 @@ interface UseChatHistoryNavigationResult {
   scrollToMessage: (
     msgId: string,
     alignment?: "message" | "media",
-    options?: { preferMounted?: boolean },
+    options?: { preferMounted?: boolean; preserveViewportUntilReady?: boolean },
   ) => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
 }
@@ -57,6 +57,30 @@ const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
 
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function holdViewportPosition(
+  container: HTMLElement,
+  scrollTop: number,
+  shouldContinue: () => boolean,
+): () => void {
+  let frameId: number | null = null;
+
+  const tick = () => {
+    if (!shouldContinue()) return;
+    const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    const clampedScrollTop = Math.min(scrollTop, maxScrollTop);
+    if (Math.abs(container.scrollTop - clampedScrollTop) > 1) {
+      container.scrollTop = clampedScrollTop;
+    }
+    frameId = requestAnimationFrame(tick);
+  };
+
+  tick();
+
+  return () => {
+    if (frameId !== null) cancelAnimationFrame(frameId);
+  };
 }
 
 async function waitForMessageElement(msgId: string, timeoutMs = 1500): Promise<HTMLElement | null> {
@@ -598,13 +622,21 @@ export function useChatHistoryNavigation({
   const scrollToMessage = useCallback(async (
     msgId: string,
     alignment: "message" | "media" = "message",
-    options?: { preferMounted?: boolean },
+    options?: { preferMounted?: boolean; preserveViewportUntilReady?: boolean },
   ) => {
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
     const fallbackElement = element;
     const useMountedFastPath = options?.preferMounted === true && !!element;
+    const container = messagesContainerRef.current;
+    const releaseHeldViewport = !useMountedFastPath && options?.preserveViewportUntilReady && container
+      ? holdViewportPosition(
+          container,
+          container.scrollTop,
+          () => navigationRequest === navigationRequestRef.current,
+        )
+      : null;
 
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
     if (!useMountedFastPath) {
@@ -627,6 +659,7 @@ export function useChatHistoryNavigation({
     }
 
     if (!element) {
+      releaseHeldViewport?.();
       if (navigationRequest !== navigationRequestRef.current) return;
       setBanner({ text: "Message not found", color: "var(--meta)" });
       setTimeout(() => setBanner(null), 2000);
@@ -635,7 +668,6 @@ export function useChatHistoryNavigation({
 
     if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
-    const container = messagesContainerRef.current;
     if (container && !useMountedFastPath) {
       await nextAnimationFrame();
       window.dispatchEvent(new Event("chat-history-preload"));
@@ -643,13 +675,17 @@ export function useChatHistoryNavigation({
         container,
         () => navigationRequest === navigationRequestRef.current,
       );
-      if (readiness === "cancelled") return;
+      if (readiness === "cancelled") {
+        releaseHeldViewport?.();
+        return;
+      }
     }
     if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
     const finalAlignmentElement = alignment === "media"
       ? element.querySelector<HTMLElement>("[data-message-media]") || element
       : element;
+    releaseHeldViewport?.();
     finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
   }, [channelId, inLiveModeRef, messagesContainerRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
 

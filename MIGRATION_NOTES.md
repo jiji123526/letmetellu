@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Search boundary loads now hold the viewport until the target window settles — 2026-08-10
+
+- When search navigation stepped into older matches that were not mounted, the chat kept the previous fast-path improvement of deferring the final scroll but still visibly bounced while `message-context` replaced the window underneath the reader.
+- Search-triggered message jumps now pin the current scroll position during that context swap and hold it until the replacement window finishes its history-layout settling pass.
+- The jump to the next match now happens only after the target window is ready, so boundary loads no longer show the interim upward/downward bounce before landing on the new result.
+
+Trade-off: during a boundary load, the viewport intentionally stays fixed instead of reflecting intermediate layout changes. If the user interrupts that load, the hold is released and the jump is cancelled.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Search result stepping now skips context reloads for mounted messages — 2026-08-10
 
 - Chat search next/previous navigation previously called `scrollToMessage` in the same full-context mode used for explicit deep links and gallery jumps.

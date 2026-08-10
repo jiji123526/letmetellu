@@ -832,7 +832,10 @@ export function ChatView({ channelId }: { channelId: string }) {
         showSearch={showSearch}
         searchMessages={searchMessages}
         onSearchNavigate={(msgId) => {
-          void scrollToMessage(msgId, "message", { preferMounted: true });
+          void scrollToMessage(msgId, "message", {
+            preferMounted: true,
+            preserveViewportUntilReady: true,
+          });
         }}
         onSearchState={setSearchState}
         onCloseSearch={closeSearch}
