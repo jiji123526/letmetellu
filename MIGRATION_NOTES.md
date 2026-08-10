@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Production reply audit confirms no legacy backfill is needed — 2026-08-09
+
+- Added `worker/scripts/audit-flat-replies.sql` as a reusable read-only audit for total replies, nested relationships, broken or cross-channel parents, cycles, maximum depth and per-channel nested counts.
+- The production audit found 4,682 messages and 747 replies, with zero nested replies, zero missing parents, zero cross-channel parents, zero cyclic chains and a maximum reply depth of one.
+- Because every existing reply already points directly to a top-level message, the planned data backfill was intentionally skipped; no production rows were rewritten.
+- The audit checkpoint bookmark is `000008f4-0000000c-000050c3-850e65485580e6fa14ccd81a5b287456`.
+
+Trade-off: the audit is a point-in-time guarantee. The phase-1 Worker write normalization now prevents new nested replies, while the reusable audit should be rerun before removing recursive compatibility reads.
+
+Deployment note: this phase adds documentation and a read-only audit script only. It requires no D1 migration, Worker deploy or frontend deploy.
+
 ### New replies are flattened onto their visible root message — 2026-08-09
 
 - The Worker now resolves every submitted `reply_to` chain to its top-level message before inserting and broadcasting a new chat message.
