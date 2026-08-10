@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const channelId = url.searchParams.get("channel");
 
   if (channelId) {
-    const readRes = await fetch(`${workerUrl}/api/user?channel=${encodeURIComponent(channelId)}`, {
+    const readRes = await fetch(`${workerUrl}/api/user/profile-channels?channel=${encodeURIComponent(channelId)}`, {
       method: "GET",
       cache: "no-store",
     });

@@ -2741,3 +2741,11 @@ Trade-off: a link that begins returning valid metadata immediately after a cache
 - Successful passcode verification explicitly drops any matching normal/live in-flight entry before the authenticated refresh begins.
 
 Trade-off: simultaneous consumers now receive the same success or failure. This only coalesces an already-running request and does not introduce a freshness window, so it reduces burst duplication without delaying later state changes.
+
+### Distinct Worker path for profile-channel reads — 2026-08-09
+
+- The same-origin `/api/user?channel=...` proxy now forwards public owner-profile channel reads to `/api/user/profile-channels` while authenticated dashboard bootstrap remains on `/api/user`.
+- The Worker already routes the namespaced path through the same validated handler, so response shape, authorization behavior and UI remain unchanged.
+- Cloudflare path analytics can now separate profile-popup traffic from authenticated dashboard state reads before any caching or broader user-state optimization is considered.
+
+Trade-off: historical `/api/user` analytics and new measurements are not directly comparable until the profile-channel share is accounted for. This is intentionally a measurement-only split and does not reduce requests by itself.
