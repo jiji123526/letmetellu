@@ -15,6 +15,7 @@ import {
 } from "./api-core";
 
 let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
+const initRequests = new Map<string, Promise<unknown>>();
 const MESSAGE_SEND_TIMEOUT_MS = 15_000;
 
 async function fetchMessageMutation(input: RequestInfo | URL, init: RequestInit) {
@@ -37,7 +38,7 @@ function loadMockApi() {
 export { clearRoomToken, decorateMediaUrl, decorateProtectedMediaUrl, decorateWelcomeConfig };
 export { getStoredUid, notifyRoomAccessGranted } from "./api-core";
 
-export async function fetchInit(channelId: string) {
+async function requestInit(channelId: string) {
   if (IS_MOCK) {
     const mockApi = await loadMockApi();
     return mockApi.fetchInit(channelId);
@@ -56,6 +57,21 @@ export async function fetchInit(channelId: string) {
   if (Array.isArray(data?.dm)) data.dm = data.dm.map(decorateMessageMedia);
   if (typeof data?.welcomeConfig === "string") data.welcomeConfig = decorateWelcomeConfig(data.welcomeConfig);
   return data;
+}
+
+export function fetchInit(channelId: string) {
+  const existingRequest = initRequests.get(channelId);
+  if (existingRequest) return existingRequest;
+
+  const request = requestInit(channelId);
+  initRequests.set(channelId, request);
+  const clearRequest = () => {
+    if (initRequests.get(channelId) === request) {
+      initRequests.delete(channelId);
+    }
+  };
+  void request.then(clearRequest, clearRequest);
+  return request;
 }
 
 export async function fetchOwnerChannels(channelId: string): Promise<{
@@ -88,7 +104,12 @@ export async function verifyPasscode(channelId: string, passcode: string): Promi
     body: JSON.stringify({ channel_id: channelId, passcode }),
     cache: "no-store",
   });
-  return res.json();
+  const result = await res.json();
+  if (res.ok && result?.ok) {
+    initRequests.delete(channelId);
+    initRequests.delete(`${channelId}_live`);
+  }
+  return result;
 }
 
 export async function fetchMessages(channelId: string, cursor?: string) {

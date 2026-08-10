@@ -2733,3 +2733,11 @@ The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTUR
 - This prevents repeatedly rendered unsupported, empty or temporarily unavailable links from triggering another outbound metadata fetch on every visit while retaining prompt recovery from temporary upstream failures.
 
 Trade-off: a link that begins returning valid metadata immediately after a cached failure can keep its fallback card for at most the applicable one- or fifteen-minute window. The bounded TTLs intentionally favor lower outbound traffic without turning failures into long-lived browser-session state.
+
+### In-flight channel-init request deduplication — 2026-08-09
+
+- Client calls for the same normal or live channel now share one in-flight `/api/init` request instead of issuing parallel copies when bootstrap, reconnect and state-refresh triggers overlap.
+- The broker retains no completed response, so a later refresh still reaches the server and receives current notice, passcode, moderation, live and channel-setting state.
+- Successful passcode verification explicitly drops any matching normal/live in-flight entry before the authenticated refresh begins.
+
+Trade-off: simultaneous consumers now receive the same success or failure. This only coalesces an already-running request and does not introduce a freshness window, so it reduces burst duplication without delaying later state changes.
