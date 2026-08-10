@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Normal message pages expand flat threads without recursion — 2026-08-09
+
+- `readVisibleMessagePage` now derives each page row's root directly as `reply_to || id`, relying on the audited depth-one invariant and the Worker write normalization.
+- Root messages are fetched by id and their visible replies by the existing `(channel_id, reply_to, deleted)` index in one `UNION ALL` query.
+- The per-page ancestor traversal and descendant recursive CTE are removed from channel entry, refresh, older paging, newer paging, reconnect refresh and latest-message reload paths.
+- Deleted roots referenced by a visible page reply remain present, while deleted child replies remain excluded; chronological ordering and whole-root-thread page expansion are unchanged.
+- The focused query test now verifies one direct D1 call, deduplicated root ids, placeholder order, indexed child filtering and the absence of recursive SQL.
+
+Trade-off: this hot path now depends on the enforced flat-reply invariant. The production audit script and root-normalizing write path are required safeguards; the separate `message-context` endpoint retains its compatibility recursion until its own focused conversion.
+
+Deployment note: this is Worker-only and requires a Worker deploy, but no D1 migration.
+
 ### Production reply audit confirms no legacy backfill is needed — 2026-08-09
 
 - Added `worker/scripts/audit-flat-replies.sql` as a reusable read-only audit for total replies, nested relationships, broken or cross-channel parents, cycles, maximum depth and per-channel nested counts.

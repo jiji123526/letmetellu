@@ -20,22 +20,6 @@ export const VISIBLE_MESSAGE_CONDITION = `
   )
 `;
 
-export function visibleMessageConditionForAlias(alias: string): string {
-  return `
-    ${alias}.channel_id = ?
-    AND (
-      ${alias}.deleted = 0
-      OR (
-        ${alias}.deleted = 1
-        AND ${alias}.id IN (
-          SELECT reply_to FROM messages
-          WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
-        )
-      )
-    )
-  `;
-}
-
 function sortVisibleMessages(messages: VisibleMessageRow[]): VisibleMessageRow[] {
   return [...messages].sort((left, right) =>
     String(left.created_at || "").localeCompare(String(right.created_at || ""))
@@ -50,65 +34,26 @@ export async function expandVisibleRootThreads(
 ): Promise<VisibleMessageRow[]> {
   if (pageMessages.length === 0) return pageMessages;
 
-  const pageIds = [...new Set(pageMessages.map((message) => String(message.id)).filter(Boolean))];
-  if (pageIds.length === 0) return pageMessages;
-
-  const pageIdPlaceholders = pageIds.map(() => "?").join(", ");
-  const ancestorRows = await env.DB.prepare(`
-    WITH RECURSIVE ancestors(seed_id, id, reply_to, depth) AS (
-      SELECT id AS seed_id, id, reply_to, 0
-      FROM messages
-      WHERE id IN (${pageIdPlaceholders})
-      UNION ALL
-      SELECT ancestors.seed_id, parent.id, parent.reply_to, ancestors.depth + 1
-      FROM messages parent
-      INNER JOIN ancestors ON ancestors.reply_to = parent.id
-      WHERE ${visibleMessageConditionForAlias("parent")}
-    )
-    SELECT seed_id, id, depth
-    FROM ancestors
-    ORDER BY seed_id ASC, depth DESC
-  `).bind(...pageIds, channelId, channelId).all<{ seed_id: string; id: string; depth: number }>();
-
-  const rootIds: string[] = [];
-  const resolvedSeedIds = new Set<string>();
-  for (const row of ancestorRows.results || []) {
-    if (resolvedSeedIds.has(row.seed_id)) continue;
-    resolvedSeedIds.add(row.seed_id);
-    rootIds.push(row.id);
-  }
+  const rootIds = [...new Set(pageMessages
+    .map((message) => String(message.reply_to || message.id))
+    .filter(Boolean))];
   if (rootIds.length === 0) return sortVisibleMessages(pageMessages);
 
   const rootPlaceholders = rootIds.map(() => "?").join(", ");
   const threadRows = await env.DB.prepare(`
-    WITH RECURSIVE visible_reply_parents(id) AS (
-      SELECT DISTINCT reply_to
+    SELECT * FROM (
+      SELECT *
       FROM messages
-      WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
-    ),
-    thread(id) AS (
-      SELECT id
+      WHERE channel_id = ? AND id IN (${rootPlaceholders})
+      UNION ALL
+      SELECT *
       FROM messages
-      WHERE id IN (${rootPlaceholders})
-        AND channel_id = ?
-        AND (
-          deleted = 0
-          OR (deleted = 1 AND id IN (SELECT id FROM visible_reply_parents))
-        )
-      UNION
-      SELECT child.id
-      FROM messages child
-      INNER JOIN thread parent_thread ON child.reply_to = parent_thread.id
-      WHERE child.channel_id = ?
-        AND (
-          child.deleted = 0
-          OR (child.deleted = 1 AND child.id IN (SELECT id FROM visible_reply_parents))
-        )
+      WHERE channel_id = ?
+        AND reply_to IN (${rootPlaceholders})
+        AND deleted = 0
     )
-    SELECT * FROM messages
-    WHERE id IN (SELECT id FROM thread)
     ORDER BY created_at ASC, id ASC
-  `).bind(channelId, ...rootIds, channelId, channelId).all<VisibleMessageRow>();
+  `).bind(channelId, ...rootIds, channelId, ...rootIds).all<VisibleMessageRow>();
 
   const byId = new Map<string, VisibleMessageRow>();
   for (const message of [...pageMessages, ...(threadRows.results || [])]) {
