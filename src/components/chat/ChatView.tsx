@@ -37,7 +37,6 @@ import {
 } from "./ChatViewStateScreens";
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
-import { MediaLoadingDots } from "./MediaLoadingDots";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -491,6 +490,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     historyModeRef,
     isNearBottomRef,
     isMessageNavigationPending,
+    isOlderHistoryLoading,
     handleScroll,
     scrollToBottom,
     positionAtLatest,
@@ -930,13 +930,15 @@ export function ChatView({ channelId }: { channelId: string }) {
 
       <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
 
-      {isMessageNavigationPending && (
+      {(isMessageNavigationPending || isOlderHistoryLoading) && (
         <div
           className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6"
           aria-live="polite"
         >
           <div
-            className="flex flex-col items-center gap-3 rounded-[18px] px-5 py-4"
+            className="flex items-center justify-center rounded-full p-4"
+            role="status"
+            aria-label={t("loading")}
             style={{
               background: "color-mix(in srgb, var(--header-bg) 92%, transparent)",
               boxShadow: "0 18px 40px rgba(15,23,42,.16)",
@@ -944,10 +946,25 @@ export function ChatView({ channelId }: { channelId: string }) {
               WebkitBackdropFilter: "saturate(180%) blur(16px)",
             }}
           >
-            <MediaLoadingDots minHeight="18px" />
-            <span style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", color: "var(--meta)" }}>
-              {t("loading")}
-            </span>
+            <div className="relative h-9 w-9 animate-spin" aria-hidden="true">
+              {Array.from({ length: 8 }).map((_, index) => {
+                const angle = (index / 8) * Math.PI * 2;
+                const x = Math.cos(angle) * 13;
+                const y = Math.sin(angle) * 13;
+                return (
+                  <span
+                    key={index}
+                    className="absolute h-1.5 w-1.5 rounded-full"
+                    style={{
+                      left: `calc(50% + ${x}px - 3px)`,
+                      top: `calc(50% + ${y}px - 3px)`,
+                      background: "var(--tint)",
+                      opacity: 0.28 + index * 0.08,
+                    }}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

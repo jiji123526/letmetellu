@@ -31,6 +31,7 @@ interface UseChatHistoryNavigationResult {
   historyModeRef: MutableRefObject<HistoryMode>;
   isNearBottomRef: MutableRefObject<boolean>;
   isMessageNavigationPending: boolean;
+  isOlderHistoryLoading: boolean;
   handleScroll: () => void;
   scrollToBottom: () => void;
   positionAtLatest: () => void;
@@ -275,6 +276,7 @@ export function useChatHistoryNavigation({
   setBanner,
 }: UseChatHistoryNavigationArgs): UseChatHistoryNavigationResult {
   const [isMessageNavigationPending, setIsMessageNavigationPending] = useState(false);
+  const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
   const isNearBottomRef = useRef(true);
   const historyModeRef = useRef<HistoryMode>(historyMode);
   const loadingMoreRef = useRef(false);
@@ -541,7 +543,9 @@ export function useChatHistoryNavigation({
         })
         .finally(() => {
           loadingMoreRef.current = false;
+          setIsOlderHistoryLoading(false);
         });
+      setIsOlderHistoryLoading(true);
     }
 
     if (
@@ -799,6 +803,7 @@ export function useChatHistoryNavigation({
     historyModeRef,
     isNearBottomRef,
     isMessageNavigationPending,
+    isOlderHistoryLoading,
     handleScroll,
     scrollToBottom,
     positionAtLatest,
