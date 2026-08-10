@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Worker security checks run continuously in GitHub Actions — 2026-08-09
+
+- Added a least-privilege GitHub Actions workflow for Worker changes on `main`, pull requests targeting `main`, and manual dispatch.
+- The workflow installs from the Worker lockfile, runs the complete authorization/hardening suite, performs the Worker TypeScript check and verifies the Wrangler bundle with `--dry-run`.
+- Path filtering avoids consuming CI time for frontend-only or documentation-only changes, while edits to the workflow itself always exercise the check.
+- Concurrency cancellation prevents stale runs for the same branch from consuming unnecessary Actions time.
+
+Trade-off: until GitHub branch protection requires the `Worker security and type checks` status, this is an automatic detector rather than a deployment gate. It intentionally does not hold Cloudflare credentials, deploy the Worker or apply D1 migrations.
+
+Deployment note: this is repository automation only. It requires no frontend deployment, Worker deployment or D1 migration.
+
 ### Privileged authorization boundaries share one tested identity primitive — 2026-08-09
 
 - Added a server-side role and route matrix documenting guest, room-viewer, logged-in, channel-owner and platform-admin evidence. The matrix explicitly treats UI visibility as non-authoritative.

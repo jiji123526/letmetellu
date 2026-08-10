@@ -1,0 +1,56 @@
+name: Worker security
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "worker/**"
+      - ".github/workflows/worker-security.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "worker/**"
+      - ".github/workflows/worker-security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker-security:
+    name: Worker security and type checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: worker
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci
+
+      - name: Run authorization and hardening tests
+        run: npm run test:hardening
+
+      - name: Run Worker typecheck
+        run: npx tsc --noEmit
+
+      - name: Verify Worker bundle
+        run: npx wrangler deploy --dry-run

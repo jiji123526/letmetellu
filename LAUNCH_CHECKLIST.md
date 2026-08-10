@@ -14,6 +14,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Email signup verification and password reset were exercised in production during the beta setup.
 - [x] The super-admin operational-health view and bounded operational-event retention are deployed.
 - [x] Worker hardening coverage currently passes 44 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
+- [x] GitHub Actions runs the Worker hardening suite, TypeScript check and Wrangler dry-run on every relevant `main` push and pull request. It performs no production deploy and requires no production secrets.
 - [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
 - [x] New replies are normalized to their top-level message. The production audit found 747 replies with no nested, broken, cross-channel or cyclic relationships.
 - [x] Normal history paging and `message-context` now use indexed root/direct-child reads instead of recursive thread traversal.
@@ -78,6 +79,11 @@ Accepted limited-beta security trade-off:
 - Do not remove `'unsafe-inline'` during release preparation without testing theme startup, auth, chat dialogs and external widgets under the stricter policy.
 
 ## Pre-deploy checks
+
+The `Worker security and type checks` GitHub status check mirrors the Worker
+commands below for every relevant pull request and `main` push. Until the
+`main` branch is protected, a failed check reports the regression but does
+not prevent a direct push or a simultaneous Vercel deployment.
 
 1. Confirm the working tree contains only the intended release changes.
 2. Review `README.md`, `MIGRATION_NOTES.md`, and this file if behavior changed.
