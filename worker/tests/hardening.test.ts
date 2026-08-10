@@ -11,6 +11,7 @@ import {
 } from "../src/lib/public-background-cache.ts";
 import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
 import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
+import { getPreviewFailureCacheTtl } from "../src/lib/preview-cache-policy.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 import { buildManagedMediaPath, extractMediaKey, normalizeManagedMediaUrl } from "../src/lib/media.ts";
 
@@ -100,6 +101,15 @@ test("preview metadata prefers Open Graph values", () => {
   assert.equal(metadata.title, "Open Graph title");
   assert.equal(metadata.siteName, "Example News");
   assert.equal(metadata.video, "https://cdn.example.com/video.mp4");
+});
+
+test("preview failure cache distinguishes stable and transient upstream failures", () => {
+  assert.equal(getPreviewFailureCacheTtl(400), 15 * 60);
+  assert.equal(getPreviewFailureCacheTtl(415), 15 * 60);
+  assert.equal(getPreviewFailureCacheTtl(502), 60);
+  assert.equal(getPreviewFailureCacheTtl(504), 60);
+  assert.equal(getPreviewFailureCacheTtl(429), null);
+  assert.equal(getPreviewFailureCacheTtl(500), null);
 });
 
 test("upload access and quota checks stay ahead of request-body consumption", () => {

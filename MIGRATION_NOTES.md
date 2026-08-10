@@ -2725,3 +2725,11 @@ Trade-offs:
 - continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures.
 
 The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTURE_PLANS.md).
+
+### Bounded Worker cache for failed link previews — 2026-08-09
+
+- The Worker preview route now caches unsupported or stable client failures for 15 minutes, transient upstream gateway and timeout failures for 60 seconds, and successful responses without usable title/image metadata for five minutes.
+- Successful metadata keeps the existing one-hour cache. Rate-limit responses, internal failures and URL-policy rejection before a cache key is accepted are not cached.
+- This prevents repeatedly rendered unsupported, empty or temporarily unavailable links from triggering another outbound metadata fetch on every visit while retaining prompt recovery from temporary upstream failures.
+
+Trade-off: a link that begins returning valid metadata immediately after a cached failure can keep its fallback card for at most the applicable one- or fifteen-minute window. The bounded TTLs intentionally favor lower outbound traffic without turning failures into long-lived browser-session state.

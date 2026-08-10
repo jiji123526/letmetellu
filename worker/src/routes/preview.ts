@@ -2,13 +2,17 @@ import { Env } from "../types";
 import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable-rate-limit";
 import { assertAllowedPreviewUrl, PreviewError } from "../lib/preview-policy";
 import { parsePreviewMetadata } from "../lib/preview-metadata";
+import {
+  getPreviewFailureCacheTtl,
+  PREVIEW_EMPTY_CACHE_TTL_SECONDS,
+  PREVIEW_SUCCESS_CACHE_TTL_SECONDS,
+} from "../lib/preview-cache-policy";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
 const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_TTL_SECONDS = 60 * 60;
 const PREVIEW_CACHE_VERSION = "v2";
 
 function getPreviewRequestIp(request: Request): string {
@@ -119,6 +123,31 @@ async function cachePreview(cacheKey: Request, response: Response): Promise<void
   }
 }
 
+function createCacheablePreviewResponse(
+  body: Record<string, unknown>,
+  status: number,
+  ttlSeconds: number,
+): Response {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": `public, max-age=${ttlSeconds}` },
+  });
+}
+
+async function createPreviewFailureResponse(
+  cacheKey: Request,
+  message: string,
+  status: number,
+): Promise<Response> {
+  const ttlSeconds = getPreviewFailureCacheTtl(status);
+  if (!ttlSeconds) {
+    return Response.json({ error: message }, { status });
+  }
+  const response = createCacheablePreviewResponse({ error: message }, status, ttlSeconds);
+  await cachePreview(cacheKey, response);
+  return response;
+}
+
 export async function handlePreview(request: Request, env: Env): Promise<Response> {
   const rawUrl = new URL(request.url).searchParams.get("url");
   if (!rawUrl) {
@@ -167,7 +196,7 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
         video: "",
         siteName: "YouTube",
         url: rawUrl,
-      }, { headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` } });
+      }, { headers: { "Cache-Control": `public, max-age=${PREVIEW_SUCCESS_CACHE_TTL_SECONDS}` } });
       await cachePreview(cacheKey, previewResponse);
       return previewResponse;
     }
@@ -180,12 +209,12 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
 
     const response = await fetchPreviewDocument(fetchUrl);
     if (!response.ok) {
-      return Response.json({ error: "fetch failed" }, { status: 502 });
+      return createPreviewFailureResponse(cacheKey, "fetch failed", 502);
     }
 
     const contentType = response.headers.get("Content-Type") || "";
     if (!/^text\/html\b/i.test(contentType) && !/^application\/xhtml\+xml\b/i.test(contentType)) {
-      return Response.json({ error: "unsupported preview content type" }, { status: 415 });
+      return createPreviewFailureResponse(cacheKey, "unsupported preview content type", 415);
     }
 
     const html = await readResponseTextWithLimit(response);
@@ -196,16 +225,19 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
       metadata.video = "";
     }
 
+    const hasUsefulMetadata = Boolean(metadata.title || metadata.image);
     const previewResponse = Response.json({ ...metadata, url: rawUrl }, {
-      headers: { "Cache-Control": `public, max-age=${PREVIEW_CACHE_TTL_SECONDS}` },
+      headers: {
+        "Cache-Control": `public, max-age=${hasUsefulMetadata
+          ? PREVIEW_SUCCESS_CACHE_TTL_SECONDS
+          : PREVIEW_EMPTY_CACHE_TTL_SECONDS}`,
+      },
     });
-    if (metadata.title || metadata.image) {
-      await cachePreview(cacheKey, previewResponse);
-    }
+    await cachePreview(cacheKey, previewResponse);
     return previewResponse;
   } catch (error) {
     if (error instanceof PreviewError) {
-      return Response.json({ error: error.message }, { status: error.status });
+      return createPreviewFailureResponse(cacheKey, error.message, error.status);
     }
     console.error("unexpected preview failure", error);
     return Response.json({ error: "failed to fetch preview" }, { status: 500 });
