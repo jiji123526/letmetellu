@@ -32,6 +32,7 @@ interface UseChatHistoryNavigationResult {
   isNearBottomRef: MutableRefObject<boolean>;
   handleScroll: () => void;
   scrollToBottom: () => void;
+  positionAtLatest: () => void;
   scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
 }
@@ -575,6 +576,21 @@ export function useChatHistoryNavigation({
     setShowScrollBtn(false);
   }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
 
+  const positionAtLatest = useCallback(() => {
+    historyModeRef.current = "latest";
+    setHistoryMode("latest");
+    setNewerMessageCount(0);
+    hasMoreNewerMessagesRef.current = false;
+    isNearBottomRef.current = true;
+    scrollAnchorRef.current = null;
+    setShowScrollBtn(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      });
+    });
+  }, [messagesEndRef, setHistoryMode, setNewerMessageCount, setShowScrollBtn]);
+
   const scrollToMessage = useCallback(async (msgId: string, alignment: "message" | "media" = "message") => {
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
@@ -686,6 +702,7 @@ export function useChatHistoryNavigation({
     isNearBottomRef,
     handleScroll,
     scrollToBottom,
+    positionAtLatest,
     scrollToMessage,
     restoreRefreshPosition,
   };

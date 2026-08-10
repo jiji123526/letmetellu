@@ -489,6 +489,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     isNearBottomRef,
     handleScroll,
     scrollToBottom,
+    positionAtLatest,
     scrollToMessage,
     restoreRefreshPosition,
   } = useChatHistoryNavigation({
@@ -505,6 +506,11 @@ export function ChatView({ channelId }: { channelId: string }) {
     setShowScrollBtn,
     setBanner,
   });
+
+  const loadLiveChannelAtLatest = useCallback(async () => {
+    await loadLiveChannelData();
+    positionAtLatest();
+  }, [loadLiveChannelData, positionAtLatest]);
 
   useChatRealtimeSync({
     channelId,
@@ -747,7 +753,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     loadNormalChannelData,
     setShowLiveEnded,
     enterLiveMode,
-    loadLiveChannelData,
+    loadLiveChannelData: loadLiveChannelAtLatest,
     dismissLivePopup,
     setShowModerationPetitionDialog,
     closeFullViewImage,
@@ -857,7 +863,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         showReconnectNotice={showReconnectNotice}
         onJoinLive={() => {
           enterLiveMode();
-          void loadLiveChannelData().catch(() => {});
+          void loadLiveChannelAtLatest().catch(() => {});
         }}
         onExitLive={() => {
           if (effectiveAdmin) {
