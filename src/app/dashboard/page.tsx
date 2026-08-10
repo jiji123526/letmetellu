@@ -101,7 +101,7 @@ interface DashboardListItem {
   liveActive: boolean;
 }
 
-const ADMIN_DASHBOARD_POLL_MS = 30000;
+const ADMIN_DASHBOARD_POLL_MS = 60000;
 const OPERATIONAL_HEALTH_POLL_MS = 5 * 60 * 1000;
 const OPERATIONAL_HEALTH_MIN_REFRESH_MS = 60 * 1000;
 const SUPPORT_PREVIEW_POLL_MS = 60000;

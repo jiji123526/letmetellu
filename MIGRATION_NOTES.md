@@ -2757,3 +2757,11 @@ Trade-off: historical `/api/user` analytics and new measurements are not directl
 - Channel configuration assets retain `private, no-store`, while the existing profile and background cache policies remain unchanged.
 
 Trade-off: after a photo is deleted or the viewer loses access, a copy already fetched by that browser can remain reusable from its private cache for up to five minutes. New requests after expiration must revalidate, and users who never passed channel authorization cannot populate this cache.
+
+### Lower super-admin dashboard and support-thread polling cost — 2026-08-09
+
+- The visible super-admin dashboard now refreshes its full reports, ticket lists and support-stat aggregation every 60 seconds instead of every 30 seconds. Operational health retains its independent five-minute freshness window.
+- An open platform-support thread still checks for new messages every 30 seconds, but its linked guided-session transcript is fetched only once per `source_session_id` instead of on every poll.
+- Focus and visibility events within ten seconds of a successful thread read no longer issue another identical request. Sending a reply or closing a thread forces a fresh read and waits behind any request already in flight.
+
+Trade-offs: a new report or ticket can take up to 60 seconds to appear in the super-admin list rather than 30 seconds. Linked guided-session data is treated as immutable after ticket escalation; message-thread state remains independently refreshed every 30 seconds.

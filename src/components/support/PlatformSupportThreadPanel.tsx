@@ -18,6 +18,7 @@ import { useLocale } from "@/hooks/useLocale";
 import { SupportThreadChat } from "./SupportThreadChat";
 
 const PLATFORM_SUPPORT_THREAD_POLL_MS = 30000;
+const PLATFORM_SUPPORT_THREAD_MIN_REFRESH_MS = 10000;
 
 function formatThreadUserLabel(
   thread: SupportThreadState | null,
@@ -74,6 +75,8 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   const shouldFollowMessagesRef = useRef(true);
   const lastRenderedMessageIdRef = useRef<string | null>(null);
   const loadThreadInFlightRef = useRef<Promise<void> | null>(null);
+  const threadLoadedAtRef = useRef(0);
+  const loadedSessionIdRef = useRef<string | null>(null);
 
   async function performLoadThread() {
     const threadResult = await fetchPlatformSupportThread(threadId);
@@ -97,7 +100,10 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
     const nextMessages = threadResult.messages || [];
     setMessages((current) => supportMessagesEqual(current, nextMessages) ? current : nextMessages);
 
-    if (threadResult.thread.source_session_id) {
+    if (
+      threadResult.thread.source_session_id
+      && loadedSessionIdRef.current !== threadResult.thread.source_session_id
+    ) {
       const sessionResult = await fetchPlatformSupportSession(threadResult.thread.source_session_id);
       if (sessionResult._status < 400) {
         setSessionDetail({
@@ -105,20 +111,29 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
           transcript: sessionResult.transcript || [],
           currentNode: sessionResult.currentNode ?? null,
         });
+        loadedSessionIdRef.current = threadResult.thread.source_session_id;
       } else {
         setSessionDetail(null);
       }
-    } else {
+    } else if (!threadResult.thread.source_session_id && loadedSessionIdRef.current !== null) {
+      loadedSessionIdRef.current = null;
       setSessionDetail(null);
     }
 
     setError("");
     setLoading(false);
+    threadLoadedAtRef.current = Date.now();
     hasCompletedInitialLoadRef.current = true;
   }
 
-  function loadThread(): Promise<void> {
-    if (loadThreadInFlightRef.current) return loadThreadInFlightRef.current;
+  function loadThread(force = false): Promise<void> {
+    if (loadThreadInFlightRef.current) {
+      if (!force) return loadThreadInFlightRef.current;
+      return loadThreadInFlightRef.current.then(() => loadThread(true));
+    }
+    if (!force && Date.now() - threadLoadedAtRef.current < PLATFORM_SUPPORT_THREAD_MIN_REFRESH_MS) {
+      return Promise.resolve();
+    }
     const request = performLoadThread()
       .catch(() => {
         setError(t("sendFailed"));
@@ -184,7 +199,7 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
       setDraft("");
-      await loadThread();
+      await loadThread(true);
     }
     setSubmitting(false);
   }
@@ -196,7 +211,7 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
     if (result._status >= 400) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
-      await loadThread();
+      await loadThread(true);
     }
     setSubmitting(false);
   }
