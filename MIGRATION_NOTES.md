@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Recursive thread reads reuse one visible-parent set — 2026-08-09
+
+- Root-thread expansion now computes the channel's visible `reply_to` parent ids once in a shared recursive-query CTE.
+- Both the seed and descendant visibility checks reuse that set instead of embedding the same channel-wide deleted-parent subquery twice.
+- The returned thread rows, deleted-parent placeholders, chronological ordering and 50-message paging contract remain unchanged.
+- A focused Worker test verifies that the generated query contains one parent-set scan and that its dynamic root/channel bindings stay in SQL placeholder order.
+
+Trade-off: the shared CTE can materialize a temporary distinct parent-id set for the channel. This adds a small fixed setup cost, but avoids repeating the same scan inside both recursive visibility branches; production D1 Insights must determine the actual rows-read improvement.
+
+Deployment note: this is Worker-only and requires a Worker deploy, but no D1 migration.
+
 ### Chat header icons use full-height touch targets — 2026-08-09
 
 - Back, channel-rules, share, search and menu buttons now use the full header height as their vertical click area.

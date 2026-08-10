@@ -81,20 +81,34 @@ export async function expandVisibleRootThreads(
 
   const rootPlaceholders = rootIds.map(() => "?").join(", ");
   const threadRows = await env.DB.prepare(`
-    WITH RECURSIVE thread(id) AS (
+    WITH RECURSIVE visible_reply_parents(id) AS (
+      SELECT DISTINCT reply_to
+      FROM messages
+      WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
+    ),
+    thread(id) AS (
       SELECT id
       FROM messages
-      WHERE id IN (${rootPlaceholders}) AND ${VISIBLE_MESSAGE_CONDITION}
+      WHERE id IN (${rootPlaceholders})
+        AND channel_id = ?
+        AND (
+          deleted = 0
+          OR (deleted = 1 AND id IN (SELECT id FROM visible_reply_parents))
+        )
       UNION
       SELECT child.id
       FROM messages child
       INNER JOIN thread parent_thread ON child.reply_to = parent_thread.id
-      WHERE ${visibleMessageConditionForAlias("child")}
+      WHERE child.channel_id = ?
+        AND (
+          child.deleted = 0
+          OR (child.deleted = 1 AND child.id IN (SELECT id FROM visible_reply_parents))
+        )
     )
     SELECT * FROM messages
     WHERE id IN (SELECT id FROM thread)
     ORDER BY created_at ASC, id ASC
-  `).bind(...rootIds, channelId, channelId, channelId, channelId).all<VisibleMessageRow>();
+  `).bind(channelId, ...rootIds, channelId, channelId).all<VisibleMessageRow>();
 
   const byId = new Map<string, VisibleMessageRow>();
   for (const message of [...pageMessages, ...(threadRows.results || [])]) {
