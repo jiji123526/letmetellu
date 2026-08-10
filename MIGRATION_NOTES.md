@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Blocking no longer retroactively marks older messages — 2026-08-10
+
+- Chat rendering previously derived a blocked-user uid set from the owner moderation list and applied a dimmed blocked-sender style to every mounted message from that uid.
+- Blocking now affects send permission and moderation state only. Older messages remain visually unchanged after a user is blocked.
+- The blocked-sender render plumbing was removed from the chat message selector and message-list prop chain, so this no longer recomputes or propagates a historical blocked marker through the message pane.
+
+Trade-off: owners no longer get an inline visual cue on previously posted messages from currently blocked users. The blocked-user list, send prevention, petitions and realtime self-block handling remain unchanged.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 
 ### D1 variable-bound thread expansion and accurate 5xx counting — 2026-08-10
 
@@ -2785,5 +2795,4 @@ Trade-offs:
 - continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures.
 
 The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTURE_PLANS.md).
-
 

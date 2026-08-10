@@ -26,7 +26,6 @@ interface MessageRowProps {
   bubbleColor: string;
   isReported: boolean;
   isReportedTarget: boolean;
-  isBlockedSender: boolean;
   searchQuery: string;
   isSearchMatch: boolean;
   isActiveMatch: boolean;
@@ -52,7 +51,6 @@ interface MessageListProps {
   bubbleColor: string;
   reportedMsgIds: Set<string>;
   reportedTargetIds: Set<string>;
-  blockedUidSet: Set<string>;
   searchQuery: string;
   searchResultIdSet: Set<string>;
   activeSearchId: string | null;
@@ -151,7 +149,6 @@ const MessageRow = React.memo(function MessageRow({
   bubbleColor,
   isReported,
   isReportedTarget,
-  isBlockedSender,
   searchQuery,
   isSearchMatch,
   isActiveMatch,
@@ -245,7 +242,7 @@ const MessageRow = React.memo(function MessageRow({
               : isMine ? "#fff" : "var(--gray-text)"),
         border: inboxBubbleStyle ? `1px solid ${inboxBubbleStyle.borderColor}` : "none",
         cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
-        opacity: isReported ? 0.6 : (effectiveAdmin && isBlockedSender) ? 0.4 : undefined,
+        opacity: isReported ? 0.6 : undefined,
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -406,7 +403,6 @@ export const MessageList = React.memo(function MessageList({
   bubbleColor,
   reportedMsgIds,
   reportedTargetIds,
-  blockedUidSet,
   searchQuery,
   searchResultIdSet,
   activeSearchId,
@@ -478,7 +474,6 @@ export const MessageList = React.memo(function MessageList({
         parentIsAdmin={parentMessage ? !!parentMessage.is_admin : null}
         isReported={reportedMsgIds.has(message.id)}
         isReportedTarget={reportedTargetIds.has(message.id)}
-        isBlockedSender={blockedUidSet.has(message.uid)}
         searchQuery={searchQuery}
         isSearchMatch={searchResultIdSet.has(message.id)}
         isActiveMatch={message.id === activeSearchId}
@@ -495,7 +490,6 @@ export const MessageList = React.memo(function MessageList({
           parentIsAdmin={!!message.is_admin}
           isReported={reportedMsgIds.has(reply.id)}
           isReportedTarget={reportedTargetIds.has(reply.id)}
-          isBlockedSender={blockedUidSet.has(reply.uid)}
           searchQuery={searchQuery}
           isSearchMatch={searchResultIdSet.has(reply.id)}
           isActiveMatch={reply.id === activeSearchId}

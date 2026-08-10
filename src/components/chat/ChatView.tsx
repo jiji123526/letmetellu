@@ -355,7 +355,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     reportedMsgIds,
     isReportsOwnerView,
     restrictedChannels,
-    blockedUidSet,
     reportedTargetIds,
     threadedMessages,
     toggleSearch,
@@ -372,7 +371,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     inLiveMode,
     messages,
     dmMessages,
-    blockedUsers,
     unavailableReplyParentIds,
     effectiveAdmin,
     setMessages,
@@ -904,7 +902,6 @@ export function ChatView({ channelId }: { channelId: string }) {
         bubbleColor={bubbleColor}
         reportedMsgIds={reportedMsgIds}
         reportedTargetIds={reportedTargetIds}
-        blockedUidSet={blockedUidSet}
         searchQuery={searchState.query}
         searchResultIdSet={searchResultIdSet}
         activeSearchId={searchState.activeId}

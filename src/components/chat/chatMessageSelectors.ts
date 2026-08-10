@@ -20,7 +20,6 @@ export interface ThreadedMessages {
 interface DeriveChatMessageCollectionsArgs {
   messages: Message[];
   dmMessages: Message[];
-  blockedUsers: ReadonlyArray<{ uid: string }>;
   unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
   isReportsChannelView: boolean;
@@ -32,7 +31,6 @@ interface DerivedChatMessageCollections {
   isReportsOwnerView: boolean;
   displayMessages: Message[];
   restrictedChannels: RestrictedChannelSummaryItem[];
-  blockedUidSet: Set<string>;
   reportedTargetIds: Set<string>;
   threadedMessages: ThreadedMessages;
 }
@@ -220,7 +218,6 @@ export function getThreadedMessages(
 export function deriveChatMessageCollections({
   messages,
   dmMessages,
-  blockedUsers,
   unavailableReplyParentIds,
   effectiveAdmin,
   isReportsChannelView,
@@ -244,7 +241,6 @@ export function deriveChatMessageCollections({
     isReportsOwnerView: reportsOwnerView,
     displayMessages: nextDisplayMessages,
     restrictedChannels: getRestrictedChannels(nextDisplayMessages, reportsOwnerView),
-    blockedUidSet: new Set(blockedUsers.map((blockedUser) => blockedUser.uid)),
     reportedTargetIds: getReportedTargetIds(nextDisplayMessages, effectiveAdmin),
     threadedMessages: getThreadedMessages(
       nextDisplayMessages,

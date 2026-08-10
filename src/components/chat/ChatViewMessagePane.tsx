@@ -35,7 +35,6 @@ interface ChatViewMessagePaneProps {
   bubbleColor: string;
   reportedMsgIds: Set<string>;
   reportedTargetIds: Set<string>;
-  blockedUidSet: Set<string>;
   searchQuery: string;
   searchResultIdSet: Set<string>;
   activeSearchId: string | null;
@@ -81,7 +80,6 @@ export function ChatViewMessagePane({
   bubbleColor,
   reportedMsgIds,
   reportedTargetIds,
-  blockedUidSet,
   searchQuery,
   searchResultIdSet,
   activeSearchId,
@@ -283,7 +281,6 @@ export function ChatViewMessagePane({
           bubbleColor={bubbleColor}
           reportedMsgIds={reportedMsgIds}
           reportedTargetIds={reportedTargetIds}
-          blockedUidSet={blockedUidSet}
           searchQuery={searchQuery}
           searchResultIdSet={searchResultIdSet}
           activeSearchId={activeSearchId}

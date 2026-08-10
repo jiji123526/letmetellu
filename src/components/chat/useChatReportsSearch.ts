@@ -33,7 +33,6 @@ interface UseChatReportsSearchArgs {
   inLiveMode: boolean;
   messages: Message[];
   dmMessages: Message[];
-  blockedUsers: ReadonlyArray<{ uid: string; reason?: string }>;
   unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;
@@ -54,7 +53,6 @@ interface UseChatReportsSearchResult {
   reportedMsgIds: Set<string>;
   isReportsOwnerView: boolean;
   restrictedChannels: RestrictedChannelSummaryItem[];
-  blockedUidSet: Set<string>;
   reportedTargetIds: Set<string>;
   threadedMessages: ThreadedMessages;
   toggleSearch: () => void;
@@ -92,7 +90,6 @@ export function useChatReportsSearch({
   inLiveMode,
   messages,
   dmMessages,
-  blockedUsers,
   unavailableReplyParentIds,
   effectiveAdmin,
   setMessages,
@@ -115,20 +112,18 @@ export function useChatReportsSearch({
   const {
     isReportsOwnerView,
     restrictedChannels,
-    blockedUidSet,
     reportedTargetIds,
     threadedMessages,
   } = useMemo(
     () => deriveChatMessageCollections({
       messages,
       dmMessages,
-      blockedUsers,
       unavailableReplyParentIds,
       effectiveAdmin,
       isReportsChannelView,
       reportsOwnerFilter,
     }),
-    [blockedUsers, dmMessages, effectiveAdmin, isReportsChannelView, messages, reportsOwnerFilter, unavailableReplyParentIds],
+    [dmMessages, effectiveAdmin, isReportsChannelView, messages, reportsOwnerFilter, unavailableReplyParentIds],
   );
 
   const searchResultIdSet = useMemo(
@@ -227,7 +222,6 @@ export function useChatReportsSearch({
     reportedMsgIds,
     isReportsOwnerView,
     restrictedChannels,
-    blockedUidSet,
     reportedTargetIds,
     threadedMessages,
     toggleSearch,
