@@ -33,7 +33,11 @@ interface UseChatHistoryNavigationResult {
   handleScroll: () => void;
   scrollToBottom: () => void;
   positionAtLatest: () => void;
-  scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
+  scrollToMessage: (
+    msgId: string,
+    alignment?: "message" | "media",
+    options?: { preferMounted?: boolean },
+  ) => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
 }
 
@@ -591,28 +595,35 @@ export function useChatHistoryNavigation({
     });
   }, [messagesEndRef, setHistoryMode, setNewerMessageCount, setShowScrollBtn]);
 
-  const scrollToMessage = useCallback(async (msgId: string, alignment: "message" | "media" = "message") => {
+  const scrollToMessage = useCallback(async (
+    msgId: string,
+    alignment: "message" | "media" = "message",
+    options?: { preferMounted?: boolean },
+  ) => {
     const navigationRequest = ++navigationRequestRef.current;
     await nextAnimationFrame();
     let element = document.getElementById(`msg-${msgId}`);
     const fallbackElement = element;
+    const useMountedFastPath = options?.preferMounted === true && !!element;
 
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    try {
-      const data = await fetchMessageContext(fetchChannel, msgId);
-      if (navigationRequest !== navigationRequestRef.current) return;
-      if (!data.messages?.some((message: Message) => message.id === msgId)) {
-        throw new Error("message not found");
+    if (!useMountedFastPath) {
+      try {
+        const data = await fetchMessageContext(fetchChannel, msgId);
+        if (navigationRequest !== navigationRequestRef.current) return;
+        if (!data.messages?.some((message: Message) => message.id === msgId)) {
+          throw new Error("message not found");
+        }
+        setMessages(data.messages as Message[]);
+        historyModeRef.current = "context";
+        setHistoryMode("context");
+        setNewerMessageCount(0);
+        hasMoreMessagesRef.current = data.has_older !== false;
+        hasMoreNewerMessagesRef.current = data.has_newer !== false;
+        element = await waitForMessageElement(msgId);
+      } catch {
+        element = fallbackElement || null;
       }
-      setMessages(data.messages as Message[]);
-      historyModeRef.current = "context";
-      setHistoryMode("context");
-      setNewerMessageCount(0);
-      hasMoreMessagesRef.current = data.has_older !== false;
-      hasMoreNewerMessagesRef.current = data.has_newer !== false;
-      element = await waitForMessageElement(msgId);
-    } catch {
-      element = fallbackElement || null;
     }
 
     if (!element) {
@@ -625,7 +636,7 @@ export function useChatHistoryNavigation({
     if (navigationRequest !== navigationRequestRef.current) return;
     element = document.getElementById(`msg-${msgId}`) || element;
     const container = messagesContainerRef.current;
-    if (container) {
+    if (container && !useMountedFastPath) {
       await nextAnimationFrame();
       window.dispatchEvent(new Event("chat-history-preload"));
       const readiness = await waitForCompleteHistoryWindow(

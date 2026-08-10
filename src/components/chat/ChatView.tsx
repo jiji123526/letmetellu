@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { getStoredUid } from "@/lib/api-core";
 import { adminAction, fetchInit, fetchOwnerChannels } from "@/lib/api-chat";
 import { useRealtime } from "@/hooks/useRealtime";
@@ -381,6 +381,10 @@ export function ChatView({ channelId }: { channelId: string }) {
       unreported: t("unreported"),
     },
   });
+  const searchMessages = useMemo(
+    () => (effectiveAdmin ? [...messages, ...dmMessages] : messages),
+    [dmMessages, effectiveAdmin, messages],
+  );
 
   const {
     applyInitData,
@@ -826,9 +830,9 @@ export function ChatView({ channelId }: { channelId: string }) {
         bubbleColor={bubbleColor}
         hasChannelRules={hasChannelRules}
         showSearch={showSearch}
-        searchMessages={effectiveAdmin ? [...messages, ...dmMessages] : messages}
+        searchMessages={searchMessages}
         onSearchNavigate={(msgId) => {
-          void scrollToMessage(msgId);
+          void scrollToMessage(msgId, "message", { preferMounted: true });
         }}
         onSearchState={setSearchState}
         onCloseSearch={closeSearch}

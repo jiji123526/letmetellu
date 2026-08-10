@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Search result stepping now skips context reloads for mounted messages — 2026-08-10
+
+- Chat search next/previous navigation previously called `scrollToMessage` in the same full-context mode used for explicit deep links and gallery jumps.
+- Even when the target result was already mounted, each step fetched `message-context`, replaced the message window, waited for history stabilization and only then scrolled, which made in-channel result stepping feel laggy.
+- Search navigation now prefers the mounted DOM message when it already exists and scrolls directly without refetching context or rehydrating the history window.
+- Search state updates also now reuse the same `resultIds` array across ordinary next/previous steps, so active-match changes no longer rebuild the result-id list on every click. Admin search input also reuses a memoized combined message array instead of recreating it on every active-match update.
+- Explicit non-search jumps, including media/gallery jumps and targets that are not mounted, still use full `message-context` hydration.
+
+Trade-off: if a mounted search result belongs to a partially loaded thread window, stepping to it no longer forces sibling-thread rehydration. This is intentional because search stepping now prioritizes responsiveness over completeness refresh for already visible targets.
+
+Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
+
 ### Blocking no longer retroactively marks older messages — 2026-08-10
 
 - Chat rendering previously derived a blocked-user uid set from the owner moderation list and applied a dimmed blocked-sender style to every mounted message from that uid.
@@ -2795,4 +2807,3 @@ Trade-offs:
 - continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures.
 
 The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTURE_PLANS.md).
-

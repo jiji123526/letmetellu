@@ -59,14 +59,15 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
   const blurFromEnterRef = useRef(false);
   const paginationInFlightRef = useRef(false);
   const searchRequestIdRef = useRef(0);
+  const resultIdsRef = useRef<string[]>([]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const updateState = (q: string, res: { id: string }[], idx: number) => {
+  const updateState = (q: string, resultIds: string[], idx: number) => {
     onSearchState({
       query: q,
-      activeId: idx >= 0 && res[idx] ? res[idx].id : null,
-      resultIds: res.map((r) => r.id),
+      activeId: idx >= 0 && resultIds[idx] ? resultIds[idx] : null,
+      resultIds,
     });
   };
 
@@ -102,7 +103,8 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
       setIndex(-1);
       setHasMore(false);
       setNextCursor(null);
-      updateState("", [], -1);
+      resultIdsRef.current = [];
+      updateState("", resultIdsRef.current, -1);
       return;
     }
 
@@ -122,14 +124,16 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
     setResults(matched);
     setHasMore(nextHasMore);
     setNextCursor(nextPageCursor);
+    resultIdsRef.current = matched.map((message) => message.id);
     if (matched.length > 0) {
       const lastIdx = matched.length - 1;
       setIndex(lastIdx);
       onNavigate(matched[lastIdx].id);
-      updateState(normalizedQuery, matched, lastIdx);
+      updateState(normalizedQuery, resultIdsRef.current, lastIdx);
     } else {
       setIndex(-1);
-      updateState(normalizedQuery, [], -1);
+      resultIdsRef.current = [];
+      updateState(normalizedQuery, resultIdsRef.current, -1);
     }
   };
 
@@ -157,8 +161,9 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
         setIndex(nextIndex);
         setHasMore(serverData.has_more);
         setNextCursor(serverData.next_cursor);
+        resultIdsRef.current = merged.map((message) => message.id);
         onNavigate(merged[nextIndex].id);
-        updateState(query.trim(), merged, nextIndex);
+        updateState(query.trim(), resultIdsRef.current, nextIndex);
       } catch {
         // Keep the current result page available when loading older matches fails.
       } finally {
@@ -173,7 +178,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
     if (next >= results.length) next = results.length - 1;
     setIndex(next);
     onNavigate(results[next].id);
-    updateState(query, results, next);
+    updateState(query, resultIdsRef.current, next);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -187,11 +192,16 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
         void navigate(-1);
       }
     }
-    if (e.key === "Escape") { onSearchState({ query: "", activeId: null, resultIds: [] }); onClose(); }
+    if (e.key === "Escape") {
+      resultIdsRef.current = [];
+      onSearchState({ query: "", activeId: null, resultIds: resultIdsRef.current });
+      onClose();
+    }
   };
 
   const handleClose = () => {
-    onSearchState({ query: "", activeId: null, resultIds: [] });
+    resultIdsRef.current = [];
+    onSearchState({ query: "", activeId: null, resultIds: resultIdsRef.current });
     onClose();
   };
 
@@ -208,7 +218,8 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
           setIndex(-1);
           setHasMore(false);
           setNextCursor(null);
-          updateState("", [], -1);
+          resultIdsRef.current = [];
+          updateState("", resultIdsRef.current, -1);
         }}
         onKeyDown={handleKeyDown}
         onBlur={() => {
