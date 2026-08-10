@@ -3,6 +3,7 @@ import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityT
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation";
 import { recordOperationalEvent } from "../lib/operational-events";
 import { deriveOperationalHealthStatus, serializeOperationalHealthWindow, type OperationalHealthWindowRow } from "../lib/operational-health";
+import { getTrustedUserId } from "../lib/trusted-identity";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow";
 import { appendSupportAuditLog } from "../lib/support-audit";
@@ -317,10 +318,7 @@ async function parseJsonObject(request: Request): Promise<JsonObject | null> {
 }
 
 async function requireTrustedUserId(request: Request, env: Env): Promise<string | null> {
-  const token = request.headers.get("X-Internal-Token");
-  const userId = request.headers.get("X-User-Id");
-  if (token !== env.INTERNAL_SECRET || !userId) return null;
-  return userId;
+  return getTrustedUserId(request, env);
 }
 
 async function requirePlatformAdminUserId(request: Request, env: Env): Promise<string | null> {

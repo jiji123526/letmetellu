@@ -15,6 +15,7 @@ import {
   type UserLocale,
 } from "../lib/channel-moderation";
 import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import { getTrustedUserId } from "../lib/trusted-identity";
 import { appendModerationAuditLog } from "../lib/moderation-audit";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { Env } from "../types";
@@ -454,8 +455,7 @@ export async function hydrateReportInboxMessages<T extends { id: string }>(
 }
 
 async function requireReportsChannelOwner(request: Request, env: Env): Promise<string | null> {
-  if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) return null;
-  const userId = request.headers.get("X-User-Id") || "";
+  const userId = getTrustedUserId(request, env) || "";
   if (!userId) return null;
   return await isReportsChannelOwner(userId, env) ? userId : null;
 }
@@ -1276,9 +1276,8 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
 
-  const internalToken = request.headers.get("X-Internal-Token");
-  const verifiedUserId = request.headers.get("X-User-Id") || "";
-  const isVerifiedUser = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+  const verifiedUserId = getTrustedUserId(request, env) || "";
+  const isVerifiedUser = Boolean(verifiedUserId);
   const isChannelOwner = isVerifiedUser && verifiedUserId === sourceChannel.owner_uid;
   if (isChannelOwner) {
     return Response.json({ error: "channel_owner_cannot_report" }, { status: 403 });

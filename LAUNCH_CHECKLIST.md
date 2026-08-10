@@ -13,7 +13,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Google login/signup callbacks and Resend delivery use the production domain.
 - [x] Email signup verification and password reset were exercised in production during the beta setup.
 - [x] The super-admin operational-health view and bounded operational-event retention are deployed.
-- [x] Worker hardening coverage currently passes 37 focused tests covering origin checks, upload and preview validation, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
+- [x] Worker hardening coverage currently passes 44 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
 - [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
 - [x] New replies are normalized to their top-level message. The production audit found 747 replies with no nested, broken, cross-channel or cyclic relationships.
 - [x] Normal history paging and `message-context` now use indexed root/direct-child reads instead of recursive thread traversal.
@@ -21,7 +21,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 ### Still required before a broad public launch
 
-- [ ] Add behavior-level regression coverage for guided support, support ticket synchronization, report filtering and super-admin dashboard state transitions.
+- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. The first shared-identity and privileged-route invariant suite now covers forged user headers, server-side owner/role checks, owner-only collection ordering, report moderation, platform support and socket authorization boundaries; cross-object mutations, guided support, report-state and dashboard transitions remain.
 - [ ] Collect normal production health baselines, calibrate thresholds and document an operator response procedure; add external alerts for degraded/critical states after calibration.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.

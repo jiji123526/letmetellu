@@ -7,6 +7,7 @@ import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
+import { isTrustedInternalRequest } from "../lib/trusted-identity";
 
 function normalizeBubbleColor(value: unknown): unknown {
   return typeof value === "string" && value.toLowerCase() === "#3b8df0"
@@ -142,8 +143,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
 
   // Verify internal token (sent by Vercel after session check)
-  const token = request.headers.get("X-Internal-Token");
-  if (token !== env.INTERNAL_SECRET) {
+  if (!isTrustedInternalRequest(request, env)) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -550,6 +550,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         ).bind(channel_id).first<{ background_image: string | null }>();
         previousBackgroundImage = previousBackground?.background_image || null;
         if (background_image !== null) {
+          if (typeof background_image !== "string") {
+            return Response.json({ error: "invalid background image" }, { status: 400 });
+          }
           normalizedBackgroundImage = normalizeManagedMediaUrl(background_image);
           if (!normalizedBackgroundImage || !isAllowedBackgroundImageUrl(background_image, env)) {
             return Response.json({ error: "invalid background image" }, { status: 400 });

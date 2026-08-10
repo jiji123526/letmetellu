@@ -11,6 +11,7 @@ import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
 import { normalizeMessageSearchQuery } from "../lib/message-search";
+import { getTrustedUserId } from "../lib/trusted-identity";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -24,9 +25,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   // Passcode gate for data endpoints
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
-  const internalToken = request.headers.get("X-Internal-Token");
-  const userId = request.headers.get("X-User-Id");
-  const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
+  const trustedUserId = getTrustedUserId(request, env) || "";
   const isOwner = trustedUserId === owner_uid;
   const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
   const reportsOwnerLocale = isOwner && trustedUserId

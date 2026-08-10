@@ -2,6 +2,7 @@ import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityT
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import type { Env } from "../types";
 import { authorizeRoomToken } from "./passcode";
+import { getTrustedUserId } from "../lib/trusted-identity";
 
 export async function handleSocketAuth(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -18,9 +19,7 @@ export async function handleSocketAuth(request: Request, env: Env): Promise<Resp
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
 
-  const trustedUserId = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
-    ? request.headers.get("X-User-Id") || ""
-    : "";
+  const trustedUserId = getTrustedUserId(request, env) || "";
   const isOwner = trustedUserId === channel.owner_uid;
   if (isOwner) {
     return Response.json({ mode: "admin", userId: trustedUserId });

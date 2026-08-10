@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Privileged authorization boundaries share one tested identity primitive — 2026-08-09
+
+- Added a server-side role and route matrix documenting guest, room-viewer, logged-in, channel-owner and platform-admin evidence. The matrix explicitly treats UI visibility as non-authoritative.
+- Added a shared trusted-identity primitive that accepts `X-User-Id` only when the matching internal proxy secret is present. Channel admin, private data, socket authorization, report moderation and platform-support boundaries now reuse it.
+- Added focused Worker tests for forged identity, missing identity and valid proxy assertions, plus route invariants proving owner and platform-role comparisons remain server-side and owner-only collections are denied before data dispatch.
+- Channel background updates now reject non-string image values before URL normalization, closing the existing typecheck gap and keeping malformed payloads out of the media validator.
+- Remaining browser-visible support, report and dashboard transitions are listed as unchecked work instead of being implied complete by lower-level tests.
+
+Trade-off: the shared primitive removes copy-pasted trust decisions, while source-boundary tests detect accidental bypasses without adding a Worker test runtime dependency. They do not replace end-to-end tests for cookies, Auth.js callbacks, room-token expiry, cross-object mutations or multi-tab state synchronization.
+
+Deployment note: this phase adds tests and documentation only. It requires no frontend or Worker deployment and no D1 migration.
+
 ### Message context reuses flat direct thread reads — 2026-08-09
 
 - Gallery navigation, search navigation, direct message links and refresh-position recovery now derive the target thread root directly as `target.reply_to || target.id`.
