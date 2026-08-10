@@ -35,10 +35,39 @@ test("flat thread expansion uses direct root and child index lookups", async () 
   const threadCall = calls[0];
   assert.doesNotMatch(threadCall.query, /WITH RECURSIVE/);
   assert.match(threadCall.query, /UNION ALL/);
-  assert.match(threadCall.query, /channel_id = \? AND id IN \(\?, \?\)/);
-  assert.match(threadCall.query, /channel_id = \?[\s\S]*reply_to IN \(\?, \?\)[\s\S]*deleted = 0/);
+  assert.match(threadCall.query, /WITH requested_roots\(id\) AS \(VALUES \(\?\), \(\?\)\)/);
+  assert.match(threadCall.query, /requested_roots\.id = messages\.id/);
+  assert.match(threadCall.query, /requested_roots\.id = messages\.reply_to/);
   assert.deepEqual(threadCall.params, [
-    "channel-a", "root-a", "root-d",
-    "channel-a", "root-a", "root-d",
+    "root-a", "root-d", "channel-a", "channel-a",
   ]);
+});
+
+test("a full page of unique roots stays below the D1 variable limit", async () => {
+  let boundParameterCount = 0;
+  const env = {
+    DB: {
+      prepare() {
+        return {
+          bind(...params: unknown[]) {
+            boundParameterCount = params.length;
+            return { async all() { return { results: [] }; } };
+          },
+        };
+      },
+    },
+  };
+
+  await expandVisibleRootThreads(
+    env as never,
+    "channel-a",
+    Array.from({ length: 50 }, (_, index) => ({
+      id: `root-${index}`,
+      reply_to: null,
+      created_at: `2026-08-09T00:00:${String(index).padStart(2, "0")}.000Z`,
+    })),
+  );
+
+  assert.equal(boundParameterCount, 52);
+  assert.ok(boundParameterCount < 100);
 });

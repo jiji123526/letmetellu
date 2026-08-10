@@ -183,7 +183,7 @@ export default {
         statusCode: response.status,
         actorUserId: request.headers.get("X-User-Id"),
       }));
-    } else if (response.status >= 500) {
+    } else if (response.status >= 500 && !capturedUnhandledException) {
       ctx.waitUntil(recordOperationalEvent({
         env,
         severity: "error",

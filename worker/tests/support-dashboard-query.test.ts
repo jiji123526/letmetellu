@@ -10,6 +10,10 @@ const supportIndexMigration = readFileSync(
   new URL("../migrations/0031_support_dashboard_query_indexes.sql", import.meta.url),
   "utf8",
 );
+const workerIndexSource = readFileSync(
+  new URL("../src/index.ts", import.meta.url),
+  "utf8",
+);
 
 test("support thread reads use direct role-keyed joins", () => {
   assert.match(
@@ -52,4 +56,11 @@ test("platform support polling uses incremental messages and lightweight dashboa
   assert.match(supportRouteSource, /type === "dashboard-stats"/);
   assert.match(supportRouteSource, /requestUrl\.searchParams\.get\("include_stats"\) !== "0"/);
   assert.match(supportRouteSource, /invalid_message_cursor/);
+});
+
+test("unhandled requests are not counted again as generic request failures", () => {
+  assert.match(
+    workerIndexSource,
+    /response\.status >= 500 && !capturedUnhandledException/,
+  );
 });

@@ -2775,3 +2775,12 @@ Trade-offs: a new report or ticket can take up to 60 seconds to appear in the su
 - Linked guided-session transcripts remain one read per source session, and bounded cursor validation prevents oversized or malformed incremental-read parameters.
 
 Trade-offs: the full admin list can be up to 60 seconds behind a remote change, statistics can be up to five minutes behind, and operational health is unavailable until the administrator expands its card. The lightweight version query still performs two small indexed/aggregate reads per minute, but avoids repeated ticket serialization and message-rollup work when nothing changed.
+
+### D1 variable-bound thread expansion and accurate 5xx counting — 2026-08-10
+
+- Five real `/api/data` failures were recorded twice as ten route errors because each thrown request emitted both `unhandled_exception` and `request_failed`. Unhandled requests now emit only the more specific event.
+- The failures occurred when a 50-message page contained 50 unique thread roots. The flat-thread query repeated all root placeholders for roots and children, producing 102 bound variables and exceeding D1's statement limit.
+- Root IDs now enter the query once through a `requested_roots` values CTE and are joined for both root and child lookups. A full 50-root page uses 52 variables while retaining non-recursive indexed lookups.
+- Regression coverage verifies the maximum page case remains below 100 bound variables and that unhandled failures are not counted twice.
+
+Trade-off: the values CTE adds a small amount of SQL planning structure, but removes duplicated bindings and preserves the same returned thread rows and ordering.

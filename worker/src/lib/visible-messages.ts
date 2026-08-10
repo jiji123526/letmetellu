@@ -54,21 +54,23 @@ export async function readVisibleFlatThreads(
   const rootIds = [...new Set(requestedRootIds.map(String).filter(Boolean))];
   if (rootIds.length === 0) return [];
 
-  const rootPlaceholders = rootIds.map(() => "?").join(", ");
+  const rootValues = rootIds.map(() => "(?)").join(", ");
   const { results } = await env.DB.prepare(`
+    WITH requested_roots(id) AS (VALUES ${rootValues})
     SELECT * FROM (
-      SELECT *
+      SELECT messages.*
       FROM messages
-      WHERE channel_id = ? AND id IN (${rootPlaceholders})
-      UNION ALL
-      SELECT *
-      FROM messages
+      INNER JOIN requested_roots ON requested_roots.id = messages.id
       WHERE channel_id = ?
-        AND reply_to IN (${rootPlaceholders})
+      UNION ALL
+      SELECT messages.*
+      FROM messages
+      INNER JOIN requested_roots ON requested_roots.id = messages.reply_to
+      WHERE channel_id = ?
         AND deleted = 0
     )
     ORDER BY created_at ASC, id ASC
-  `).bind(channelId, ...rootIds, channelId, ...rootIds).all<VisibleMessageRow>();
+  `).bind(...rootIds, channelId, channelId).all<VisibleMessageRow>();
   return results || [];
 }
 
