@@ -20,7 +20,7 @@ export default async function SupportPage({
     }
     return (
       <Providers>
-        <PlatformSupportThreadPanel threadId={threadParam} />
+        <PlatformSupportThreadPanel key={threadParam} threadId={threadParam} />
       </Providers>
     );
   }

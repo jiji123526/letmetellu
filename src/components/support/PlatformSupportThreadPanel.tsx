@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   closePlatformSupportThread,
   fetchPlatformSupportSession,
@@ -75,11 +75,14 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
   const shouldFollowMessagesRef = useRef(true);
   const lastRenderedMessageIdRef = useRef<string | null>(null);
   const loadThreadInFlightRef = useRef<Promise<void> | null>(null);
+  const loadThreadForPollingRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const threadLoadedAtRef = useRef(0);
   const loadedSessionIdRef = useRef<string | null>(null);
+  const lastMessageCursorRef = useRef<{ createdAt: string; id: string } | null>(null);
 
   async function performLoadThread() {
-    const threadResult = await fetchPlatformSupportThread(threadId);
+    const cursor = lastMessageCursorRef.current;
+    const threadResult = await fetchPlatformSupportThread(threadId, cursor);
     if (threadResult._status === 403) {
       setError(t("supportNoAccess"));
       setLoading(false);
@@ -98,7 +101,19 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
 
     setThreadDetail(threadResult.thread);
     const nextMessages = threadResult.messages || [];
-    setMessages((current) => supportMessagesEqual(current, nextMessages) ? current : nextMessages);
+    setMessages((current) => {
+      if (!cursor) return supportMessagesEqual(current, nextMessages) ? current : nextMessages;
+      if (nextMessages.length === 0) return current;
+      const existingIds = new Set(current.map((message) => message.id));
+      return [...current, ...nextMessages.filter((message) => !existingIds.has(message.id))];
+    });
+    const newestMessage = nextMessages.at(-1);
+    if (newestMessage) {
+      lastMessageCursorRef.current = {
+        createdAt: newestMessage.created_at,
+        id: newestMessage.id,
+      };
+    }
 
     if (
       threadResult.thread.source_session_id
@@ -148,15 +163,19 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
     return request;
   }
 
-  const loadThreadEffect = useEffectEvent(() => {
-    void loadThread();
+  useEffect(() => {
+    loadThreadForPollingRef.current = () => loadThread();
   });
 
+  const loadThreadForPolling = useCallback(() => {
+    void loadThreadForPollingRef.current();
+  }, []);
+
   useForegroundPolling({
-    enabled: Boolean(threadId),
+    enabled: Boolean(threadId) && threadDetail?.status !== "closed",
     pollMs: PLATFORM_SUPPORT_THREAD_POLL_MS,
     runImmediately: true,
-    onRefresh: loadThreadEffect,
+    onRefresh: loadThreadForPolling,
   });
 
   useEffect(() => {

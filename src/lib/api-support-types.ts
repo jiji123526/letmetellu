@@ -141,6 +141,11 @@ export interface PlatformDashboardResponse {
   support_stats?: PlatformDashboardSupportStats | null;
 }
 
+export interface PlatformDashboardVersionResponse {
+  error?: string;
+  version: string;
+}
+
 export interface PlatformOperationalHealthWindow {
   tracked_event_count: number;
   request_5xx_count: number;

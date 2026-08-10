@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import type { PlatformOperationalHealthResponse } from "@/lib/api-support";
 
@@ -8,13 +9,16 @@ export function PlatformOperationalHealthCard({
   loading,
   error,
   onRefresh,
+  onExpandedChange,
 }: {
   health: PlatformOperationalHealthResponse | null;
   loading: boolean;
   error: boolean;
   onRefresh: () => void;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   const { locale, t } = useLocale();
+  const [expanded, setExpanded] = useState(false);
   const status = health?.status || "healthy";
   const statusColor = status === "critical" ? "#dc2626" : status === "degraded" ? "#d97706" : "#16a34a";
   const statusLabel = status === "critical"
@@ -54,18 +58,36 @@ export function PlatformOperationalHealthCard({
               {error ? t("operationalHealthLoadFailed") : loading && !health ? t("operationalHealthLoading") : t("operationalHealthLast15m")}
             </p>
           </div>
-          <button
-            type="button"
-            className="border-none bg-transparent cursor-pointer text-[12px] font-medium shrink-0 disabled:opacity-50"
-            style={{ color: "var(--tint)" }}
-            disabled={loading}
-            onClick={onRefresh}
-          >
-            {loading ? t("operationalHealthRefreshing") : t("operationalHealthRefresh")}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {expanded && (
+              <button
+                type="button"
+                className="border-none bg-transparent cursor-pointer text-[12px] font-medium disabled:opacity-50"
+                style={{ color: "var(--tint)" }}
+                disabled={loading}
+                onClick={onRefresh}
+              >
+                {loading ? t("operationalHealthRefreshing") : t("operationalHealthRefresh")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="w-7 h-7 border-none rounded-full cursor-pointer flex items-center justify-center text-[14px]"
+              style={{ color: "var(--meta)", background: "var(--bg)" }}
+              aria-expanded={expanded}
+              onClick={() => {
+                const nextExpanded = !expanded;
+                setExpanded(nextExpanded);
+                onExpandedChange?.(nextExpanded);
+                if (nextExpanded && !health && !loading) onRefresh();
+              }}
+            >
+              {expanded ? "⌃" : "⌄"}
+            </button>
+          </div>
         </div>
 
-        {recent && (
+        {expanded && recent && (
           <>
             <div className="grid grid-cols-4 gap-1.5 mt-3">
               {[

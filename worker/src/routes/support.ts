@@ -78,6 +78,12 @@ interface ReportsChannelRow {
   created_at: string;
 }
 
+interface PlatformDashboardVersionRow {
+  total_count: number;
+  active_count: number;
+  latest_at: string | null;
+}
+
 interface PlatformDashboardTicketRow extends SupportThreadRow {
   has_admin_reply?: number;
 }
@@ -477,13 +483,24 @@ async function fetchSupportSessionEvents(sessionId: string, env: Env): Promise<S
   return (results || []).map(parseEventPayload);
 }
 
-async function fetchSupportMessages(threadId: string, env: Env): Promise<SupportMessageRow[]> {
+async function fetchSupportMessages(
+  threadId: string,
+  env: Env,
+  after?: { createdAt: string; id: string } | null,
+): Promise<SupportMessageRow[]> {
+  const cursorClause = after
+    ? "AND (created_at > ? OR (created_at = ? AND id > ?))"
+    : "";
   const { results } = await env.DB.prepare(`
     SELECT id, thread_id, sender_role, sender_user_id, text, created_at
     FROM support_messages
     WHERE thread_id = ?
+      ${cursorClause}
     ORDER BY created_at ASC, id ASC
-  `).bind(threadId).all<SupportMessageRow>();
+  `).bind(
+    threadId,
+    ...(after ? [after.createdAt, after.createdAt, after.id] : []),
+  ).all<SupportMessageRow>();
   return results || [];
 }
 
@@ -1187,8 +1204,50 @@ export async function handleSupport(request: Request, env: Env): Promise<Respons
   return Response.json({ error: "invalid_action" }, { status: 400 });
 }
 
+async function readPlatformDashboardStats(env: Env): Promise<PlatformDashboardStatsRow | null> {
+  return env.DB.prepare(`
+    WITH message_rollup AS (
+      SELECT
+        thread_id,
+        MAX(CASE WHEN sender_role = 'user' THEN support_messages.created_at END) AS last_user_message_at,
+        MAX(CASE WHEN sender_role = 'platform_admin' THEN support_messages.created_at END) AS last_admin_message_at
+      FROM support_messages
+      INNER JOIN support_threads open_threads ON open_threads.id = support_messages.thread_id AND open_threads.status = 'open'
+      GROUP BY thread_id
+    )
+    SELECT
+      COUNT(*) AS open_count,
+      SUM(CASE WHEN mr.last_admin_message_at IS NULL OR mr.last_user_message_at > mr.last_admin_message_at THEN 1 ELSE 0 END) AS waiting_for_admin_count,
+      SUM(CASE WHEN mr.last_admin_message_at IS NOT NULL AND (mr.last_user_message_at IS NULL OR mr.last_admin_message_at >= mr.last_user_message_at) THEN 1 ELSE 0 END) AS waiting_for_user_count,
+      SUM(CASE WHEN mr.last_user_message_at IS NOT NULL AND (ar.read_at IS NULL OR mr.last_user_message_at > ar.read_at) THEN 1 ELSE 0 END) AS unread_for_admin_count,
+      SUM(CASE WHEN st.updated_at <= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS stale_24h_count,
+      SUM(CASE WHEN st.updated_at <= datetime('now', '-72 hours') THEN 1 ELSE 0 END) AS stale_72h_count,
+      MIN(st.created_at) AS oldest_open_at
+    FROM support_threads st
+    LEFT JOIN message_rollup mr ON mr.thread_id = st.id
+    LEFT JOIN support_thread_reads ar ON ar.thread_id = st.id AND ar.actor_role = 'platform_admin'
+    WHERE st.status = 'open'
+  `).first<PlatformDashboardStatsRow>();
+}
+
+function serializePlatformDashboardStats(row: PlatformDashboardStatsRow | null) {
+  const oldestOpenMs = parseIsoMs(row?.oldest_open_at);
+  return {
+    open_count: Number(row?.open_count || 0),
+    waiting_for_admin_count: Number(row?.waiting_for_admin_count || 0),
+    waiting_for_user_count: Number(row?.waiting_for_user_count || 0),
+    unread_for_admin_count: Number(row?.unread_for_admin_count || 0),
+    stale_24h_count: Number(row?.stale_24h_count || 0),
+    stale_72h_count: Number(row?.stale_72h_count || 0),
+    oldest_open_duration_minutes: oldestOpenMs === null
+      ? 0
+      : Math.max(0, Math.floor((Date.now() - oldestOpenMs) / 60_000)),
+  };
+}
+
 async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale, env: Env): Promise<Response> {
   const reportsChannelId = getReportsChannelId(env);
+  const includeStats = requestUrl.searchParams.get("include_stats") !== "0";
   const requestedOpenLimit = Number.parseInt(requestUrl.searchParams.get("open_limit") || "", 10);
   const openLimit = Number.isFinite(requestedOpenLimit)
     ? Math.min(Math.max(requestedOpenLimit, 1), SUPPORT_DASHBOARD_OPEN_TICKET_MAX_LIMIT)
@@ -1229,29 +1288,9 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
     ORDER BY st.updated_at DESC, st.id DESC
     LIMIT ?
   `).bind(SUPPORT_DASHBOARD_CLOSED_TICKET_LIMIT).all<PlatformDashboardTicketRow>();
-  const supportStatsPromise = env.DB.prepare(`
-    WITH message_rollup AS (
-      SELECT
-        thread_id,
-        MAX(CASE WHEN sender_role = 'user' THEN support_messages.created_at END) AS last_user_message_at,
-        MAX(CASE WHEN sender_role = 'platform_admin' THEN support_messages.created_at END) AS last_admin_message_at
-      FROM support_messages
-      INNER JOIN support_threads open_threads ON open_threads.id = support_messages.thread_id AND open_threads.status = 'open'
-      GROUP BY thread_id
-    )
-    SELECT
-      COUNT(*) AS open_count,
-      SUM(CASE WHEN mr.last_admin_message_at IS NULL OR mr.last_user_message_at > mr.last_admin_message_at THEN 1 ELSE 0 END) AS waiting_for_admin_count,
-      SUM(CASE WHEN mr.last_admin_message_at IS NOT NULL AND (mr.last_user_message_at IS NULL OR mr.last_admin_message_at >= mr.last_user_message_at) THEN 1 ELSE 0 END) AS waiting_for_user_count,
-      SUM(CASE WHEN mr.last_user_message_at IS NOT NULL AND (ar.read_at IS NULL OR mr.last_user_message_at > ar.read_at) THEN 1 ELSE 0 END) AS unread_for_admin_count,
-      SUM(CASE WHEN st.updated_at <= datetime('now', '-24 hours') THEN 1 ELSE 0 END) AS stale_24h_count,
-      SUM(CASE WHEN st.updated_at <= datetime('now', '-72 hours') THEN 1 ELSE 0 END) AS stale_72h_count,
-      MIN(st.created_at) AS oldest_open_at
-    FROM support_threads st
-    LEFT JOIN message_rollup mr ON mr.thread_id = st.id
-    LEFT JOIN support_thread_reads ar ON ar.thread_id = st.id AND ar.actor_role = 'platform_admin'
-    WHERE st.status = 'open'
-  `).first<PlatformDashboardStatsRow>();
+  const supportStatsPromise = includeStats
+    ? readPlatformDashboardStats(env)
+    : Promise.resolve<PlatformDashboardStatsRow | null>(null);
 
   const [
     reportsChannel,
@@ -1284,10 +1323,6 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
     has_admin_reply: !!thread.has_admin_reply,
   }));
   const tickets = [...openTickets, ...closedTickets];
-  const oldestOpenMs = parseIsoMs(supportStats?.oldest_open_at);
-  const oldestOpenDurationMinutes = oldestOpenMs === null
-    ? 0
-    : Math.max(0, Math.floor((Date.now() - oldestOpenMs) / 60_000));
   const lastOpenRow = visibleOpenRows.at(-1);
 
   return Response.json({
@@ -1305,22 +1340,54 @@ async function fetchPlatformSupportDashboard(requestUrl: URL, locale: UserLocale
       has_more: hasMoreOpenTickets,
       next_cursor: hasMoreOpenTickets && lastOpenRow ? `${lastOpenRow.updated_at}|${lastOpenRow.id}` : null,
     },
-    support_stats: {
-      open_count: Number(supportStats?.open_count || 0),
-      waiting_for_admin_count: Number(supportStats?.waiting_for_admin_count || 0),
-      waiting_for_user_count: Number(supportStats?.waiting_for_user_count || 0),
-      unread_for_admin_count: Number(supportStats?.unread_for_admin_count || 0),
-      stale_24h_count: Number(supportStats?.stale_24h_count || 0),
-      stale_72h_count: Number(supportStats?.stale_72h_count || 0),
-      oldest_open_duration_minutes: oldestOpenDurationMinutes,
-    },
+    support_stats: includeStats ? serializePlatformDashboardStats(supportStats) : undefined,
   });
 }
 
-async function fetchPlatformSupportThreadDetail(threadId: string, locale: UserLocale, env: Env): Promise<Response> {
+async function fetchPlatformDashboardStats(env: Env): Promise<Response> {
+  return Response.json({
+    support_stats: serializePlatformDashboardStats(await readPlatformDashboardStats(env)),
+  });
+}
+
+async function fetchPlatformDashboardVersion(env: Env): Promise<Response> {
+  const [threadVersion, reportVersion] = await Promise.all([
+    env.DB.prepare(`
+      SELECT
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS active_count,
+        MAX(updated_at) AS latest_at
+      FROM support_threads
+    `).first<PlatformDashboardVersionRow>(),
+    env.DB.prepare(`
+      SELECT
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS active_count,
+        MAX(COALESCE(resolved_at, created_at)) AS latest_at
+      FROM channel_reports
+    `).first<PlatformDashboardVersionRow>(),
+  ]);
+  return Response.json({
+    version: [
+      Number(threadVersion?.total_count || 0),
+      Number(threadVersion?.active_count || 0),
+      threadVersion?.latest_at || "",
+      Number(reportVersion?.total_count || 0),
+      Number(reportVersion?.active_count || 0),
+      reportVersion?.latest_at || "",
+    ].join(":"),
+  });
+}
+
+async function fetchPlatformSupportThreadDetail(
+  threadId: string,
+  locale: UserLocale,
+  env: Env,
+  after?: { createdAt: string; id: string } | null,
+): Promise<Response> {
   const [thread, messages] = await Promise.all([
     fetchSupportThreadById(threadId, env),
-    fetchSupportMessages(threadId, env),
+    fetchSupportMessages(threadId, env, after),
   ]);
   if (!thread) {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
@@ -1516,20 +1583,37 @@ export async function handlePlatformSupport(request: Request, env: Env): Promise
   if (!actorUserId) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
-  const locale = await getUserLocale(actorUserId, env);
-
   if (request.method === "GET") {
     const url = new URL(request.url);
     const type = url.searchParams.get("type") || "dashboard";
-    if (type === "dashboard") {
-      return fetchPlatformSupportDashboard(url, locale, env);
+    if (type === "dashboard-version") {
+      return fetchPlatformDashboardVersion(env);
+    }
+    if (type === "dashboard-stats") {
+      return fetchPlatformDashboardStats(env);
     }
     if (type === "health") {
       return fetchPlatformOperationalHealth(env);
     }
+    const locale = await getUserLocale(actorUserId, env);
+    if (type === "dashboard") {
+      return fetchPlatformSupportDashboard(url, locale, env);
+    }
     if (type === "thread") {
       const threadId = url.searchParams.get("thread_id") || "";
-      return fetchPlatformSupportThreadDetail(threadId, locale, env);
+      const afterCreatedAt = url.searchParams.get("after_created_at") || "";
+      const afterId = url.searchParams.get("after_id") || "";
+      if (
+        afterCreatedAt.length > 64
+        || afterId.length > 100
+        || (afterCreatedAt && !Number.isFinite(Date.parse(afterCreatedAt)))
+      ) {
+        return Response.json({ error: "invalid_message_cursor" }, { status: 400 });
+      }
+      const after = afterCreatedAt && afterId
+        ? { createdAt: afterCreatedAt, id: afterId }
+        : null;
+      return fetchPlatformSupportThreadDetail(threadId, locale, env, after);
     }
     if (type === "session") {
       const sessionId = url.searchParams.get("session_id") || "";

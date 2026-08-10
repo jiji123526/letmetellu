@@ -42,3 +42,14 @@ test("support dashboard indexes cover pagination and both message lookup orders"
   assert.match(supportIndexMigration, /DROP INDEX IF EXISTS support_threads_status_updated_idx/);
   assert.match(supportIndexMigration, /DROP INDEX IF EXISTS support_messages_thread_idx/);
 });
+
+test("platform support polling uses incremental messages and lightweight dashboard probes", () => {
+  assert.match(
+    supportRouteSource,
+    /AND \(created_at > \? OR \(created_at = \? AND id > \?\)\)/,
+  );
+  assert.match(supportRouteSource, /type === "dashboard-version"/);
+  assert.match(supportRouteSource, /type === "dashboard-stats"/);
+  assert.match(supportRouteSource, /requestUrl\.searchParams\.get\("include_stats"\) !== "0"/);
+  assert.match(supportRouteSource, /invalid_message_cursor/);
+});

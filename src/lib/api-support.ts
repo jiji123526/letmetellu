@@ -1,6 +1,7 @@
 import { IS_MOCK } from "./api-core";
 import type {
   PlatformDashboardResponse,
+  PlatformDashboardVersionResponse,
   PlatformOperationalHealthResponse,
   PlatformSupportSessionResponse,
   PlatformSupportThreadResponse,
@@ -13,6 +14,7 @@ import type {
 
 export type {
   PlatformDashboardResponse,
+  PlatformDashboardVersionResponse,
   PlatformDashboardSupportStats,
   PlatformOperationalHealthResponse,
   PlatformOperationalHealthRoute,
@@ -279,14 +281,37 @@ export async function clearSupportSession(sessionId: string) {
   });
 }
 
-export async function fetchPlatformDashboard(openCursor?: string | null) {
+export async function fetchPlatformDashboard(
+  openCursor?: string | null,
+  options?: { includeStats?: boolean },
+) {
   if (IS_MOCK) {
     const mockApi = await loadSupportMockApi();
     return mockApi.fetchMockPlatformDashboard();
   }
   const params = new URLSearchParams({ type: "dashboard" });
   if (openCursor) params.set("open_cursor", openCursor);
+  if (options?.includeStats === false) params.set("include_stats", "0");
   return requestSupportJson<PlatformDashboardResponse>(`/api/platform-admin/support?${params.toString()}`, {
+    cache: "no-store",
+  });
+}
+
+export async function fetchPlatformDashboardVersion() {
+  if (IS_MOCK) {
+    return { version: "mock", _status: 200 };
+  }
+  return requestSupportJson<PlatformDashboardVersionResponse>("/api/platform-admin/support?type=dashboard-version", {
+    cache: "no-store",
+  });
+}
+
+export async function fetchPlatformDashboardStats() {
+  if (IS_MOCK) {
+    const dashboard = await fetchPlatformDashboard();
+    return { support_stats: dashboard.support_stats ?? null, _status: dashboard._status };
+  }
+  return requestSupportJson<Pick<PlatformDashboardResponse, "support_stats">>("/api/platform-admin/support?type=dashboard-stats", {
     cache: "no-store",
   });
 }
@@ -301,12 +326,20 @@ export async function fetchPlatformOperationalHealth() {
   });
 }
 
-export async function fetchPlatformSupportThread(threadId: string) {
+export async function fetchPlatformSupportThread(
+  threadId: string,
+  after?: { createdAt: string; id: string } | null,
+) {
   if (IS_MOCK) {
     const mockApi = await loadSupportMockApi();
     return mockApi.fetchMockPlatformSupportThread(threadId);
   }
-  return requestSupportJson<PlatformSupportThreadResponse>(`/api/platform-admin/support?type=thread&thread_id=${encodeURIComponent(threadId)}`, {
+  const params = new URLSearchParams({ type: "thread", thread_id: threadId });
+  if (after) {
+    params.set("after_created_at", after.createdAt);
+    params.set("after_id", after.id);
+  }
+  return requestSupportJson<PlatformSupportThreadResponse>(`/api/platform-admin/support?${params.toString()}`, {
     cache: "no-store",
   });
 }

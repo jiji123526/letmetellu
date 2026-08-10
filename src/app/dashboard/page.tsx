@@ -13,6 +13,8 @@ import {
   clearStoredSupportTicketPreview,
   closeSupportThread,
   fetchPlatformDashboard,
+  fetchPlatformDashboardStats,
+  fetchPlatformDashboardVersion,
   fetchPlatformOperationalHealth,
   fetchSupportPreview,
   readStoredSupportTicketPreview,
@@ -102,6 +104,7 @@ interface DashboardListItem {
 }
 
 const ADMIN_DASHBOARD_POLL_MS = 60000;
+const ADMIN_DASHBOARD_STATS_POLL_MS = 5 * 60 * 1000;
 const OPERATIONAL_HEALTH_POLL_MS = 5 * 60 * 1000;
 const OPERATIONAL_HEALTH_MIN_REFRESH_MS = 60 * 1000;
 const SUPPORT_PREVIEW_POLL_MS = 60000;
@@ -323,6 +326,7 @@ function DashboardPageContent() {
   const [operationalHealth, setOperationalHealth] = useState<PlatformOperationalHealthResponse | null>(null);
   const [operationalHealthLoading, setOperationalHealthLoading] = useState(false);
   const [operationalHealthError, setOperationalHealthError] = useState(false);
+  const [operationalHealthExpanded, setOperationalHealthExpanded] = useState(false);
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -338,7 +342,11 @@ function DashboardPageContent() {
   const listAnimationsEnabledRef = useRef(false);
   const loadChannelsInFlightRef = useRef<Promise<boolean> | null>(null);
   const loadPlatformDashboardInFlightRef = useRef<Promise<boolean> | null>(null);
+  const loadPlatformDashboardVersionInFlightRef = useRef<Promise<void> | null>(null);
+  const loadPlatformDashboardStatsInFlightRef = useRef<Promise<void> | null>(null);
   const platformDashboardLoadedAtRef = useRef(0);
+  const platformDashboardStatsLoadedAtRef = useRef(0);
+  const platformDashboardVersionRef = useRef<string | null>(null);
   const loadOperationalHealthInFlightRef = useRef<Promise<void> | null>(null);
   const operationalHealthLoadedAtRef = useRef(0);
   const loadSupportPreviewInFlightRef = useRef<Promise<void> | null>(null);
@@ -520,7 +528,7 @@ function DashboardPageContent() {
     }
   }, []);
 
-  const loadPlatformDashboard = useCallback((): Promise<boolean> => {
+  const loadPlatformDashboard = useCallback((includeStats = true): Promise<boolean> => {
     if (loadPlatformDashboardInFlightRef.current) return loadPlatformDashboardInFlightRef.current;
     const request = (async (): Promise<boolean> => {
       if (status !== "authenticated") {
@@ -532,7 +540,13 @@ function DashboardPageContent() {
       }
       try {
         startDashboardRequest("admin-dashboard");
-        const result = await fetchPlatformDashboard();
+        const [result, versionResult] = await Promise.all([
+          fetchPlatformDashboard(null, { includeStats }),
+          fetchPlatformDashboardVersion(),
+        ]);
+        if (versionResult._status < 400) {
+          platformDashboardVersionRef.current = versionResult.version;
+        }
         if (result._status === 403 || result._status === 404) {
           setPlatformAdminRole((current) => current ? { ...current, isAdmin: false } : current);
           setPlatformDashboard(null);
@@ -546,14 +560,19 @@ function DashboardPageContent() {
           setPlatformDashboardError(true);
           return true;
         }
-        const nextDashboard: PlatformDashboardResponse = {
-          reportsInbox: result.reportsInbox ?? null,
-          tickets: result.tickets || [],
-          open_pagination: result.open_pagination ?? null,
-          support_stats: result.support_stats ?? null,
-        };
+        if (result.support_stats !== undefined) {
+          platformDashboardStatsLoadedAtRef.current = Date.now();
+        }
         setPlatformDashboardError(false);
         setPlatformDashboard((current) => {
+          const nextDashboard: PlatformDashboardResponse = {
+            reportsInbox: result.reportsInbox ?? null,
+            tickets: result.tickets || [],
+            open_pagination: result.open_pagination ?? null,
+            support_stats: result.support_stats !== undefined
+              ? result.support_stats
+              : current?.support_stats ?? null,
+          };
           if (!current) return nextDashboard;
           const currentOpenCount = current.tickets.filter((ticket) => ticket.status === "open").length;
           const nextOpenCount = nextDashboard.tickets.filter((ticket) => ticket.status === "open").length;
@@ -584,12 +603,61 @@ function DashboardPageContent() {
     return request;
   }, [status]);
 
+  const loadPlatformDashboardStats = useCallback((): Promise<void> => {
+    if (loadPlatformDashboardStatsInFlightRef.current) {
+      return loadPlatformDashboardStatsInFlightRef.current;
+    }
+    const request = (async () => {
+      const result = await fetchPlatformDashboardStats();
+      if (result._status >= 400 || result.support_stats === undefined) return;
+      setPlatformDashboard((current) => current ? {
+        ...current,
+        support_stats: result.support_stats ?? null,
+      } : current);
+      platformDashboardStatsLoadedAtRef.current = Date.now();
+    })().finally(() => {
+      if (loadPlatformDashboardStatsInFlightRef.current === request) {
+        loadPlatformDashboardStatsInFlightRef.current = null;
+      }
+    });
+    loadPlatformDashboardStatsInFlightRef.current = request;
+    return request;
+  }, []);
+
+  const refreshPlatformDashboardIfChanged = useCallback((): Promise<void> => {
+    if (loadPlatformDashboardVersionInFlightRef.current) {
+      return loadPlatformDashboardVersionInFlightRef.current;
+    }
+    const request = (async () => {
+      try {
+        const result = await fetchPlatformDashboardVersion();
+        if (result._status >= 400) return;
+        const previousVersion = platformDashboardVersionRef.current;
+        platformDashboardVersionRef.current = result.version;
+        const statsStale = Date.now() - platformDashboardStatsLoadedAtRef.current
+          >= ADMIN_DASHBOARD_STATS_POLL_MS;
+        if (previousVersion !== null && previousVersion !== result.version) {
+          await loadPlatformDashboard(false);
+        }
+        if (statsStale) await loadPlatformDashboardStats();
+      } finally {
+        platformDashboardLoadedAtRef.current = Date.now();
+      }
+    })().finally(() => {
+      if (loadPlatformDashboardVersionInFlightRef.current === request) {
+        loadPlatformDashboardVersionInFlightRef.current = null;
+      }
+    });
+    loadPlatformDashboardVersionInFlightRef.current = request;
+    return request;
+  }, [loadPlatformDashboard, loadPlatformDashboardStats]);
+
   const loadMorePlatformTickets = useCallback(async () => {
     const cursor = platformDashboard?.open_pagination?.next_cursor;
     if (!cursor || loadingMorePlatformTickets) return;
     setLoadingMorePlatformTickets(true);
     try {
-      const result = await fetchPlatformDashboard(cursor);
+      const result = await fetchPlatformDashboard(cursor, { includeStats: false });
       if (result._status >= 400) return;
       setPlatformDashboard((current) => {
         if (!current) return current;
@@ -743,7 +811,6 @@ function DashboardPageContent() {
         const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
         if (isAdmin) {
           const platformDashboardRequest = loadPlatformDashboard();
-          void loadOperationalHealth();
           await platformDashboardRequest;
           setLoading(false);
           return;
@@ -789,9 +856,13 @@ function DashboardPageContent() {
     const now = Date.now();
     if (isPlatformAdmin) {
       if (now - platformDashboardLoadedAtRef.current >= ADMIN_DASHBOARD_POLL_MS) {
-        void loadPlatformDashboard();
+        void refreshPlatformDashboardIfChanged();
       }
-      if (now - operationalHealthLoadedAtRef.current >= OPERATIONAL_HEALTH_POLL_MS) {
+      if (
+        operationalHealth
+        && operationalHealthExpanded
+        && now - operationalHealthLoadedAtRef.current >= OPERATIONAL_HEALTH_POLL_MS
+      ) {
         void loadOperationalHealth();
       }
       return;
@@ -799,7 +870,7 @@ function DashboardPageContent() {
     if (now - supportPreviewLoadedAtRef.current >= SUPPORT_PREVIEW_POLL_MS) {
       void loadSupportPreview();
     }
-  }, [isPlatformAdmin, loadOperationalHealth, loadPlatformDashboard, loadSupportPreview]);
+  }, [isPlatformAdmin, loadOperationalHealth, loadSupportPreview, operationalHealth, operationalHealthExpanded, refreshPlatformDashboardIfChanged]);
 
   useForegroundPolling({
     enabled: status !== "loading",
@@ -812,7 +883,9 @@ function DashboardPageContent() {
     if (status === "loading") return;
     const refresh = () => {
       if (isPlatformAdmin) {
-        void loadPlatformDashboard();
+        const includeStats = Date.now() - platformDashboardStatsLoadedAtRef.current
+          >= ADMIN_DASHBOARD_STATS_POLL_MS;
+        void loadPlatformDashboard(includeStats);
         return;
       }
       void loadSupportPreview();
@@ -1695,6 +1768,7 @@ function DashboardPageContent() {
             loading={operationalHealthLoading}
             error={operationalHealthError}
             onRefresh={() => void loadOperationalHealth(true)}
+            onExpandedChange={setOperationalHealthExpanded}
           />
         )}
 

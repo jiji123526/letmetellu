@@ -2765,3 +2765,13 @@ Trade-off: after a photo is deleted or the viewer loses access, a copy already f
 - Focus and visibility events within ten seconds of a successful thread read no longer issue another identical request. Sending a reply or closing a thread forces a fresh read and waits behind any request already in flight.
 
 Trade-offs: a new report or ticket can take up to 60 seconds to appear in the super-admin list rather than 30 seconds. Linked guided-session data is treated as immutable after ticket escalation; message-thread state remains independently refreshed every 30 seconds.
+
+### Event-sensitive super-admin reads and incremental support polling — 2026-08-09
+
+- The super-admin dashboard now polls a lightweight `dashboard-version` response once per minute. Full reports and ticket lists reload only when support-thread or channel-report activity changes, or after an explicit local action/manual refresh.
+- Support statistics were split into a dedicated endpoint and refresh independently every five minutes instead of running their message rollup on every list refresh.
+- Operational health performs no startup read. Its card is collapsed initially, loads on first expansion, and only then participates in the existing five-minute visible-tab refresh cycle.
+- Closed platform-support threads stop polling. Open threads send their last `(created_at, id)` cursor and receive only newer immutable messages, while thread status continues to refresh every 30 seconds.
+- Linked guided-session transcripts remain one read per source session, and bounded cursor validation prevents oversized or malformed incremental-read parameters.
+
+Trade-offs: the full admin list can be up to 60 seconds behind a remote change, statistics can be up to five minutes behind, and operational health is unavailable until the administrator expands its card. The lightweight version query still performs two small indexed/aggregate reads per minute, but avoids repeated ticket serialization and message-rollup work when nothing changed.
