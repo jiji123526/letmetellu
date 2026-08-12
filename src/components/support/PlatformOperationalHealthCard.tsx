@@ -33,6 +33,7 @@ export function PlatformOperationalHealthCard({
     || route.unhandled_exception_count
     || route.maintenance_failure_count
     || route.rate_limited_count
+    || route.media_not_found_count
   )).slice(0, 3);
   const updatedAt = health?.generated_at
     ? new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
@@ -90,13 +91,14 @@ export function PlatformOperationalHealthCard({
 
         {expanded && recent && (
           <>
-            <div className="grid grid-cols-5 gap-1.5 mt-3">
+            <div className="grid grid-cols-3 gap-1.5 mt-3">
               {[
                 [t("operationalHealth5xx"), recent.request_5xx_count],
                 [t("operationalHealthPreviewFailures"), recent.preview_upstream_failure_count],
                 [t("operationalHealthExceptions"), recent.unhandled_exception_count],
                 ["429", recent.rate_limited_count],
                 ["403", recent.forbidden_count],
+                [t("operationalHealthMediaMisses"), recent.media_not_found_count],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-[10px] px-2 py-2 text-center" style={{ background: "var(--bg)" }}>
                   <div className="text-[15px] font-semibold tabular-nums">{value}</div>
@@ -114,6 +116,7 @@ export function PlatformOperationalHealthCard({
                       <span className="shrink-0 tabular-nums" style={{ color: "var(--meta)" }}>
                         {t("operationalHealthRouteCounts")
                           .replace("{errors}", String(route.request_5xx_count + route.preview_upstream_failure_count + route.unhandled_exception_count + route.maintenance_failure_count))
+                          .replace("{missing}", String(route.media_not_found_count))
                           .replace("{limited}", String(route.rate_limited_count))}
                       </span>
                     </div>

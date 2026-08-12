@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Media `404` misses are now visible without affecting core health severity — 2026-08-12
+
+- Production error analytics showed enough `/api/media/...` `404` traffic that operators needed it visible, but those misses should not carry the same weight as core backend `5xx`, exceptions or maintenance failures.
+- The Worker now records grouped `media_not_found` operational events for `GET /api/media/:key` responses, with the support health payload exposing a dedicated media-`404` counter in both the 15-minute summary and 24-hour route breakdown.
+- Media paths are normalized the same way websocket paths are, so missing media no longer fragments the health view by individual object key.
+- Health severity calculation is unchanged: media `404` stays visible as a secondary signal and does not degrade the overall service status.
+- Client-cancelled `499` traffic is still edge-analytics-only. The Worker cannot reliably persist those cancels after the client disconnects upstream, so that portion remains outside the in-Worker health model for now.
+
+Trade-off: the health card now carries one more low-priority metric, which slightly increases operator detail in exchange for making media churn visible without conflating it with backend failures.
+
+Deployment note: this requires a Worker deploy for event recording and aggregation, plus a frontend deploy for the updated super-admin health card. No D1 migration is required.
+
 ### Websocket health routes now roll up by category instead of channel ID — 2026-08-12
 
 - Production error analytics included channel-specific websocket paths like `/ws/synkongii`, which fragmented the same class of connection failures across per-channel route labels and made the health view harder to interpret.

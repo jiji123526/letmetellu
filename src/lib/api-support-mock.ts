@@ -509,6 +509,7 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
     maintenance_failure_count: 0,
     rate_limited_count: 0,
     forbidden_count: 0,
+    media_not_found_count: 0,
   };
   return {
     generated_at: new Date().toISOString(),

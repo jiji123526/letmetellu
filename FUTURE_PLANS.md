@@ -56,7 +56,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### 2026-08-12 error-analytics follow-up
 
-- Keep media `404` and client-cancelled `499` traffic visible, but do not let them carry the same operator weight as core backend failures in the first-line health summary.
+- If the platform later adds bounded edge-log ingestion, surface client-cancelled `499` traffic as a separate low-priority signal rather than folding it into core backend health. Worker-side media `404` visibility is already covered by the current operational-health card.
 
 ### Measured performance follow-up
 

@@ -247,6 +247,16 @@ export default {
         statusCode: response.status,
         actorUserId: request.headers.get("X-User-Id"),
       }));
+    } else if (response.status === 404 && route === "GET /api/media/:key") {
+      ctx.waitUntil(recordOperationalEvent({
+        env,
+        severity: "info",
+        route,
+        eventType: "media_not_found",
+        statusCode: response.status,
+        actorUserId: request.headers.get("X-User-Id"),
+        detail: routeDetail || undefined,
+      }));
     } else if (response.status === 403) {
       ctx.waitUntil(recordOperationalEvent({
         env,
@@ -255,6 +265,7 @@ export default {
         eventType: "forbidden",
         statusCode: response.status,
         actorUserId: request.headers.get("X-User-Id"),
+        detail: routeDetail || undefined,
       }));
     } else if (response.status >= 500 && !capturedUnhandledException) {
       ctx.waitUntil(recordOperationalEvent({
@@ -264,6 +275,7 @@ export default {
         eventType: getOperationalEventOverride(response) || "request_failed",
         statusCode: response.status,
         actorUserId: request.headers.get("X-User-Id"),
+        detail: routeDetail || undefined,
       }));
     }
 

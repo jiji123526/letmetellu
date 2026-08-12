@@ -208,6 +208,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
     maintenance_failure_count: undefined,
     rate_limited_count: "7",
     forbidden_count: 3,
+    media_not_found_count: "9",
   }), {
     tracked_event_count: 12,
     request_5xx_count: 2,
@@ -216,6 +217,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
     maintenance_failure_count: 0,
     rate_limited_count: 7,
     forbidden_count: 3,
+    media_not_found_count: 9,
   });
 });
 
@@ -244,10 +246,16 @@ test("operational event overrides stay internal to Worker bookkeeping", () => {
 
 test("operational route normalization groups websocket channel paths", () => {
   assert.equal(normalizeOperationalRoute("get", "/ws/zziks"), "GET /ws/:channel");
+  assert.equal(normalizeOperationalRoute("get", "/api/media/zziks/example.jpg"), "GET /api/media/:key");
   assert.equal(normalizeOperationalRoute("post", "/api/messages"), "POST /api/messages");
   assert.deepEqual(getOperationalRouteDetail("/ws/zziks"), {
     route_group: "websocket",
     request_channel_id: "zziks",
+  });
+  assert.deepEqual(getOperationalRouteDetail("/api/media/zziks/example.jpg"), {
+    route_group: "media",
+    request_channel_id: "zziks",
+    request_media_key: "zziks/example.jpg",
   });
   assert.equal(getOperationalRouteDetail("/api/messages"), null);
 });

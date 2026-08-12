@@ -6,6 +6,7 @@ export interface OperationalHealthWindowRow {
   maintenance_failure_count?: number | string | null;
   rate_limited_count?: number | string | null;
   forbidden_count?: number | string | null;
+  media_not_found_count?: number | string | null;
 }
 
 export interface OperationalHealthWindow {
@@ -16,6 +17,7 @@ export interface OperationalHealthWindow {
   maintenance_failure_count: number;
   rate_limited_count: number;
   forbidden_count: number;
+  media_not_found_count: number;
 }
 
 function count(value: number | string | null | undefined): number {
@@ -34,6 +36,7 @@ export function serializeOperationalHealthWindow(
     maintenance_failure_count: count(row?.maintenance_failure_count),
     rate_limited_count: count(row?.rate_limited_count),
     forbidden_count: count(row?.forbidden_count),
+    media_not_found_count: count(row?.media_not_found_count),
   };
 }
 

@@ -58,12 +58,24 @@ export function normalizeOperationalRoute(method: string, pathname: string): str
   if (pathname.startsWith("/ws/")) {
     return `${normalizedMethod} /ws/:channel`;
   }
+  if (pathname.startsWith("/api/media/")) {
+    return `${normalizedMethod} /api/media/:key`;
+  }
   return `${normalizedMethod} ${pathname}`;
 }
 
 export function getOperationalRouteDetail(pathname: string): OperationalErrorDetail | null {
   if (!pathname.startsWith("/ws/")) {
-    return null;
+    if (!pathname.startsWith("/api/media/")) {
+      return null;
+    }
+    const mediaKey = decodeURIComponent(pathname.replace("/api/media/", ""));
+    const requestChannelId = mediaKey.split("/")[0] || null;
+    return {
+      route_group: "media",
+      request_channel_id: requestChannelId,
+      request_media_key: mediaKey,
+    };
   }
   const channelId = pathname.split("/ws/")[1]?.split("/")[0] || null;
   return {

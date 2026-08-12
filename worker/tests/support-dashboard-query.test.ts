@@ -74,4 +74,12 @@ test("operational health groups websocket routes by normalized channel path", ()
     workerIndexSource,
     /normalizeOperationalRoute\(request\.method, url\.pathname\)/,
   );
+  assert.match(
+    workerIndexSource,
+    /response\.status === 404 && route === "GET \/api\/media\/:key"/,
+  );
+  assert.match(
+    supportRouteSource,
+    /SUM\(CASE WHEN event_type = 'media_not_found' THEN 1 ELSE 0 END\) AS media_not_found_count/,
+  );
 });

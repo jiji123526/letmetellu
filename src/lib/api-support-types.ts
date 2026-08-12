@@ -154,6 +154,7 @@ export interface PlatformOperationalHealthWindow {
   maintenance_failure_count: number;
   rate_limited_count: number;
   forbidden_count: number;
+  media_not_found_count: number;
 }
 
 export interface PlatformOperationalHealthRoute extends PlatformOperationalHealthWindow {
