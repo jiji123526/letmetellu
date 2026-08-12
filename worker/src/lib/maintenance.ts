@@ -71,8 +71,10 @@ async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<numb
   for (const row of results || []) {
     const liveSession = parseLiveSessionState(row.text, row.updated_at);
     if (!isLiveSessionExpired(liveSession, nowMs)) continue;
-    await endLiveSession(env, row.channel_id, "expired");
-    expiredCount += 1;
+    const result = await endLiveSession(env, row.channel_id, "expired", liveSession!.sessionId);
+    if (result.status === "ended") {
+      expiredCount += 1;
+    }
   }
   return expiredCount;
 }

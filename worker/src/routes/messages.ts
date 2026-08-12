@@ -79,7 +79,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         if (!liveSession || isLiveSessionExpired(liveSession)) {
           if (liveSession) {
             routeStage = "expire_live_state";
-            await endLiveSession(env, parentChannelId, "expired");
+            await endLiveSession(env, parentChannelId, "expired", liveSession.sessionId);
           }
           return Response.json({ error: "live_session_ended" }, { status: 403 });
         }

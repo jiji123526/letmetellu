@@ -57,7 +57,6 @@ interface UseChatRealtimeSyncArgs {
   connected: boolean;
   uid: string;
   isOwner: boolean;
-  isAdmin: boolean;
   isLoggedIn: boolean;
   localBubbleColor: string | null;
   subscribe: (handler: (event: RealtimeEvent) => void) => () => void;
@@ -69,6 +68,9 @@ interface UseChatRealtimeSyncArgs {
   pendingReactionUpdatesRef: MutableRefObject<Map<string, string>>;
   reactionFrameRef: MutableRefObject<number | null>;
   applyInitData: (data: InitData) => void;
+  applyLiveSnapshot: (live: InitData["live"]) => void;
+  liveActive: boolean;
+  liveSessionId: string;
   showPasscodeGate: (notice?: string, bannerText?: string) => void;
   clearRoomAccessBanner: () => void;
   refreshOwnerModeration: () => void;
@@ -105,7 +107,6 @@ export function useChatRealtimeSync({
   connected,
   uid,
   isOwner,
-  isAdmin,
   isLoggedIn,
   localBubbleColor,
   subscribe,
@@ -117,6 +118,9 @@ export function useChatRealtimeSync({
   pendingReactionUpdatesRef,
   reactionFrameRef,
   applyInitData,
+  applyLiveSnapshot,
+  liveActive,
+  liveSessionId,
   showPasscodeGate,
   clearRoomAccessBanner,
   refreshOwnerModeration,
@@ -170,47 +174,37 @@ export function useChatRealtimeSync({
     }
   }, [channelId, getViewingChannelId, setMessages]);
 
-  const refreshCurrentChannelInit = useCallback(async (traceCycleId?: string) => {
-    const fetchChannel = getViewingChannelId();
+  const fetchTrackedInit = useCallback(async (
+    fetchChannel: string,
+    traceCycleId?: string,
+  ): Promise<InitData> => {
     if (traceCycleId) {
       startChatPerformanceRequest(channelId, traceCycleId, "init");
     }
     try {
-      const data = await fetchInit(fetchChannel) as InitData;
-      applyInitData(data);
+      return await fetchInit(fetchChannel) as InitData;
     } finally {
       if (traceCycleId) {
         finishChatPerformanceRequest(channelId, traceCycleId, "init");
       }
     }
-  }, [applyInitData, channelId, getViewingChannelId]);
+  }, [channelId]);
 
-  const refreshViewerChannelState = useCallback(async (traceCycleId?: string) => {
-    const fetchChannel = getViewingChannelId();
-    if (traceCycleId) {
-      startChatPerformanceRequest(channelId, traceCycleId, "init");
+  const applyLightweightInitData = useCallback((data: InitData) => {
+    if (!data.channel || data.messages === undefined) return;
+    setChannel(data.channel);
+    if (historyModeRef.current === "latest") {
+      setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
     }
-    try {
-      const data = await fetchInit(fetchChannel) as InitData;
-      if (!data.channel || data.messages === undefined) return;
-      setChannel(data.channel);
-      if (historyModeRef.current === "latest") {
-        setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
-      }
-      if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
-      if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
-      if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
-      if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
-      setOwnerModeration(data.ownerModeration);
-      setViewerModerationStatus(data.viewerModerationStatus ?? null);
-    } finally {
-      if (traceCycleId) {
-        finishChatPerformanceRequest(channelId, traceCycleId, "init");
-      }
-    }
+    if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
+    if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
+    if (data.petitionEnabled !== undefined) setPetitionEnabled(data.petitionEnabled);
+    if (data.dmEnabled !== undefined) setDmEnabled(data.dmEnabled);
+    setOwnerModeration(data.ownerModeration);
+    setViewerModerationStatus(data.viewerModerationStatus ?? null);
+    applyLiveSnapshot(data.live);
   }, [
-    channelId,
-    getViewingChannelId,
+    applyLiveSnapshot,
     historyModeRef,
     setActiveNotice,
     setChannel,
@@ -221,6 +215,65 @@ export function useChatRealtimeSync({
     setViewerModerationStatus,
     setWelcomeConfig,
   ]);
+
+  const applyReconnectInitData = useCallback((data: InitData) => {
+    if (isOwner) {
+      applyInitData(data);
+      return;
+    }
+    applyLightweightInitData(data);
+  }, [applyInitData, applyLightweightInitData, isOwner]);
+
+  const reconcileCurrentLiveSession = useCallback(async (traceCycleId?: string) => {
+    const wasInLiveMode = inLiveModeRef.current;
+    const fetchChannel = wasInLiveMode ? `${channelId}_live` : channelId;
+    const data = await fetchTrackedInit(fetchChannel, traceCycleId);
+    const serverLive = data.live?.active ? data.live : null;
+    const serverSessionId = serverLive?.sessionId || "";
+    const sameSession = Boolean(
+      serverLive
+      && (!liveSessionId || serverSessionId === liveSessionId),
+    );
+
+    if (wasInLiveMode && !sameSession) {
+      endLiveSessionLocally({
+        clearSeen: true,
+        showEndedPopup: !serverLive,
+      });
+      const normalData = await fetchTrackedInit(channelId, traceCycleId);
+      applyInitData(normalData);
+      if (serverLive) {
+        handleLiveStartedEvent({
+          title: serverLive.title,
+          sessionId: serverSessionId,
+          expiresAt: serverLive.expiresAt || null,
+        });
+      }
+      return { shouldJoinLive: false, sessionId: "" };
+    }
+
+    applyReconnectInitData(data);
+    return {
+      shouldJoinLive: wasInLiveMode && sameSession,
+      sessionId: serverSessionId,
+    };
+  }, [
+    applyInitData,
+    applyReconnectInitData,
+    channelId,
+    endLiveSessionLocally,
+    fetchTrackedInit,
+    handleLiveStartedEvent,
+    inLiveModeRef,
+    liveSessionId,
+  ]);
+
+  const synchronizeLiveSession = useCallback(async (traceCycleId?: string) => {
+    const result = await reconcileCurrentLiveSession(traceCycleId);
+    if (result.shouldJoinLive && result.sessionId) {
+      send({ type: "join-live", sessionId: result.sessionId });
+    }
+  }, [reconcileCurrentLiveSession, send]);
 
   useEffect(() => {
     return subscribe((event) => {
@@ -297,18 +350,10 @@ export function useChatRealtimeSync({
 
       if (event.type === "reconnected") {
         const traceCycleId = typeof event.traceCycleId === "string" ? event.traceCycleId : null;
-        if (isOwner) {
-          settleTraceRequest(traceCycleId, refreshCurrentChannelInit(traceCycleId || undefined));
-        } else if (!isAdmin) {
-          settleTraceRequest(traceCycleId, refreshViewerChannelState(traceCycleId || undefined));
-        } else if (historyModeRef.current === "latest") {
-          settleTraceRequest(traceCycleId, refreshLatestMessages(traceCycleId || undefined));
-        } else if (traceCycleId) {
-          completeChatPerformanceCycle(channelId, traceCycleId, "settled");
-        }
-        if (inLiveModeRef.current) {
-          send({ type: "join-live" });
-        }
+        settleTraceRequest(
+          traceCycleId,
+          synchronizeLiveSession(traceCycleId || undefined),
+        );
       }
 
       if (event.type === "dm-new") {
@@ -428,7 +473,7 @@ export function useChatRealtimeSync({
       if (event.type === "room-access-opened") {
         clearRoomAccessBanner();
         setPasscodeGate(null);
-        void refreshCurrentChannelInit().catch(() => {});
+        void synchronizeLiveSession().catch(() => {});
       }
 
       if (event.type === "room-access-revoked") {
@@ -513,7 +558,6 @@ export function useChatRealtimeSync({
     channelId,
     uid,
     isOwner,
-    isAdmin,
     isLoggedIn,
     localBubbleColor,
     send,
@@ -549,8 +593,7 @@ export function useChatRealtimeSync({
     setShowChannelDeleted,
     getViewingChannelId,
     refreshLatestMessages,
-    refreshCurrentChannelInit,
-    refreshViewerChannelState,
+    synchronizeLiveSession,
     deletedMessage,
     roomAuthExpired,
     passcodeChanged,
@@ -565,18 +608,32 @@ export function useChatRealtimeSync({
         return;
       }
       const hiddenDurationMs = Date.now() - lastHidden;
-      if (!lastHidden || hiddenDurationMs <= 5 * 60 * 1000) return;
+      if (!lastHidden) return;
       if (!connected) return;
-      if (historyModeRef.current === "context") return;
+      const shouldSynchronizeLive = liveActive || inLiveModeRef.current;
+      const shouldRefreshMessages = hiddenDurationMs > 5 * 60 * 1000
+        && historyModeRef.current !== "context";
+      if (!shouldSynchronizeLive && !shouldRefreshMessages) return;
       const traceCycleId = startChatPerformanceCycle(channelId, "visibility-resume", {
         hiddenForMs: hiddenDurationMs,
       });
-      void refreshLatestMessages(traceCycleId).then(
+      const refresh = shouldSynchronizeLive
+        ? synchronizeLiveSession(traceCycleId)
+        : refreshLatestMessages(traceCycleId);
+      void refresh.then(
         () => completeChatPerformanceCycle(channelId, traceCycleId, "settled"),
         () => completeChatPerformanceCycle(channelId, traceCycleId, "failed"),
       );
     };
     document.addEventListener("visibilitychange", handler);
     return () => document.removeEventListener("visibilitychange", handler);
-  }, [channelId, connected, historyModeRef, refreshLatestMessages]);
+  }, [
+    channelId,
+    connected,
+    historyModeRef,
+    inLiveModeRef,
+    liveActive,
+    refreshLatestMessages,
+    synchronizeLiveSession,
+  ]);
 }

@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Live-session ending now reconciles stale and background tabs — 2026-08-12
+
+- Live end requests now include the session ID the owner tab believes it is ending. The Worker conditionally claims only that exact session, so an old owner tab cannot terminate or delete a newer live session.
+- Reconnecting viewers and tabs returning from the background now refresh authoritative live state before sending `join-live`. Ended sessions return to normal chat, changed sessions show the current join prompt, and unchanged sessions restore live presence.
+- The Durable Object validates every live-presence join against D1, clears persisted live-presence flags when a session ends, and returns the current session snapshot when a client presents a stale ID.
+- Owner tabs retain their current live UI until the end request succeeds. Failed requests remain retryable, while a session-conflict response exits the stale session and loads the current state.
+- Tabs in the same browser also react to the persisted live-active flag changing to false, reducing the delay between an end action in one tab and cleanup in another.
+- Regression coverage verifies matching, stale and already-ended session behavior plus the reconnect and websocket session guards.
+
+Trade-off: reconnecting or foregrounded tabs that still hold local live state perform an additional `/api/init` reconciliation before restoring presence. Live ending also waits for Worker confirmation instead of appearing instantaneous, which prevents destructive stale-tab actions and false local success.
+
+Deployment note: this requires both a frontend and Worker deploy. No D1 migration is required.
+
 ### Media `404` misses are now visible without affecting core health severity — 2026-08-12
 
 - Production error analytics showed enough `/api/media/...` `404` traffic that operators needed it visible, but those misses should not carry the same weight as core backend `5xx`, exceptions or maintenance failures.

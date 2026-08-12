@@ -54,7 +54,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       const liveSession = await readLiveSessionState(env, parentChannelId);
       if (!liveSession || isLiveSessionExpired(liveSession)) {
         if (liveSession) {
-          await endLiveSession(env, parentChannelId, "expired");
+          await endLiveSession(env, parentChannelId, "expired", liveSession.sessionId);
         }
         return Response.json({ error: "live_session_ended" }, { status: 403 });
       }

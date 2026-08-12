@@ -820,8 +820,20 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "end-live": {
-      await endLiveSession(env, channel_id, "manual");
-      return Response.json({ ok: true });
+      const expectedSessionId = typeof payload?.sessionId === "string"
+        ? payload.sessionId
+        : "";
+      if (!expectedSessionId) {
+        return Response.json({ error: "missing_live_session_id" }, { status: 400 });
+      }
+      const result = await endLiveSession(env, channel_id, "manual", expectedSessionId);
+      if (result.status === "session_changed") {
+        return Response.json({
+          error: "live_session_changed",
+          live: result.live,
+        }, { status: 409 });
+      }
+      return Response.json({ ok: true, ended: result.status === "ended" });
     }
 
     default:

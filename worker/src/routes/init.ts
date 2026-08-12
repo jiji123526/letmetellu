@@ -198,7 +198,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     liveStatus = parseLiveSessionState(liveConfigRow?.text, liveConfigRow?.updated_at);
     if (isLiveSessionExpired(liveStatus)) {
       routeStage = "expire_live_state";
-      await endLiveSession(env, parentChannelId, "expired");
+      await endLiveSession(env, parentChannelId, "expired", liveStatus!.sessionId);
       liveStatus = null;
     }
 

@@ -1,5 +1,6 @@
 import type { Env } from "../types";
 import { deleteMediaByUrl } from "./media";
+import { getLiveSessionEndDisposition } from "./live-session-end";
 
 const HOUR_MS = 60 * 60 * 1000;
 export const LIVE_SESSION_DURATION_HOURS = 8;
@@ -13,6 +14,11 @@ export interface LiveSessionState {
   startedAt: string;
   expiresAt: string;
 }
+
+export type LiveSessionEndResult =
+  | { status: "ended"; live: LiveSessionState }
+  | { status: "already_ended"; live: null }
+  | { status: "session_changed"; live: LiveSessionState };
 
 function normalizeIso(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -78,12 +84,34 @@ export async function endLiveSession(
   env: Env,
   channelId: string,
   reason: "manual" | "expired" = "manual",
-): Promise<void> {
+  expectedSessionId: string,
+): Promise<LiveSessionEndResult> {
   const liveChannelId = `${channelId}_live`;
+  const liveRow = await env.DB.prepare(
+    "SELECT text, updated_at FROM config WHERE id = ? LIMIT 1"
+  ).bind(`live_${channelId}`).first<{ text: string | null; updated_at: string | null }>();
+  const currentLive = parseLiveSessionState(liveRow?.text, liveRow?.updated_at);
+  const disposition = getLiveSessionEndDisposition(
+    currentLive?.sessionId || null,
+    expectedSessionId,
+  );
 
-  await env.DB.prepare(
-    "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
-  ).bind(`live_${channelId}`, "false", channelId, "false").run();
+  if (disposition === "already_ended") {
+    return { status: "already_ended", live: null };
+  }
+  if (disposition === "session_changed") {
+    return { status: "session_changed", live: currentLive! };
+  }
+
+  const claimed = await env.DB.prepare(
+    "UPDATE config SET text = 'false', updated_at = datetime('now') WHERE id = ? AND text = ?"
+  ).bind(`live_${channelId}`, liveRow!.text).run();
+  if (!claimed.meta.changes) {
+    const latestLive = await readLiveSessionState(env, channelId);
+    return latestLive
+      ? { status: "session_changed", live: latestLive }
+      : { status: "already_ended", live: null };
+  }
 
   const doId = env.CHAT_ROOM.idFromName(channelId);
   const stub = env.CHAT_ROOM.get(doId);
@@ -125,4 +153,6 @@ export async function endLiveSession(
     env.DB.prepare("DELETE FROM upload_tickets WHERE channel_id = ?").bind(liveChannelId),
     env.DB.prepare("DELETE FROM channels WHERE id = ?").bind(liveChannelId),
   ]);
+
+  return { status: "ended", live: currentLive! };
 }

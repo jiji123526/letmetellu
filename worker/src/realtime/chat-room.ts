@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { verifyAdminWsToken, verifyRoomViewerWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
+import { isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 import { advanceChannelRateLimit, type ChannelRateLimitBucket } from "../lib/channel-rate-limit";
@@ -182,6 +183,15 @@ export class ChatRoom {
       const eventStr = JSON.stringify(event);
       const isDmEvent = event.type === "dm-new" || event.type === "dm-deleted";
 
+      if (event.type === "live-ended") {
+        for (const [socket, connection] of this.connections) {
+          if (!connection.inLive) continue;
+          connection.inLive = false;
+          this.persistConnection(socket, connection);
+        }
+        this.queueLivePresenceBroadcast();
+      }
+
       if (isDmEvent) {
         // Only send DM events to authenticated admin connections
         this.broadcastToAdmin(eventStr);
@@ -282,7 +292,31 @@ export class ChatRoom {
         this.broadcast(message);
       }
       if (data.type === "join-live" && connection.authorized) {
-        connection.inLive = true;
+        const liveSession = await readLiveSessionState(this.env, connection.channelId);
+        const requestedSessionId = typeof data.sessionId === "string" ? data.sessionId : "";
+        const activeLiveSession = liveSession && !isLiveSessionExpired(liveSession)
+          ? liveSession
+          : null;
+        if (!activeLiveSession) {
+          connection.inLive = false;
+          socket.send(JSON.stringify({
+            type: "live-ended",
+            channel_id: connection.channelId,
+            reason: "stale-session",
+          }));
+        } else if (requestedSessionId !== activeLiveSession.sessionId) {
+          connection.inLive = false;
+          socket.send(JSON.stringify({
+            type: "live-started",
+            channel_id: connection.channelId,
+            title: activeLiveSession.title,
+            sessionId: activeLiveSession.sessionId,
+            startedAt: activeLiveSession.startedAt,
+            expiresAt: activeLiveSession.expiresAt,
+          }));
+        } else {
+          connection.inLive = true;
+        }
         this.queueLivePresenceBroadcast();
       }
       if (data.type === "leave-live" && connection.authorized) {

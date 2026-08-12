@@ -219,8 +219,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   // Auto-reload when new version is deployed (only when user has no draft)
   useAutoUpdate(!!(input || pendingPhotos.length > 0 || replyingTo || dmMode));
 
-  const handleLiveModePresenceChange = useCallback((nextInLiveMode: boolean) => {
-    send({ type: nextInLiveMode ? "join-live" : "leave-live" });
+  const handleLiveModePresenceChange = useCallback((nextInLiveMode: boolean, sessionId: string) => {
+    send(nextInLiveMode
+      ? { type: "join-live", sessionId }
+      : { type: "leave-live" });
   }, [send]);
 
   const fetchLiveState = useCallback(() => {
@@ -236,6 +238,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     liveActive,
     inLiveMode,
     liveTitle,
+    liveSessionId,
     liveCountdownNotice,
     showLivePopup,
     showLiveEnded,
@@ -521,7 +524,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     connected,
     uid,
     isOwner,
-    isAdmin,
     isLoggedIn,
     localBubbleColor,
     subscribe,
@@ -533,6 +535,9 @@ export function ChatView({ channelId }: { channelId: string }) {
     pendingReactionUpdatesRef,
     reactionFrameRef,
     applyInitData,
+    applyLiveSnapshot,
+    liveActive,
+    liveSessionId,
     showPasscodeGate,
     clearRoomAccessBanner,
     refreshOwnerModeration,
@@ -750,7 +755,11 @@ export function ChatView({ channelId }: { channelId: string }) {
     setActiveNotice,
     setBanner,
     liveStartedBannerText: t("liveStarted"),
+    liveEndFailedText: t("liveEndFailed"),
+    liveSessionChangedText: t("liveSessionChanged"),
+    liveSessionId,
     syncLiveSessionDetails,
+    handleLiveStartedEvent,
     setShowLiveTitlePrompt,
     setShowEndLiveConfirm,
     endLiveSessionLocally,

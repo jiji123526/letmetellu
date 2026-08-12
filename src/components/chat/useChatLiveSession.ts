@@ -37,7 +37,7 @@ interface UseChatLiveSessionArgs {
   };
   fetchLiveState: () => Promise<LiveStateResponse>;
   onExpiredLiveEnded: () => Promise<void> | void;
-  onLiveModePresenceChange: (inLiveMode: boolean) => void;
+  onLiveModePresenceChange: (inLiveMode: boolean, sessionId: string) => void;
 }
 
 interface EndLiveSessionOptions {
@@ -180,6 +180,7 @@ export function useChatLiveSession({
   }, [liveSessionKey, liveTitleKey, texts.liveTitle]);
 
   const exitLiveMode = useCallback(() => {
+    inLiveModeRef.current = false;
     setInLiveMode(false);
     localStorage.setItem(inLiveModeKey, "false");
   }, [inLiveModeKey]);
@@ -187,6 +188,7 @@ export function useChatLiveSession({
   const enterLiveMode = useCallback((options?: EnterLiveModeOptions) => {
     setShowLivePopup(false);
     setShowLiveEnded(false);
+    inLiveModeRef.current = true;
     setInLiveMode(true);
     localStorage.setItem(inLiveModeKey, "true");
     localStorage.removeItem(liveNoticeDismissedKey);
@@ -197,6 +199,7 @@ export function useChatLiveSession({
 
   const endLiveSessionLocally = useCallback((options?: EndLiveSessionOptions) => {
     const wasInLiveMode = inLiveModeRef.current;
+    inLiveModeRef.current = false;
     setLiveActive(false);
     setLiveTitle(texts.liveTitle);
     setLiveSessionId("");
@@ -302,8 +305,25 @@ export function useChatLiveSession({
   }, [clearLiveExpiryRetryTimer, clearLiveNoticeTimeout]);
 
   useEffect(() => {
-    onLiveModePresenceChange(inLiveMode);
-  }, [inLiveMode, onLiveModePresenceChange]);
+    if (inLiveMode && !liveSessionId) return;
+    onLiveModePresenceChange(inLiveMode, liveSessionId);
+  }, [inLiveMode, liveSessionId, onLiveModePresenceChange]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== liveActiveKey || event.newValue !== "false") return;
+      const wasInLiveMode = endLiveSessionLocally({
+        clearSeen: true,
+        showEndedPopup: inLiveModeRef.current,
+      });
+      if (wasInLiveMode) {
+        void Promise.resolve(onExpiredLiveEnded()).catch(() => {});
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [endLiveSessionLocally, liveActiveKey, onExpiredLiveEnded]);
 
   useEffect(() => {
     resetLiveCountdownState();

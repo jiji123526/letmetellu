@@ -106,6 +106,8 @@ export const ko = {
   liveEndTitle: "라이브 종료",
   liveEndMessage: "라이브를 종료하시겠습니까?<br>모든 메시지가 삭제됩니다.",
   liveEndBtn: "종료",
+  liveEndFailed: "라이브를 종료하지 못했습니다. 다시 시도해 주세요.",
+  liveSessionChanged: "라이브 세션이 변경되어 최신 세션을 불러왔습니다.",
   liveJoinTitle: "라이브 채팅이 시작되었습니다.",
   liveJoinDesc: "참여하시겠습니까?\n라이브 종료 시 모든 메시지가 삭제됩니다.",
   liveJoin: "참여",

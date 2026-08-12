@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { adminAction } from "@/lib/api-chat";
 import type { Message } from "./chatTypes";
 
@@ -31,7 +31,11 @@ interface UseChatOverlayCallbacksArgs {
   setActiveNotice: Dispatch<SetStateAction<string>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   liveStartedBannerText: string;
+  liveEndFailedText: string;
+  liveSessionChangedText: string;
+  liveSessionId: string;
   syncLiveSessionDetails: (input: { sessionId: string; expiresAt: string | null }) => void;
+  handleLiveStartedEvent: (input: { title?: string; sessionId?: string; expiresAt?: string | null }) => void;
   setShowLiveTitlePrompt: Dispatch<SetStateAction<boolean>>;
   setShowEndLiveConfirm: Dispatch<SetStateAction<boolean>>;
   endLiveSessionLocally: (options: { clearSeen?: boolean }) => void;
@@ -79,7 +83,11 @@ export function useChatOverlayCallbacks({
   setActiveNotice,
   setBanner,
   liveStartedBannerText,
+  liveEndFailedText,
+  liveSessionChangedText,
+  liveSessionId,
   syncLiveSessionDetails,
+  handleLiveStartedEvent,
   setShowLiveTitlePrompt,
   setShowEndLiveConfirm,
   endLiveSessionLocally,
@@ -92,6 +100,8 @@ export function useChatOverlayCallbacks({
   closeFullViewImage,
   closeGallery,
 }: UseChatOverlayCallbacksArgs): UseChatOverlayCallbacksResult {
+  const endingLiveRef = useRef(false);
+
   const flashBanner = useCallback((text: string, color: string) => {
     setBanner({ text, color });
     setTimeout(() => setBanner(null), 3000);
@@ -155,12 +165,69 @@ export function useChatOverlayCallbacks({
   }, [setShowLiveTitlePrompt]);
 
   const confirmEndLive = useCallback(async () => {
-    setShowEndLiveConfirm(false);
-    endLiveSessionLocally({ clearSeen: true });
-    await adminAction("end-live", channelId);
-    void loadNormalChannelData().catch(() => {});
-    setShowLiveEnded(true);
-  }, [channelId, endLiveSessionLocally, loadNormalChannelData, setShowEndLiveConfirm, setShowLiveEnded]);
+    if (endingLiveRef.current) return;
+    endingLiveRef.current = true;
+    try {
+      if (!liveSessionId) {
+        flashBanner(liveEndFailedText, "#d32f2f");
+        await loadNormalChannelData();
+        return;
+      }
+
+      const result = await adminAction("end-live", channelId, {
+        sessionId: liveSessionId,
+      }) as {
+        ok?: boolean;
+        error?: string;
+        live?: {
+          active?: boolean;
+          title?: string;
+          sessionId?: string;
+          expiresAt?: string;
+        };
+      };
+
+      if (result.ok) {
+        setShowEndLiveConfirm(false);
+        endLiveSessionLocally({ clearSeen: true });
+        await loadNormalChannelData();
+        setShowLiveEnded(true);
+        return;
+      }
+
+      if (result.error === "live_session_changed") {
+        setShowEndLiveConfirm(false);
+        endLiveSessionLocally({ clearSeen: true });
+        await loadNormalChannelData();
+        if (result.live?.active) {
+          handleLiveStartedEvent({
+            title: result.live.title,
+            sessionId: result.live.sessionId,
+            expiresAt: result.live.expiresAt || null,
+          });
+        }
+        flashBanner(liveSessionChangedText, "#c0392b");
+        return;
+      }
+
+      flashBanner(liveEndFailedText, "#d32f2f");
+    } catch {
+      flashBanner(liveEndFailedText, "#d32f2f");
+    } finally {
+      endingLiveRef.current = false;
+    }
+  }, [
+    channelId,
+    endLiveSessionLocally,
+    flashBanner,
+    handleLiveStartedEvent,
+    liveEndFailedText,
+    liveSessionChangedText,
+    liveSessionId,
+    loadNormalChannelData,
+    setShowEndLiveConfirm,
+    setShowLiveEnded,
+  ]);
 
   const cancelEndLive = useCallback(() => {
     setShowEndLiveConfirm(false);
