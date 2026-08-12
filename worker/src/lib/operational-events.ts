@@ -1,6 +1,9 @@
 import type { Env } from "../types";
 
 export const OPERATIONAL_EVENT_OVERRIDE_HEADER = "X-Letmetellu-Operational-Event";
+const OPERATIONAL_ERROR_DETAIL = Symbol("letmetellu.operational-error-detail");
+
+export type OperationalErrorDetail = Record<string, unknown>;
 
 export async function recordOperationalEvent(input: {
   env: Env;
@@ -48,4 +51,49 @@ export function withOperationalEventOverride(response: Response, eventType: stri
 
 export function stripOperationalEventHeaders(headers: Headers): void {
   headers.delete(OPERATIONAL_EVENT_OVERRIDE_HEADER);
+}
+
+export function normalizeOperationalRoute(method: string, pathname: string): string {
+  const normalizedMethod = method.toUpperCase();
+  if (pathname.startsWith("/ws/")) {
+    return `${normalizedMethod} /ws/:channel`;
+  }
+  return `${normalizedMethod} ${pathname}`;
+}
+
+export function getOperationalRouteDetail(pathname: string): OperationalErrorDetail | null {
+  if (!pathname.startsWith("/ws/")) {
+    return null;
+  }
+  const channelId = pathname.split("/ws/")[1]?.split("/")[0] || null;
+  return {
+    route_group: "websocket",
+    request_channel_id: channelId,
+  };
+}
+
+export function withOperationalErrorContext(error: unknown, detail: OperationalErrorDetail): Error {
+  const target = error instanceof Error ? error : new Error(String(error));
+  const existingDetail = getOperationalErrorDetail(target) || {};
+  Object.defineProperty(target, OPERATIONAL_ERROR_DETAIL, {
+    value: {
+      ...existingDetail,
+      ...detail,
+    },
+    configurable: true,
+    enumerable: false,
+    writable: true,
+  });
+  return target;
+}
+
+export function getOperationalErrorDetail(error: unknown): OperationalErrorDetail | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const detail = (error as Error & { [OPERATIONAL_ERROR_DETAIL]?: unknown })[OPERATIONAL_ERROR_DETAIL];
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) {
+    return null;
+  }
+  return detail as OperationalErrorDetail;
 }

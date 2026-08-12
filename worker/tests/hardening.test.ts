@@ -6,9 +6,13 @@ import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
 import { getMediaCacheControl } from "../src/lib/media-cache-control.ts";
 import {
+  getOperationalRouteDetail,
+  getOperationalErrorDetail,
+  normalizeOperationalRoute,
   OPERATIONAL_EVENT_OVERRIDE_HEADER,
   getOperationalEventOverride,
   stripOperationalEventHeaders,
+  withOperationalErrorContext,
   withOperationalEventOverride,
 } from "../src/lib/operational-events.ts";
 import {
@@ -236,4 +240,44 @@ test("operational event overrides stay internal to Worker bookkeeping", () => {
   const headers = new Headers(response.headers);
   stripOperationalEventHeaders(headers);
   assert.equal(headers.get(OPERATIONAL_EVENT_OVERRIDE_HEADER), null);
+});
+
+test("operational route normalization groups websocket channel paths", () => {
+  assert.equal(normalizeOperationalRoute("get", "/ws/zziks"), "GET /ws/:channel");
+  assert.equal(normalizeOperationalRoute("post", "/api/messages"), "POST /api/messages");
+  assert.deepEqual(getOperationalRouteDetail("/ws/zziks"), {
+    route_group: "websocket",
+    request_channel_id: "zziks",
+  });
+  assert.equal(getOperationalRouteDetail("/api/messages"), null);
+});
+
+test("operational error context merges route detail onto thrown errors", () => {
+  const error = new Error("boom");
+  const contextualized = withOperationalErrorContext(error, { route_stage: "load_channel" });
+  assert.equal(contextualized, error);
+  assert.deepEqual(getOperationalErrorDetail(contextualized), {
+    route_stage: "load_channel",
+  });
+
+  withOperationalErrorContext(contextualized, {
+    route_action: "send",
+    request_channel_id: "room-1",
+  });
+  assert.deepEqual(getOperationalErrorDetail(contextualized), {
+    route_stage: "load_channel",
+    route_action: "send",
+    request_channel_id: "room-1",
+  });
+});
+
+test("init and messages routes keep operational error context instrumentation", () => {
+  const initSource = readFileSync(new URL("../src/routes/init.ts", import.meta.url), "utf8");
+  assert.match(initSource, /withOperationalErrorContext/);
+  assert.match(initSource, /route_stage/);
+
+  const messagesSource = readFileSync(new URL("../src/routes/messages.ts", import.meta.url), "utf8");
+  assert.match(messagesSource, /withOperationalErrorContext/);
+  assert.match(messagesSource, /route_action/);
+  assert.match(messagesSource, /route_stage/);
 });

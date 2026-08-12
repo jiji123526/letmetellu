@@ -16,7 +16,10 @@ import { handleChannelReports } from "./routes/channel-reports";
 import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
 import {
+  getOperationalRouteDetail,
+  getOperationalErrorDetail,
   getOperationalEventOverride,
+  normalizeOperationalRoute,
   recordOperationalEvent,
   stripOperationalEventHeaders,
 } from "./lib/operational-events";
@@ -82,7 +85,8 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") || "";
-    const route = `${request.method} ${url.pathname}`;
+    const route = normalizeOperationalRoute(request.method, url.pathname);
+    const routeDetail = getOperationalRouteDetail(url.pathname);
 
     // Handle CORS preflight
     if (request.method === "OPTIONS") {
@@ -94,18 +98,79 @@ export default {
 
     // WebSocket upgrade → route to Durable Object
     if (url.pathname.startsWith("/ws/")) {
-      if (request.headers.get("Upgrade") !== "websocket") {
-        return new Response("websocket upgrade required", { status: 426 });
-      }
-      if (!isAllowedRequestOrigin(request.headers.get("Origin"), env.ALLOWED_ORIGIN)) {
-        return new Response("forbidden origin", { status: 403 });
-      }
-      const channelId = url.pathname.split("/ws/")[1];
-      if (!channelId) return new Response("missing channel", { status: 400 });
+      let response: Response;
+      let capturedUnhandledException = false;
 
-      const doId = env.CHAT_ROOM.idFromName(channelId);
-      const stub = env.CHAT_ROOM.get(doId);
-      return stub.fetch(request);
+      try {
+        if (request.headers.get("Upgrade") !== "websocket") {
+          response = new Response("websocket upgrade required", { status: 426 });
+        } else if (!isAllowedRequestOrigin(request.headers.get("Origin"), env.ALLOWED_ORIGIN)) {
+          response = new Response("forbidden origin", { status: 403 });
+        } else {
+          const channelId = url.pathname.split("/ws/")[1];
+          if (!channelId) {
+            response = new Response("missing channel", { status: 400 });
+          } else {
+            const doId = env.CHAT_ROOM.idFromName(channelId);
+            const stub = env.CHAT_ROOM.get(doId);
+            response = await stub.fetch(request);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        capturedUnhandledException = true;
+        const operationalDetail = getOperationalErrorDetail(err);
+        ctx.waitUntil(recordOperationalEvent({
+          env,
+          severity: "error",
+          route,
+          eventType: "unhandled_exception",
+          statusCode: 500,
+          actorUserId: request.headers.get("X-User-Id"),
+          detail: {
+            path: url.pathname,
+            method: request.method,
+            error: err instanceof Error ? err.message : String(err),
+            websocket_phase: "upgrade",
+            ...(routeDetail || {}),
+            ...(operationalDetail || {}),
+          },
+        }));
+        return buildResponse(
+          request,
+          Response.json({ error: "internal_error" }, { status: 500 }),
+          origin,
+          env.ALLOWED_ORIGIN,
+        );
+      }
+
+      if (response.status === 403) {
+        ctx.waitUntil(recordOperationalEvent({
+          env,
+          severity: "warn",
+          route,
+          eventType: "forbidden",
+          statusCode: response.status,
+          actorUserId: request.headers.get("X-User-Id"),
+          detail: routeDetail || undefined,
+        }));
+      } else if (response.status >= 500 && !capturedUnhandledException) {
+        ctx.waitUntil(recordOperationalEvent({
+          env,
+          severity: "error",
+          route,
+          eventType: getOperationalEventOverride(response) || "request_failed",
+          statusCode: response.status,
+          actorUserId: request.headers.get("X-User-Id"),
+          detail: routeDetail || undefined,
+        }));
+      }
+
+      if (response.status === 101) {
+        return response;
+      }
+
+      return buildResponse(request, response, origin, env.ALLOWED_ORIGIN);
     }
 
     // API routes
@@ -154,6 +219,7 @@ export default {
     } catch (err) {
       console.error(err);
       capturedUnhandledException = true;
+      const operationalDetail = getOperationalErrorDetail(err);
       ctx.waitUntil(recordOperationalEvent({
         env,
         severity: "error",
@@ -165,6 +231,8 @@ export default {
           path: url.pathname,
           method: request.method,
           error: err instanceof Error ? err.message : String(err),
+          ...(routeDetail || {}),
+          ...(operationalDetail || {}),
         },
       }));
       response = Response.json({ error: "internal_error" }, { status: 500 });

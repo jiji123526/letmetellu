@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Websocket health routes now roll up by category instead of channel ID — 2026-08-12
+
+- Production error analytics included channel-specific websocket paths like `/ws/synkongii`, which fragmented the same class of connection failures across per-channel route labels and made the health view harder to interpret.
+- Operational-event route normalization now records websocket requests under `GET /ws/:channel` instead of the raw per-channel path, while retaining the concrete channel ID in structured event detail.
+- The Worker websocket branch now records forbidden, `5xx` and unhandled upgrade failures through the same operational-event path as the HTTP API branch instead of bypassing the health model on early websocket errors.
+- The super-admin operational-health query also normalizes historical `GET /ws/<channel>` rows inside the 24-hour route aggregation, so the grouped websocket category appears immediately after deploy without waiting for the old rows to age out.
+
+Trade-off: the route label is now intentionally less specific in the summary card. Operators trade direct per-channel route names in the first-line health view for a more accurate grouped websocket signal, while the stored detail still preserves the channel ID for deeper inspection.
+
+Deployment note: this requires a Worker deploy only. No D1 migration or frontend deployment is required.
+
+### `/api/init` and `/api/messages` failures now record route stage detail — 2026-08-12
+
+- Production error analytics showed `/api/init` and `/api/messages` behind preview failures as the next most actionable backend `5xx` buckets, but the existing `unhandled_exception` events only recorded route, method and message text.
+- The Worker now attaches operational error context to unexpected throws inside both handlers, including the route action for message mutations and the active route stage such as channel load, passcode verification, rate limiting, reply resolution, persistence or broadcast.
+- The top-level Worker exception recorder now merges that route context into the stored `detail_json` for `unhandled_exception`, so D1 operational-event inspection can identify where a bootstrap or mutation fault happened without first reproducing it locally.
+- Coverage now verifies the helper merges detail onto thrown errors and that both route files keep the instrumentation in place.
+
+Trade-off: this does not change client responses or the super-admin health card yet. The gain is better backend observability, while deeper UI drill-down would still require a separate admin-facing log view.
+
+Deployment note: this requires a Worker deploy only. No D1 migration or frontend deployment is required.
+
 ### Preview upstream failures no longer inflate core service 5xx health — 2026-08-12
 
 - Production error analytics showed `/api/preview` as the largest 24-hour `5xx` bucket, ahead of `/api/init` and `/api/messages`, even when the failures were caused by third-party sites timing out or returning bad upstream responses.

@@ -64,3 +64,14 @@ test("unhandled requests are not counted again as generic request failures", () 
     /response\.status >= 500 && !capturedUnhandledException/,
   );
 });
+
+test("operational health groups websocket routes by normalized channel path", () => {
+  assert.match(
+    supportRouteSource,
+    /WHEN route LIKE 'GET \/ws\/%' THEN 'GET \/ws\/:channel'/,
+  );
+  assert.match(
+    workerIndexSource,
+    /normalizeOperationalRoute\(request\.method, url\.pathname\)/,
+  );
+});

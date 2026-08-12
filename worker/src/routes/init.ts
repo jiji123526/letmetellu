@@ -3,6 +3,7 @@ import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityT
 import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
+import { withOperationalErrorContext } from "../lib/operational-events";
 import { getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { hydrateReportInboxMessages } from "./channel-reports";
@@ -31,59 +32,74 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     return Response.json({ error: "missing channel" }, { status: 400 });
   }
 
-  // Live channels use parent channel's config
   const isLiveChannel = channelId.endsWith("_live");
   const parentChannelId = isLiveChannel ? channelId.replace(/_live$/, "") : channelId;
+  let routeStage = "load_channel";
 
-  // Fetch channel config (always from parent)
-  const channel = await env.DB.prepare(
-    `SELECT channels.*, users.name AS owner_name
-     FROM channels
-     LEFT JOIN users ON users.id = channels.owner_uid
-     WHERE channels.id = ?`
-  )
-    .bind(parentChannelId).first();
+  try {
+    // Fetch channel config (always from parent)
+    const channel = await env.DB.prepare(
+      `SELECT channels.*, users.name AS owner_name
+       FROM channels
+       LEFT JOIN users ON users.id = channels.owner_uid
+       WHERE channels.id = ?`
+    )
+      .bind(parentChannelId).first();
 
-  if (!channel) {
-    return Response.json({ error: "channel not found" }, { status: 404 });
-  }
+    if (!channel) {
+      return Response.json({ error: "channel not found" }, { status: 404 });
+    }
 
-  // Only the trusted app proxy can assert a user identity. Keep this check
-  // independent of passcode state so public channels receive the same
-  // owner-only data protection as private channels.
-  const internalToken = request.headers.get("X-Internal-Token");
-  const userId = request.headers.get("X-User-Id");
-  const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
-  const isOwner = trustedUserId === (channel as any).owner_uid;
-  const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
-  const adminDataStatus = userId === (channel as any).owner_uid
-    ? (isOwner ? "authorized" : "unauthorized")
-    : undefined;
-  if (isReportsChannel(parentChannelId, env) && !isOwner) {
-    return Response.json({ error: "owner access required" }, { status: 403 });
-  }
-  const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
-  const deviceToken = request.headers.get("X-Device-Token") || "";
-  const verifiedAnonymous = anonymousToken
-    ? await verifyAnonymousIdentityToken(anonymousToken, env)
-    : null;
-  const verifiedDevice = deviceToken
-    ? await verifyDeviceIdentityToken(deviceToken, env)
-    : null;
-  const anonymousIdentity = verifiedAnonymous
-    ? { uid: verifiedAnonymous.uid, token: anonymousToken }
-    : await createAnonymousIdentity(env);
-  const deviceIdentity = verifiedDevice
-    ? { deviceId: verifiedDevice.device_id, token: deviceToken }
-    : await createDeviceIdentity(env);
+    routeStage = "resolve_viewer_identity";
 
-  // Passcode gate: if channel has passcode, verify token or owner identity
-  if ((channel as any).passcode) {
-    if (!isOwner && !isReportsOwnerViewer) {
-      const token = request.headers.get("X-Room-Token");
-      if (token) {
-        const decoded = await authorizeRoomToken(token, parentChannelId, (channel as any).passcode, env);
-        if (!decoded) {
+    // Only the trusted app proxy can assert a user identity. Keep this check
+    // independent of passcode state so public channels receive the same
+    // owner-only data protection as private channels.
+    const internalToken = request.headers.get("X-Internal-Token");
+    const userId = request.headers.get("X-User-Id");
+    const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
+    const isOwner = trustedUserId === (channel as any).owner_uid;
+    const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
+    const adminDataStatus = userId === (channel as any).owner_uid
+      ? (isOwner ? "authorized" : "unauthorized")
+      : undefined;
+    if (isReportsChannel(parentChannelId, env) && !isOwner) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
+    const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
+    const deviceToken = request.headers.get("X-Device-Token") || "";
+    const verifiedAnonymous = anonymousToken
+      ? await verifyAnonymousIdentityToken(anonymousToken, env)
+      : null;
+    const verifiedDevice = deviceToken
+      ? await verifyDeviceIdentityToken(deviceToken, env)
+      : null;
+    const anonymousIdentity = verifiedAnonymous
+      ? { uid: verifiedAnonymous.uid, token: anonymousToken }
+      : await createAnonymousIdentity(env);
+    const deviceIdentity = verifiedDevice
+      ? { deviceId: verifiedDevice.device_id, token: deviceToken }
+      : await createDeviceIdentity(env);
+
+    routeStage = "verify_room_access";
+
+    // Passcode gate: if channel has passcode, verify token or owner identity
+    if ((channel as any).passcode) {
+      if (!isOwner && !isReportsOwnerViewer) {
+        const token = request.headers.get("X-Room-Token");
+        if (token) {
+          const decoded = await authorizeRoomToken(token, parentChannelId, (channel as any).passcode, env);
+          if (!decoded) {
+            return Response.json({
+              hasPasscode: true,
+              passcodeHint: (channel as any).passcode_hint || "",
+              channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+              anonymousUid: anonymousIdentity.uid,
+              anonymousToken: anonymousIdentity.token,
+              deviceToken: deviceIdentity.token,
+            });
+          }
+        } else {
           return Response.json({
             hasPasscode: true,
             passcodeHint: (channel as any).passcode_hint || "",
@@ -93,160 +109,171 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             deviceToken: deviceIdentity.token,
           });
         }
-      } else {
-        return Response.json({
-          hasPasscode: true,
-          passcodeHint: (channel as any).passcode_hint || "",
-          channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
-          anonymousUid: anonymousIdentity.uid,
-          anonymousToken: anonymousIdentity.token,
-          deviceToken: deviceIdentity.token,
-        });
       }
+      // Owner or valid token — continue to full data
     }
-    // Owner or valid token — continue to full data
-  }
 
-  // Collect independent reads into one D1 batch. This removes the accumulated
-  // latency of issuing messages, settings and moderation queries one by one.
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare(`
-      SELECT id, text, updated_at FROM config
-      WHERE (channel_id = ? AND id = ?)
-         OR (channel_id = ? AND id IN (?, ?, ?, ?, ?))
-    `).bind(
-      channelId,
-      `notice_${channelId}`,
-      parentChannelId,
-      `welcome_${parentChannelId}`,
-      `live_${parentChannelId}`,
-      `liveEmojis_${parentChannelId}`,
-      `petition_${parentChannelId}`,
-      `dm_${parentChannelId}`,
-    ),
-    env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
-    env.DB.prepare("SELECT status FROM channel_moderation WHERE channel_id = ? LIMIT 1").bind(parentChannelId),
-  ];
+    routeStage = "prepare_bootstrap_batch";
 
-  let blockedIndex: number | null = null;
-  let viewerBlockedIndex: number | null = null;
-  let dmIndex: number | null = null;
-  if (isOwner) {
-    blockedIndex = statements.length;
-    statements.push(
-      env.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?").bind(parentChannelId)
-    );
-    dmIndex = statements.length;
-    statements.push(
-      env.DB.prepare(
-        "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
-      ).bind(channelId)
-    );
-  } else {
-    const viewerUid = anonymousIdentity.uid;
-    const viewerDeviceId = deviceIdentity.deviceId;
-    if (viewerUid.length <= 128 && viewerDeviceId.length <= 128 && (viewerUid || viewerDeviceId)) {
-      const viewerDeviceLookup = await getBlockedDeviceLookup(viewerDeviceId, env);
-      viewerBlockedIndex = statements.length;
+    // Collect independent reads into one D1 batch. This removes the accumulated
+    // latency of issuing messages, settings and moderation queries one by one.
+    const statements: D1PreparedStatement[] = [
+      env.DB.prepare(`
+        SELECT id, text, updated_at FROM config
+        WHERE (channel_id = ? AND id = ?)
+           OR (channel_id = ? AND id IN (?, ?, ?, ?, ?))
+      `).bind(
+        channelId,
+        `notice_${channelId}`,
+        parentChannelId,
+        `welcome_${parentChannelId}`,
+        `live_${parentChannelId}`,
+        `liveEmojis_${parentChannelId}`,
+        `petition_${parentChannelId}`,
+        `dm_${parentChannelId}`,
+      ),
+      env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
+      env.DB.prepare("SELECT status FROM channel_moderation WHERE channel_id = ? LIMIT 1").bind(parentChannelId),
+    ];
+
+    routeStage = "prepare_viewer_block_lookup";
+
+    let blockedIndex: number | null = null;
+    let viewerBlockedIndex: number | null = null;
+    let dmIndex: number | null = null;
+    if (isOwner) {
+      blockedIndex = statements.length;
+      statements.push(
+        env.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?").bind(parentChannelId)
+      );
+      dmIndex = statements.length;
       statements.push(
         env.DB.prepare(
-          "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
-        ).bind(parentChannelId, viewerUid, viewerDeviceLookup.raw, viewerDeviceLookup.hashed, viewerDeviceLookup.raw)
+          "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
+        ).bind(channelId)
       );
+    } else {
+      const viewerUid = anonymousIdentity.uid;
+      const viewerDeviceId = deviceIdentity.deviceId;
+      if (viewerUid.length <= 128 && viewerDeviceId.length <= 128 && (viewerUid || viewerDeviceId)) {
+        const viewerDeviceLookup = await getBlockedDeviceLookup(viewerDeviceId, env);
+        viewerBlockedIndex = statements.length;
+        statements.push(
+          env.DB.prepare(
+            "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
+          ).bind(parentChannelId, viewerUid, viewerDeviceLookup.raw, viewerDeviceLookup.hashed, viewerDeviceLookup.raw)
+        );
+      }
     }
-  }
 
-  // Presence is served by the Durable Object, so it can run concurrently with
-  // the single D1 batch instead of extending the critical path.
-  const doId = env.CHAT_ROOM.idFromName(parentChannelId);
-  const stub = env.CHAT_ROOM.get(doId);
-  const [messagePage, batchResults, presenceRes] = await Promise.all([
-    readVisibleMessagePage(env, channelId, { limit: 50 }),
-    env.DB.batch(statements),
-    stub.fetch(new Request("http://internal/presence")),
-  ]);
-  const presence = await presenceRes.json() as { count: number };
+    routeStage = "load_bootstrap_data";
 
-  const rawMessages = messagePage.messages;
-  const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
-  const config = new Map(configRows.map((row) => [row.id, row.text]));
-  const liveRow = batchResults[1].results?.[0] as { is_frozen?: number } | undefined;
-  const moderationRow = batchResults[2].results?.[0] as { status?: string } | undefined;
-  const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
-  const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
-  const viewerBlocked = viewerBlockedIndex === null
-    ? false
-    : (batchResults[viewerBlockedIndex].results?.length || 0) > 0;
+    // Presence is served by the Durable Object, so it can run concurrently with
+    // the single D1 batch instead of extending the critical path.
+    const doId = env.CHAT_ROOM.idFromName(parentChannelId);
+    const stub = env.CHAT_ROOM.get(doId);
+    const [messagePage, batchResults, presenceRes] = await Promise.all([
+      readVisibleMessagePage(env, channelId, { limit: 50 }),
+      env.DB.batch(statements),
+      stub.fetch(new Request("http://internal/presence")),
+    ]);
+    const presence = await presenceRes.json() as { count: number };
 
-  // Parse live status
-  let liveStatus: LiveSessionState | null = null;
-  const liveConfigRow = configRows.find((row) => row.id === `live_${parentChannelId}`);
-  liveStatus = parseLiveSessionState(liveConfigRow?.text, liveConfigRow?.updated_at);
-  if (isLiveSessionExpired(liveStatus)) {
-    await endLiveSession(env, parentChannelId, "expired");
-    liveStatus = null;
-  }
+    const rawMessages = messagePage.messages;
+    const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
+    const config = new Map(configRows.map((row) => [row.id, row.text]));
+    const liveRow = batchResults[1].results?.[0] as { is_frozen?: number } | undefined;
+    const moderationRow = batchResults[2].results?.[0] as { status?: string } | undefined;
+    const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
+    const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
+    const viewerBlocked = viewerBlockedIndex === null
+      ? false
+      : (batchResults[viewerBlockedIndex].results?.length || 0) > 0;
 
-  // For live channels, override is_frozen with the _live row's value
-  let responseChannel = channel;
-  if (isLiveChannel && liveRow) {
-    responseChannel = { ...channel, is_frozen: liveRow.is_frozen ?? 0 };
-  }
-  const viewerModerationStatus = !isOwner
-    && !isReportsOwnerViewer
-    && moderationRow?.status === "frozen"
-      ? "frozen"
+    routeStage = "parse_live_state";
+
+    // Parse live status
+    let liveStatus: LiveSessionState | null = null;
+    const liveConfigRow = configRows.find((row) => row.id === `live_${parentChannelId}`);
+    liveStatus = parseLiveSessionState(liveConfigRow?.text, liveConfigRow?.updated_at);
+    if (isLiveSessionExpired(liveStatus)) {
+      routeStage = "expire_live_state";
+      await endLiveSession(env, parentChannelId, "expired");
+      liveStatus = null;
+    }
+
+    routeStage = "finalize_channel_state";
+
+    // For live channels, override is_frozen with the _live row's value
+    let responseChannel = channel;
+    if (isLiveChannel && liveRow) {
+      responseChannel = { ...channel, is_frozen: liveRow.is_frozen ?? 0 };
+    }
+    const viewerModerationStatus = !isOwner
+      && !isReportsOwnerViewer
+      && moderationRow?.status === "frozen"
+        ? "frozen"
+        : null;
+
+    // The passcode column contains the stored credential hash. Clients only
+    // need to know whether a gate exists, never the hash itself.
+    const safeChannel = { ...(responseChannel as Record<string, unknown>) };
+    delete safeChannel.passcode;
+
+    const ownerRoomToken = isOwner && (channel as any).passcode
+      ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
+      : undefined;
+    const ownerModeration = isOwner
+      ? await getChannelModeration(parentChannelId, env)
       : null;
+    const reportsOwnerId = await getReportsChannelOwnerId(env);
+    const reportsOwnerLocale = isOwner
+      ? await getUserLocale(trustedUserId, env)
+      : "ko";
+    const messages = isReportsChannel(parentChannelId, env) && isOwner
+      ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env, reportsOwnerLocale)
+      : rawMessages;
+    const protectedMessages = markProtectedSenders(messages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
+    const protectedDmMessages = markProtectedSenders(dmMessages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
 
-  // The passcode column contains the stored credential hash. Clients only
-  // need to know whether a gate exists, never the hash itself.
-  const safeChannel = { ...(responseChannel as Record<string, unknown>) };
-  delete safeChannel.passcode;
+    routeStage = "build_response";
 
-  const ownerRoomToken = isOwner && (channel as any).passcode
-    ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
-    : undefined;
-  const ownerModeration = isOwner
-    ? await getChannelModeration(parentChannelId, env)
-    : null;
-  const reportsOwnerId = await getReportsChannelOwnerId(env);
-  const reportsOwnerLocale = isOwner
-    ? await getUserLocale(trustedUserId, env)
-    : "ko";
-  const messages = isReportsChannel(parentChannelId, env) && isOwner
-    ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env, reportsOwnerLocale)
-    : rawMessages;
-  const protectedMessages = markProtectedSenders(messages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
-  const protectedDmMessages = markProtectedSenders(dmMessages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
-
-  return Response.json({
-    channel: safeChannel,
-    hasPasscode: Boolean((channel as any).passcode),
-    passcodeHint: (channel as any).passcode_hint || "",
-    messages: protectedMessages,
-    blocked,
-    viewerBlocked,
-    viewerModerationStatus,
-    dm: protectedDmMessages || [],
-    adminDataStatus,
-    viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
-    isReportsChannel: isReportsChannel(parentChannelId, env),
-    presence: presence.count,
-    bannerNotice: config.get(`notice_${channelId}`) || "",
-    welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
-    live: liveStatus,
-    emojiPresets: config.get(`liveEmojis_${parentChannelId}`) || null,
-    petitionEnabled: config.get(`petition_${parentChannelId}`) !== "false",
-    dmEnabled: config.get(`dm_${parentChannelId}`) !== "false",
-    ownerModeration: ownerModeration
-      ? {
-          status: ownerModeration.status,
-          petitionStatus: ownerModeration.petition_status,
-        }
-      : undefined,
-    roomToken: ownerRoomToken,
-    anonymousUid: anonymousIdentity.uid,
-    anonymousToken: anonymousIdentity.token,
-    deviceToken: deviceIdentity.token,
-  });
+    return Response.json({
+      channel: safeChannel,
+      hasPasscode: Boolean((channel as any).passcode),
+      passcodeHint: (channel as any).passcode_hint || "",
+      messages: protectedMessages,
+      blocked,
+      viewerBlocked,
+      viewerModerationStatus,
+      dm: protectedDmMessages || [],
+      adminDataStatus,
+      viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
+      isReportsChannel: isReportsChannel(parentChannelId, env),
+      presence: presence.count,
+      bannerNotice: config.get(`notice_${channelId}`) || "",
+      welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
+      live: liveStatus,
+      emojiPresets: config.get(`liveEmojis_${parentChannelId}`) || null,
+      petitionEnabled: config.get(`petition_${parentChannelId}`) !== "false",
+      dmEnabled: config.get(`dm_${parentChannelId}`) !== "false",
+      ownerModeration: ownerModeration
+        ? {
+            status: ownerModeration.status,
+            petitionStatus: ownerModeration.petition_status,
+          }
+        : undefined,
+      roomToken: ownerRoomToken,
+      anonymousUid: anonymousIdentity.uid,
+      anonymousToken: anonymousIdentity.token,
+      deviceToken: deviceIdentity.token,
+    });
+  } catch (error) {
+    throw withOperationalErrorContext(error, {
+      route_stage: routeStage,
+      request_channel_id: channelId,
+      channel_id: parentChannelId,
+      live_channel: isLiveChannel,
+    });
+  }
 }

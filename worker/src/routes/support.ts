@@ -1435,8 +1435,21 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
     env.DB.prepare(summarySql).bind(cutoff15m).first<OperationalHealthWindowRow>(),
     env.DB.prepare(summarySql).bind(cutoff24h).first<OperationalHealthWindowRow>(),
     env.DB.prepare(`
+      WITH normalized_events AS (
+        SELECT
+          CASE
+            WHEN route LIKE 'GET /ws/%' THEN 'GET /ws/:channel'
+            ELSE route
+          END AS normalized_route,
+          event_type,
+          status_code,
+          created_at
+        FROM operational_events
+        WHERE created_at >= ?
+          AND event_type IN ('request_failed', 'preview_upstream_failed', 'unhandled_exception', 'maintenance_failed', 'rate_limited', 'forbidden')
+      )
       SELECT
-        route,
+        normalized_route AS route,
         SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
         SUM(CASE WHEN event_type = 'preview_upstream_failed' THEN 1 ELSE 0 END) AS preview_upstream_failure_count,
         SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
@@ -1444,10 +1457,8 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
         SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
         SUM(CASE WHEN event_type = 'forbidden' THEN 1 ELSE 0 END) AS forbidden_count,
         MAX(created_at) AS last_event_at
-      FROM operational_events
-      WHERE created_at >= ?
-        AND event_type IN ('request_failed', 'preview_upstream_failed', 'unhandled_exception', 'maintenance_failed', 'rate_limited', 'forbidden')
-      GROUP BY route
+      FROM normalized_events
+      GROUP BY normalized_route
       ORDER BY request_5xx_count DESC, preview_upstream_failure_count DESC, unhandled_exception_count DESC,
                maintenance_failure_count DESC, rate_limited_count DESC, forbidden_count DESC
       LIMIT 12

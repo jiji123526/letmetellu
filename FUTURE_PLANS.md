@@ -56,9 +56,6 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### 2026-08-12 error-analytics follow-up
 
-- Split `/api/preview` upstream fetch and timeout failures out of the core `5xx` health counter so third-party sites do not make the platform look degraded when chat, auth and support are healthy.
-- Add route-stage or action detail for `/api/init` and `/api/messages` failures so health reads can distinguish bootstrap, paging and mutation faults without reading raw logs first.
-- Normalize WebSocket path analytics from channel-specific routes like `/ws/zziks` into grouped websocket categories before treating them as a broad backend trend.
 - Keep media `404` and client-cancelled `499` traffic visible, but do not let them carry the same operator weight as core backend failures in the first-line health summary.
 
 ### Measured performance follow-up
