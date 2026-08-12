@@ -149,6 +149,7 @@ export interface PlatformDashboardVersionResponse {
 export interface PlatformOperationalHealthWindow {
   tracked_event_count: number;
   request_5xx_count: number;
+  preview_upstream_failure_count: number;
   unhandled_exception_count: number;
   maintenance_failure_count: number;
   rate_limited_count: number;

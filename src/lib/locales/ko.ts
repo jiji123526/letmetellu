@@ -448,6 +448,7 @@ export const ko = {
   operationalHealthRefresh: "새로고침",
   operationalHealthRefreshing: "확인 중…",
   operationalHealth5xx: "5xx 오류",
+  operationalHealthPreviewFailures: "프리뷰 외부 오류",
   operationalHealthExceptions: "예외",
   operationalHealthProblemRoutes: "확인이 필요한 경로 · 24시간",
   operationalHealthRouteCounts: "오류 {errors} · 429 {limited}",

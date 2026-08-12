@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Preview upstream failures no longer inflate core service 5xx health — 2026-08-12
+
+- Production error analytics showed `/api/preview` as the largest 24-hour `5xx` bucket, ahead of `/api/init` and `/api/messages`, even when the failures were caused by third-party sites timing out or returning bad upstream responses.
+- The Worker now tags preview `502/503/504` responses as `preview_upstream_failed` instead of the generic `request_failed` event type used for core backend `5xx` health.
+- The super-admin health summary and route breakdown now expose preview upstream failures as their own counter, so core service health is no longer degraded by external preview targets while those failures remain visible for operators.
+- The follow-up monitoring plan now explicitly tracks `/api/init`, `/api/messages`, websocket grouping, and media `404` or client-cancelled traffic separately instead of treating all error buckets as equally actionable.
+
+Trade-off: raw HTTP analytics and CDN edge error charts will still show preview `502/504` responses because the HTTP semantics remain unchanged. Only the internal operational-health model is reclassified to better reflect platform health.
+
+Deployment note: this requires a Worker deploy for the event classification and health aggregation change, plus a frontend deploy for the updated super-admin health card. No D1 migration is required.
+
 ### Search boundary loads now hold the viewport until the target window settles — 2026-08-10
 
 - When search navigation stepped into older matches that were not mounted, the chat kept the previous fast-path improvement of deferring the final scroll but still visibly bounced while `message-context` replaced the window underneath the reader.

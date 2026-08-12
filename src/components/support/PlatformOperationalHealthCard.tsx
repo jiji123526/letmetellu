@@ -29,6 +29,7 @@ export function PlatformOperationalHealthCard({
   const recent = health?.windows.last_15m;
   const problemRoutes = (health?.routes || []).filter((route) => (
     route.request_5xx_count
+    || route.preview_upstream_failure_count
     || route.unhandled_exception_count
     || route.maintenance_failure_count
     || route.rate_limited_count
@@ -89,9 +90,10 @@ export function PlatformOperationalHealthCard({
 
         {expanded && recent && (
           <>
-            <div className="grid grid-cols-4 gap-1.5 mt-3">
+            <div className="grid grid-cols-5 gap-1.5 mt-3">
               {[
                 [t("operationalHealth5xx"), recent.request_5xx_count],
+                [t("operationalHealthPreviewFailures"), recent.preview_upstream_failure_count],
                 [t("operationalHealthExceptions"), recent.unhandled_exception_count],
                 ["429", recent.rate_limited_count],
                 ["403", recent.forbidden_count],
@@ -111,7 +113,7 @@ export function PlatformOperationalHealthCard({
                       <span className="truncate font-medium">{route.route}</span>
                       <span className="shrink-0 tabular-nums" style={{ color: "var(--meta)" }}>
                         {t("operationalHealthRouteCounts")
-                          .replace("{errors}", String(route.request_5xx_count + route.unhandled_exception_count + route.maintenance_failure_count))
+                          .replace("{errors}", String(route.request_5xx_count + route.preview_upstream_failure_count + route.unhandled_exception_count + route.maintenance_failure_count))
                           .replace("{limited}", String(route.rate_limited_count))}
                       </span>
                     </div>

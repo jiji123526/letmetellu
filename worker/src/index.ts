@@ -15,7 +15,11 @@ import { handleRecentChannels } from "./routes/recent-channels";
 import { handleChannelReports } from "./routes/channel-reports";
 import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
-import { recordOperationalEvent } from "./lib/operational-events";
+import {
+  getOperationalEventOverride,
+  recordOperationalEvent,
+  stripOperationalEventHeaders,
+} from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
 import { isAllowedRequestOrigin } from "./lib/request-origin";
 
@@ -58,6 +62,7 @@ function appendVary(headers: Headers, value: string): void {
 
 function buildResponse(request: Request, response: Response, origin: string, allowedOrigin: string): Response {
   const headers = new Headers(response.headers);
+  stripOperationalEventHeaders(headers);
   Object.entries(corsHeaders(origin, allowedOrigin)).forEach(([key, value]) => {
     if (value) headers.set(key, value);
     else headers.delete(key);
@@ -188,10 +193,9 @@ export default {
         env,
         severity: "error",
         route,
-        eventType: "request_failed",
+        eventType: getOperationalEventOverride(response) || "request_failed",
         statusCode: response.status,
         actorUserId: request.headers.get("X-User-Id"),
-        detail: capturedUnhandledException ? { source: "unhandled_exception" } : undefined,
       }));
     }
 

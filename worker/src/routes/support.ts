@@ -1422,6 +1422,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
     SELECT
       COUNT(*) AS tracked_event_count,
       SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+      SUM(CASE WHEN event_type = 'preview_upstream_failed' THEN 1 ELSE 0 END) AS preview_upstream_failure_count,
       SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
       SUM(CASE WHEN event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
       SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
@@ -1437,6 +1438,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       SELECT
         route,
         SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+        SUM(CASE WHEN event_type = 'preview_upstream_failed' THEN 1 ELSE 0 END) AS preview_upstream_failure_count,
         SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
         SUM(CASE WHEN event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
         SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
@@ -1444,9 +1446,9 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
         MAX(created_at) AS last_event_at
       FROM operational_events
       WHERE created_at >= ?
-        AND event_type IN ('request_failed', 'unhandled_exception', 'maintenance_failed', 'rate_limited', 'forbidden')
+        AND event_type IN ('request_failed', 'preview_upstream_failed', 'unhandled_exception', 'maintenance_failed', 'rate_limited', 'forbidden')
       GROUP BY route
-      ORDER BY request_5xx_count DESC, unhandled_exception_count DESC,
+      ORDER BY request_5xx_count DESC, preview_upstream_failure_count DESC, unhandled_exception_count DESC,
                maintenance_failure_count DESC, rate_limited_count DESC, forbidden_count DESC
       LIMIT 12
     `).bind(cutoff24h).all<OperationalHealthWindowRow & { route: string; last_event_at: string }>(),

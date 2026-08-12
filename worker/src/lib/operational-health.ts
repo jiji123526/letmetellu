@@ -1,6 +1,7 @@
 export interface OperationalHealthWindowRow {
   tracked_event_count?: number | string | null;
   request_5xx_count?: number | string | null;
+  preview_upstream_failure_count?: number | string | null;
   unhandled_exception_count?: number | string | null;
   maintenance_failure_count?: number | string | null;
   rate_limited_count?: number | string | null;
@@ -10,6 +11,7 @@ export interface OperationalHealthWindowRow {
 export interface OperationalHealthWindow {
   tracked_event_count: number;
   request_5xx_count: number;
+  preview_upstream_failure_count: number;
   unhandled_exception_count: number;
   maintenance_failure_count: number;
   rate_limited_count: number;
@@ -27,6 +29,7 @@ export function serializeOperationalHealthWindow(
   return {
     tracked_event_count: count(row?.tracked_event_count),
     request_5xx_count: count(row?.request_5xx_count),
+    preview_upstream_failure_count: count(row?.preview_upstream_failure_count),
     unhandled_exception_count: count(row?.unhandled_exception_count),
     maintenance_failure_count: count(row?.maintenance_failure_count),
     rate_limited_count: count(row?.rate_limited_count),

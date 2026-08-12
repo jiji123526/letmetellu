@@ -1,5 +1,7 @@
 import type { Env } from "../types";
 
+export const OPERATIONAL_EVENT_OVERRIDE_HEADER = "X-Letmetellu-Operational-Event";
+
 export async function recordOperationalEvent(input: {
   env: Env;
   severity: "info" | "warn" | "error";
@@ -29,4 +31,21 @@ export async function recordOperationalEvent(input: {
   } catch (error) {
     console.warn("failed to record operational event", error);
   }
+}
+
+export function getOperationalEventOverride(response: Response): string | null {
+  return response.headers.get(OPERATIONAL_EVENT_OVERRIDE_HEADER);
+}
+
+export function withOperationalEventOverride(response: Response, eventType: string): Response {
+  const headers = new Headers(response.headers);
+  headers.set(OPERATIONAL_EVENT_OVERRIDE_HEADER, eventType);
+  return new Response(response.body, {
+    status: response.status,
+    headers,
+  });
+}
+
+export function stripOperationalEventHeaders(headers: Headers): void {
+  headers.delete(OPERATIONAL_EVENT_OVERRIDE_HEADER);
 }

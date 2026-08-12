@@ -6,6 +6,12 @@ import { getRateLimitBucketStart } from "../src/lib/durable-rate-limit.ts";
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
 import { getMediaCacheControl } from "../src/lib/media-cache-control.ts";
 import {
+  OPERATIONAL_EVENT_OVERRIDE_HEADER,
+  getOperationalEventOverride,
+  stripOperationalEventHeaders,
+  withOperationalEventOverride,
+} from "../src/lib/operational-events.ts";
+import {
   canUsePublicBackgroundCache,
   createPublicBackgroundCacheKey,
 } from "../src/lib/public-background-cache.ts";
@@ -193,6 +199,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
   assert.deepEqual(serializeOperationalHealthWindow({
     tracked_event_count: "12",
     request_5xx_count: 2,
+    preview_upstream_failure_count: "4",
     unhandled_exception_count: null,
     maintenance_failure_count: undefined,
     rate_limited_count: "7",
@@ -200,6 +207,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
   }), {
     tracked_event_count: 12,
     request_5xx_count: 2,
+    preview_upstream_failure_count: 4,
     unhandled_exception_count: 0,
     maintenance_failure_count: 0,
     rate_limited_count: 7,
@@ -211,8 +219,21 @@ test("operational health status applies conservative 15-minute thresholds", () =
   const base = serializeOperationalHealthWindow(null);
   assert.equal(deriveOperationalHealthStatus(base), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");
+  assert.equal(deriveOperationalHealthStatus({ ...base, preview_upstream_failure_count: 4 }), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, rate_limited_count: 25 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 5 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, unhandled_exception_count: 3 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, maintenance_failure_count: 1 }), "critical");
+});
+
+test("operational event overrides stay internal to Worker bookkeeping", () => {
+  const response = withOperationalEventOverride(
+    Response.json({ error: "fetch failed" }, { status: 502 }),
+    "preview_upstream_failed",
+  );
+  assert.equal(getOperationalEventOverride(response), "preview_upstream_failed");
+
+  const headers = new Headers(response.headers);
+  stripOperationalEventHeaders(headers);
+  assert.equal(headers.get(OPERATIONAL_EVENT_OVERRIDE_HEADER), null);
 });

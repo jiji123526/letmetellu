@@ -504,6 +504,7 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
   const emptyWindow: PlatformOperationalHealthWindow = {
     tracked_event_count: 0,
     request_5xx_count: 0,
+    preview_upstream_failure_count: 0,
     unhandled_exception_count: 0,
     maintenance_failure_count: 0,
     rate_limited_count: 0,

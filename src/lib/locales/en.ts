@@ -450,6 +450,7 @@ export const en: Record<LocaleKeys, string> = {
   operationalHealthRefresh: "Refresh",
   operationalHealthRefreshing: "Checking…",
   operationalHealth5xx: "5xx errors",
+  operationalHealthPreviewFailures: "Preview upstream",
   operationalHealthExceptions: "Exceptions",
   operationalHealthProblemRoutes: "Routes needing attention · 24h",
   operationalHealthRouteCounts: "Errors {errors} · 429 {limited}",

@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable-rate-limit";
+import { withOperationalEventOverride } from "../lib/operational-events";
 import { assertAllowedPreviewUrl, PreviewError } from "../lib/preview-policy";
 import { parsePreviewMetadata } from "../lib/preview-metadata";
 import {
@@ -143,7 +144,12 @@ async function createPreviewFailureResponse(
   if (!ttlSeconds) {
     return Response.json({ error: message }, { status });
   }
-  const response = createCacheablePreviewResponse({ error: message }, status, ttlSeconds);
+  const response = status >= 502 && status <= 504
+    ? withOperationalEventOverride(
+      createCacheablePreviewResponse({ error: message }, status, ttlSeconds),
+      "preview_upstream_failed",
+    )
+    : createCacheablePreviewResponse({ error: message }, status, ttlSeconds);
   await cachePreview(cacheKey, response);
   return response;
 }
