@@ -1,4 +1,4 @@
-import { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export function getParentChannelId(channelId: string): string {
   return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;

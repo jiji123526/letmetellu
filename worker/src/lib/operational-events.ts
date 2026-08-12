@@ -1,4 +1,4 @@
-import type { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export const OPERATIONAL_EVENT_OVERRIDE_HEADER = "X-Letmetellu-Operational-Event";
 const OPERATIONAL_ERROR_DETAIL = Symbol("letmetellu.operational-error-detail");

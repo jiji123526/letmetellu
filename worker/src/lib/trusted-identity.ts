@@ -1,4 +1,4 @@
-import type { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export function isTrustedInternalRequest(request: Request, env: Env): boolean {
   return request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET;

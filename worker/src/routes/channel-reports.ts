@@ -1,4 +1,4 @@
-import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity.ts";
 import {
   broadcastModerationStateChange,
   broadcastFreezeChange,
@@ -13,14 +13,14 @@ import {
   sendOwnerModerationNotice,
   setChannelModeration,
   type UserLocale,
-} from "../lib/channel-moderation";
-import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
-import { getTrustedUserId } from "../lib/trusted-identity";
-import { appendModerationAuditLog } from "../lib/moderation-audit";
-import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
-import { Env } from "../types";
-import { deleteChannel } from "../lib/channel-cleanup";
-import { authorizeRoomToken } from "./passcode";
+} from "../lib/channel-moderation.ts";
+import { consumeDurableRateLimit } from "../lib/durable-rate-limit.ts";
+import { getTrustedUserId } from "../lib/trusted-identity.ts";
+import { appendModerationAuditLog } from "../lib/moderation-audit.ts";
+import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels.ts";
+import type { Env } from "../types.ts";
+import { deleteChannel } from "../lib/channel-cleanup.ts";
+import { authorizeRoomToken } from "./passcode.ts";
 
 const REPORT_REASONS = new Set([
   "spam",

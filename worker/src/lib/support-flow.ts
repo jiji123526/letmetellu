@@ -1,5 +1,5 @@
-import type { UserLocale } from "./channel-moderation";
-import { getSupportFlowLocale } from "./support-flow-locales";
+import type { UserLocale } from "./channel-moderation.ts";
+import { getSupportFlowLocale } from "./support-flow-locales.ts";
 
 export type SupportTopic =
   | "login"

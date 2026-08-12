@@ -1,4 +1,4 @@
-import type { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export type ActorRecordType = "message" | "dm";
 

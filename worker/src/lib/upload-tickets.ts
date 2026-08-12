@@ -1,4 +1,4 @@
-import { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export type UploadPurpose = "message" | "dm" | "channel-asset";
 

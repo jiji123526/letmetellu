@@ -1,4 +1,4 @@
-import { Env } from "../types";
+import type { Env } from "../types.ts";
 
 // Message length cap
 const MAX_MESSAGE_LENGTH = 5000;

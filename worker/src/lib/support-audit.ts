@@ -1,4 +1,4 @@
-import type { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export async function appendSupportAuditLog(input: {
   env: Env;

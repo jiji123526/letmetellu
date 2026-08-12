@@ -1,4 +1,4 @@
-import type { Env } from "../types";
+import type { Env } from "../types.ts";
 
 export function messageHasLinks(text: string | null | undefined): boolean {
   if (!text) return false;

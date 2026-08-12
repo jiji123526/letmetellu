@@ -1,17 +1,17 @@
-import { Env } from "../types";
-import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation";
-import { isReportsChannel } from "../lib/special-channels";
-import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation";
-import { deleteMediaByUrl } from "../lib/media";
-import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets";
-import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
-import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
-import { syncMessageLink } from "../lib/message-links";
-import { withOperationalErrorContext } from "../lib/operational-events";
-import { authorizeRoomToken } from "./passcode";
-import { isValidClientMessageId } from "../lib/message-idempotency";
-import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads";
+import type { Env } from "../types.ts";
+import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity.ts";
+import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation.ts";
+import { isReportsChannel } from "../lib/special-channels.ts";
+import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation.ts";
+import { deleteMediaByUrl } from "../lib/media.ts";
+import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
+import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions.ts";
+import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
+import { syncMessageLink } from "../lib/message-links.ts";
+import { withOperationalErrorContext } from "../lib/operational-events.ts";
+import { authorizeRoomToken } from "./passcode.ts";
+import { isValidClientMessageId } from "../lib/message-idempotency.ts";
+import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -61,6 +61,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       const requestedReplyTo = normalizeRequestedReplyId(reply_to);
       if (requestedReplyTo === undefined) {
         return Response.json({ error: "invalid_reply_target" }, { status: 400 });
+      }
+      const requestedReportedMessageId = report
+        ? normalizeRequestedReplyId(reported_msg_id)
+        : null;
+      if (report && !requestedReportedMessageId) {
+        return Response.json({ error: "invalid_report_target" }, { status: 400 });
       }
       const clientMessageId = isValidClientMessageId(client_message_id) ? client_message_id : crypto.randomUUID();
 
@@ -196,6 +202,16 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       if (requestedReplyTo && !resolvedReplyTo) {
         return Response.json({ error: "invalid_reply_target" }, { status: 400 });
       }
+      routeStage = "resolve_report_target";
+      const resolvedReportedMessage = requestedReportedMessageId
+        ? await env.DB.prepare(
+          "SELECT id FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0"
+        ).bind(requestedReportedMessageId, requestChannelId).first<{ id: string }>()
+        : null;
+      if (requestedReportedMessageId && !resolvedReportedMessage) {
+        return Response.json({ error: "invalid_report_target" }, { status: 400 });
+      }
+      const resolvedReportedMessageId = resolvedReportedMessage?.id || null;
 
       // Insert message (+ gallery if image) in a single batch
       const id = crypto.randomUUID();
@@ -229,7 +245,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         env.DB.prepare(`
           INSERT INTO messages (id, client_message_id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, report, reported_msg_id, gallery_id, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, clientMessageId, senderUid, senderUid, nick || null, text || "", isAdmin, requestChannelId, image || null, resolvedReplyTo, report ? 1 : 0, reported_msg_id || null, image ? id : null, created_at),
+        `).bind(id, clientMessageId, senderUid, senderUid, nick || null, text || "", isAdmin, requestChannelId, image || null, resolvedReplyTo, report ? 1 : 0, resolvedReportedMessageId, image ? id : null, created_at),
       ];
       if (!isChannelOwner && requesterDeviceId) {
         routeStage = "persist_message_identities";
@@ -268,7 +284,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       const newMessage = {
         id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
         channel_id, image: image || null, reply_to: resolvedReplyTo,
-        report: report ? 1 : 0, reported_msg_id: reported_msg_id || null, gallery_id: image ? id : null,
+        report: report ? 1 : 0, reported_msg_id: resolvedReportedMessageId, gallery_id: image ? id : null,
         deleted: 0, edited: 0, reactions: "{}", created_at,
       };
       routeStage = "broadcast_message";

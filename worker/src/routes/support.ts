@@ -1,13 +1,13 @@
-import type { Env } from "../types";
-import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getUserLocale, type UserLocale } from "../lib/channel-moderation";
-import { recordOperationalEvent } from "../lib/operational-events";
-import { deriveOperationalHealthStatus, serializeOperationalHealthWindow, type OperationalHealthWindowRow } from "../lib/operational-health";
-import { getTrustedUserId } from "../lib/trusted-identity";
-import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
-import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow";
-import { appendSupportAuditLog } from "../lib/support-audit";
-import { consumeDurableRateLimit } from "../lib/durable-rate-limit";
+import type { Env } from "../types.ts";
+import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity.ts";
+import { getUserLocale, type UserLocale } from "../lib/channel-moderation.ts";
+import { recordOperationalEvent } from "../lib/operational-events.ts";
+import { deriveOperationalHealthStatus, serializeOperationalHealthWindow, type OperationalHealthWindowRow } from "../lib/operational-health.ts";
+import { getTrustedUserId } from "../lib/trusted-identity.ts";
+import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels.ts";
+import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow.ts";
+import { appendSupportAuditLog } from "../lib/support-audit.ts";
+import { consumeDurableRateLimit } from "../lib/durable-rate-limit.ts";
 
 const SUPPORT_TEXT_MAX_LENGTH = 1_500;
 const SUPPORT_SESSION_TEXT_MAX_LENGTH = 500;

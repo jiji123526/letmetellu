@@ -1,6 +1,6 @@
-import { hashRateLimitIdentifier } from "../lib/durable-rate-limit";
-import { invalidatePasscodeCache } from "../lib/validation";
-import { Env } from "../types";
+import { hashRateLimitIdentifier } from "../lib/durable-rate-limit.ts";
+import { invalidatePasscodeCache } from "../lib/validation.ts";
+import type { Env } from "../types.ts";
 
 const PASSCODE_HASH_PREFIX = "pbkdf2-sha256$";
 const PASSCODE_PBKDF2_ITERATIONS = 100_000;

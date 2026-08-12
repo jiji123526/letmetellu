@@ -31,7 +31,7 @@ Status as of 2026-08-12:
 | `/api/init` | Public-room bootstrap; locked rooms receive only gate metadata | Full locked-room bootstrap with channel-bound room token | Full data and owner state | Reports channel only through configured ownership | Server checks trusted identity and room token; manual state coverage |
 | `/api/data` messages/gallery/links/search | Public room allowed | Locked room allowed with token | Allowed | Reports inbox only for configured owner | Passcode boundary in handler; flat history/query tests |
 | `/api/data` dm/blocked/banned-words | Denied | Denied | Allowed for owned channel | No implicit cross-channel override | Shared trusted-identity and pre-switch owner-boundary tests |
-| `/api/messages` | Public room allowed with signed actor identity | Locked room allowed with token | Allowed | Reports mutations require configured ownership | Idempotency, reply and actor-identity focused tests; broader action matrix pending |
+| `/api/messages` | Public room allowed with signed actor identity | Locked room allowed with token | Allowed | Reports mutations require configured ownership | Idempotency, reply/report target, actor-identity and direct cross-channel mutation tests |
 | `/api/admin` | Denied | Denied | Owned channel only; ending live also requires the exact active session ID | No implicit ownership of other channels | Shared internal-secret and owner checks; focused stale-session end coverage |
 | `/api/socket-auth` | Public rooms receive no privileged mode | Locked viewer mode requires room token | Admin mode only with trusted matching identity | Reports viewer/admin mode follows configured ownership | Shared trusted-identity and owner-check tests; origin test covers WebSocket entry |
 | `/ws/:channel` | Public-room connection only after allowed-origin upgrade | Locked viewer authorization requires a scoped viewer token | Admin authorization requires a scoped owner token | Reports authorization follows configured ownership | Durable Object revalidates live joins against current D1 session ID; focused source/session tests, browser transitions pending |
@@ -39,8 +39,8 @@ Status as of 2026-08-12:
 | `/api/media/*` | Public media only where channel policy permits | Protected media requires current room authorization on network access/revalidation | Owned-channel media allowed | No blanket media override | Cache/access focused tests; an already cached private response can remain reusable for its bounded browser-cache window |
 | `/api/dm` | Signed actor and channel policy required | Same, with room token for locked room | Owner receives data through owner-only data route | No implicit override | Idempotency/identity controls exist; full action regression pending |
 | `/api/channel-reports` POST | Signed actor/device required | Locked channel additionally requires room token | Owner cannot report own channel | Same submission rules | Durable quota and target-channel lookup; direct target/evidence expansion pending |
-| `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity and platform-role check tests |
-| `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation implemented; guided-state regression pending |
+| `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity, platform-role, per-action denial and target-lookup tests |
+| `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation and direct ownership-mutation tests; guided-state/browser regression pending |
 | `/api/platform-admin/support` | Denied | Denied | Denied unless platform admin | Allowed | Shared trusted-identity and platform-role check tests |
 | `/api/user` account reads/writes | Denied except documented public profile/channel-existence reads | Same | Own account through trusted proxy | Own account through trusted proxy | Functional forged preference-update rejection test |
 | `/api/recent-channels` | Browser-local only; Worker account route denied | Same | Own rows through trusted proxy | Own rows through trusted proxy | Identity/email canonicalization exists; action regression pending |
@@ -57,9 +57,9 @@ Status as of 2026-08-12:
 - [x] Channel owner and platform-admin comparisons remain server-side after
   trusted identity resolution.
 - [x] Owner-only collections are rejected before their data switch.
-- [ ] Exercise every `/api/messages` method with another channel's message ID,
+- [x] Exercise every `/api/messages` method with another channel's message ID,
   upload ticket and room token.
-- [ ] Exercise every report/petition action with normal-user, channel-owner and
+- [x] Exercise every report/petition action with normal-user, channel-owner and
   platform-admin sessions.
 - [x] A stale owner session ID cannot end a newer live session, and WebSocket
   live presence is accepted only for the current active session.

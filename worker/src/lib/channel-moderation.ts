@@ -1,5 +1,5 @@
-import { Env } from "../types";
-import { getParentChannelId, getReportsChannelId } from "./special-channels";
+import type { Env } from "../types.ts";
+import { getParentChannelId, getReportsChannelId } from "./special-channels.ts";
 
 export type ModerationStatus = "active" | "warned" | "suspended" | "frozen";
 export type PetitionStatus = "none" | "open" | "accepted" | "rejected";

@@ -1,6 +1,6 @@
-import type { Env } from "../types";
-import { deleteMediaByUrl } from "./media";
-import { getLiveSessionEndDisposition } from "./live-session-end";
+import type { Env } from "../types.ts";
+import { deleteMediaByUrl } from "./media.ts";
+import { getLiveSessionEndDisposition } from "./live-session-end.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
 export const LIVE_SESSION_DURATION_HOURS = 8;

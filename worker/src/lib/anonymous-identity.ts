@@ -1,4 +1,4 @@
-import { Env } from "../types";
+import type { Env } from "../types.ts";
 
 const ANONYMOUS_IDENTITY_TTL_SECONDS = 90 * 24 * 60 * 60;
 const DEVICE_IDENTITY_TTL_SECONDS = 90 * 24 * 60 * 60;
