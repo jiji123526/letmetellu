@@ -4,7 +4,7 @@ This checklist is for shipping **yap.** beyond ad hoc internal testing.
 It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
 backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
-## Status snapshot — 2026-08-09
+## Status snapshot — 2026-08-12
 
 ### Completed and verified
 
@@ -13,11 +13,14 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Google login/signup callbacks and Resend delivery use the production domain.
 - [x] Email signup verification and password reset were exercised in production during the beta setup.
 - [x] The super-admin operational-health view and bounded operational-event retention are deployed.
-- [x] Worker hardening coverage currently passes 44 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
+- [x] Worker hardening coverage currently passes 56 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, YouTube URL parsing, live-session ending, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
 - [x] GitHub Actions runs the Worker hardening suite, TypeScript check and Wrangler dry-run on every relevant `main` push and pull request. It performs no production deploy and requires no production secrets.
 - [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
 - [x] New replies are normalized to their top-level message. The production audit found 747 replies with no nested, broken, cross-channel or cyclic relationships.
 - [x] Normal history paging and `message-context` now use indexed root/direct-child reads instead of recursive thread traversal.
+- [x] YouTube and Instagram use lightweight preview cards rather than client-side widgets or iframes. YouTube cards no longer depend on an external title provider.
+- [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
+- [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
 - [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
 
 ### Still required before a broad public launch
@@ -34,7 +37,19 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 - [ ] After representative traffic, rerun `worker/scripts/audit-flat-replies.sql` and D1 Insights. Confirm the former recursive query stops accumulating executions and compare the replacement query's rows read and duration.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
-- [ ] Measure widget/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
+- [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
+
+## Current release verification — 2026-08-12
+
+Complete these checks for the social-preview and live-session changes before treating the current `main` revision as production-verified:
+
+- [ ] Deploy the Worker first so YouTube preview cache `v3`, deterministic thumbnail cards, session-aware live ending and updated operational diagnostics are active.
+- [ ] Deploy the frontend after the Worker and confirm the production CSP no longer permits unused YouTube, Twitter or Instagram widget origins.
+- [ ] Verify standard YouTube watch, `youtu.be`, Shorts and live URLs render static thumbnail cards without iframe/widget requests.
+- [ ] Verify an Instagram public URL renders a static card when metadata is available and leaves the original link visible when metadata is unavailable.
+- [ ] Verify a stale owner tab cannot end a newer live session.
+- [ ] Verify a viewer tab returning from the background exits an ended session or receives the current session prompt before rejoining presence.
+- [ ] Confirm preview upstream failures remain visible separately from core `5xx`, while media `404` remains a non-severity secondary signal.
 
 ## Public-launch blockers
 
@@ -76,7 +91,7 @@ The limited-beta gate was completed on 2026-08-04:
 Accepted limited-beta security trade-off:
 
 - The production CSP still permits `script-src 'unsafe-inline'`. No active XSS is known, but this weakens CSP as a fallback containment layer if a separate injection bug exists. Keep normal input/rendering protections in place, monitor browser errors, and complete the nonce/dialog-contract migration before a broad public launch.
-- Do not remove `'unsafe-inline'` during release preparation without testing theme startup, auth, chat dialogs and external widgets under the stricter policy.
+- Do not remove `'unsafe-inline'` during release preparation without testing theme startup, auth, chat dialogs, deferred preview cards and raw-link fallback under the stricter policy.
 
 ## Pre-deploy checks
 
@@ -100,7 +115,14 @@ cd worker
 npx tsc --noEmit
 ```
 
-5. If dependencies changed, rerun the production audit:
+5. Run the Worker hardening suite and verify the deploy bundle:
+
+```bash
+npm run test:hardening
+npx wrangler deploy --dry-run
+```
+
+6. If dependencies changed, rerun the production audit:
 
 ```bash
 npm audit --omit=dev
@@ -162,15 +184,19 @@ Run these after deployment.
 
 1. Locked-channel profile image still appears in the channel list.
 2. Background/profile changes made by the owner appear correctly.
-3. Deleted media no longer renders in chat/gallery.
+3. Deleted media disappears from chat/gallery and a new or revalidated request for its old URL returns `404`.
+4. Account for the documented browser-cache window when testing a URL that was already loaded before deletion.
 
 ### Link previews
 
 1. Normal public URL produces a preview.
-2. YouTube URL produces a preview.
-3. X/Twitter URL produces a preview.
-4. Blocked, non-HTML, oversized, or slow URLs do not crash the Worker.
-5. When a preview does not render, the original clickable URL remains visible.
+2. Standard YouTube watch, `youtu.be`, Shorts and live URLs produce static thumbnail cards with no iframe request.
+3. YouTube cards still render when external title/author metadata is unavailable.
+4. Public Instagram and X/Twitter URLs use lightweight cards with no platform widget script.
+5. Private or metadata-restricted Instagram posts leave the original clickable URL visible.
+6. Blocked, non-HTML, oversized, or slow URLs do not crash the Worker.
+7. When any preview does not render, the original clickable URL remains visible.
+8. Reloading a previously viewed link can restore its bounded browser-cached preview without changing authorization behavior.
 
 ### Live mode
 
@@ -179,6 +205,9 @@ Run these after deployment.
 3. Confirm presence updates.
 4. End the live session.
 5. Confirm live messages/media are cleaned up and the normal room view recovers.
+6. Keep a viewer tab hidden through session end, return to it and confirm it reconciles to normal chat before sending live presence.
+7. Start a newer session, then attempt to end live from an owner tab holding the previous session and confirm the newer session remains active.
+8. End live in one browser tab and confirm another open tab clears its local live state.
 
 ### Account flows
 
@@ -201,8 +230,11 @@ Run these after deployment.
 
 Before wider rollout, verify that you can inspect:
 
-- preview fetch rejects, timeouts, and rate-limit events;
-- media `403`, `404`, and `500` outcomes;
+- core backend `5xx` separately from third-party preview upstream failures;
+- preview fetch rejects, timeouts and rate-limit events;
+- media `403`, grouped `404` and `500` outcomes, with media `404` excluded from core severity;
+- `/api/init` and `/api/messages` failure-stage detail;
+- grouped WebSocket failures without per-channel route fragmentation;
 - room-auth failures and passcode verification failures;
 - upload ticket validation failures;
 - report submissions and moderation actions.
@@ -234,7 +266,7 @@ Internal or limited beta can proceed after:
 
 - successful production smoke tests;
 - monitoring/logging is available;
-- no active `500` regressions remain;
+- no active core backend `500` regressions remain;
 - the team accepts the remaining isolate-local rate-limit tradeoffs.
 
 Public launch should wait until:
