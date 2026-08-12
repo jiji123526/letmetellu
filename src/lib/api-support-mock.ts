@@ -507,6 +507,7 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
     preview_upstream_failure_count: 0,
     unhandled_exception_count: 0,
     maintenance_failure_count: 0,
+    cleanup_failure_count: 0,
     rate_limited_count: 0,
     forbidden_count: 0,
     media_not_found_count: 0,

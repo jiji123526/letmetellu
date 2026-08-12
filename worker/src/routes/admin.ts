@@ -6,8 +6,9 @@ import { getReportsChannelOwnerId } from "../lib/special-channels";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
-import { createPasscodeHash, invalidatePasscodeAttempts } from "./passcode";
+import { createPasscodeHash } from "./passcode";
 import { isTrustedInternalRequest } from "../lib/trusted-identity";
+import { deleteChannel } from "../lib/channel-cleanup";
 
 function normalizeBubbleColor(value: unknown): unknown {
   return typeof value === "string" && value.toLowerCase() === "#3b8df0"
@@ -79,62 +80,6 @@ function formatModerationPetitionMessage(input: {
         `내용: ${input.text}`,
         "상태: 접수됨",
       ].join("\n");
-}
-
-export async function deleteChannel(channelId: string, env: Env) {
-  const channelIds = [channelId, `${channelId}_live`];
-  const placeholders = channelIds.map(() => "?").join(", ");
-  const [messageMedia, galleryMedia, dmMedia, channelMedia, configMedia, uploadTickets] = await Promise.all([
-    env.DB.prepare(`SELECT image FROM messages WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
-    env.DB.prepare(`SELECT image FROM gallery WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
-    env.DB.prepare(`SELECT image FROM dm WHERE channel_id IN (${placeholders}) AND image IS NOT NULL`).bind(...channelIds).all(),
-    env.DB.prepare(`SELECT profile_image, background_image FROM channels WHERE id IN (${placeholders}) AND (profile_image IS NOT NULL OR background_image IS NOT NULL)`).bind(...channelIds).all(),
-    env.DB.prepare(`SELECT text FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds).all(),
-    env.DB.prepare(`SELECT key FROM upload_tickets WHERE channel_id IN (${placeholders})`).bind(...channelIds).all(),
-  ]);
-
-  const mediaKeys = new Set<string>();
-  const mediaSources = [
-    ...messageMedia.results.map((row) => row.image),
-    ...galleryMedia.results.map((row) => row.image),
-    ...dmMedia.results.map((row) => row.image),
-    ...channelMedia.results.map((row) => row.profile_image),
-    ...channelMedia.results.map((row) => row.background_image),
-    ...configMedia.results.map((row) => row.text),
-  ];
-  for (const source of mediaSources) {
-    if (typeof source !== "string") continue;
-    for (const match of source.matchAll(/\/api\/media\/([^"'\\\s)<>]+)/g)) {
-      if (match[1]) mediaKeys.add(match[1]);
-    }
-  }
-  for (const row of uploadTickets.results || []) {
-    if (typeof row.key === "string" && row.key) mediaKeys.add(row.key);
-  }
-
-  await env.DB.batch([
-    env.DB.prepare(`DELETE FROM messages WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM message_links WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM gallery WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM dm WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM blocked WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM message_actor_identities WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM config WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM moderators WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM banned_words WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM upload_tickets WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM user_recent_channels WHERE channel_id IN (${placeholders})`).bind(...channelIds),
-    env.DB.prepare(`DELETE FROM channels WHERE id IN (${placeholders})`).bind(...channelIds),
-  ]);
-  const doId = env.CHAT_ROOM.idFromName(channelId);
-  const stub = env.CHAT_ROOM.get(doId);
-  await stub.fetch(new Request("http://internal/channel-deleted", {
-    method: "POST",
-  })).catch(() => null);
-  await Promise.all([...mediaKeys].map((key) => env.MEDIA.delete(key).catch(() => {})));
-  invalidatePasscodeCache(channelId);
-  invalidateBannedWordsCache(channelId);
-  invalidatePasscodeAttempts(channelId);
 }
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
@@ -219,8 +164,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "delete-channel": {
-      await deleteChannel(channel_id, env);
-      return Response.json({ ok: true });
+      const result = await deleteChannel(channel_id, env);
+      return Response.json({
+        ok: true,
+        cleanup_pending: result.cleanupPending,
+      });
     }
 
     case "submit-moderation-petition": {

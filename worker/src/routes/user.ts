@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
-import { deleteChannel } from "./admin";
+import { deleteChannel } from "../lib/channel-cleanup";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -182,7 +182,9 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     const { results: ownedChannels } = await env.DB.prepare(
       "SELECT id FROM channels WHERE owner_uid = ? AND id NOT LIKE '%_live'"
     ).bind(user.id).all<{ id: string }>();
-    await Promise.all((ownedChannels || []).map((channel) => deleteChannel(channel.id, env)));
+    const cleanupResults = await Promise.all(
+      (ownedChannels || []).map((channel) => deleteChannel(channel.id, env)),
+    );
 
     await env.DB.batch([
       env.DB.prepare("DELETE FROM user_recent_channels WHERE user_id = ?").bind(user.id),
@@ -193,7 +195,11 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       env.DB.prepare("UPDATE gallery SET auth_uid = NULL WHERE auth_uid = ?").bind(user.id),
       env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id),
     ]);
-    return Response.json({ ok: true, deleted_channels: ownedChannels.length });
+    return Response.json({
+      ok: true,
+      deleted_channels: ownedChannels.length,
+      cleanup_pending: cleanupResults.some((result) => result.cleanupPending),
+    });
   }
 
   if (request.method === "POST") {

@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { deleteCompletedCleanupJobs, retryPendingChannelCleanups } from "./channel-cleanup";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState } from "./live-sessions";
 import { cleanupExpiredUploadTickets } from "./upload-tickets";
 
@@ -8,9 +9,11 @@ const OPERATIONAL_EVENTS_RETENTION_MS = 30 * DAY_MS;
 const MODERATION_AUDIT_RETENTION_MS = 365 * DAY_MS;
 const SUPPORT_AUDIT_RETENTION_MS = 365 * DAY_MS;
 const MESSAGE_ACTOR_IDENTITY_RETENTION_MS = 90 * DAY_MS;
+const COMPLETED_CLEANUP_JOB_RETENTION_MS = 30 * DAY_MS;
 const CLEANUP_BATCH_LIMIT = 250;
 const CLEANUP_MAX_BATCHES = 8;
 const LIVE_SESSION_EXPIRY_BATCH_LIMIT = 20;
+const CHANNEL_CLEANUP_RETRY_LIMIT = 20;
 
 function cutoffIso(retentionMs: number, nowMs: number): string {
   return new Date(nowMs - retentionMs).toISOString();
@@ -62,6 +65,16 @@ async function drainExpiredUploadTicketRetention(env: Env): Promise<number> {
   return deleted;
 }
 
+async function drainCompletedCleanupJobRetention(env: Env, cutoff: string): Promise<number> {
+  let deleted = 0;
+  for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch++) {
+    const count = await deleteCompletedCleanupJobs(env, cutoff, CLEANUP_BATCH_LIMIT);
+    deleted += count;
+    if (count < CLEANUP_BATCH_LIMIT) break;
+  }
+  return deleted;
+}
+
 async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<number> {
   const { results } = await env.DB.prepare(
     "SELECT id, channel_id, text, updated_at FROM config WHERE id GLOB 'live_*' AND text IS NOT NULL AND text != 'false' ORDER BY updated_at ASC LIMIT ?"
@@ -87,8 +100,13 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   moderationAuditLogsDeleted: number;
   supportAuditLogsDeleted: number;
   messageActorIdentitiesDeleted: number;
+  channelCleanupJobsAttempted: number;
+  channelCleanupJobsCompleted: number;
+  channelCleanupJobsPending: number;
+  completedCleanupJobsDeleted: number;
 }> {
   const expiredLiveSessionsEnded = await expireTimedOutLiveSessions(env, nowMs);
+  const channelCleanup = await retryPendingChannelCleanups(env, nowMs, CHANNEL_CLEANUP_RETRY_LIMIT);
   const uploadTicketsDeleted = await drainExpiredUploadTicketRetention(env);
   const durableRateLimitsDeleted = await drainTableRetention(
     env,
@@ -120,6 +138,10 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     "created_at",
     cutoffIso(MESSAGE_ACTOR_IDENTITY_RETENTION_MS, nowMs),
   );
+  const completedCleanupJobsDeleted = await drainCompletedCleanupJobRetention(
+    env,
+    cutoffIso(COMPLETED_CLEANUP_JOB_RETENTION_MS, nowMs),
+  );
 
   return {
     expiredLiveSessionsEnded,
@@ -129,5 +151,9 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     moderationAuditLogsDeleted,
     supportAuditLogsDeleted,
     messageActorIdentitiesDeleted,
+    channelCleanupJobsAttempted: channelCleanup.attempted,
+    channelCleanupJobsCompleted: channelCleanup.completed,
+    channelCleanupJobsPending: channelCleanup.pending,
+    completedCleanupJobsDeleted,
   };
 }

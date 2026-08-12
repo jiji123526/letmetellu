@@ -32,6 +32,7 @@ export function PlatformOperationalHealthCard({
     || route.preview_upstream_failure_count
     || route.unhandled_exception_count
     || route.maintenance_failure_count
+    || route.cleanup_failure_count
     || route.rate_limited_count
     || route.media_not_found_count
   )).slice(0, 3);
@@ -96,6 +97,7 @@ export function PlatformOperationalHealthCard({
                 [t("operationalHealth5xx"), recent.request_5xx_count],
                 [t("operationalHealthPreviewFailures"), recent.preview_upstream_failure_count],
                 [t("operationalHealthExceptions"), recent.unhandled_exception_count],
+                [t("operationalHealthCleanupFailures"), recent.cleanup_failure_count],
                 ["429", recent.rate_limited_count],
                 ["403", recent.forbidden_count],
                 [t("operationalHealthMediaMisses"), recent.media_not_found_count],
@@ -115,7 +117,7 @@ export function PlatformOperationalHealthCard({
                       <span className="truncate font-medium">{route.route}</span>
                       <span className="shrink-0 tabular-nums" style={{ color: "var(--meta)" }}>
                         {t("operationalHealthRouteCounts")
-                          .replace("{errors}", String(route.request_5xx_count + route.preview_upstream_failure_count + route.unhandled_exception_count + route.maintenance_failure_count))
+                          .replace("{errors}", String(route.request_5xx_count + route.preview_upstream_failure_count + route.unhandled_exception_count + route.maintenance_failure_count + route.cleanup_failure_count))
                           .replace("{missing}", String(route.media_not_found_count))
                           .replace("{limited}", String(route.rate_limited_count))}
                       </span>

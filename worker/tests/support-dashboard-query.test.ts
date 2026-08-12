@@ -14,6 +14,18 @@ const workerIndexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
 );
+const cleanupSource = readFileSync(
+  new URL("../src/lib/channel-cleanup.ts", import.meta.url),
+  "utf8",
+);
+const maintenanceSource = readFileSync(
+  new URL("../src/lib/maintenance.ts", import.meta.url),
+  "utf8",
+);
+const cleanupMigration = readFileSync(
+  new URL("../migrations/0036_retryable_channel_cleanup.sql", import.meta.url),
+  "utf8",
+);
 
 test("support thread reads use direct role-keyed joins", () => {
   assert.match(
@@ -82,4 +94,27 @@ test("operational health groups websocket routes by normalized channel path", ()
     supportRouteSource,
     /SUM\(CASE WHEN event_type = 'media_not_found' THEN 1 ELSE 0 END\) AS media_not_found_count/,
   );
+  assert.match(
+    supportRouteSource,
+    /SUM\(CASE WHEN event_type = 'cleanup_failed' THEN 1 ELSE 0 END\) AS cleanup_failure_count/,
+  );
+});
+
+test("channel deletion records recoverable cleanup before deleting D1 state", () => {
+  const batchStart = cleanupSource.indexOf("await env.DB.batch([");
+  const insertJob = cleanupSource.indexOf("INSERT INTO cleanup_jobs", batchStart);
+  const deleteChannel = cleanupSource.indexOf("DELETE FROM channels", batchStart);
+
+  assert.ok(batchStart >= 0, "channel deletion should use one D1 batch");
+  assert.ok(insertJob > batchStart, "cleanup job should be created in the deletion batch");
+  assert.ok(deleteChannel > insertJob, "cleanup job should be recorded before channel rows are removed");
+  assert.match(cleanupMigration, /UNIQUE \(resource_type, resource_id, resource_version\)/);
+  assert.match(cleanupMigration, /cleanup_jobs_due_idx/);
+});
+
+test("scheduled maintenance retries and retains channel cleanup jobs", () => {
+  assert.match(maintenanceSource, /retryPendingChannelCleanups\(env, nowMs, CHANNEL_CLEANUP_RETRY_LIMIT\)/);
+  assert.match(maintenanceSource, /deleteCompletedCleanupJobs\(env, cutoff, CLEANUP_BATCH_LIMIT\)/);
+  assert.match(cleanupSource, /eventType: "cleanup_failed"/);
+  assert.match(cleanupSource, /eventType: "cleanup_recovered"/);
 });

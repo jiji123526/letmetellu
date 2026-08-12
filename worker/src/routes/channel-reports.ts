@@ -19,7 +19,7 @@ import { getTrustedUserId } from "../lib/trusted-identity";
 import { appendModerationAuditLog } from "../lib/moderation-audit";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { Env } from "../types";
-import { deleteChannel } from "./admin";
+import { deleteChannel } from "../lib/channel-cleanup";
 import { authorizeRoomToken } from "./passcode";
 
 const REPORT_REASONS = new Set([

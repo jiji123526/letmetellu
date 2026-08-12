@@ -454,6 +454,7 @@ export const en: Record<LocaleKeys, string> = {
   operationalHealth5xx: "5xx errors",
   operationalHealthPreviewFailures: "Preview upstream",
   operationalHealthExceptions: "Exceptions",
+  operationalHealthCleanupFailures: "Cleanup retries",
   operationalHealthMediaMisses: "Media 404",
   operationalHealthProblemRoutes: "Routes needing attention · 24h",
   operationalHealthRouteCounts: "Errors {errors} · 404 {missing} · 429 {limited}",

@@ -4,6 +4,7 @@ export interface OperationalHealthWindowRow {
   preview_upstream_failure_count?: number | string | null;
   unhandled_exception_count?: number | string | null;
   maintenance_failure_count?: number | string | null;
+  cleanup_failure_count?: number | string | null;
   rate_limited_count?: number | string | null;
   forbidden_count?: number | string | null;
   media_not_found_count?: number | string | null;
@@ -15,6 +16,7 @@ export interface OperationalHealthWindow {
   preview_upstream_failure_count: number;
   unhandled_exception_count: number;
   maintenance_failure_count: number;
+  cleanup_failure_count: number;
   rate_limited_count: number;
   forbidden_count: number;
   media_not_found_count: number;
@@ -34,6 +36,7 @@ export function serializeOperationalHealthWindow(
     preview_upstream_failure_count: count(row?.preview_upstream_failure_count),
     unhandled_exception_count: count(row?.unhandled_exception_count),
     maintenance_failure_count: count(row?.maintenance_failure_count),
+    cleanup_failure_count: count(row?.cleanup_failure_count),
     rate_limited_count: count(row?.rate_limited_count),
     forbidden_count: count(row?.forbidden_count),
     media_not_found_count: count(row?.media_not_found_count),
@@ -53,6 +56,7 @@ export function deriveOperationalHealthStatus(window: OperationalHealthWindow): 
   if (
     window.request_5xx_count > 0
     || window.unhandled_exception_count > 0
+    || window.cleanup_failure_count > 0
     || window.rate_limited_count >= 25
   ) {
     return "degraded";

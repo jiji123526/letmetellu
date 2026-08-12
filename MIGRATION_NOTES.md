@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel deletion now survives partial Durable Object and R2 failures — 2026-08-12
+
+- Channel deletion now inserts a durable cleanup job containing the exact media-key snapshot in the same D1 batch that removes the channel and related application rows.
+- Durable Object invalidation and R2 deletion are tracked as independent idempotent stages. The request still attempts both immediately, but a failure no longer disappears after the channel row is gone.
+- Hourly maintenance retries up to 20 due jobs with exponential backoff from one minute to 24 hours. A short lease limits overlapping scheduled attempts, and completed jobs are retained for 30 days before bounded removal.
+- Account deletion uses the same workflow for every owned channel and reports whether external cleanup remains pending.
+- Cleanup failures and later recoveries are recorded as operational events. The super-admin health view exposes recent cleanup retry failures as a degraded signal without classifying them as request `5xx`.
+- Regression coverage verifies retry policy, media-key validation, atomic job/deletion ordering, scheduled retry wiring and health aggregation.
+
+Trade-off: deletion now adds one D1 job row and several small progress updates, and failed external cleanup can retain a bounded media-key manifest for up to 30 days after recovery. In exchange, transient Durable Object or R2 failures are recoverable and visible instead of silently leaking stale state or media.
+
+Deployment note: apply D1 migration `0036_retryable_channel_cleanup.sql` before deploying the Worker, then deploy the frontend for the updated health card.
+
 ### YouTube cards no longer depend on external metadata — 2026-08-12
 
 - Production inspection showed standard YouTube preview requests returning `502` because the Worker treated its noembed title lookup as mandatory, even though YouTube thumbnails are available from a deterministic video-ID URL.

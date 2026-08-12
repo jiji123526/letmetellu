@@ -13,7 +13,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Google login/signup callbacks and Resend delivery use the production domain.
 - [x] Email signup verification and password reset were exercised in production during the beta setup.
 - [x] The super-admin operational-health view and bounded operational-event retention are deployed.
-- [x] Worker hardening coverage currently passes 56 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, YouTube URL parsing, live-session ending, message idempotency, reply normalization, rate limiting, support query shape and health-state derivation.
+- [x] Worker hardening coverage currently passes 60 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, YouTube URL parsing, live-session ending, message idempotency, reply normalization, rate limiting, support query shape, cleanup reliability and health-state derivation.
 - [x] GitHub Actions runs the Worker hardening suite, TypeScript check and Wrangler dry-run on every relevant `main` push and pull request. It performs no production deploy and requires no production secrets.
 - [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
 - [x] New replies are normalized to their top-level message. The production audit found 747 replies with no nested, broken, cross-channel or cyclic relationships.
@@ -21,6 +21,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] YouTube and Instagram use lightweight preview cards rather than client-side widgets or iframes. YouTube cards no longer depend on an external title provider.
 - [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
 - [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
+- [x] Channel and owned-channel account deletion record retryable Durable Object/R2 cleanup, with bounded scheduled retries and operational-health visibility.
 - [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
 
 ### Still required before a broad public launch
@@ -30,7 +31,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
 - [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
-- [ ] Move cross-store channel/account/media deletion toward retryable, observable cleanup so partial D1/R2/Durable Object failures can recover.
+- [ ] Deploy migration `0036` and verify a partial channel cleanup is retried and recovered before treating the new cross-store deletion path as production-ready.
 - [ ] Expand durable abuse controls and validate direct-API report evidence/targets before materially widening access.
 
 ### Operational follow-up, not a current blocker
@@ -43,6 +44,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 Complete these checks for the social-preview and live-session changes before treating the current `main` revision as production-verified:
 
+- [ ] Run `cd worker && npm run db:migrate:prod` to create `cleanup_jobs` before the Worker using it is deployed.
 - [ ] Deploy the Worker first so YouTube preview cache `v3`, deterministic thumbnail cards, session-aware live ending and updated operational diagnostics are active.
 - [ ] Deploy the frontend after the Worker and confirm the production CSP no longer permits unused YouTube, Twitter or Instagram widget origins.
 - [ ] Verify standard YouTube watch, `youtu.be`, Shorts and live URLs render static thumbnail cards without iframe/widget requests.
@@ -50,6 +52,7 @@ Complete these checks for the social-preview and live-session changes before tre
 - [ ] Verify a stale owner tab cannot end a newer live session.
 - [ ] Verify a viewer tab returning from the background exits an ended session or receives the current session prompt before rejoining presence.
 - [ ] Confirm preview upstream failures remain visible separately from core `5xx`, while media `404` remains a non-severity secondary signal.
+- [ ] Delete a disposable channel with a known media object, confirm the D1 channel disappears, the media is removed, and the cleanup job reaches `completed_at`; also verify the health card exposes any forced cleanup failure.
 
 ## Public-launch blockers
 

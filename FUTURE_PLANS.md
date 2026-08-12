@@ -10,7 +10,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 2. Add regression coverage for the recent chat refactors plus support, reports and dashboard state transitions.
 3. Calibrate the existing operational-health view from production baselines, then add alert delivery and response procedures.
 4. Add explicit monitoring for production email and legacy credential-upgrade paths.
-5. Move deletion, cleanup and retention toward retryable, observable workflows.
+5. Extend the new retryable channel-cleanup foundation to remaining retention workflows.
 6. Expand durable abuse controls beyond the current first pass.
 7. Use the new dashboard startup measurements to decide whether any larger derived-activity redesign is justified.
 
@@ -52,7 +52,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Add explicit operational-event coverage for upload failures, preview failures and WebSocket authorization/origin failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
 - Measure `/api/user`, platform-support dashboard and support-thread latency before pursuing another query redesign.
-- Track scheduled-maintenance duration, per-table deletion counts and R2 deletion failures so the existing bounded cleanup work is operationally visible.
+- Track scheduled-maintenance duration and per-table deletion counts. Channel cleanup now records R2/Durable Object stage failures and recoveries, but broader scheduled retention still needs equivalent visibility.
 
 #### 2026-08-12 error-analytics follow-up
 
@@ -109,8 +109,9 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Cleanup and deletion reliability
 
-- Move channel, account and cross-store media deletion toward idempotent, retryable cleanup jobs instead of relying indefinitely on one request completing every D1, Durable Object and R2 step.
-- Preserve the current synchronous user experience initially, but record durable cleanup progress so partial channel or media deletion can resume safely after a timeout or transient failure.
+- Completed first phase on 2026-08-12: channel deletion atomically records a media snapshot and cleanup job with the D1 deletion, then tracks and retries Durable Object invalidation and R2 removal independently. Account deletion reuses this path for owned channels.
+- Validate retry age, attempt counts and recovery events in production after migration `0036`, then set an operator threshold for cleanup jobs that remain pending beyond the normal retry window.
+- Extend the job model only where another cross-store workflow has the same partial-failure risk; do not turn ordinary single-store D1 retention into unnecessary queue work.
 - Existing scheduled retention covers operational events, moderation/support audit logs, message actor identities, rate-limit rows and expired upload tickets. Define policy for closed support sessions and tickets, reports, petitions and visit-survey responses before extending automated cleanup to those product records.
 - Add dry-run counts, bounded batches and failure monitoring before expanding destructive scheduled maintenance.
 - The 2026-08-04 pre-beta cleanup removed seven legacy credential test accounts, their four owned channels and six additional orphan channels through an exact-ID, precondition-checked one-time maintenance run. The temporary route was removed immediately afterward; all Google accounts, the platform `reports` channel, `whaaa` and the new verified credential account were confirmed preserved.
