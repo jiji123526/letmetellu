@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### YouTube cards no longer depend on external metadata — 2026-08-12
+
+- Production inspection showed standard YouTube preview requests returning `502` because the Worker treated its noembed title lookup as mandatory, even though YouTube thumbnails are available from a deterministic video-ID URL.
+- YouTube cards now return immediately from the parsed video ID with the deterministic thumbnail, site name and original link. The noembed request was removed from the critical path rather than retained as a possible five-second delay.
+- URL parsing now supports short links, Shorts, live links, embed links and watch URLs where `v` is not the first query parameter.
+- The Worker preview cache version was advanced so previously cached YouTube failures and empty generic results do not delay recovery after deployment.
+
+Trade-off: the lightweight YouTube card contains the thumbnail and YouTube label but not the video title or author. This removes an external request and its failure/latency entirely from the user-visible success path.
+
+Deployment note: this requires both a Worker and frontend deploy. No D1 migration is required.
+
 ### YouTube and Instagram now use lightweight preview cards — 2026-08-12
 
 - YouTube and Instagram links now use the same deferred `/api/preview` metadata cards and persistent browser preview cache as other external links.

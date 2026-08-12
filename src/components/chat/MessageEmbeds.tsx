@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 
 // URL patterns
-const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[\w-]{11}/;
 const INSTAGRAM_REGEX = /https?:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
 const URL_REGEX = /https?:\/\/[^\s<]+/g;
 const EMBED_PREVIEW_ROOT_MARGIN = "720px";
@@ -28,6 +27,20 @@ const previewCacheMetadata = new Map<string, { cachedAt: number }>();
 const previewRequests = new Map<string, Promise<PreviewData | null>>();
 let persistentPreviewCachePromise: Promise<Cache | null> | null = null;
 let legacyPreviewStorageCleaned = false;
+
+function isYouTubeUrl(rawUrl: string): boolean {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    return hostname === "youtu.be"
+      || hostname === "www.youtu.be"
+      || hostname === "youtube.com"
+      || hostname.endsWith(".youtube.com")
+      || hostname === "youtube-nocookie.com"
+      || hostname.endsWith(".youtube-nocookie.com");
+  } catch {
+    return false;
+  }
+}
 
 function isPreviewData(value: unknown): value is PreviewData {
   if (!value || typeof value !== "object") return false;
@@ -359,7 +372,7 @@ export function MessageEmbeds({
   if (unique.length === 0) return null;
 
   const renderEmbed = (url: string) => {
-    const staticOnly = YOUTUBE_REGEX.test(url) || INSTAGRAM_REGEX.test(url);
+    const staticOnly = isYouTubeUrl(url) || INSTAGRAM_REGEX.test(url);
     return (
       <LinkPreviewCard
         url={url}

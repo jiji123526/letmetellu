@@ -3,6 +3,7 @@ import { consumeDurableRateLimit, hashRateLimitIdentifier } from "../lib/durable
 import { withOperationalEventOverride } from "../lib/operational-events";
 import { assertAllowedPreviewUrl, PreviewError } from "../lib/preview-policy";
 import { parsePreviewMetadata } from "../lib/preview-metadata";
+import { extractYouTubeVideoId } from "../lib/youtube-preview";
 import {
   getPreviewFailureCacheTtl,
   PREVIEW_EMPTY_CACHE_TTL_SECONDS,
@@ -14,7 +15,7 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v2";
+const PREVIEW_CACHE_VERSION = "v3";
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -101,21 +102,6 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
   return html;
 }
 
-async function fetchYouTubeOEmbed(videoId: string): Promise<{ title?: string; author_name?: string }> {
-  const response = await fetchWithTimeout(
-    `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`,
-    { redirect: "error" },
-  );
-  if (!response.ok) {
-    throw new PreviewError("failed to fetch youtube preview", 502);
-  }
-  try {
-    return await response.json() as { title?: string; author_name?: string };
-  } catch {
-    throw new PreviewError("invalid youtube preview response", 502);
-  }
-}
-
 async function cachePreview(cacheKey: Request, response: Response): Promise<void> {
   try {
     await caches.default.put(cacheKey, response.clone());
@@ -190,14 +176,13 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
   }
 
   try {
-    // YouTube: use noembed for title, return thumbnail directly.
-    const ytMatch = rawUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
-    if (ytMatch) {
-      const videoId = ytMatch[1];
-      const oembedData = await fetchYouTubeOEmbed(videoId);
+    // YouTube thumbnails are deterministic and require no widget or metadata fetch.
+    const youtubeVideoId = extractYouTubeVideoId(rawUrl);
+    if (youtubeVideoId) {
+      const videoId = youtubeVideoId;
       const previewResponse = Response.json({
-        title: oembedData.title || "",
-        description: oembedData.author_name || "",
+        title: "",
+        description: "",
         image: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
         video: "",
         siteName: "YouTube",

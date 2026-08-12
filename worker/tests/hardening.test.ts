@@ -24,6 +24,7 @@ import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
 import { getPreviewFailureCacheTtl } from "../src/lib/preview-cache-policy.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 import { buildManagedMediaPath, extractMediaKey, normalizeManagedMediaUrl } from "../src/lib/media.ts";
+import { extractYouTubeVideoId } from "../src/lib/youtube-preview.ts";
 
 function expectPreviewError(fn: () => unknown, message: string): void {
   let thrown: unknown;
@@ -120,6 +121,16 @@ test("preview failure cache distinguishes stable and transient upstream failures
   assert.equal(getPreviewFailureCacheTtl(504), 60);
   assert.equal(getPreviewFailureCacheTtl(429), null);
   assert.equal(getPreviewFailureCacheTtl(500), null);
+});
+
+test("YouTube preview IDs support common share, live and reordered watch URLs", () => {
+  assert.equal(extractYouTubeVideoId("https://youtu.be/dQw4w9WgXcQ?si=test"), "dQw4w9WgXcQ");
+  assert.equal(extractYouTubeVideoId("https://www.youtube.com/shorts/dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(extractYouTubeVideoId("https://www.youtube.com/live/dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(extractYouTubeVideoId("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(extractYouTubeVideoId("https://www.youtube.com/watch?si=test&v=dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(extractYouTubeVideoId("https://example.com/watch?v=dQw4w9WgXcQ"), null);
+  assert.equal(extractYouTubeVideoId("https://youtube.com/watch?v=invalid"), null);
 });
 
 test("upload access and quota checks stay ahead of request-body consumption", () => {
