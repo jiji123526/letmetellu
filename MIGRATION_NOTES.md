@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### YouTube and Instagram now use lightweight preview cards — 2026-08-12
+
+- YouTube and Instagram links now use the same deferred `/api/preview` metadata cards and persistent browser preview cache as other external links.
+- Their third-party iframe/widget paths, Instagram script loader, responsive widget observers and media loading dots were removed.
+- These platform cards remain static even when metadata includes a video URL. Selecting the card opens the original YouTube or Instagram URL instead of playing content inside chat.
+- Preview metadata failure leaves the original clickable link visible, avoiding messages that could remain as loading dots when a third-party script, iframe or post was blocked or unavailable.
+- Obsolete YouTube, Twitter and Instagram script, connection and frame origins were removed from the frontend Content Security Policy because no client widget path requires them anymore.
+
+Trade-off: YouTube videos and Instagram posts no longer play inline, and private or metadata-restricted posts may show only their original link. In exchange, chat rendering uses fewer third-party requests, has less layout movement, and no longer depends on platform widget scripts or iframe readiness.
+
+Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
+
 ### Live-session ending now reconciles stale and background tabs — 2026-08-12
 
 - Live end requests now include the session ID the owner tab believes it is ending. The Worker conditionally claims only that exact session, so an old owner tab cannot terminate or delete a newer live session.

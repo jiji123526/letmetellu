@@ -97,7 +97,7 @@ Normal chat and live-session clients connect through the parent channel's Durabl
 - Moderation and support actions produce audit records; operational failures are retained in bounded event storage.
 - Next.js and the Worker send explicit security headers and origin restrictions.
 
-The production CSP currently permits `script-src 'unsafe-inline'` for required startup behavior and supported widgets. This is an accepted limited-beta trade-off documented in [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md).
+The production CSP currently permits `script-src 'unsafe-inline'` for required startup behavior. This is an accepted limited-beta trade-off documented in [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md).
 
 ## Technology
 

@@ -24,25 +24,15 @@ function buildContentSecurityPolicy() {
     "'self'",
     "'unsafe-inline'",
     ...(process.env.NODE_ENV === "production" ? [] : ["'unsafe-eval'"]),
-    "https://platform.twitter.com",
-    "https://www.instagram.com",
   ];
   const connectSrc = [
     "'self'",
     "blob:",
     ...workerOrigins,
     "https://cdn.jsdelivr.net",
-    "https://platform.twitter.com",
-    "https://syndication.twitter.com",
-    "https://www.instagram.com",
   ];
   const frameSrc = [
     "'self'",
-    "https://www.youtube.com",
-    "https://www.youtube-nocookie.com",
-    "https://platform.twitter.com",
-    "https://syndication.twitter.com",
-    "https://www.instagram.com",
   ];
 
   const directives = [

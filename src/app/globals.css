@@ -200,11 +200,9 @@ body {
   padding: calc(var(--bubble-font-size) * 0.588) calc(var(--bubble-font-size) * 0.824) !important;
 }
 
-/* Lazy widgets have full-width wrappers once activated. Keep every loading
-   phase at the same compact typing-bubble size until real content is ready. */
+/* Keep media loading phases at the same compact typing-bubble size. */
 [data-bubble]:has(.media-loading-dots) .message-embeds,
-[data-bubble]:has(.media-loading-dots) .message-embeds > div,
-[data-bubble]:has(.media-loading-dots) .native-chat-embed {
+[data-bubble]:has(.media-loading-dots) .message-embeds > div {
   width: fit-content !important;
   min-width: 0 !important;
   max-width: none !important;
@@ -215,29 +213,8 @@ body {
   display: none !important;
 }
 
-/* Apply tighter padding only once an actual preview/widget is present. */
-[data-bubble]:has(.message-embeds iframe):not(:has(.media-loading-dots)),
+/* Apply tighter padding only once an actual preview is present. */
 [data-bubble]:has(.message-embeds video):not(:has(.media-loading-dots)),
-[data-bubble]:has(.message-embeds .native-chat-embed):not(:has(.media-loading-dots)),
 [data-bubble]:has(.message-embeds .link-preview-card):not(:has(.media-loading-dots)) {
   padding: calc(var(--bubble-font-size) * 0.588) !important;
-}
-
-/* Native widgets render at 320px, then their wrapper scales them proportionally. */
-.native-chat-embed,
-.native-chat-embed-scale {
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-
-.native-chat-embed-scale iframe {
-  display: block !important;
-  max-width: none !important;
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
-}
-
-.native-chat-embed-scale .twitter-tweet-rendered {
-  margin-top: 0 !important;
-  margin-bottom: 0 !important;
 }

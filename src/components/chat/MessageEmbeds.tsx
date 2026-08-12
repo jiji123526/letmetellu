@@ -1,124 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { MediaLoadingDots } from "./MediaLoadingDots";
-
-interface InstagramEmbeds {
-  process: () => void;
-}
-
-declare global {
-  interface Window {
-    instgrm?: { Embeds?: InstagramEmbeds };
-  }
-}
+import { useEffect, useRef, useState } from "react";
 
 // URL patterns
-const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/;
-const TWITTER_REGEX = /https?:\/\/(twitter\.com|x\.com)\/\w+\/status\/(\d+)/;
+const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[\w-]{11}/;
 const INSTAGRAM_REGEX = /https?:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
 const URL_REGEX = /https?:\/\/[^\s<]+/g;
-const NATIVE_EMBED_WIDTH = 320;
 const EMBED_PREVIEW_ROOT_MARGIN = "720px";
-
-interface NetworkInformationLike {
-  effectiveType?: string;
-  saveData?: boolean;
-}
-
-let instagramScriptPromise: Promise<InstagramEmbeds | null> | null = null;
-let instagramProcessTimer: ReturnType<typeof setTimeout> | null = null;
-let instagramPreloadScheduled = false;
-
-function getNetworkInformation(): NetworkInformationLike | undefined {
-  return (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
-}
-
-function getEmbedPreloadMargin() {
-  const connection = getNetworkInformation();
-  if (connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
-    return "300px 0px";
-  }
-  if (connection?.effectiveType === "3g") return "600px 0px";
-  return "1000px 0px";
-}
-
-function loadInstagramEmbeds(): Promise<InstagramEmbeds | null> {
-  if (window.instgrm?.Embeds) return Promise.resolve(window.instgrm.Embeds);
-  if (instagramScriptPromise) return instagramScriptPromise;
-
-  instagramScriptPromise = new Promise((resolve) => {
-    const existing = document.getElementById("insta-embed-js") as HTMLScriptElement | null;
-    const script = existing || document.createElement("script");
-    const finish = () => resolve(window.instgrm?.Embeds || null);
-    script.addEventListener("load", finish, { once: true });
-    script.addEventListener("error", () => resolve(null), { once: true });
-    if (!existing) {
-      script.id = "insta-embed-js";
-      script.src = "https://www.instagram.com/embed.js";
-      script.async = true;
-      document.body.appendChild(script);
-    }
-  });
-  return instagramScriptPromise;
-}
-
-function scheduleInstagramProcess(embeds: InstagramEmbeds) {
-  if (instagramProcessTimer) return;
-  instagramProcessTimer = setTimeout(() => {
-    instagramProcessTimer = null;
-    embeds.process();
-  }, 0);
-}
-
-function scheduleIdleInstagramPreload() {
-  if (instagramPreloadScheduled) return;
-  instagramPreloadScheduled = true;
-
-  const preload = () => {
-    void loadInstagramEmbeds();
-  };
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(preload, { timeout: 2000 });
-  } else {
-    setTimeout(preload, 500);
-  }
-}
-
-function LazyEmbed({ render, fillWidth }: { render: () => ReactNode; fillWidth: boolean }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(false);
-
-  useEffect(() => {
-    const activateForNavigation = () => setActive(true);
-    window.addEventListener("chat-history-preload", activateForNavigation);
-    return () => window.removeEventListener("chat-history-preload", activateForNavigation);
-  }, []);
-
-  useEffect(() => {
-    const element = rootRef.current;
-    if (!element) return;
-    if (!("IntersectionObserver" in window)) {
-      const fallbackTimer = setTimeout(() => {
-        setActive(true);
-      }, 0);
-      return () => clearTimeout(fallbackTimer);
-    }
-    const preloadObserver = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      setActive(true);
-      preloadObserver.disconnect();
-    }, { rootMargin: getEmbedPreloadMargin() });
-    preloadObserver.observe(element);
-    return () => preloadObserver.disconnect();
-  }, []);
-
-  return (
-    <div ref={rootRef} style={{ width: fillWidth ? "100%" : "fit-content", maxWidth: "100%" }}>
-      {active ? render() : <MediaLoadingDots />}
-    </div>
-  );
-}
 
 interface PreviewData {
   title: string;
@@ -284,18 +172,6 @@ function requestPreview(url: string, forceRefresh = false): Promise<PreviewData 
   return request;
 }
 
-function normalizeInstagramEmbedUrl(rawUrl: string): string | null {
-  try {
-    const parsed = new URL(rawUrl);
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname !== "instagram.com" && hostname !== "www.instagram.com") return null;
-    if (!/^\/(p|reel)\/[\w-]+\/?$/i.test(parsed.pathname)) return null;
-    return parsed.toString();
-  } catch {
-    return null;
-  }
-}
-
 function useDeferredEmbedVisibility(rootMargin: string) {
   const targetRef = useRef<HTMLAnchorElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -328,71 +204,17 @@ function useDeferredEmbedVisibility(rootMargin: string) {
   return { targetRef, isVisible };
 }
 
-function useResponsiveEmbedScale() {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [scaledHeight, setScaledHeight] = useState(80);
-
-  useEffect(() => {
-    const frame = frameRef.current;
-    const content = contentRef.current;
-    if (!frame || !content) return;
-
-    const updateSize = () => {
-      const nextScale = Math.min(1, frame.clientWidth / NATIVE_EMBED_WIDTH);
-      const naturalHeight = Math.max(80, content.scrollHeight);
-      setScale(nextScale);
-      setScaledHeight(naturalHeight * nextScale);
-    };
-    updateSize();
-
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(frame);
-    observer.observe(content);
-    return () => observer.disconnect();
-  }, []);
-
-  return { frameRef, contentRef, scale, scaledHeight };
-}
-
-function YouTubeEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    onReady(url);
-  }, [onReady, url]);
-
-  const match = url.match(YOUTUBE_REGEX);
-  if (!match) return null;
-  const videoId = match[1];
-  const isShorts = url.includes("/shorts/");
-
-  return (
-    <div style={{
-      position: "relative",
-      borderRadius: "12px",
-      overflow: "hidden",
-      width: loading ? "auto" : "min(320px, 100%)",
-      maxWidth: "100%",
-      background: loading ? "transparent" : "#000",
-      aspectRatio: loading ? undefined : (isShorts ? "9/16" : "16/9"),
-    }}>
-      {loading && <MediaLoadingDots />}
-      <iframe
-        loading="lazy"
-        width="100%"
-        height="100%"
-        src={`https://www.youtube.com/embed/${videoId}`}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        onLoad={() => setLoading(false)}
-        style={{ display: loading ? "none" : "block", border: 0 }}
-      />
-    </div>
-  );
-}
-
-function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolean; onReady: (url: string) => void }) {
+function LinkPreviewCard({
+  url,
+  isMine,
+  staticOnly = false,
+  onReady,
+}: {
+  url: string;
+  isMine: boolean;
+  staticOnly?: boolean;
+  onReady: (url: string) => void;
+}) {
   const [data, setData] = useState<PreviewData | null>(previewCache.get(url) || null);
   const [hasResolved, setHasResolved] = useState(previewCache.has(url));
   const { targetRef, isVisible } = useDeferredEmbedVisibility(EMBED_PREVIEW_ROOT_MARGIN);
@@ -449,8 +271,9 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
   }
   if (!data) return null;
 
+  const previewVideo = staticOnly ? "" : data.video;
   const hasTextMetadata = !!(data.title || data.description || data.siteName);
-  const shouldPreserveFullImage = !!data.image && !data.video && !hasTextMetadata;
+  const shouldPreserveFullImage = !!data.image && !previewVideo && !hasTextMetadata;
 
   return (
     <a
@@ -471,9 +294,9 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {data.video ? (
+      {previewVideo ? (
         <video
-          src={data.video}
+          src={previewVideo}
           poster={data.image || undefined}
           controls
           playsInline
@@ -518,76 +341,6 @@ function LinkPreviewCard({ url, isMine, onReady }: { url: string; isMine: boolea
   );
 }
 
-function InstagramEmbed({ url, onReady }: { url: string; onReady: (url: string) => void }) {
-  const { frameRef, contentRef, scale, scaledHeight } = useResponsiveEmbedScale();
-  const [loading, setLoading] = useState(true);
-  const embedUrl = normalizeInstagramEmbedUrl(url);
-
-  useEffect(() => {
-    onReady(url);
-  }, [onReady, url]);
-
-  useEffect(() => {
-    const container = contentRef.current;
-    if (!container || !embedUrl) return;
-
-    container.replaceChildren();
-    const blockquote = document.createElement("blockquote");
-    blockquote.className = "instagram-media";
-    blockquote.dataset.instgrmPermalink = embedUrl;
-    blockquote.dataset.instgrmVersion = "14";
-    Object.assign(blockquote.style, {
-      maxWidth: `${NATIVE_EMBED_WIDTH}px`,
-      width: `${NATIVE_EMBED_WIDTH}px`,
-      minWidth: "0",
-      margin: "0",
-      border: "0",
-      borderRadius: "12px",
-      background: "var(--card)",
-    });
-    container.appendChild(blockquote);
-
-    const observer = new MutationObserver(() => {
-      if (container.querySelector("iframe")) {
-        setLoading(false);
-        observer.disconnect();
-      }
-    });
-    observer.observe(container, { childList: true, subtree: true });
-
-    let cancelled = false;
-    void loadInstagramEmbeds().then((embeds) => {
-      if (!embeds || cancelled) {
-        if (!cancelled) setLoading(false);
-        return;
-      }
-      scheduleInstagramProcess(embeds);
-    });
-
-    return () => {
-      cancelled = true;
-      observer.disconnect();
-    };
-  }, [embedUrl, url, contentRef]);
-
-  if (!embedUrl) return null;
-
-  return (
-    <div
-      ref={frameRef}
-      className="native-chat-embed"
-      style={{ position: "relative", width: loading ? "auto" : `${NATIVE_EMBED_WIDTH}px`, maxWidth: "100%", height: loading ? "calc(var(--bubble-font-size) * 1.38)" : `${scaledHeight}px`, overflow: "hidden", borderRadius: "12px" }}
-    >
-      {loading && <MediaLoadingDots />}
-      <div
-        ref={contentRef}
-        className="native-chat-embed-scale"
-        style={{ position: "absolute", top: 0, left: 0, width: `${NATIVE_EMBED_WIDTH}px`, transform: `scale(${scale})`, transformOrigin: "top left", visibility: loading ? "hidden" : "visible" }}
-      />
-    </div>
-  );
-}
-
 // Main export: renders embeds for URLs found in message text
 export function MessageEmbeds({
   text,
@@ -602,39 +355,19 @@ export function MessageEmbeds({
 }) {
   const urls = text.match(URL_REGEX);
   const unique = [...new Set(urls || [])];
-  const hasInstagram = unique.some((url) => INSTAGRAM_REGEX.test(url));
-
-  useEffect(() => {
-    if (hasInstagram) scheduleIdleInstagramPreload();
-  }, [hasInstagram]);
 
   if (unique.length === 0) return null;
 
   const renderEmbed = (url: string) => {
-    // YouTube — inline iframe
-    if (YOUTUBE_REGEX.test(url)) {
-      return (
-        <LazyEmbed
-          fillWidth={fillWidth}
-          render={() => <YouTubeEmbed url={url} onReady={onEmbedReady} />}
-        />
-      );
-    }
-    // Twitter/X — lightweight preview card via worker metadata
-    if (TWITTER_REGEX.test(url)) {
-      return <LinkPreviewCard url={url} isMine={isMine} onReady={onEmbedReady} />;
-    }
-    // Instagram — native widget
-    if (INSTAGRAM_REGEX.test(url)) {
-      return (
-        <LazyEmbed
-          fillWidth={fillWidth}
-          render={() => <InstagramEmbed url={url} onReady={onEmbedReady} />}
-        />
-      );
-    }
-    // Other URLs — OG link preview
-    return <LinkPreviewCard url={url} isMine={isMine} onReady={onEmbedReady} />;
+    const staticOnly = YOUTUBE_REGEX.test(url) || INSTAGRAM_REGEX.test(url);
+    return (
+      <LinkPreviewCard
+        url={url}
+        isMine={isMine}
+        staticOnly={staticOnly}
+        onReady={onEmbedReady}
+      />
+    );
   };
 
   return (
