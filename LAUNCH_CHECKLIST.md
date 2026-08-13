@@ -16,8 +16,8 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Worker hardening coverage currently passes 60 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, YouTube URL parsing, live-session ending, message idempotency, reply normalization, rate limiting, support query shape, cleanup reliability and health-state derivation.
 - [x] GitHub Actions runs the Worker hardening suite, TypeScript check and Wrangler dry-run on every relevant `main` push and pull request. It performs no production deploy and requires no production secrets.
 - [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
-- [x] New replies are normalized to their top-level message. The production audit found 747 replies with no nested, broken, cross-channel or cyclic relationships.
-- [x] Normal history paging and `message-context` now use indexed root/direct-child reads instead of recursive thread traversal.
+- [x] New replies are normalized to their top-level message. The 2026-08-13 production audit found 1,057 replies across 6,855 messages with no nested, broken, cross-channel, cyclic or over-depth relationships; maximum observed depth was one.
+- [x] Normal history paging uses indexed root/direct-child reads. `message-context` uses bounded recursion only to resolve a legacy target to its root, then loads the surrounding root window through the same indexed expansion path.
 - [x] YouTube and Instagram use lightweight preview cards rather than client-side widgets or iframes. YouTube cards no longer depend on an external title provider.
 - [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
 - [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
@@ -38,9 +38,12 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 ### Operational follow-up, not a current blocker
 
-- [ ] After deploying the 2026-08-13 thread-query change and collecting representative traffic, rerun `worker/scripts/audit-flat-replies.sql` and D1 Insights. Confirm `WITH requested_roots` stops accumulating executions and compare the new primary-key/root and indexed-child query fingerprints against the recorded `2.7k-3.6k` rows-read-per-row baseline.
-- [ ] Run `worker/scripts/audit-message-indexes.sql` against production. Confirm normal message paging selects `messages_channel_created_id_idx` before considering removal of the older `messages_channel_idx`; retain both reply indexes because their column orders serve different predicates.
-- [ ] After deploying the Durable Object presence fallback, confirm a `realtime_unavailable` event appears as degraded health without producing an `/api/init` `500`, and verify the WebSocket reconnect restores the live presence count.
+- [x] Reran `worker/scripts/audit-flat-replies.sql` against production after the 2026-08-13 rollout: 6,855 messages and 1,057 replies were all flat and valid, with zero broken, cross-channel, nested, cyclic or over-depth relationships.
+- [x] Verified production query plans for root paging and reply operations. Root windows use `messages_channel_root_created_id_idx`; deleted-state child expansion uses `messages_channel_deleted_reply_idx`; thread deletion uses `messages_channel_reply_deleted_idx`. Both reply indexes remain justified, and no query/schema fix is required.
+- [ ] In D1 Insights, confirm the retired `WITH requested_roots` fingerprint stops accumulating post-deployment executions and compare new root/child rows-read-per-row against the recorded `2.7k-3.6k` baseline.
+- [ ] Audit remaining chronological query shapes before considering removal of `messages_channel_idx`; root-owned paging no longer provides evidence for removing it because that path now uses the dedicated `0037` index.
+- [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
+- [ ] When a genuine post-deployment Durable Object failure occurs, confirm `realtime_unavailable` produces degraded health without an `/api/init` `500`; independently verify WebSocket reconnect restores the live presence count.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
 
