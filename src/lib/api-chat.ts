@@ -373,6 +373,7 @@ export async function sendMessage(payload: {
     },
     body: JSON.stringify(payload),
   });
+  if (res.status >= 500) throw new Error(`Message send failed: ${res.status}`);
   return res.json();
 }
 
@@ -398,6 +399,7 @@ export async function sendMessageAsAdmin(payload: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  if (res.status >= 500) throw new Error(`Message send failed: ${res.status}`);
   return res.json();
 }
 

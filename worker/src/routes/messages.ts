@@ -16,6 +16,29 @@ import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-th
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
 
+type PersistedMessage = Record<string, unknown> & {
+  id: string;
+  uid: string;
+  channel_id: string;
+  created_at: string;
+};
+
+async function broadcastPersistedMessage(
+  env: Env,
+  parentChannelId: string,
+  message: PersistedMessage,
+): Promise<void> {
+  const doId = env.CHAT_ROOM.idFromName(parentChannelId);
+  const chatRoom = env.CHAT_ROOM.get(doId);
+  const response = await chatRoom.fetch(new Request("http://internal/broadcast", {
+    method: "POST",
+    body: JSON.stringify({ type: "message-new", message }),
+  }));
+  if (!response.ok) {
+    throw new Error(`message_broadcast_failed:${response.status}`);
+  }
+}
+
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
   if (!token) return null;
@@ -143,12 +166,14 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
       routeStage = "check_idempotency";
       const existingMessage = await env.DB.prepare(
-        "SELECT id, uid, channel_id, created_at FROM messages WHERE client_message_id = ? LIMIT 1"
-      ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+        "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
+      ).bind(clientMessageId).first<PersistedMessage>();
       if (existingMessage) {
         if (existingMessage.uid !== requesterUid || existingMessage.channel_id !== requestChannelId) {
           return Response.json({ error: "client_message_id_conflict" }, { status: 409 });
         }
+        routeStage = "rebroadcast_duplicate";
+        await broadcastPersistedMessage(env, parentChannelId, existingMessage);
         return Response.json({ id: existingMessage.id, created_at: existingMessage.created_at, duplicate: true });
       }
 
@@ -270,9 +295,11 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       } catch (error) {
         routeStage = "resolve_batch_conflict";
         const duplicate = await env.DB.prepare(
-          "SELECT id, uid, channel_id, created_at FROM messages WHERE client_message_id = ? LIMIT 1"
-        ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+          "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
+        ).bind(clientMessageId).first<PersistedMessage>();
         if (duplicate?.uid === requesterUid && duplicate.channel_id === requestChannelId) {
+          routeStage = "rebroadcast_batch_duplicate";
+          await broadcastPersistedMessage(env, parentChannelId, duplicate);
           return Response.json({ id: duplicate.id, created_at: duplicate.created_at, duplicate: true });
         }
         throw error;
@@ -283,15 +310,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       // Broadcast through the same parent-channel Durable Object used above.
       const newMessage = {
         id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
-        channel_id, image: image || null, reply_to: resolvedReplyTo,
+        channel_id: requestChannelId, image: image || null, reply_to: resolvedReplyTo,
         report: report ? 1 : 0, reported_msg_id: resolvedReportedMessageId, gallery_id: image ? id : null,
         deleted: 0, edited: 0, reactions: "{}", created_at,
       };
       routeStage = "broadcast_message";
-      await chatRoom.fetch(new Request("http://internal/broadcast", {
-        method: "POST",
-        body: JSON.stringify({ type: "message-new", message: newMessage }),
-      }));
+      await broadcastPersistedMessage(env, parentChannelId, newMessage);
 
       routeStage = "build_response";
       return Response.json({ id, created_at });

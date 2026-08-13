@@ -13,12 +13,17 @@ import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import { clearChannelBackground, storeChannelBackground } from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
+import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 
 interface BannerState {
   text: string;
   color: string;
+}
+
+interface ApplyInitDataOptions {
+  preserveHistory?: boolean;
 }
 
 interface UseChatChannelBootstrapArgs {
@@ -29,7 +34,7 @@ interface UseChatChannelBootstrapArgs {
   isOwner: boolean;
   inLiveModeRef: MutableRefObject<boolean>;
   initRequestIdRef: MutableRefObject<number>;
-  applyInitDataRef: MutableRefObject<(data: InitData) => void>;
+  applyInitDataRef: MutableRefObject<(data: InitData, options?: ApplyInitDataOptions) => void>;
   applyEmojiPresetsSnapshot: (snapshot: string | null | undefined) => void;
   applyLiveSnapshot: (live: InitData["live"]) => void;
   setUid: Dispatch<SetStateAction<string>>;
@@ -61,7 +66,7 @@ interface UseChatChannelBootstrapArgs {
 }
 
 interface UseChatChannelBootstrapResult {
-  applyInitData: (data: InitData) => void;
+  applyInitData: (data: InitData, options?: ApplyInitDataOptions) => void;
   loadNormalChannelData: () => Promise<void>;
   loadLiveChannelData: () => Promise<void>;
   refreshOwnerModeration: () => void;
@@ -103,7 +108,7 @@ export function useChatChannelBootstrap({
   setReportsChannelView,
   text,
 }: UseChatChannelBootstrapArgs): UseChatChannelBootstrapResult {
-  const applyInitData = useCallback((data: InitData) => {
+  const applyInitData = useCallback((data: InitData, options?: ApplyInitDataOptions) => {
     if (typeof data.anonymousUid === "string" && data.anonymousUid) {
       setUid(data.anonymousUid);
     }
@@ -161,9 +166,13 @@ export function useChatChannelBootstrap({
       });
     }
 
-    setMessages(data.messages || []);
-    setHistoryMode("latest");
-    setNewerMessageCount(0);
+    if (options?.preserveHistory) {
+      setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
+    } else {
+      setMessages(data.messages || []);
+      setHistoryMode("latest");
+      setNewerMessageCount(0);
+    }
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
     setViewerModerationStatus(data.viewerModerationStatus ?? null);

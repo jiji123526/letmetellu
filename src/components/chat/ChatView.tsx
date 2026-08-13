@@ -142,7 +142,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const initialScrollDoneRef = useRef(false);
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
   const reactionFrameRef = useRef<number | null>(null);
-  const applyInitDataRef = useRef<(data: InitData) => void>(() => {});
+  const applyInitDataRef = useRef<(
+    data: InitData,
+    options?: { preserveHistory?: boolean },
+  ) => void>(() => {});
 
   const processPendingPhoto = useCallback(async (file: File): Promise<PendingPhoto> => {
     if (file.type === "image/gif") {
@@ -493,6 +496,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const {
     historyModeRef,
     isNearBottomRef,
+    hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
     handleScroll,
@@ -532,6 +536,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     inLiveModeRef,
     historyModeRef,
     isNearBottomRef,
+    hasMoreNewerMessagesRef,
     messagesEndRef,
     pendingReactionUpdatesRef,
     reactionFrameRef,

@@ -22,3 +22,11 @@ test("message idempotency migration covers chat and DM writes", () => {
   assert.match(migration, /UNIQUE INDEX[\s\S]*messages\(client_message_id\)/);
   assert.match(migration, /UNIQUE INDEX[\s\S]*dm\(client_message_id\)/);
 });
+
+test("duplicate message retries rebroadcast the persisted message", () => {
+  const route = readFileSync(new URL("../src/routes/messages.ts", import.meta.url), "utf8");
+  assert.match(route, /routeStage = "rebroadcast_duplicate"[\s\S]*broadcastPersistedMessage/);
+  assert.match(route, /routeStage = "rebroadcast_batch_duplicate"[\s\S]*broadcastPersistedMessage/);
+  assert.match(route, /routeStage = "broadcast_message"[\s\S]*broadcastPersistedMessage/);
+  assert.match(route, /message_broadcast_failed/);
+});

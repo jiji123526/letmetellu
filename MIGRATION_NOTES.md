@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Realtime gaps recover without resetting chat position — 2026-08-13
+
+- A `message-new` event received while browsing contextual history previously incremented the newer-message badge but did not reopen the newer-page cursor. If that cursor had already reached its former end, scrolling down could not request the newly persisted message, so it appeared only after refresh or an explicit return to latest.
+- Context-mode realtime events now mark newer history as available and deduplicate pending event IDs before incrementing the badge. Downward scrolling can therefore load the page containing the new message.
+- Reconnect snapshots also mark contextual history as having newer content when the tab may have missed events while hidden.
+- Owner reconnect handling no longer applies the bootstrap reset path. It refreshes owner-only state and merges the latest message snapshot while preserving the current history mode, mounted window and scroll anchor, matching the existing lightweight viewer recovery behavior.
+- Message delivery also now recovers when D1 persistence succeeds but the Durable Object broadcast fails. A retry with the same client message ID rebroadcasts the stored row instead of returning duplicate success silently, and frontend `5xx` sends retain that ID for the next retry.
+
+Trade-off: owner recovery retains more mounted history than a full reset and relies on the existing bounded history-window trimming during subsequent navigation. Context-mode reconnects cannot know the exact number of missed messages from the snapshot alone, so they reopen pagination without inflating the unread badge. Duplicate retries use at-least-once broadcast delivery, so clients must continue deduplicating by message ID.
+
+Deployment note: this requires both a frontend and Worker deploy. No D1 migration is required.
+
 ### Message editing uses the centered dialog overlay again — 2026-08-13
 
 - Message editing previously rendered as an inline panel beneath the chat header and search bar. Its height became part of the chat flex layout, which could push or compress the message viewport and make the editor appear to break the top of the page.

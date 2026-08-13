@@ -30,6 +30,7 @@ interface UseChatHistoryNavigationArgs {
 interface UseChatHistoryNavigationResult {
   historyModeRef: MutableRefObject<HistoryMode>;
   isNearBottomRef: MutableRefObject<boolean>;
+  hasMoreNewerMessagesRef: MutableRefObject<boolean>;
   isMessageNavigationPending: boolean;
   isOlderHistoryLoading: boolean;
   handleScroll: () => void;
@@ -802,6 +803,7 @@ export function useChatHistoryNavigation({
   return {
     historyModeRef,
     isNearBottomRef,
+    hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
     handleScroll,

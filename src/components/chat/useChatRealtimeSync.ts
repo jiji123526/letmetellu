@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import {
   clearRoomToken,
   decorateMediaUrl,
@@ -64,10 +64,11 @@ interface UseChatRealtimeSyncArgs {
   inLiveModeRef: MutableRefObject<boolean>;
   historyModeRef: MutableRefObject<"latest" | "context">;
   isNearBottomRef: MutableRefObject<boolean>;
+  hasMoreNewerMessagesRef: MutableRefObject<boolean>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   pendingReactionUpdatesRef: MutableRefObject<Map<string, string>>;
   reactionFrameRef: MutableRefObject<number | null>;
-  applyInitData: (data: InitData) => void;
+  applyInitData: (data: InitData, options?: { preserveHistory?: boolean }) => void;
   applyLiveSnapshot: (live: InitData["live"]) => void;
   liveActive: boolean;
   liveSessionId: string;
@@ -114,6 +115,7 @@ export function useChatRealtimeSync({
   inLiveModeRef,
   historyModeRef,
   isNearBottomRef,
+  hasMoreNewerMessagesRef,
   messagesEndRef,
   pendingReactionUpdatesRef,
   reactionFrameRef,
@@ -152,6 +154,7 @@ export function useChatRealtimeSync({
     passcodeChanged,
     adminDataAuthFailed,
   } = text;
+  const pendingContextMessageIdsRef = useRef(new Set<string>());
 
   const getViewingChannelId = useCallback(() => {
     return inLiveModeRef.current ? `${channelId}_live` : channelId;
@@ -195,6 +198,8 @@ export function useChatRealtimeSync({
     setChannel(data.channel);
     if (historyModeRef.current === "latest") {
       setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
+    } else if ((data.messages || []).length > 0) {
+      hasMoreNewerMessagesRef.current = true;
     }
     if (data.bannerNotice !== undefined) setActiveNotice(data.bannerNotice || "");
     if (data.welcomeConfig !== undefined) setWelcomeConfig(data.welcomeConfig || "");
@@ -205,6 +210,7 @@ export function useChatRealtimeSync({
     applyLiveSnapshot(data.live);
   }, [
     applyLiveSnapshot,
+    hasMoreNewerMessagesRef,
     historyModeRef,
     setActiveNotice,
     setChannel,
@@ -218,11 +224,20 @@ export function useChatRealtimeSync({
 
   const applyReconnectInitData = useCallback((data: InitData) => {
     if (isOwner) {
-      applyInitData(data);
+      if (historyModeRef.current === "context" && (data.messages || []).length > 0) {
+        hasMoreNewerMessagesRef.current = true;
+      }
+      applyInitData(data, { preserveHistory: true });
       return;
     }
     applyLightweightInitData(data);
-  }, [applyInitData, applyLightweightInitData, isOwner]);
+  }, [
+    applyInitData,
+    applyLightweightInitData,
+    hasMoreNewerMessagesRef,
+    historyModeRef,
+    isOwner,
+  ]);
 
   const reconcileCurrentLiveSession = useCallback(async (traceCycleId?: string) => {
     const wasInLiveMode = inLiveModeRef.current;
@@ -290,6 +305,13 @@ export function useChatRealtimeSync({
         const viewingChannel = getViewingChannelId();
         if (msg.channel_id === viewingChannel) {
           if (historyModeRef.current === "context") {
+            if (pendingContextMessageIdsRef.current.has(msg.id)) return;
+            if (pendingContextMessageIdsRef.current.size >= 500) {
+              const oldestId = pendingContextMessageIdsRef.current.values().next().value;
+              if (oldestId) pendingContextMessageIdsRef.current.delete(oldestId);
+            }
+            pendingContextMessageIdsRef.current.add(msg.id);
+            hasMoreNewerMessagesRef.current = true;
             setNewerMessageCount((count) => count + 1);
             return;
           }
@@ -563,6 +585,7 @@ export function useChatRealtimeSync({
     send,
     inLiveModeRef,
     historyModeRef,
+    hasMoreNewerMessagesRef,
     isNearBottomRef,
     messagesEndRef,
     pendingReactionUpdatesRef,
