@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Flat thread expansion now uses direct batched index lookups — 2026-08-13
+
+- Production D1 Insights showed the `WITH requested_roots(id) AS (VALUES ...)` query family consuming most database runtime. Its largest fingerprint read `212.62M` rows and represented `12.03%` of runtime, while the family read roughly `2.7k-3.6k` rows for each row returned.
+- Root-thread expansion now sends two statements in one D1 batch: roots are selected through the message primary key and direct children through the existing `(channel_id, reply_to, deleted)` index.
+- Each statement uses at most 51 bound values for a full 50-root page, remaining below D1's variable limit without the materialized values CTE or union-level sort.
+- The Worker merges and chronologically sorts both result sets after the batch, preserving the existing root-plus-visible-direct-replies response contract for init, normal paging and message-context navigation.
+- Regression coverage verifies the two indexed query shapes, parameter bounds and merged result order.
+
+Trade-off: one logical expansion now executes two D1 statements instead of one, although both travel in the same batch. This slightly increases statement count in exchange for avoiding the measured high rows-read query shape.
+
+Deployment note: this requires a Worker deploy only. No D1 migration or frontend deploy is required. After representative traffic, compare the new `id IN (...)` and `reply_to IN (...)` fingerprints against the recorded CTE baseline.
+
 ### Channel deletion now survives partial Durable Object and R2 failures — 2026-08-12
 
 - Channel deletion now inserts a durable cleanup job containing the exact media-key snapshot in the same D1 batch that removes the channel and related application rows.

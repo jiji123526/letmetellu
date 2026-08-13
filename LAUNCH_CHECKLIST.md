@@ -36,7 +36,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 ### Operational follow-up, not a current blocker
 
-- [ ] After representative traffic, rerun `worker/scripts/audit-flat-replies.sql` and D1 Insights. Confirm the former recursive query stops accumulating executions and compare the replacement query's rows read and duration.
+- [ ] After deploying the 2026-08-13 thread-query change and collecting representative traffic, rerun `worker/scripts/audit-flat-replies.sql` and D1 Insights. Confirm `WITH requested_roots` stops accumulating executions and compare the new primary-key/root and indexed-child query fingerprints against the recorded `2.7k-3.6k` rows-read-per-row baseline.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
 

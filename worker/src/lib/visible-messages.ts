@@ -54,24 +54,27 @@ export async function readVisibleFlatThreads(
   const rootIds = [...new Set(requestedRootIds.map(String).filter(Boolean))];
   if (rootIds.length === 0) return [];
 
-  const rootValues = rootIds.map(() => "(?)").join(", ");
-  const { results } = await env.DB.prepare(`
-    WITH requested_roots(id) AS (VALUES ${rootValues})
-    SELECT * FROM (
-      SELECT messages.*
+  const placeholders = rootIds.map(() => "?").join(", ");
+  const [rootResult, childResult] = await env.DB.batch<VisibleMessageRow>([
+    env.DB.prepare(`
+      SELECT *
       FROM messages
-      INNER JOIN requested_roots ON requested_roots.id = messages.id
       WHERE channel_id = ?
-      UNION ALL
-      SELECT messages.*
+        AND id IN (${placeholders})
+    `).bind(channelId, ...rootIds),
+    env.DB.prepare(`
+      SELECT *
       FROM messages
-      INNER JOIN requested_roots ON requested_roots.id = messages.reply_to
       WHERE channel_id = ?
+        AND reply_to IN (${placeholders})
         AND deleted = 0
-    )
-    ORDER BY created_at ASC, id ASC
-  `).bind(...rootIds, channelId, channelId).all<VisibleMessageRow>();
-  return results || [];
+    `).bind(channelId, ...rootIds),
+  ]);
+
+  return sortVisibleMessages([
+    ...(rootResult.results || []),
+    ...(childResult.results || []),
+  ]);
 }
 
 export async function readVisibleMessagePage(
