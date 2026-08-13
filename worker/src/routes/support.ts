@@ -1426,6 +1426,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
       SUM(CASE WHEN event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
       SUM(CASE WHEN event_type = 'cleanup_failed' THEN 1 ELSE 0 END) AS cleanup_failure_count,
+      SUM(CASE WHEN event_type = 'realtime_unavailable' THEN 1 ELSE 0 END) AS realtime_failure_count,
       SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
       SUM(CASE WHEN event_type = 'forbidden' THEN 1 ELSE 0 END) AS forbidden_count,
       SUM(CASE WHEN event_type = 'media_not_found' THEN 1 ELSE 0 END) AS media_not_found_count
@@ -1448,7 +1449,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
           created_at
         FROM operational_events
         WHERE created_at >= ?
-          AND event_type IN ('request_failed', 'preview_upstream_failed', 'unhandled_exception', 'maintenance_failed', 'cleanup_failed', 'rate_limited', 'forbidden', 'media_not_found')
+          AND event_type IN ('request_failed', 'preview_upstream_failed', 'unhandled_exception', 'maintenance_failed', 'cleanup_failed', 'realtime_unavailable', 'rate_limited', 'forbidden', 'media_not_found')
       )
       SELECT
         normalized_route AS route,
@@ -1457,6 +1458,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
         SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
         SUM(CASE WHEN event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
         SUM(CASE WHEN event_type = 'cleanup_failed' THEN 1 ELSE 0 END) AS cleanup_failure_count,
+        SUM(CASE WHEN event_type = 'realtime_unavailable' THEN 1 ELSE 0 END) AS realtime_failure_count,
         SUM(CASE WHEN event_type = 'rate_limited' THEN 1 ELSE 0 END) AS rate_limited_count,
         SUM(CASE WHEN event_type = 'forbidden' THEN 1 ELSE 0 END) AS forbidden_count,
         SUM(CASE WHEN event_type = 'media_not_found' THEN 1 ELSE 0 END) AS media_not_found_count,
@@ -1464,7 +1466,8 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       FROM normalized_events
       GROUP BY normalized_route
       ORDER BY request_5xx_count DESC, preview_upstream_failure_count DESC, unhandled_exception_count DESC,
-               maintenance_failure_count DESC, cleanup_failure_count DESC, rate_limited_count DESC, forbidden_count DESC,
+               maintenance_failure_count DESC, cleanup_failure_count DESC, realtime_failure_count DESC,
+               rate_limited_count DESC, forbidden_count DESC,
                media_not_found_count DESC
       LIMIT 12
     `).bind(cutoff24h).all<OperationalHealthWindowRow & { route: string; last_event_at: string }>(),
@@ -1488,6 +1491,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       degraded_15m: {
         request_5xx_count: 1,
         unhandled_exception_count: 1,
+        realtime_failure_count: 1,
         rate_limited_count: 25,
       },
     },

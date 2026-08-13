@@ -98,6 +98,10 @@ test("operational health groups websocket routes by normalized channel path", ()
     supportRouteSource,
     /SUM\(CASE WHEN event_type = 'cleanup_failed' THEN 1 ELSE 0 END\) AS cleanup_failure_count/,
   );
+  assert.match(
+    supportRouteSource,
+    /SUM\(CASE WHEN event_type = 'realtime_unavailable' THEN 1 ELSE 0 END\) AS realtime_failure_count/,
+  );
 });
 
 test("channel deletion records recoverable cleanup before deleting D1 state", () => {

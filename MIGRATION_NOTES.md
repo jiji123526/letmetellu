@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Durable Object presence resets no longer fail channel initialization — 2026-08-13
+
+- Production correlation found three `/api/init` `500`s and one `/ws/:channel` `500` for `zziks` within 21 milliseconds. All four carried the same Cloudflare Durable Object storage-reset reference, identifying one realtime infrastructure incident rather than four independent application failures.
+- `/api/init` previously awaited message reads, configuration reads and the nonessential Durable Object presence count in one `Promise.all`. A rejected presence request therefore discarded otherwise valid bootstrap data and failed room entry.
+- Presence loading now fails open: a failed, non-successful or malformed Durable Object response returns a temporary count of `0`, while channel data and messages continue loading normally.
+- Each fallback records a `realtime_unavailable` operational event with the channel, stage and provider error. The super-admin health view exposes these events separately and marks recent realtime fallback as degraded, so graceful recovery does not hide recurring platform resets.
+- Regression coverage verifies normal presence, storage-reset fallback, malformed response handling, event recording and health aggregation.
+
+Trade-off: during a Durable Object reset, users can briefly see a presence count of `0` until the socket reconnects or a later init succeeds. WebSocket establishment can still fail during the reset itself, but existing reconnect behavior can recover without channel bootstrap also failing.
+
+Deployment note: this requires both a Worker deploy and frontend deploy for the updated health card. No D1 migration is required.
+
 ### Flat thread expansion now uses direct batched index lookups — 2026-08-13
 
 - Production D1 Insights showed the `WITH requested_roots(id) AS (VALUES ...)` query family consuming most database runtime. Its largest fingerprint read `212.62M` rows and represented `12.03%` of runtime, while the family read roughly `2.7k-3.6k` rows for each row returned.

@@ -153,6 +153,7 @@ export interface PlatformOperationalHealthWindow {
   unhandled_exception_count: number;
   maintenance_failure_count: number;
   cleanup_failure_count: number;
+  realtime_failure_count: number;
   rate_limited_count: number;
   forbidden_count: number;
   media_not_found_count: number;

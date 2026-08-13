@@ -241,6 +241,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
     unhandled_exception_count: null,
     maintenance_failure_count: undefined,
     cleanup_failure_count: "2",
+    realtime_failure_count: "3",
     rate_limited_count: "7",
     forbidden_count: 3,
     media_not_found_count: "9",
@@ -251,6 +252,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
     unhandled_exception_count: 0,
     maintenance_failure_count: 0,
     cleanup_failure_count: 2,
+    realtime_failure_count: 3,
     rate_limited_count: 7,
     forbidden_count: 3,
     media_not_found_count: 9,
@@ -263,6 +265,7 @@ test("operational health status applies conservative 15-minute thresholds", () =
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, preview_upstream_failure_count: 4 }), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, cleanup_failure_count: 1 }), "degraded");
+  assert.equal(deriveOperationalHealthStatus({ ...base, realtime_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, rate_limited_count: 25 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 5 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, unhandled_exception_count: 3 }), "critical");

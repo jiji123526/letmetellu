@@ -453,6 +453,7 @@ export const ko = {
   operationalHealthPreviewFailures: "프리뷰 외부 오류",
   operationalHealthExceptions: "예외",
   operationalHealthCleanupFailures: "정리 재시도",
+  operationalHealthRealtimeFailures: "실시간 대체 처리",
   operationalHealthMediaMisses: "미디어 404",
   operationalHealthProblemRoutes: "확인이 필요한 경로 · 24시간",
   operationalHealthRouteCounts: "오류 {errors} · 404 {missing} · 429 {limited}",
