@@ -7,8 +7,8 @@ export function getMediaCacheControl(
   }
   if (sourceType === "channel-background") {
     return requiresPrivateCache
-      ? "private, max-age=900, must-revalidate"
-      : "public, max-age=604800, s-maxage=3600, immutable";
+      ? "private, max-age=300, must-revalidate"
+      : "public, max-age=300, s-maxage=3600, must-revalidate";
   }
   if (sourceType === "message" || sourceType === "gallery" || sourceType === "dm") {
     return "private, max-age=300, must-revalidate";

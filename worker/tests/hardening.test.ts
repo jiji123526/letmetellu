@@ -190,11 +190,11 @@ test("matchesImageSignature rejects mismatched, truncated and unsupported conten
 test("media cache policy keeps shared assets public and chat media browser-private", () => {
   assert.equal(
     getMediaCacheControl("channel-background", false),
-    "public, max-age=604800, s-maxage=3600, immutable",
+    "public, max-age=300, s-maxage=3600, must-revalidate",
   );
   assert.equal(
     getMediaCacheControl("channel-background", true),
-    "private, max-age=900, must-revalidate",
+    "private, max-age=300, must-revalidate",
   );
   assert.equal(getMediaCacheControl("message", false), "private, max-age=300, must-revalidate");
   assert.equal(getMediaCacheControl("gallery", true), "private, max-age=300, must-revalidate");
