@@ -37,6 +37,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 ### Operational follow-up, not a current blocker
 
 - [ ] After deploying the 2026-08-13 thread-query change and collecting representative traffic, rerun `worker/scripts/audit-flat-replies.sql` and D1 Insights. Confirm `WITH requested_roots` stops accumulating executions and compare the new primary-key/root and indexed-child query fingerprints against the recorded `2.7k-3.6k` rows-read-per-row baseline.
+- [ ] Run `worker/scripts/audit-message-indexes.sql` against production. Confirm normal message paging selects `messages_channel_created_id_idx` before considering removal of the older `messages_channel_idx`; retain both reply indexes because their column orders serve different predicates.
 - [ ] After deploying the Durable Object presence fallback, confirm a `realtime_unavailable` event appears as degraded health without producing an `/api/init` `500`, and verify the WebSocket reconnect restores the live presence count.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.

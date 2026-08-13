@@ -98,7 +98,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 #### Later message-query optimizations
 
 - Completed on 2026-08-13: root and child `IN (?, ...)` lookups now use seven bounded query sizes (`1`, `2`, `4`, `8`, `16`, `32`, `50`) instead of potentially producing a separate D1 Insights fingerprint for every page size. Repeating the final ID as padding is result-neutral; this improves observability but does not inherently reduce rows read or execution cost.
-- Audit potentially overlapping `messages` indexes against production query plans and Insights before removing any. Fewer indexes reduce write amplification and storage, but removing an index that still serves another route can trade a small write saving for a large read regression.
+- Initial index audit completed on 2026-08-13: `messages_channel_idx(channel_id, created_at)` is the only clear removal candidate because `messages_channel_created_id_idx(channel_id, created_at, id)` has the same leading columns. The two reply indexes intentionally use opposite column orders, the deleted/created index serves latest-visible reads, and the partial client-message index enforces idempotency. Run `worker/scripts/audit-message-indexes.sql` against production and confirm paging uses the newer composite index before creating a removal migration; no index was dropped during the code-only audit.
 - Continue checking browser diagnostics and edge analytics for duplicate `/api/init` or message-page requests. Query tuning cannot compensate for unnecessary request fan-out, although the latest dashboard and chat traces indicate the known duplicate startup paths are largely controlled.
 
 #### Phase 4: support dashboard query tuning
