@@ -47,7 +47,18 @@ export function getDisplayMessages(
   reportsOwnerFilter: ReportsOwnerFilter,
 ): Message[] {
   if (!effectiveAdmin) return messages.filter((message) => !message.report);
-  const adminMessages = [...messages, ...dmMessages];
+  const oldestLoadedMessageAt = messages.reduce<string | null>((oldest, message) => {
+    if (!message.created_at) return oldest;
+    return !oldest || message.created_at.localeCompare(oldest) < 0
+      ? message.created_at
+      : oldest;
+  }, null);
+  const visibleDmMessages = oldestLoadedMessageAt
+    ? dmMessages.filter((message) =>
+        !message.created_at || message.created_at.localeCompare(oldestLoadedMessageAt) >= 0
+      )
+    : dmMessages;
+  const adminMessages = [...messages, ...visibleDmMessages];
   if (!isReportsOwnerView) {
     return adminMessages.sort((left, right) => (left.created_at || "").localeCompare(right.created_at || ""));
   }

@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Owner DMs now follow the loaded chat history window — 2026-08-13
+
+- Owners receive a fixed recent-DM snapshot during channel initialization while normal chat messages load in cursor-based pages.
+- The renderer previously merged every cached DM into every normal-message window. An older DM could therefore appear at the top before the corresponding normal history page arrived, then move again when that page was inserted and scroll anchoring settled.
+- Owner DMs are now interleaved only when they are at or newer than the oldest normal message currently loaded. Older DMs enter the rendered timeline together with the older normal-message page that reaches their timestamp.
+- Channels with no normal messages still show their available DMs, preserving owner access to DM-only activity.
+
+Trade-off: an older cached DM remains hidden until normal history reaches the same period. This produces a coherent paginated timeline but does not turn DMs into an independently pageable inbox; the existing initialization snapshot still limits available DMs to the latest 50.
+
+Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
+
 ### Touchscreen laptops can use Enter to send messages — 2026-08-13
 
 - The chat composer previously treated any browser with touch-event support or a positive `maxTouchPoints` value as mobile and disabled Enter-to-send.
