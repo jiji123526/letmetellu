@@ -172,6 +172,20 @@ export interface PlatformOperationalHealthResponse {
     last_15m: PlatformOperationalHealthWindow;
     last_24h: PlatformOperationalHealthWindow;
   };
+  thresholds: {
+    critical_15m: {
+      request_5xx_count: number;
+      unhandled_exception_count: number;
+      maintenance_failure_count: number;
+    };
+    degraded_15m: {
+      request_5xx_count: number;
+      unhandled_exception_count: number;
+      cleanup_failure_count: number;
+      realtime_failure_count: number;
+      rate_limited_count: number;
+    };
+  };
   routes: PlatformOperationalHealthRoute[];
 }
 

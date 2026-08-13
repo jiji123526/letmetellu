@@ -705,6 +705,7 @@ function DashboardPageContent() {
           generated_at: result.generated_at,
           status: result.status,
           windows: result.windows,
+          thresholds: result.thresholds,
           routes: result.routes || [],
         });
         operationalHealthLoadedAtRef.current = Date.now();

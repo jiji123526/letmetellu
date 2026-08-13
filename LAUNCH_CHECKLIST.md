@@ -32,11 +32,12 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Migration `0038` and its race-recovering guided-support Worker changes are deployed.
 - [x] Cross-tab logout and account deletion were deployed and verified to remove owner controls and reconnect chat without stale WebSocket privileges.
 - [x] Fresh protected-media requests and direct capabilities reject stale room access and deleted parent channels before reading R2; bounded private browser-cache reuse is explicitly documented.
+- [x] The first seven-day operational-health baseline was reviewed across 672 fifteen-minute windows. Normal p50/p95/p99 counts were zero, the existing thresholds were retained, and the operator response runbook is complete.
 
 ### Still required before a broad public launch
 
 - [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization, cross-tab socket revocation and media-access revocation are covered; deployed support/report transitions remain.
-- [ ] Collect normal production health baselines, calibrate thresholds and document an operator response procedure; add external alerts for degraded/critical states after calibration.
+- [ ] Add and test external degraded/critical alert delivery using the calibrated thresholds and completed operator response runbook.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
 - [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
@@ -78,8 +79,8 @@ Do not treat the app as public-launch ready until these are complete:
 - Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
 2. Monitoring and operator alerting
-- The health dashboard and local performance diagnostics exist; baseline calibration and external alert delivery do not.
-- Calibrate the existing super-admin operational-health dashboard against production baselines, then add alert delivery for degraded or critical states.
+- The health dashboard, repeatable seven-day baseline audit, initial production calibration and operator response runbook are complete.
+- Add and test alert delivery for degraded or critical states. Keep preview failures, expected forbidden requests and media misses out of core paging.
 - Add bounded operator summaries for moderation/support audit trends.
 - Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 

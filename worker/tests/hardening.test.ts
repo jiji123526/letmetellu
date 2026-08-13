@@ -20,7 +20,11 @@ import {
   canUsePublicBackgroundCache,
   createPublicBackgroundCacheKey,
 } from "../src/lib/public-background-cache.ts";
-import { deriveOperationalHealthStatus, serializeOperationalHealthWindow } from "../src/lib/operational-health.ts";
+import {
+  deriveOperationalHealthStatus,
+  OPERATIONAL_HEALTH_THRESHOLDS,
+  serializeOperationalHealthWindow,
+} from "../src/lib/operational-health.ts";
 import { parsePreviewMetadata } from "../src/lib/preview-metadata.ts";
 import { getPreviewFailureCacheTtl } from "../src/lib/preview-cache-policy.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
@@ -260,6 +264,20 @@ test("operational health windows normalize D1 values and missing counts", () => 
 });
 
 test("operational health status applies conservative 15-minute thresholds", () => {
+  assert.deepEqual(OPERATIONAL_HEALTH_THRESHOLDS, {
+    critical_15m: {
+      request_5xx_count: 5,
+      unhandled_exception_count: 3,
+      maintenance_failure_count: 1,
+    },
+    degraded_15m: {
+      request_5xx_count: 1,
+      unhandled_exception_count: 1,
+      cleanup_failure_count: 1,
+      realtime_failure_count: 1,
+      rate_limited_count: 25,
+    },
+  });
   const base = serializeOperationalHealthWindow(null);
   assert.equal(deriveOperationalHealthStatus(base), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");

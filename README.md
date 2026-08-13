@@ -10,6 +10,9 @@ The service is running as a monitored limited beta. The production deployment in
 
 Work remaining before a broad public launch is primarily operational hardening: wider regression coverage, calibrated alerts, stricter CSP enforcement, retryable cross-store cleanup, and broader abuse controls. See [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md) for the current release gate.
 
+Production health investigation and response procedures are documented in
+[OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md).
+
 ## Product Overview
 
 ### Chat

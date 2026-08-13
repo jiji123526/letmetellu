@@ -2,7 +2,12 @@ import type { Env } from "../types.ts";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity.ts";
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation.ts";
 import { recordOperationalEvent } from "../lib/operational-events.ts";
-import { deriveOperationalHealthStatus, serializeOperationalHealthWindow, type OperationalHealthWindowRow } from "../lib/operational-health.ts";
+import {
+  deriveOperationalHealthStatus,
+  OPERATIONAL_HEALTH_THRESHOLDS,
+  serializeOperationalHealthWindow,
+  type OperationalHealthWindowRow,
+} from "../lib/operational-health.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels.ts";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow.ts";
@@ -1545,19 +1550,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       last_15m: last15m,
       last_24h: last24h,
     },
-    thresholds: {
-      critical_15m: {
-        request_5xx_count: 5,
-        unhandled_exception_count: 3,
-        maintenance_failure_count: 1,
-      },
-      degraded_15m: {
-        request_5xx_count: 1,
-        unhandled_exception_count: 1,
-        realtime_failure_count: 1,
-        rate_limited_count: 25,
-      },
-    },
+    thresholds: OPERATIONAL_HEALTH_THRESHOLDS,
     routes: (routeResults.results || []).map((row) => ({
       route: row.route,
       ...serializeOperationalHealthWindow(row),

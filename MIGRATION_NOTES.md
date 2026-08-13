@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Operational health has a repeatable baseline and response procedure — 2026-08-13
+
+- Health thresholds now have one shared Worker definition used by both status derivation and the platform-admin API response, preventing displayed thresholds from drifting from runtime behavior.
+- `worker/scripts/audit-operational-health-baseline.sql` provides a read-only seven-day baseline with zero-filled 15-minute windows, percentile/max signal counts, daily event totals, route concentration and pending cleanup jobs.
+- `OPERATIONS_RUNBOOK.md` documents critical/degraded triage, route-stage investigation, realtime fallback, cleanup retries, preview failures, abuse signals, media misses, rollback decisions and recovery confirmation.
+- The runbook explicitly separates failure-count baselines from true error-rate and latency SLOs because `operational_events` does not record successful requests or request durations.
+- The first production run reviewed 672 fifteen-minute windows. Core 5xx and exception p50/p95/p99 values were zero, only five windows were nonzero, the maximum burst was four, and no cleanup jobs were pending. Existing thresholds were retained: isolated core failures remain degraded, exception bursts of three remain critical, and preview/forbidden signals remain contextual.
+
+Trade-off: the baseline audit reads up to seven days of retained operational events and cleanup state when run manually. Runtime request behavior and polling are unchanged. External alert delivery remains separate work and should use the calibrated thresholds rather than introducing a second severity model.
+
+Deployment note: the threshold refactor requires a Worker deployment but does not change current threshold values. No frontend deployment or D1 migration is required.
+
 ### Fresh media requests fail closed after access revocation — 2026-08-13
 
 - Protected media already revalidated the current channel passcode on every network request, but an attached upload ticket could still identify media after its channel row was deleted.

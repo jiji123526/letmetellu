@@ -1,0 +1,191 @@
+# Production Operations Runbook
+
+This runbook covers the existing `operational_events` health model and retryable
+channel-cleanup jobs. Times and database timestamps are UTC.
+
+## Current Health Model
+
+The super-admin dashboard summarizes the last 15 minutes and 24 hours. Current
+15-minute thresholds are:
+
+| Status | Trigger |
+| --- | --- |
+| Critical | `request_failed` 5xx >= 5, unhandled exceptions >= 3, or any scheduled-maintenance failure |
+| Degraded | Any request 5xx, exception, cleanup failure or realtime fallback, or rate limits >= 25 |
+| Context only | Preview upstream failures, forbidden requests and media 404s do not independently change core health |
+
+These are conservative beta thresholds. Do not raise them merely to make a
+recurring application failure appear healthy.
+
+### Calibrated Beta Baseline
+
+The first production review on 2026-08-13 covered 672 fifteen-minute windows.
+Core 5xx and unhandled-exception counts were nonzero in only five windows, with
+p50, p95 and p99 all at zero. The maximum was four events in one window.
+Maintenance, cleanup, realtime, rate-limit and media-miss signals were all zero,
+and there were no pending cleanup jobs.
+
+The existing thresholds were retained:
+
+- one core failure remains degraded because normal windows are quiet;
+- three exceptions remain critical because the observed exception bursts were
+  real Durable Object incidents, not normal traffic;
+- five request failures remain critical, just above the observed maximum burst;
+- preview upstream failures and expected forbidden requests remain context-only
+  signals because they did not indicate a core service outage.
+
+Recalibrate only after traffic volume changes materially or a later seven-day
+sample demonstrates a different normal pattern.
+
+## Collect A Baseline
+
+Run the read-only audit from `worker/` after representative traffic:
+
+```bash
+npx wrangler d1 execute letsplay-db --remote \
+  --command "$(cat scripts/audit-operational-health-baseline.sql)"
+```
+
+The first result zero-fills seven days of 15-minute windows and reports the
+average, p50, p95, p99 and maximum for each tracked signal. Later results show
+daily counts, route concentration and pending cleanup jobs.
+
+Run it at a consistent UTC time once per week during beta. Keep dated output in
+the private operator workspace, not Git, because route details and cleanup
+errors are production operational data.
+
+Before changing thresholds:
+
+1. Collect at least seven representative days, including the busiest day.
+2. Separate core failures from preview upstream failures, expected 403s, media
+   misses and deliberate rate limiting.
+3. Investigate recurring core errors instead of normalizing them.
+4. Compare p95/p99 with the current threshold and check whether affected users
+   could enter rooms, send messages or use owner/admin functions.
+5. Record the old value, new value, evidence window and rollback condition in
+   `MIGRATION_NOTES.md`.
+
+`operational_events` does not contain successful-request volume or latency.
+Counts therefore cannot produce a true error rate or latency SLO. Use
+Cloudflare/Vercel request analytics for denominators until bounded success and
+latency telemetry is added.
+
+## Response Procedure
+
+### Critical
+
+1. Open the super-admin health card and identify the dominant route and signal.
+2. Check whether the first event follows a deployment.
+3. Run the recent-event query below and inspect `route_stage` and the bounded
+   error text.
+4. Reproduce one core path: room entry (`/api/init`), message send and, when
+   relevant, owner/admin access.
+5. Roll back only when the failure began after a deployment and the previous
+   version is known good. Provider incidents should use graceful fallback and
+   monitoring rather than an unrelated code rollback.
+6. Confirm recovery with two consecutive healthy 15-minute windows and a
+   successful core smoke test.
+
+### Degraded
+
+1. Determine whether the signal is isolated, transient or increasing.
+2. Check route concentration and cleanup backlog.
+3. For one realtime fallback, confirm `/api/init` still succeeded and presence
+   recovers after WebSocket reconnect.
+4. For cleanup failure, allow scheduled retry unless attempts or age continue
+   increasing.
+5. Escalate to critical handling when users cannot complete a core action,
+   failures spread across routes, or the critical threshold is reached.
+
+### Recent Event Detail
+
+```bash
+npx wrangler d1 execute letsplay-db --remote --command "
+SELECT
+  created_at,
+  severity,
+  route,
+  event_type,
+  status_code,
+  json_extract(detail_json, '$.route_stage') AS route_stage,
+  substr(json_extract(detail_json, '$.error'), 1, 300) AS error
+FROM operational_events
+WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2 hours')
+ORDER BY created_at DESC
+LIMIT 100;
+"
+```
+
+## Signal Playbooks
+
+### `/api/init` Or Core 5xx
+
+- Group by `route_stage` and error text.
+- If the error is a Durable Object reset, verify a `realtime_unavailable`
+  fallback appears without a matching post-fallback `/api/init` 500.
+- If failures began after deployment, compare the current and previous Worker
+  versions and roll back only the Worker when the frontend contract permits it.
+- Recovery means room entry and refresh succeed and the 15-minute count stops
+  increasing.
+
+### Realtime Unavailable
+
+- Treat an isolated event as degraded, not a full outage.
+- Confirm init returned usable room data with temporary presence `0`.
+- Confirm WebSocket reconnect restores live presence.
+- Escalate when fallbacks repeat across channels or pair with websocket/init
+  5xx responses.
+
+### Cleanup Failure
+
+```bash
+npx wrangler d1 execute letsplay-db --remote --command "
+SELECT id, resource_id, attempt_count, next_attempt_at,
+       substr(last_error, 1, 300) AS last_error,
+       created_at, updated_at
+FROM cleanup_jobs
+WHERE completed_at IS NULL
+ORDER BY created_at ASC
+LIMIT 50;
+"
+```
+
+- Do not manually delete the D1 job or R2 objects without first identifying the
+  failed stage.
+- Confirm attempts advance and the job eventually receives `completed_at`.
+- Escalate when the oldest job exceeds the normal observed recovery window,
+  attempts stop advancing, or retained media remains externally accessible.
+
+### Preview Failures
+
+- Preview `502/504` responses are third-party quality signals, not core-health
+  failures.
+- Check whether failures are concentrated by upstream domain.
+- Escalate only when the Worker URL policy, timeout path or all preview requests
+  fail independently of upstream targets.
+
+### Rate Limits And Forbidden Requests
+
+- `429` and `403` commonly indicate working abuse controls.
+- Check concentration by route and time before changing limits.
+- Escalate when legitimate smoke tests are blocked or a sudden distributed
+  spike suggests active abuse.
+
+### Media 404
+
+- Confirm whether the message/channel was deleted or cleanup completed.
+- Escalate only for referenced current media that should still exist.
+- Never restore deleted media solely to reduce the 404 counter.
+
+## Alert Rollout
+
+The initial baseline is calibrated. External alerts remain disabled until an
+alert delivery path is implemented and tested. When enabled:
+
+- page immediately for critical core-health state;
+- notify without paging for sustained degraded state across two windows;
+- deduplicate by status and dominant route;
+- send one recovery notification after two healthy windows;
+- exclude preview failures, expected 403s and media misses from paging.
+
+Every alert must link to this runbook and the super-admin health view.

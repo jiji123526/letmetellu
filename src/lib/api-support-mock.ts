@@ -517,6 +517,20 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
     generated_at: new Date().toISOString(),
     status: "healthy",
     windows: { last_15m: emptyWindow, last_24h: emptyWindow },
+    thresholds: {
+      critical_15m: {
+        request_5xx_count: 5,
+        unhandled_exception_count: 3,
+        maintenance_failure_count: 1,
+      },
+      degraded_15m: {
+        request_5xx_count: 1,
+        unhandled_exception_count: 1,
+        cleanup_failure_count: 1,
+        realtime_failure_count: 1,
+        rate_limited_count: 25,
+      },
+    },
     routes: [],
     _status: 200,
   };
