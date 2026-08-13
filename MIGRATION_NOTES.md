@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Open chat tabs drop stale socket privileges after logout — 2026-08-13
+
+- Auth.js already shares session changes across tabs, and every same-origin HTTP proxy rechecks the current session before forwarding a trusted user ID.
+- Chat WebSockets previously stayed mounted when that authenticated user ID changed because their connection lifecycle was keyed only to the channel and anonymous chat UID. A tab could therefore stop showing owner controls after logout while its existing Durable Object connection remained authenticated as an admin.
+- The realtime hook now includes the authenticated account ID in its authorization lifecycle. Login, logout and successful account deletion followed by logout close the old socket and open a replacement that requests authorization from the current session. The token request also rejects a client/server authenticated-state mismatch during the transition instead of issuing a token from stale client state.
+- On a public channel the replacement continues as a normal viewer; on a locked channel it retains only separately valid room-token access; on the reports channel it remains unauthorized without the platform-admin session.
+- Focused source coverage preserves the identity-bound socket lifecycle and the cross-tab-aware session-provider boundary.
+
+Trade-off: logging in, logging out or switching accounts while a channel is open causes one deliberate WebSocket reconnect and presence update. Ordinary renders and unchanged sessions do not reconnect, and no new D1 polling or session-validation read was added.
+
+Deployment note: this is frontend-only. After deployment, open the same owned channel in two tabs, log out or delete the account in one tab, and confirm the other tab loses owner controls and reconnects without admin authorization.
+
 ### Report moderation state synchronizes across privileged views — 2026-08-13
 
 - Channel-level moderation actions previously rewrote every related report message on the server, but the acting reports inbox patched only the selected message and depended on receiving its own WebSocket broadcasts for the rest.

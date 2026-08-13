@@ -43,8 +43,15 @@ export async function GET(request: Request) {
   const session = await auth();
   const url = new URL(request.url);
   const channelId = url.searchParams.get("channel");
+  const expectedAuthentication = url.searchParams.get("authenticated");
   if (!channelId) {
     return NextResponse.json({ error: "missing channel" }, { status: 400 });
+  }
+  if (
+    (expectedAuthentication === "1" && !session?.user?.id)
+    || (expectedAuthentication === "0" && !!session?.user?.id)
+  ) {
+    return NextResponse.json({ error: "session changed" }, { status: 409 });
   }
 
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";

@@ -176,7 +176,11 @@ export function ChatView({ channelId }: { channelId: string }) {
     return () => window.removeEventListener("anonymous-identity-changed", handleIdentityChanged);
   }, []);
 
-  const { connected, showReconnectNotice, presence, liveCount, subscribe, send } = useRealtime(channelId, uid);
+  const { connected, showReconnectNotice, presence, liveCount, subscribe, send } = useRealtime(
+    channelId,
+    uid,
+    authUserId,
+  );
   const effectiveAdmin = isAdmin && !adminViewAsUser;
   const {
     input,

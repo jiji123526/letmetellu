@@ -27,7 +27,11 @@ function reconnectDelay(attempt: number) {
   return Math.round(exponentialDelay * jitter);
 }
 
-export function useRealtime(channelId: string | null, uid: string) {
+export function useRealtime(
+  channelId: string | null,
+  uid: string,
+  authenticatedUserId: string | null,
+) {
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<Set<MessageHandler>>(new Set());
   const [socketConnected, setSocketConnected] = useState(false);
@@ -54,9 +58,13 @@ export function useRealtime(channelId: string | null, uid: string) {
       startChatPerformanceRequest(channelId, reconnectTraceId, "ws-token");
     }
     try {
-      const response = await fetch(`/api/ws-token?channel=${encodeURIComponent(channelId)}`, {
-        cache: "no-store",
-      });
+      const expectedAuthentication = authenticatedUserId ? "1" : "0";
+      const response = await fetch(
+        `/api/ws-token?channel=${encodeURIComponent(channelId)}&authenticated=${expectedAuthentication}`,
+        {
+          cache: "no-store",
+        },
+      );
       if (socket !== wsRef.current || socket.readyState !== WebSocket.OPEN) return;
       if (response.status === 204) return;
       if (!response.ok) return;
@@ -78,7 +86,7 @@ export function useRealtime(channelId: string | null, uid: string) {
         finishChatPerformanceRequest(channelId, reconnectTraceId, "ws-token");
       }
     }
-  }, [channelId]);
+  }, [authenticatedUserId, channelId]);
 
   const clearReconnectTimeout = useCallback(() => {
     if (!reconnectTimeout.current) return;
