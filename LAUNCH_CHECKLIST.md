@@ -4,7 +4,7 @@ This checklist is for shipping **yap.** beyond ad hoc internal testing.
 It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
 backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
-## Status snapshot — 2026-08-12
+## Status snapshot — 2026-08-13
 
 ### Completed and verified
 
@@ -22,6 +22,9 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
 - [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
 - [x] Channel and owned-channel account deletion record retryable Durable Object/R2 cleanup, with bounded scheduled retries and operational-health visibility.
+- [x] All D1 migrations through `0037_message_root_pagination.sql` are applied in production.
+- [x] Cross-store channel cleanup was verified end to end, including D1 deletion, R2 media removal, cleanup-job completion and operational-health visibility.
+- [x] Message history was verified with root-owned pagination: replies remain under their parent, adjacent parent windows do not disappear, and replies to unmounted historical parents do not reappear as latest messages.
 - [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
 
 ### Still required before a broad public launch
@@ -31,7 +34,6 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
 - [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
-- [ ] Deploy migration `0036` and verify a partial channel cleanup is retried and recovered before treating the new cross-store deletion path as production-ready.
 - [ ] Expand durable abuse controls and validate direct-API report evidence/targets before materially widening access.
 
 ### Operational follow-up, not a current blocker
@@ -42,19 +44,20 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
 
-## Current release verification — 2026-08-12
+## Current release verification — completed 2026-08-13
 
-Complete these checks for the social-preview and live-session changes before treating the current `main` revision as production-verified:
+The social-preview, live-session, cleanup and root-owned message-history changes were production-verified:
 
-- [ ] Run `cd worker && npm run db:migrate:prod` to create `cleanup_jobs` before the Worker using it is deployed.
-- [ ] Deploy the Worker first so YouTube preview cache `v3`, deterministic thumbnail cards, session-aware live ending and updated operational diagnostics are active.
-- [ ] Deploy the frontend after the Worker and confirm the production CSP no longer permits unused YouTube, Twitter or Instagram widget origins.
-- [ ] Verify standard YouTube watch, `youtu.be`, Shorts and live URLs render static thumbnail cards without iframe/widget requests.
-- [ ] Verify an Instagram public URL renders a static card when metadata is available and leaves the original link visible when metadata is unavailable.
-- [ ] Verify a stale owner tab cannot end a newer live session.
-- [ ] Verify a viewer tab returning from the background exits an ended session or receives the current session prompt before rejoining presence.
-- [ ] Confirm preview upstream failures remain visible separately from core `5xx`, while media `404` remains a non-severity secondary signal.
-- [ ] Delete a disposable channel with a known media object, confirm the D1 channel disappears, the media is removed, and the cleanup job reaches `completed_at`; also verify the health card exposes any forced cleanup failure.
+- [x] Applied all production D1 migrations through `0037_message_root_pagination.sql`.
+- [x] Deployed the Worker before the frontend so preview cache `v3`, deterministic thumbnail cards, session-aware live ending, root-owned message pagination and updated operational diagnostics are active.
+- [x] Deployed the frontend and confirmed the production CSP no longer permits unused YouTube, Twitter or Instagram widget origins.
+- [x] Verified standard YouTube watch, `youtu.be`, Shorts and live URLs render static thumbnail cards without iframe/widget requests.
+- [x] Verified an Instagram public URL renders a static card when metadata is available and leaves the original link visible when metadata is unavailable.
+- [x] Verified a stale owner tab cannot end a newer live session.
+- [x] Verified a viewer tab returning from the background exits an ended session or receives the current session prompt before rejoining presence.
+- [x] Confirmed preview upstream failures remain visible separately from core `5xx`, while media `404` remains a non-severity secondary signal.
+- [x] Deleted a disposable channel with a known media object and confirmed D1 deletion, media removal, cleanup-job completion and health-card failure visibility.
+- [x] Verified older/newer scrolling follows parent-message order, complete reply groups remain attached to their roots, and search/gallery navigation centers the correct parent window.
 
 ## Public-launch blockers
 
