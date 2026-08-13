@@ -374,6 +374,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     inLiveMode,
     messages,
     dmMessages,
+    historyMode,
     unavailableReplyParentIds,
     effectiveAdmin,
     setMessages,

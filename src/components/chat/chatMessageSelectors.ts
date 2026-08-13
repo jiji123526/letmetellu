@@ -20,6 +20,7 @@ export interface ThreadedMessages {
 interface DeriveChatMessageCollectionsArgs {
   messages: Message[];
   dmMessages: Message[];
+  historyMode: "latest" | "context";
   unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
   isReportsChannelView: boolean;
@@ -45,17 +46,34 @@ export function getDisplayMessages(
   effectiveAdmin: boolean,
   isReportsOwnerView: boolean,
   reportsOwnerFilter: ReportsOwnerFilter,
+  historyMode: "latest" | "context" = "latest",
 ): Message[] {
   if (!effectiveAdmin) return messages.filter((message) => !message.report);
-  const oldestLoadedMessageAt = messages.reduce<string | null>((oldest, message) => {
-    if (!message.created_at) return oldest;
-    return !oldest || message.created_at.localeCompare(oldest) < 0
-      ? message.created_at
-      : oldest;
-  }, null);
-  const visibleDmMessages = oldestLoadedMessageAt
+  const loadedMessageRange = messages.reduce<{
+    oldest: string | null;
+    newest: string | null;
+  }>((range, message) => {
+    if (!message.created_at) return range;
+    return {
+      oldest: !range.oldest || message.created_at.localeCompare(range.oldest) < 0
+        ? message.created_at
+        : range.oldest,
+      newest: !range.newest || message.created_at.localeCompare(range.newest) > 0
+        ? message.created_at
+        : range.newest,
+    };
+  }, { oldest: null, newest: null });
+  const visibleDmMessages = loadedMessageRange.oldest
     ? dmMessages.filter((message) =>
-        !message.created_at || message.created_at.localeCompare(oldestLoadedMessageAt) >= 0
+        !message.created_at
+        || (
+          message.created_at.localeCompare(loadedMessageRange.oldest!) >= 0
+          && (
+            historyMode === "latest"
+            || !loadedMessageRange.newest
+            || message.created_at.localeCompare(loadedMessageRange.newest) <= 0
+          )
+        )
       )
     : dmMessages;
   const adminMessages = [...messages, ...visibleDmMessages];
@@ -229,6 +247,7 @@ export function getThreadedMessages(
 export function deriveChatMessageCollections({
   messages,
   dmMessages,
+  historyMode,
   unavailableReplyParentIds,
   effectiveAdmin,
   isReportsChannelView,
@@ -242,6 +261,7 @@ export function deriveChatMessageCollections({
     effectiveAdmin,
     reportsOwnerView,
     reportsOwnerFilter,
+    historyMode,
   );
   const knownMessageIds = new Set(
     [...messages, ...dmMessages].map((message) => message.id),
