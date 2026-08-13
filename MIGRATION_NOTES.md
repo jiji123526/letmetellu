@@ -14,7 +14,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 Trade-off: logging in, logging out or switching accounts while a channel is open causes one deliberate WebSocket reconnect and presence update. Ordinary renders and unchanged sessions do not reconnect, and no new D1 polling or session-validation read was added.
 
-Deployment note: this is frontend-only. After deployment, open the same owned channel in two tabs, log out or delete the account in one tab, and confirm the other tab loses owner controls and reconnects without admin authorization.
+Deployment verification: the frontend was deployed and the two-tab logout/account-deletion flow was verified. The other tab loses owner controls and reconnects without admin authorization. No Worker deployment or D1 migration was required.
 
 ### Report moderation state synchronizes across privileged views — 2026-08-13
 

@@ -80,9 +80,9 @@ Status as of 2026-08-13:
 - [ ] Verify the deployed report open/warn/freeze/unfreeze/petition flow in
   both inbox and channel UI; mutation-wide reconciliation and owner refresh
   have focused automated coverage.
-- [ ] Verify deployed logout and account deletion in another open tab; HTTP
-  session checks and identity-bound WebSocket reconnection have focused
-  coverage.
+- [x] Deployed logout and account deletion invalidate privileged HTTP and
+  WebSocket behavior in another open tab; the replacement socket reconnects
+  under the current session state.
 - [x] A hidden or disconnected live tab reconciles ended/replaced session state
   before restoring presence, and an end action in one tab updates another tab.
 - [ ] Media access revocation tests distinguish a new unauthorized network
