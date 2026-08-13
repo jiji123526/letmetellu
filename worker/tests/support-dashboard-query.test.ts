@@ -10,6 +10,14 @@ const supportIndexMigration = readFileSync(
   new URL("../migrations/0031_support_dashboard_query_indexes.sql", import.meta.url),
   "utf8",
 );
+const dashboardSource = readFileSync(
+  new URL("../../src/app/dashboard/page.tsx", import.meta.url),
+  "utf8",
+);
+const platformThreadSource = readFileSync(
+  new URL("../../src/components/support/PlatformSupportThreadPanel.tsx", import.meta.url),
+  "utf8",
+);
 const workerIndexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
@@ -68,6 +76,29 @@ test("platform support polling uses incremental messages and lightweight dashboa
   assert.match(supportRouteSource, /type === "dashboard-stats"/);
   assert.match(supportRouteSource, /requestUrl\.searchParams\.get\("include_stats"\) !== "0"/);
   assert.match(supportRouteSource, /invalid_message_cursor/);
+});
+
+test("ticket lifecycle changes replace stale dashboard state and refresh statistics", () => {
+  assert.match(
+    dashboardSource,
+    /if \(!current \|\| authoritative\) return nextDashboard/,
+  );
+  assert.match(
+    dashboardSource,
+    /if \(!authoritative\) return inFlightRequest;[\s\S]*await inFlightRequest/,
+  );
+  assert.match(
+    dashboardSource,
+    /previousVersion !== null && previousVersion !== result\.version[\s\S]*loadPlatformDashboard\(true, true\)/,
+  );
+  assert.match(
+    dashboardSource,
+    /const refresh = \(\) => \{[\s\S]*loadPlatformDashboard\(true, true\)[\s\S]*addEventListener\("support-ticket-changed", refresh/,
+  );
+  assert.match(
+    platformThreadSource,
+    /closePlatformSupportThread[\s\S]*support-ticket-changed/,
+  );
 });
 
 test("unhandled requests are not counted again as generic request failures", () => {

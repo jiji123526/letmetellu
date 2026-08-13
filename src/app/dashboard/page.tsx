@@ -528,8 +528,15 @@ function DashboardPageContent() {
     }
   }, []);
 
-  const loadPlatformDashboard = useCallback((includeStats = true): Promise<boolean> => {
-    if (loadPlatformDashboardInFlightRef.current) return loadPlatformDashboardInFlightRef.current;
+  const loadPlatformDashboard = useCallback(async (
+    includeStats = true,
+    authoritative = false,
+  ): Promise<boolean> => {
+    const inFlightRequest = loadPlatformDashboardInFlightRef.current;
+    if (inFlightRequest) {
+      if (!authoritative) return inFlightRequest;
+      await inFlightRequest;
+    }
     const request = (async (): Promise<boolean> => {
       if (status !== "authenticated") {
         setPlatformDashboard(null);
@@ -573,7 +580,7 @@ function DashboardPageContent() {
               ? result.support_stats
               : current?.support_stats ?? null,
           };
-          if (!current) return nextDashboard;
+          if (!current || authoritative) return nextDashboard;
           const currentOpenCount = current.tickets.filter((ticket) => ticket.status === "open").length;
           const nextOpenCount = nextDashboard.tickets.filter((ticket) => ticket.status === "open").length;
           if (currentOpenCount <= nextOpenCount) return nextDashboard;
@@ -637,7 +644,8 @@ function DashboardPageContent() {
         const statsStale = Date.now() - platformDashboardStatsLoadedAtRef.current
           >= ADMIN_DASHBOARD_STATS_POLL_MS;
         if (previousVersion !== null && previousVersion !== result.version) {
-          await loadPlatformDashboard(false);
+          await loadPlatformDashboard(true, true);
+          return;
         }
         if (statsStale) await loadPlatformDashboardStats();
       } finally {
@@ -883,9 +891,7 @@ function DashboardPageContent() {
     if (status === "loading") return;
     const refresh = () => {
       if (isPlatformAdmin) {
-        const includeStats = Date.now() - platformDashboardStatsLoadedAtRef.current
-          >= ADMIN_DASHBOARD_STATS_POLL_MS;
-        void loadPlatformDashboard(includeStats);
+        void loadPlatformDashboard(true, true);
         return;
       }
       void loadSupportPreview();

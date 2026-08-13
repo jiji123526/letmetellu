@@ -231,6 +231,7 @@ export function PlatformSupportThreadPanel({ threadId }: { threadId: string }) {
       setError(typeof result.error === "string" ? result.error : t("sendFailed"));
     } else {
       await loadThread(true);
+      window.dispatchEvent(new CustomEvent("support-ticket-changed"));
     }
     setSubmitting(false);
   }

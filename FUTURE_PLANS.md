@@ -7,7 +7,7 @@ This file tracks remaining product and platform work. Implemented behavior and d
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
 1. Remove transition origins after rollback readiness, then complete the nonce-based CSP hardening sequence.
-2. Complete browser regression coverage for support, reports and dashboard state transitions; guided-support server lifecycle invariants are covered.
+2. Complete browser regression coverage for support and report transitions; guided-support invariants and authoritative ticket-dashboard refresh logic are covered.
 3. Calibrate the existing operational-health view from production baselines, then add alert delivery and response procedures.
 4. Add explicit monitoring for production email and legacy credential-upgrade paths.
 5. Extend the production-verified retryable channel-cleanup foundation only to remaining cross-store retention workflows that need it.

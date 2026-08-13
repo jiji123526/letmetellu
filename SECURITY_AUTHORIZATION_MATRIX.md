@@ -41,7 +41,7 @@ Status as of 2026-08-13:
 | `/api/channel-reports` POST | Signed actor/device required | Locked channel additionally requires room token | Owner cannot report own channel | Same submission rules | Durable quota and target-channel lookup; direct target/evidence expansion pending |
 | `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity, platform-role, per-action denial and target-lookup tests |
 | `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation, owned lifecycle transitions and database-enforced one-open-session/ticket invariants; browser regression pending |
-| `/api/platform-admin/support` | Denied | Denied | Denied unless platform admin | Allowed | Shared trusted-identity and platform-role check tests |
+| `/api/platform-admin/support` | Denied | Denied | Denied unless platform admin | Allowed | Shared trusted-identity/platform-role tests plus focused authoritative dashboard-state synchronization coverage |
 | `/api/user` account reads/writes | Denied except documented public profile/channel-existence reads | Same | Own account through trusted proxy | Own account through trusted proxy | Functional forged preference-update rejection test |
 | `/api/recent-channels` | Browser-local only; Worker account route denied | Same | Own rows through trusted proxy | Own rows through trusted proxy | Identity/email canonicalization exists; action regression pending |
 | `/api/auth` | Public credential flow through trusted app origin/proxy contract | Same | Same | Same | Rate limits and token lifecycle implemented; email/legacy monitoring pending |

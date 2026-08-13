@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Support ticket closures authoritatively refresh the admin dashboard — 2026-08-13
+
+- The platform dashboard already polled a lightweight support/report version, but a detected change reloaded tickets without statistics and merged the response into the existing paginated list.
+- That merge could retain stale open rows or an obsolete open-page cursor after a user closed a ticket, while support counters remained stale for up to five minutes.
+- Version changes and same-tab `support-ticket-changed` events now request fresh tickets and statistics and replace the dashboard snapshot and pagination cursor. An authoritative refresh arriving during another dashboard request queues behind it instead of being silently coalesced into the older request.
+- Closing a ticket from the platform thread panel now emits the same refresh event after the authoritative thread reload.
+- Focused source regression coverage verifies authoritative replacement, queued refresh behavior, version-triggered statistics and the close-event bridge.
+
+Trade-off: when support or report state changes, the admin ticket list returns to its authoritative first page, so any extra open-ticket pages previously loaded must be requested again. The changed-state refresh also reads support statistics immediately instead of waiting for the five-minute stats interval. Normal unchanged version polls remain lightweight.
+
+Deployment note: this is frontend-only. Deploy the frontend, then verify a user-side ticket closure changes the admin row and counters after the next foreground version check, and an admin-side closure refreshes the current browser immediately.
+
 ### Guided support enforces one active lifecycle per user — 2026-08-13
 
 - Guided support already checked for an existing open session or ticket before creating another, but simultaneous requests from duplicate clicks or separate tabs could both pass the lookup before either insert completed.
