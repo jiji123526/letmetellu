@@ -706,6 +706,13 @@ function DashboardPageContent() {
           status: result.status,
           windows: result.windows,
           thresholds: result.thresholds,
+          alerting: result.alerting ?? {
+            enabled: false,
+            evaluation_interval_minutes: 5,
+            notified_status: "healthy",
+            last_alert_kind: null,
+            last_alert_at: null,
+          },
           routes: result.routes || [],
         });
         operationalHealthLoadedAtRef.current = Date.now();

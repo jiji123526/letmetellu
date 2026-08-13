@@ -186,6 +186,13 @@ export interface PlatformOperationalHealthResponse {
       rate_limited_count: number;
     };
   };
+  alerting: {
+    enabled: boolean;
+    evaluation_interval_minutes: number;
+    notified_status: "healthy" | "degraded" | "critical";
+    last_alert_kind: "degraded" | "critical" | "recovery" | null;
+    last_alert_at: string | null;
+  };
   routes: PlatformOperationalHealthRoute[];
 }
 

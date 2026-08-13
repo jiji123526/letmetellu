@@ -24,6 +24,7 @@ import {
   stripOperationalEventHeaders,
 } from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
+import { runOperationalHealthAlerts } from "./lib/operational-alerts";
 import { isAllowedRequestOrigin } from "./lib/request-origin";
 
 export { ChatRoom };
@@ -282,17 +283,36 @@ export default {
     return buildResponse(request, response, origin, env.ALLOWED_ORIGIN);
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (controller.cron === "17 * * * *") {
+      ctx.waitUntil((async () => {
+        try {
+          await runScheduledMaintenance(env);
+        } catch (error) {
+          console.error("scheduled maintenance failed", error);
+          await recordOperationalEvent({
+            env,
+            severity: "error",
+            route: "scheduled maintenance",
+            eventType: "maintenance_failed",
+            detail: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        }
+      })());
+    }
+
     ctx.waitUntil((async () => {
       try {
-        await runScheduledMaintenance(env);
+        await runOperationalHealthAlerts(env);
       } catch (error) {
-        console.error("scheduled maintenance failed", error);
+        console.error("operational health alert evaluation failed", error);
         await recordOperationalEvent({
           env,
           severity: "error",
-          route: "scheduled maintenance",
-          eventType: "maintenance_failed",
+          route: "scheduled operational health alert",
+          eventType: "operational_alert_delivery_failed",
           detail: {
             error: error instanceof Error ? error.message : String(error),
           },

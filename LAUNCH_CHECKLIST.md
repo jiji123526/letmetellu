@@ -37,7 +37,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 ### Still required before a broad public launch
 
 - [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization, cross-tab socket revocation and media-access revocation are covered; deployed support/report transitions remain.
-- [ ] Add and test external degraded/critical alert delivery using the calibrated thresholds and completed operator response runbook.
+- [ ] Apply migration `0039`, configure `OPERATIONAL_ALERT_EMAIL`, deploy Worker/frontend alert delivery, and verify one critical/recovery cycle without duplicate email. The implementation and response runbook are complete.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
 - [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
@@ -79,8 +79,8 @@ Do not treat the app as public-launch ready until these are complete:
 - Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
 2. Monitoring and operator alerting
-- The health dashboard, repeatable seven-day baseline audit, initial production calibration and operator response runbook are complete.
-- Add and test alert delivery for degraded or critical states. Keep preview failures, expected forbidden requests and media misses out of core paging.
+- The health dashboard, repeatable seven-day baseline audit, initial production calibration, response runbook and deduplicated email-alert implementation are complete.
+- Apply migration `0039`, configure the recipient secret, deploy, and test one critical/recovery cycle. Preview failures, expected forbidden requests and media misses remain outside core paging.
 - Add bounded operator summaries for moderation/support audit trends.
 - Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 

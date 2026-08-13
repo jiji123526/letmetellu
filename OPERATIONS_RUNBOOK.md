@@ -179,13 +179,58 @@ LIMIT 50;
 
 ## Alert Rollout
 
-The initial baseline is calibrated. External alerts remain disabled until an
-alert delivery path is implemented and tested. When enabled:
+The initial baseline is calibrated. The Worker evaluates health every five
+minutes and delivers transition emails through Resend when
+`OPERATIONAL_ALERT_EMAIL` is configured:
 
-- page immediately for critical core-health state;
-- notify without paging for sustained degraded state across two windows;
-- deduplicate by status and dominant route;
-- send one recovery notification after two healthy windows;
-- exclude preview failures, expected 403s and media misses from paging.
+- critical state sends on its first evaluation;
+- degraded state sends only after two consecutive non-healthy 15-minute windows;
+- an existing degraded alert escalates once if the state becomes critical;
+- the same incident does not resend on every scheduled evaluation;
+- recovery sends only after two consecutive healthy windows;
+- preview failures, expected 403s and media misses remain excluded from severity.
 
-Every alert must link to this runbook and the super-admin health view.
+Alert emails include bounded counts, up to five dominant routes, and links to
+this runbook and the super-admin dashboard. They intentionally exclude raw
+error text, user IDs and the configured recipient.
+
+### Enable Alert Delivery
+
+Apply the state migration before deploying the Worker:
+
+```bash
+cd worker
+npx wrangler d1 migrations apply letsplay-db --remote
+npx wrangler secret put OPERATIONAL_ALERT_EMAIL
+npx wrangler deploy
+```
+
+Enter one monitored operator email address when Wrangler prompts for the
+secret. Deploy the frontend after the Worker; the expanded health card should
+show **External alerts: On** and a five-minute check interval.
+
+Confirm durable delivery state:
+
+```bash
+npx wrangler d1 execute letsplay-db --remote --command "
+SELECT notified_status, last_alert_kind, last_alert_at, updated_at
+FROM operational_health_alert_state
+WHERE alert_key = 'core_health';
+"
+```
+
+If delivery fails, the state remains unchanged so the next evaluation retries
+with the same Resend idempotency key. Failures are recorded as
+`operational_alert_delivery_failed`.
+
+### Delivery Verification
+
+Do not manufacture a production incident during normal traffic. In a quiet
+maintenance window, a full end-to-end test may insert three clearly labeled
+synthetic `unhandled_exception` events, wait up to five minutes for the critical
+email, delete those exact synthetic rows, and wait for two healthy windows for
+the recovery email. Keep the inserted IDs so only test records are removed.
+The dashboard being critical during this test is expected.
+
+After verification, confirm one critical email, one recovery email, no duplicate
+email on intervening evaluations, and a final `notified_status = 'healthy'`.

@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Calibrated health states deliver deduplicated external alerts — 2026-08-13
+
+- A five-minute scheduled evaluator uses the same shared 15-minute health thresholds as the super-admin dashboard.
+- Critical state sends immediately on detection, degraded state requires two consecutive non-healthy windows, and recovery requires two consecutive healthy windows.
+- Migration `0039_operational_health_alert_state.sql` stores the last externally notified state so repeated cron runs do not resend the same incident. A degraded incident escalates once if it becomes critical.
+- Resend idempotency is stable while a state transition is pending. Failed delivery leaves durable state unchanged for retry and records `operational_alert_delivery_failed`.
+- Alert email contains bounded signal counts and dominant routes, but no raw errors, users or recipient configuration. The health API exposes only enabled/disabled state and delivery metadata.
+- The existing hourly maintenance cron remains at minute 17; alert evaluation runs independently every five minutes.
+
+Trade-off: enabling alerting adds two bounded health-window reads, one alert-state read and one bounded route-summary read every five minutes. Email is sent only on a qualified state transition. Critical detection may be delayed by up to five minutes, while degraded and recovery notifications intentionally wait for persistence to avoid transient alert noise.
+
+Deployment note: apply migration `0039`, set the `OPERATIONAL_ALERT_EMAIL` Worker secret, deploy the Worker, then deploy the frontend. No existing threshold changes are included.
+
 ### Operational health has a repeatable baseline and response procedure — 2026-08-13
 
 - Health thresholds now have one shared Worker definition used by both status derivation and the platform-admin API response, preventing displayed thresholds from drifting from runtime behavior.

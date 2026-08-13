@@ -128,6 +128,14 @@ export function PlatformOperationalHealthCard({
                 </div>
               </div>
             )}
+            <div className="mt-2.5 pt-2.5 flex items-center justify-between gap-3 text-[10px]" style={{ borderTop: "0.5px solid var(--hairline)" }}>
+              <span style={{ color: "var(--meta)" }}>{t("operationalHealthAlerting")}</span>
+              <span className="font-medium" style={{ color: health.alerting.enabled ? "#16a34a" : "#dc2626" }}>
+                {health.alerting.enabled
+                  ? t("operationalHealthAlertingEnabled").replace("{minutes}", String(health.alerting.evaluation_interval_minutes))
+                  : t("operationalHealthAlertingDisabled")}
+              </span>
+            </div>
             {updatedAt && (
               <p className="mt-2.5 mb-0 text-right text-[9px]" style={{ color: "var(--meta)" }}>
                 {t("operationalHealthUpdated").replace("{time}", updatedAt)}

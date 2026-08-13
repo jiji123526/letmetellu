@@ -8,6 +8,7 @@ import {
   serializeOperationalHealthWindow,
   type OperationalHealthWindowRow,
 } from "../lib/operational-health.ts";
+import { isOperationalAlertingEnabled } from "../lib/operational-alerts.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels.ts";
 import { buildSupportFlow, buildSupportSummary, getSupportNode, supportTopicLabel, type SupportNode, type SupportTranscriptEvent } from "../lib/support-flow.ts";
@@ -1502,7 +1503,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
     WHERE created_at >= ?
   `;
 
-  const [last15mRow, last24hRow, routeResults] = await Promise.all([
+  const [last15mRow, last24hRow, routeResults, alertState] = await Promise.all([
     env.DB.prepare(summarySql).bind(cutoff15m).first<OperationalHealthWindowRow>(),
     env.DB.prepare(summarySql).bind(cutoff24h).first<OperationalHealthWindowRow>(),
     env.DB.prepare(`
@@ -1539,6 +1540,15 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
                media_not_found_count DESC
       LIMIT 12
     `).bind(cutoff24h).all<OperationalHealthWindowRow & { route: string; last_event_at: string }>(),
+    env.DB.prepare(`
+      SELECT notified_status, last_alert_kind, last_alert_at
+      FROM operational_health_alert_state
+      WHERE alert_key = 'core_health'
+    `).first<{
+      notified_status: "healthy" | "degraded" | "critical";
+      last_alert_kind: "degraded" | "critical" | "recovery" | null;
+      last_alert_at: string | null;
+    }>(),
   ]);
 
   const last15m = serializeOperationalHealthWindow(last15mRow);
@@ -1551,6 +1561,13 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       last_24h: last24h,
     },
     thresholds: OPERATIONAL_HEALTH_THRESHOLDS,
+    alerting: {
+      enabled: isOperationalAlertingEnabled(env),
+      evaluation_interval_minutes: 5,
+      notified_status: alertState?.notified_status || "healthy",
+      last_alert_kind: alertState?.last_alert_kind || null,
+      last_alert_at: alertState?.last_alert_at || null,
+    },
     routes: (routeResults.results || []).map((row) => ({
       route: row.route,
       ...serializeOperationalHealthWindow(row),

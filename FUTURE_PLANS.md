@@ -8,7 +8,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 1. Remove transition origins after rollback readiness, then complete the nonce-based CSP hardening sequence.
 2. Complete deployed browser regression checks for support and report transitions; cross-tab auth and fresh media-access revocation are covered.
-3. Add external alert delivery using the calibrated operational-health thresholds and completed response runbook.
+3. Deploy and verify the completed external health-alert delivery path.
 4. Add explicit monitoring for production email and legacy credential-upgrade paths.
 5. Extend the production-verified retryable channel-cleanup foundation only to remaining cross-store retention workflows that need it.
 6. Expand durable abuse controls beyond the current first pass.
@@ -47,7 +47,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Repeat `worker/scripts/audit-operational-health-baseline.sql` weekly during beta and after material traffic changes. The first production sample retained the existing `5xx`, exception and `429` thresholds.
 - Track WebSocket disconnect, reconnect-attempt and authorization-failure counts so the jittered exponential reconnect policy can be calibrated from production recovery behavior. Init presence fallbacks are now recorded as `realtime_unavailable`; use them to distinguish provider resets from ordinary client disconnects.
-- Add external alert delivery for degraded or critical health only after threshold calibration; the operator response and escalation path is documented in `OPERATIONS_RUNBOOK.md`.
+- Deploy and verify the implemented Resend alert path after migration `0039` and recipient-secret configuration; the calibrated decisions and response path are documented in `OPERATIONS_RUNBOOK.md`.
 - Add bounded summaries for moderation action volume, report volume, petition outcomes and support queue age; the underlying audit records already exist, but these trends are not yet presented.
 - Add explicit operational-event coverage for upload failures, preview failures and WebSocket authorization/origin failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.

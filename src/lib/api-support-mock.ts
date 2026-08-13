@@ -531,6 +531,13 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
         rate_limited_count: 25,
       },
     },
+    alerting: {
+      enabled: true,
+      evaluation_interval_minutes: 5,
+      notified_status: "healthy",
+      last_alert_kind: null,
+      last_alert_at: null,
+    },
     routes: [],
     _status: 200,
   };
