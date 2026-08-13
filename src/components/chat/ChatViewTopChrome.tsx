@@ -208,14 +208,11 @@ export function ChatViewTopChrome({
       )}
 
       {editingText && (
-        <div className="flex-none px-4 pt-3">
-          <EditDialog
-            inline
-            currentText={editingText}
-            onSave={onSaveEdit}
-            onClose={onCloseEdit}
-          />
-        </div>
+        <EditDialog
+          currentText={editingText}
+          onSave={onSaveEdit}
+          onClose={onCloseEdit}
+        />
       )}
 
       {isAdmin && adminViewAsUser && (

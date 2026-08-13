@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message editing uses the centered dialog overlay again — 2026-08-13
+
+- Message editing previously rendered as an inline panel beneath the chat header and search bar. Its height became part of the chat flex layout, which could push or compress the message viewport and make the editor appear to break the top of the page.
+- The inline variant has been removed. Message editing now uses the same fixed, centered backdrop and bounded-width panel pattern as notice-banner editing.
+- Opening or closing the editor no longer changes header or message-pane dimensions.
+
+Trade-off: editing temporarily covers the conversation with a modal backdrop instead of keeping the timeline fully visible. This matches the existing notice editor and provides more predictable behavior across narrow and desktop layouts.
+
+Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
+
 ### Owner DMs now follow the loaded chat history window — 2026-08-13
 
 - Owners receive a fixed recent-DM snapshot during channel initialization while normal chat messages load in cursor-based pages.

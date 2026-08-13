@@ -7,10 +7,9 @@ interface EditDialogProps {
   currentText: string;
   onSave: (newText: string) => void;
   onClose: () => void;
-  inline?: boolean;
 }
 
-export function EditDialog({ currentText, onSave, onClose, inline = false }: EditDialogProps) {
+export function EditDialog({ currentText, onSave, onClose }: EditDialogProps) {
   const { t } = useLocale();
   const [text, setText] = useState(currentText);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -27,12 +26,10 @@ export function EditDialog({ currentText, onSave, onClose, inline = false }: Edi
     <div
       style={{
         width: "100%",
-        maxWidth: inline ? "none" : "300px",
+        maxWidth: "300px",
         background: "var(--bg)",
         borderRadius: "16px",
         padding: "20px",
-        border: inline ? "1px solid color-mix(in srgb, var(--gray-text) 10%, transparent)" : undefined,
-        boxShadow: inline ? "0 12px 30px rgba(0,0,0,.08)" : undefined,
       }}
     >
       {/* Title */}
@@ -81,10 +78,6 @@ export function EditDialog({ currentText, onSave, onClose, inline = false }: Edi
       </div>
     </div>
   );
-
-  if (inline) {
-    return panel;
-  }
 
   return (
     <div
