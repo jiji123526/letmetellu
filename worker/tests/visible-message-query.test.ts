@@ -102,6 +102,43 @@ test("standalone thread reads fetch roots and children", async () => {
   assert.deepEqual(calls[1].params, ["channel-a", "root-a", "root-d"]);
 });
 
+test("thread lookup sizes use bounded query-shape buckets", async () => {
+  const calls: Array<{ query: string; params: unknown[] }> = [];
+  const env = {
+    DB: {
+      prepare(query: string) {
+        return {
+          bind(...params: unknown[]) {
+            calls.push({ query, params });
+            return { query, params };
+          },
+        };
+      },
+      async batch() {
+        return [{ results: [] }, { results: [] }];
+      },
+    },
+  };
+
+  await readVisibleFlatThreads(
+    env as never,
+    "channel-a",
+    ["root-a", "root-b", "root-c"],
+  );
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].query, /id IN \(\?, \?, \?, \?\)/);
+  assert.match(calls[1].query, /reply_to IN \(\?, \?, \?, \?\)/);
+  assert.deepEqual(calls[0].params, [
+    "channel-a",
+    "root-a",
+    "root-b",
+    "root-c",
+    "root-c",
+  ]);
+  assert.deepEqual(calls[1].params, calls[0].params);
+});
+
 test("each full-page thread lookup stays below the D1 variable limit", async () => {
   const boundParameterCounts: number[] = [];
   const env = {

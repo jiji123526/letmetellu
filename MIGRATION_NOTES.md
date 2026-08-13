@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Thread lookups now use bounded D1 query shapes — 2026-08-13
+
+- Root and child thread lookups previously generated a distinct SQL string for every `IN`-list length from one to 50, fragmenting equivalent work across many D1 Insights fingerprints.
+- Lookup sizes now use seven buckets: `1`, `2`, `4`, `8`, `16`, `32` and `50`. Lists between bucket sizes repeat their final ID until the next bucket is reached; duplicate values in an `IN` predicate do not alter the matched rows.
+- The 50-root maximum remains unchanged and each statement still stays below D1's variable limit.
+- Regression coverage verifies padding behavior, stable result semantics and the existing full-page parameter bound.
+
+Trade-off: padded statements bind up to the next bucket's number of values, adding a small amount of query text and parameter processing. This is primarily an observability improvement for D1 Insights, not a direct read-cost reduction.
+
+Deployment note: this requires a Worker deploy only. No D1 migration or frontend deploy is required.
+
 ### Message paging reuses roots already loaded in the page — 2026-08-13
 
 - Visible-message paging already has the selected page rows before expanding their complete reply groups. It now passes those loaded message IDs into thread expansion instead of querying every root by primary key again.

@@ -27,6 +27,14 @@ function sortVisibleMessages(messages: VisibleMessageRow[]): VisibleMessageRow[]
   );
 }
 
+const THREAD_LOOKUP_BUCKETS = [1, 2, 4, 8, 16, 32, 50] as const;
+
+function normalizeThreadLookupIds(ids: string[]): string[] {
+  const bucketSize = THREAD_LOOKUP_BUCKETS.find((size) => size >= ids.length);
+  if (!bucketSize || ids.length === bucketSize) return ids;
+  return [...ids, ...Array(bucketSize - ids.length).fill(ids[ids.length - 1])];
+}
+
 export async function expandVisibleRootThreads(
   env: Env,
   channelId: string,
@@ -64,23 +72,25 @@ export async function readVisibleFlatThreads(
   const statements: D1PreparedStatement[] = [];
   const missingRootIds = rootIds.filter((rootId) => !loadedMessageIds.has(rootId));
   if (missingRootIds.length > 0) {
-    const rootPlaceholders = missingRootIds.map(() => "?").join(", ");
+    const normalizedMissingRootIds = normalizeThreadLookupIds(missingRootIds);
+    const rootPlaceholders = normalizedMissingRootIds.map(() => "?").join(", ");
     statements.push(env.DB.prepare(`
       SELECT *
       FROM messages
       WHERE channel_id = ?
         AND id IN (${rootPlaceholders})
-    `).bind(channelId, ...missingRootIds));
+    `).bind(channelId, ...normalizedMissingRootIds));
   }
 
-  const childPlaceholders = rootIds.map(() => "?").join(", ");
+  const normalizedRootIds = normalizeThreadLookupIds(rootIds);
+  const childPlaceholders = normalizedRootIds.map(() => "?").join(", ");
   statements.push(env.DB.prepare(`
       SELECT *
       FROM messages
       WHERE channel_id = ?
         AND reply_to IN (${childPlaceholders})
         AND deleted = 0
-    `).bind(channelId, ...rootIds));
+    `).bind(channelId, ...normalizedRootIds));
 
   const results = await env.DB.batch<VisibleMessageRow>(statements);
   return sortVisibleMessages(results.flatMap((result) => result.results || []));

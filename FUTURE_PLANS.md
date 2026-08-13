@@ -97,7 +97,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### Later message-query optimizations
 
-- Normalize dynamic `IN (?, ...)` sizes only if D1 Insights fingerprint fragmentation materially interferes with production analysis. Padding or fixed-size query buckets improve observability but do not inherently reduce rows read or execution cost.
+- Completed on 2026-08-13: root and child `IN (?, ...)` lookups now use seven bounded query sizes (`1`, `2`, `4`, `8`, `16`, `32`, `50`) instead of potentially producing a separate D1 Insights fingerprint for every page size. Repeating the final ID as padding is result-neutral; this improves observability but does not inherently reduce rows read or execution cost.
 - Audit potentially overlapping `messages` indexes against production query plans and Insights before removing any. Fewer indexes reduce write amplification and storage, but removing an index that still serves another route can trade a small write saving for a large read regression.
 - Continue checking browser diagnostics and edge analytics for duplicate `/api/init` or message-page requests. Query tuning cannot compensate for unnecessary request fan-out, although the latest dashboard and chat traces indicate the known duplicate startup paths are largely controlled.
 
