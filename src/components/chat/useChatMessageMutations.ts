@@ -402,8 +402,7 @@ export function useChatMessageMutations({
   ]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
-    const isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    if (event.key === "Enter" && !event.shiftKey && !isMobile && !event.nativeEvent.isComposing) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void handleSend();
     }

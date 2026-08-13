@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Touchscreen laptops can use Enter to send messages — 2026-08-13
+
+- The chat composer previously treated any browser with touch-event support or a positive `maxTouchPoints` value as mobile and disabled Enter-to-send.
+- Touchscreen Windows laptops therefore inserted a newline when users pressed Enter on their physical keyboard, even though the same behavior worked on non-touch laptops.
+- Enter now submits consistently regardless of touchscreen capability. `Shift+Enter` still inserts a newline, and Enter events emitted while an IME is composing text remain ignored so composition can finish safely.
+
+Trade-off: browsers do not reliably expose whether an Enter event came from a physical or virtual keyboard. A mobile virtual keyboard that emits a normal Enter keydown may now submit instead of inserting a newline; `Shift+Enter` remains the explicit multiline path where the keyboard provides Shift.
+
+Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
+
 ### Duplicate in-flight history pages now coalesce — 2026-08-13
 
 - A request-path audit confirmed that channel initialization already coalesces concurrent same-channel `/api/init` calls and the history scroll handler prevents overlapping loads with a synchronous ref.
