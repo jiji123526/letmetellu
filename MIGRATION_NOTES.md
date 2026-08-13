@@ -8,9 +8,10 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 - The chat composer previously treated any browser with touch-event support or a positive `maxTouchPoints` value as mobile and disabled Enter-to-send.
 - Touchscreen Windows laptops therefore inserted a newline when users pressed Enter on their physical keyboard, even though the same behavior worked on non-touch laptops.
-- Enter now submits consistently regardless of touchscreen capability. `Shift+Enter` still inserts a newline, and Enter events emitted while an IME is composing text remain ignored so composition can finish safely.
+- The composer now uses a narrow viewport plus a coarse primary pointer as the mobile-layout signal instead of touchscreen capability alone. On typical phones, Enter inserts a newline and the visible send button submits; on desktop layouts, including touchscreen laptops with a mouse or trackpad, Enter submits.
+- `Shift+Enter` still inserts a newline, and Enter events emitted while an IME is composing text remain ignored so composition can finish safely.
 
-Trade-off: browsers do not reliably expose whether an Enter event came from a physical or virtual keyboard. A mobile virtual keyboard that emits a normal Enter keydown may now submit instead of inserting a newline; `Shift+Enter` remains the explicit multiline path where the keyboard provides Shift.
+Trade-off: browser media capabilities describe the current layout and primary pointer, not the actual source of each key event. A narrow tablet with an attached keyboard can still use mobile newline behavior, while a phone using a fine primary pointer can use desktop send behavior. This is more reliable for touchscreen laptops than treating all touch-capable devices as mobile.
 
 Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
 

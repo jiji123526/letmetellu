@@ -402,7 +402,15 @@ export function useChatMessageMutations({
   ]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+    const usesMobileComposer = window.matchMedia(
+      "(max-width: 767px) and (pointer: coarse)",
+    ).matches;
+    if (
+      event.key === "Enter"
+      && !event.shiftKey
+      && !usesMobileComposer
+      && !event.nativeEvent.isComposing
+    ) {
       event.preventDefault();
       void handleSend();
     }
