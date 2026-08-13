@@ -47,23 +47,41 @@ export function trimMessageWindow<T extends Pick<ChatMessageSnapshot, "id" | "re
   edgeToKeep: "older" | "newer",
 ): T[] {
   if (messages.length <= MAX_MOUNTED_HISTORY_MESSAGES) return messages;
-  const selected = edgeToKeep === "older"
-    ? messages.slice(0, MAX_MOUNTED_HISTORY_MESSAGES)
-    : messages.slice(-MAX_MOUNTED_HISTORY_MESSAGES);
   const messagesById = new Map(messages.map((message) => [message.id, message]));
-  const rootIdsByMessageId = new Map<string, string>();
+  const groups = new Map<string, T[]>();
   for (const message of messages) {
-    rootIdsByMessageId.set(message.id, resolveVisibleRootId(message, messagesById));
+    const rootId = resolveVisibleRootId(message, messagesById);
+    const group = groups.get(rootId);
+    if (group) {
+      group.push(message);
+    } else {
+      groups.set(rootId, [message]);
+    }
   }
 
-  // Keep whole visible root-thread groups mounted so sibling replies are not
-  // selectively dropped when the chronological cut lands in the middle of a thread.
-  const selectedRootIds = new Set(
-    selected.map((message) => rootIdsByMessageId.get(message.id) || message.id),
-  );
+  const orderedGroups = [...groups.entries()].sort(([, left], [, right]) => {
+    const leftRoot = left.find((message) => !message.reply_to) || left[0];
+    const rightRoot = right.find((message) => !message.reply_to) || right[0];
+    return leftRoot.created_at.localeCompare(rightRoot.created_at)
+      || leftRoot.id.localeCompare(rightRoot.id);
+  });
+  const groupsFromKeptEdge = edgeToKeep === "older"
+    ? orderedGroups
+    : [...orderedGroups].reverse();
+  const selectedRootIds = new Set<string>();
+  let selectedMessageCount = 0;
+
+  for (const [rootId, group] of groupsFromKeptEdge) {
+    if (
+      selectedRootIds.size > 0
+      && selectedMessageCount + group.length > MAX_MOUNTED_HISTORY_MESSAGES
+    ) break;
+    selectedRootIds.add(rootId);
+    selectedMessageCount += group.length;
+  }
 
   return messages.filter((message) =>
-    selectedRootIds.has(rootIdsByMessageId.get(message.id) || message.id)
+    selectedRootIds.has(resolveVisibleRootId(message, messagesById))
   );
 }
 
@@ -122,15 +140,20 @@ export function mergeServerMessageSnapshot<T extends ChatMessageSnapshot>(previo
   if (previous.length === 0) return incoming;
   if (incoming.length === 0) return [];
 
+  const incomingById = new Map(incoming.map((message) => [message.id, message]));
+  const incomingRootIds = new Set(
+    incoming.map((message) => resolveVisibleRootId(message, incomingById)),
+  );
+  const previousByIdForRoots = new Map(previous.map((message) => [message.id, message]));
   const previousById = new Map(previous.map((message) => [message.id, message]));
   const incomingIds = new Set(incoming.map((message) => message.id));
-  const oldestIncomingTime = incoming[0]?.created_at || "";
   const merged: T[] = [];
 
-  // Preserve locally loaded history older than the server snapshot. Within the
-  // snapshot window, absence means the server deleted the message.
+  // A latest snapshot owns only the root threads it contains. Preserve every
+  // other mounted thread regardless of when one of its replies was created.
   for (const message of previous) {
-    if (message.created_at < oldestIncomingTime || incomingIds.has(message.id)) {
+    const rootId = resolveVisibleRootId(message, previousByIdForRoots);
+    if (!incomingRootIds.has(rootId) || incomingIds.has(message.id)) {
       merged.push(message);
     }
   }

@@ -78,6 +78,14 @@ function responseCursor(value: unknown): MessagePageCursor | null {
     : null;
 }
 
+function rootBoundaryCursor(
+  messages: Message[],
+  edge: "start" | "end",
+): MessagePageCursor | null {
+  const roots = messages.filter((message) => !message.reply_to);
+  return messageCursor(edge === "start" ? roots[0] : roots.at(-1));
+}
+
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
@@ -537,8 +545,10 @@ export function useChatHistoryNavigation({
               historyModeRef.current = "context";
               setHistoryMode("context");
               hasMoreNewerMessagesRef.current = true;
-              newerPageCursorRef.current = responseEndCursor;
-              return trimMessageWindow(combined, "older");
+              const trimmed = trimMessageWindow(combined, "older");
+              newerPageCursorRef.current = rootBoundaryCursor(trimmed, "end")
+                || responseEndCursor;
+              return trimmed;
             });
             await nextAnimationFrame();
             const anchor = lockedScrollAnchorRef.current;
@@ -625,8 +635,10 @@ export function useChatHistoryNavigation({
               );
               if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
               hasMoreMessagesRef.current = true;
-              olderPageCursorRef.current = responseStartCursor;
-              return trimMessageWindow(combined, "newer");
+              const trimmed = trimMessageWindow(combined, "newer");
+              olderPageCursorRef.current = rootBoundaryCursor(trimmed, "start")
+                || responseStartCursor;
+              return trimmed;
             });
             requestAnimationFrame(() => {
               const anchor = lockedScrollAnchorRef.current;

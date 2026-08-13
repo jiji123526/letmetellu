@@ -304,6 +304,14 @@ export function useChatRealtimeSync({
         const msg = decorateMessageMedia(event.message as Message);
         const viewingChannel = getViewingChannelId();
         if (msg.channel_id === viewingChannel) {
+          if (msg.reply_to) {
+            setMessages((previous) => {
+              if (previous.some((message) => message.id === msg.id)) return previous;
+              if (!previous.some((message) => message.id === msg.reply_to)) return previous;
+              return [...previous, msg];
+            });
+            return;
+          }
           if (historyModeRef.current === "context") {
             if (pendingContextMessageIdsRef.current.has(msg.id)) return;
             if (pendingContextMessageIdsRef.current.size >= 500) {

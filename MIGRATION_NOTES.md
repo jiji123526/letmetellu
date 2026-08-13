@@ -4,9 +4,22 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message history windows now follow parent-message order — 2026-08-13
+
+- Pagination previously counted roots and replies as equal chronological rows, then moved replies beneath their parents only during rendering. A late reply to `parent 1` could therefore consume a page slot and leave the adjacent `parent 2` outside the mounted window.
+- Initial history, older/newer paging and message-context navigation now select root messages only. Each selected root expands into its complete visible reply group, so a thread permanently occupies its parent’s position regardless of when its replies were created.
+- Context navigation resolves legacy nested reply chains to their true root before selecting the surrounding root window.
+- Realtime replies are inserted only when their parent thread is already mounted. A new reply to an old unmounted parent no longer pulls that historical thread into the latest window or creates a misleading newer-page badge.
+- The bounded client history cache now trims contiguous root groups instead of cutting by individual reply timestamps. Snapshot recovery similarly replaces only threads represented in the incoming root window and preserves other mounted threads.
+- Migration `0037_message_root_pagination.sql` adds the chronological root index needed to avoid scanning reply activity during root-page reads.
+
+Trade-off: a 50-root page can contain substantially more than 50 rendered rows when threads have many replies, so response size and layout time are variable. The client still keeps whole threads when enforcing its approximate 300-message mounted limit, which means one unusually large thread can exceed that limit by itself. Replies to unmounted historical parents are intentionally not surfaced in the latest view.
+
+Deployment note: apply D1 migration `0037_message_root_pagination.sql`, deploy the Worker, then deploy the frontend.
+
 ### Expanded replies no longer create missing message windows — 2026-08-13
 
-- Message pages select 50 chronological rows and then include related reply roots and children outside that raw page. The client previously used the first and last expanded messages as its next pagination cursors.
+- Before root-owned pagination, message pages selected 50 chronological rows and then included related reply roots and children outside that raw page. The client previously used the first and last expanded messages as its next pagination cursors.
 - An older expanded parent could therefore move the backward cursor past a contiguous interval of normal messages; a newer expanded reply could produce the equivalent gap while paging forward.
 - The Worker now returns explicit start and end cursors from the unexpanded SQL page. Initial loading, older/newer paging, message navigation and refresh restoration retain those raw boundaries independently from the rendered message array.
 - When the bounded 300-message client window trims one side, the opposite cursor uses the newly loaded raw-page boundary. This can deliberately refetch overlapping rows, which the existing ID merge removes, but it cannot skip the interval between pages.

@@ -7,9 +7,10 @@ const dataRouteSource = readFileSync(
   "utf8",
 );
 
-test("message context derives a flat root and reuses direct thread reads", () => {
-  assert.match(dataRouteSource, /const threadRootId = target\.reply_to \|\| target\.id/);
-  assert.match(dataRouteSource, /readVisibleFlatThreads\(env, channelId, \[threadRootId\]\)/);
-  assert.doesNotMatch(dataRouteSource, /WITH RECURSIVE ancestors/);
+test("message context centers a root-indexed window and expands its threads", () => {
+  assert.match(dataRouteSource, /WITH RECURSIVE ancestors/);
+  assert.match(dataRouteSource, /AS thread_root_id/);
+  assert.match(dataRouteSource, /VISIBLE_ROOT_MESSAGE_CONDITION/);
+  assert.match(dataRouteSource, /expandVisibleRootThreads\(env, channelId, contextPageRows\)/);
   assert.doesNotMatch(dataRouteSource, /WITH RECURSIVE thread/);
 });

@@ -1,10 +1,11 @@
 import { Env } from "../types";
 import { getUserLocale } from "../lib/channel-moderation";
 import {
-  readVisibleFlatThreads,
+  expandVisibleRootThreads,
   readVisibleMessagePage,
   type VisibleMessageRow,
   VISIBLE_MESSAGE_CONDITION,
+  VISIBLE_ROOT_MESSAGE_CONDITION,
 } from "../lib/visible-messages";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
@@ -92,57 +93,69 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       }
 
       const target = await env.DB.prepare(
-        `SELECT id, created_at, reply_to
-         FROM messages
-         WHERE id = ? AND channel_id = ?
-           AND (
-             deleted = 0
-             OR (
-               deleted = 1
-               AND EXISTS (
-                 SELECT 1 FROM messages child
-                 WHERE child.channel_id = ?
-                   AND child.reply_to = messages.id
-                   AND child.deleted = 0
+        `WITH RECURSIVE ancestors(id, created_at, reply_to) AS (
+           SELECT id, created_at, reply_to
+           FROM messages
+           WHERE id = ? AND channel_id = ?
+             AND (
+               deleted = 0
+               OR (
+                 deleted = 1
+                 AND EXISTS (
+                   SELECT 1 FROM messages child
+                   WHERE child.channel_id = ?
+                     AND child.reply_to = messages.id
+                     AND child.deleted = 0
+                 )
                )
              )
-           )`
-      ).bind(messageId, channelId, channelId).first<{ id: string; created_at: string; reply_to: string | null }>();
+           UNION
+           SELECT parent.id, parent.created_at, parent.reply_to
+           FROM messages parent
+           INNER JOIN ancestors ON ancestors.reply_to = parent.id
+           WHERE parent.channel_id = ?
+         )
+         SELECT
+           id AS thread_root_id,
+           created_at AS thread_root_created_at
+         FROM ancestors
+         WHERE reply_to IS NULL
+         LIMIT 1`
+      ).bind(messageId, channelId, channelId, channelId).first<{
+        thread_root_id: string;
+        thread_root_created_at: string;
+      }>();
       if (!target) {
         return Response.json({ error: "message not found" }, { status: 404 });
       }
 
-      const visibleMessageCondition = `
-        channel_id = ?
-        AND (
-          deleted = 0
-          OR (
-            deleted = 1
-            AND id IN (
-              SELECT reply_to FROM messages
-              WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
-            )
-          )
-        )
-      `;
-      const threadRootId = target.reply_to || target.id;
-
-      const [beforeResult, afterResult, threadMessages] = await Promise.all([
+      const [beforeResult, afterResult] = await Promise.all([
         env.DB.prepare(`
           SELECT * FROM messages
-          WHERE ${visibleMessageCondition}
+          WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
             AND (created_at < ? OR (created_at = ? AND id <= ?))
           ORDER BY created_at DESC, id DESC
           LIMIT 27
-        `).bind(channelId, channelId, target.created_at, target.created_at, target.id).all(),
+        `).bind(
+          channelId,
+          channelId,
+          target.thread_root_created_at,
+          target.thread_root_created_at,
+          target.thread_root_id,
+        ).all<VisibleMessageRow>(),
         env.DB.prepare(`
           SELECT * FROM messages
-          WHERE ${visibleMessageCondition}
+          WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
             AND (created_at > ? OR (created_at = ? AND id > ?))
           ORDER BY created_at ASC, id ASC
           LIMIT 26
-        `).bind(channelId, channelId, target.created_at, target.created_at, target.id).all(),
-        readVisibleFlatThreads(env, channelId, [threadRootId]),
+        `).bind(
+          channelId,
+          channelId,
+          target.thread_root_created_at,
+          target.thread_root_created_at,
+          target.thread_root_id,
+        ).all<VisibleMessageRow>(),
       ]);
 
       const hasOlder = beforeResult.results.length > 26;
@@ -155,23 +168,13 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       );
       const pageStart = contextPageRows[0] as { id?: string; created_at?: string } | undefined;
       const pageEnd = contextPageRows.at(-1) as { id?: string; created_at?: string } | undefined;
-      const byId = new Map<string, Record<string, unknown>>();
-      for (const message of [
-        ...beforeMessages,
-        ...afterMessages,
-        ...threadMessages,
-      ] as Record<string, unknown>[]) {
-        byId.set(String(message.id), message);
-      }
-      const messages = [...byId.values()].sort((left, right) =>
-        String(left.created_at || "").localeCompare(String(right.created_at || ""))
-      );
+      const messages = await expandVisibleRootThreads(env, channelId, contextPageRows);
       const responseMessages = isReportsChannel(parentChannelId, env) && isOwner
         ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, env, reportsOwnerLocale)
         : messages;
       return Response.json({
         messages: responseMessages,
-        target_id: target.id,
+        target_id: messageId,
         has_older: hasOlder,
         has_newer: hasNewer,
         page_start_cursor: pageStart?.id && pageStart.created_at

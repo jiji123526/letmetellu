@@ -165,6 +165,31 @@ test("each full-page thread lookup stays below the D1 variable limit", async () 
   assert.ok(boundParameterCounts.every((count) => count < 100));
 });
 
+test("context-sized root windows stay below the D1 variable limit", async () => {
+  const boundParameterCounts: number[] = [];
+  const env = {
+    DB: {
+      prepare() {
+        return {
+          bind(...params: unknown[]) {
+            boundParameterCounts.push(params.length);
+            return {};
+          },
+        };
+      },
+      async batch() {
+        return [{ results: [] }, { results: [] }];
+      },
+    },
+  };
+  const rootIds = Array.from({ length: 51 }, (_, index) => `root-${index}`);
+
+  await readVisibleFlatThreads(env as never, "channel-a", rootIds);
+
+  assert.deepEqual(boundParameterCounts, [65, 65]);
+  assert.ok(boundParameterCounts.every((count) => count < 100));
+});
+
 test("flat thread expansion merges and sorts batched roots and children", async () => {
   const env = {
     DB: {
@@ -189,10 +214,12 @@ test("flat thread expansion merges and sorts batched roots and children", async 
   assert.deepEqual(messages.map((message) => message.id), ["root-a", "reply-b"]);
 });
 
-test("message page cursors use raw rows instead of expanded thread edges", async () => {
+test("message pages select root indexes and expand replies without moving cursors", async () => {
+  const queries: string[] = [];
   const env = {
     DB: {
-      prepare() {
+      prepare(query: string) {
+        queries.push(query);
         return {
           bind() {
             return {
@@ -201,7 +228,7 @@ test("message page cursors use raw rows instead of expanded thread edges", async
                   results: [
                     {
                       id: "page-a",
-                      reply_to: "root-old",
+                      reply_to: null,
                       created_at: "2026-08-09T00:10:00.000Z",
                     },
                     {
@@ -220,13 +247,6 @@ test("message page cursors use raw rows instead of expanded thread edges", async
         return [
           {
             results: [{
-              id: "root-old",
-              reply_to: null,
-              created_at: "2026-08-09T00:00:00.000Z",
-            }],
-          },
-          {
-            results: [{
               id: "reply-new",
               reply_to: "page-b",
               created_at: "2026-08-09T00:20:00.000Z",
@@ -239,8 +259,8 @@ test("message page cursors use raw rows instead of expanded thread edges", async
 
   const page = await readVisibleMessagePage(env as never, "channel-a", { limit: 50 });
 
+  assert.match(queries[0], /reply_to IS NULL/);
   assert.deepEqual(page.messages.map((message) => message.id), [
-    "root-old",
     "page-a",
     "page-b",
     "reply-new",

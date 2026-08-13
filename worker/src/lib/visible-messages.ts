@@ -25,6 +25,11 @@ export const VISIBLE_MESSAGE_CONDITION = `
   )
 `;
 
+export const VISIBLE_ROOT_MESSAGE_CONDITION = `
+  ${VISIBLE_MESSAGE_CONDITION}
+  AND reply_to IS NULL
+`;
+
 function sortVisibleMessages(messages: VisibleMessageRow[]): VisibleMessageRow[] {
   return [...messages].sort((left, right) =>
     String(left.created_at || "").localeCompare(String(right.created_at || ""))
@@ -32,7 +37,7 @@ function sortVisibleMessages(messages: VisibleMessageRow[]): VisibleMessageRow[]
   );
 }
 
-const THREAD_LOOKUP_BUCKETS = [1, 2, 4, 8, 16, 32, 50] as const;
+const THREAD_LOOKUP_BUCKETS = [1, 2, 4, 8, 16, 32, 50, 64] as const;
 
 function normalizeThreadLookupIds(ids: string[]): string[] {
   const bucketSize = THREAD_LOOKUP_BUCKETS.find((size) => size >= ids.length);
@@ -121,7 +126,7 @@ export async function readVisibleMessagePage(
   const direction = input?.direction || null;
   const limit = input?.limit || 50;
 
-  let innerQuery = `SELECT * FROM messages WHERE ${VISIBLE_MESSAGE_CONDITION}`;
+  let innerQuery = `SELECT * FROM messages WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}`;
   const params: unknown[] = [channelId, channelId];
 
   if (cursor) {
