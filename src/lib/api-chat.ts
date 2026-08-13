@@ -16,6 +16,7 @@ import {
 
 let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
 const initRequests = new Map<string, Promise<unknown>>();
+const messagePageRequests = new Map<string, Promise<unknown>>();
 const MESSAGE_SEND_TIMEOUT_MS = 15_000;
 
 async function fetchMessageMutation(input: RequestInfo | URL, init: RequestInit) {
@@ -128,7 +129,7 @@ export async function fetchMessages(channelId: string, cursor?: string) {
   return data;
 }
 
-export async function fetchMessagePage(
+async function requestMessagePage(
   channelId: string,
   direction: "before" | "after",
   cursor: { createdAt: string; id: string },
@@ -151,6 +152,26 @@ export async function fetchMessagePage(
   const data = await res.json();
   if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
   return data;
+}
+
+export function fetchMessagePage(
+  channelId: string,
+  direction: "before" | "after",
+  cursor: { createdAt: string; id: string },
+) {
+  const requestKey = `${channelId}\u0000${direction}\u0000${cursor.createdAt}\u0000${cursor.id}`;
+  const existingRequest = messagePageRequests.get(requestKey);
+  if (existingRequest) return existingRequest as ReturnType<typeof requestMessagePage>;
+
+  const request = requestMessagePage(channelId, direction, cursor);
+  messagePageRequests.set(requestKey, request);
+  const clearRequest = () => {
+    if (messagePageRequests.get(requestKey) === request) {
+      messagePageRequests.delete(requestKey);
+    }
+  };
+  void request.then(clearRequest, clearRequest);
+  return request;
 }
 
 export async function fetchMessageContext(channelId: string, messageId: string) {

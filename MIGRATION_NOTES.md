@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Duplicate in-flight history pages now coalesce — 2026-08-13
+
+- A request-path audit confirmed that channel initialization already coalesces concurrent same-channel `/api/init` calls and the history scroll handler prevents overlapping loads with a synchronous ref.
+- The API client now adds a second guard for message paging: concurrent requests with the same channel, direction, timestamp and message-ID cursor share one network promise.
+- The entry is removed immediately after success or failure. Completed pages are not cached, so returning to the same boundary later still reads current server data.
+- Latest-message refreshes are intentionally not coalesced with this mechanism because a websocket synchronization event may require a snapshot newer than an already-running request.
+
+Trade-off: concurrent callers for an identical history boundary receive the same response, which is appropriate for one in-flight pagination operation. The request-key map is process-local, short-lived and bounded by active requests rather than retained history.
+
+Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
+
 ### Thread lookups now use bounded D1 query shapes — 2026-08-13
 
 - Root and child thread lookups previously generated a distinct SQL string for every `IN`-list length from one to 50, fragmenting equivalent work across many D1 Insights fingerprints.
