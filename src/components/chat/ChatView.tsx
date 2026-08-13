@@ -13,7 +13,7 @@ import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { readChannelBackground } from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
-import type { Message } from "./chatTypes";
+import type { Message, MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReplyParents } from "./useChatReplyParents";
@@ -74,6 +74,8 @@ function getImageDimensions(file: File): Promise<{ width: number; height: number
 
 export function ChatView({ channelId }: { channelId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [initialPageStartCursor, setInitialPageStartCursor] = useState<MessagePageCursor | null>(null);
+  const [initialPageEndCursor, setInitialPageEndCursor] = useState<MessagePageCursor | null>(null);
   const [channel, setChannel] = useState<Channel | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
   const [viewerBlocked, setViewerBlocked] = useState(false);
@@ -414,6 +416,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     setUid,
     setChannel,
     setMessages,
+    setInitialPageStartCursor,
+    setInitialPageEndCursor,
     setHistoryMode,
     setNewerMessageCount,
     setBlockedUsers,
@@ -507,6 +511,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   } = useChatHistoryNavigation({
     channelId,
     messages,
+    initialPageStartCursor,
+    initialPageEndCursor,
     historyMode,
     enabled: !loading && !passcodeGate && !showChannelDeleted,
     messagesContainerRef,

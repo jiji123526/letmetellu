@@ -6,6 +6,11 @@ export type VisibleMessageRow = Record<string, unknown> & {
   created_at?: string;
 };
 
+export interface VisibleMessageCursor {
+  id: string;
+  createdAt: string;
+}
+
 export const VISIBLE_MESSAGE_CONDITION = `
   channel_id = ?
   AND (
@@ -105,7 +110,12 @@ export async function readVisibleMessagePage(
     direction?: "before" | "after" | null;
     limit?: number;
   },
-): Promise<{ messages: VisibleMessageRow[]; hasMore: boolean }> {
+): Promise<{
+  messages: VisibleMessageRow[];
+  hasMore: boolean;
+  pageStartCursor: VisibleMessageCursor | null;
+  pageEndCursor: VisibleMessageCursor | null;
+}> {
   const cursor = input?.cursor || null;
   const cursorId = input?.cursorId || null;
   const direction = input?.direction || null;
@@ -142,9 +152,17 @@ export async function readVisibleMessagePage(
       ? rawResults.slice(0, limit)
       : rawResults.slice(rawResults.length - limit)
     : rawResults;
+  const pageStart = pageResults[0];
+  const pageEnd = pageResults.at(-1);
 
   return {
     messages: await expandVisibleRootThreads(env, channelId, pageResults),
     hasMore,
+    pageStartCursor: pageStart?.created_at
+      ? { id: pageStart.id, createdAt: pageStart.created_at }
+      : null,
+    pageEndCursor: pageEnd?.created_at
+      ? { id: pageEnd.id, createdAt: pageEnd.created_at }
+      : null,
   };
 }

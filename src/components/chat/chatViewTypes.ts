@@ -1,4 +1,4 @@
-import type { Message } from "./chatTypes";
+import type { Message, MessagePageCursor } from "./chatTypes";
 
 export interface Channel {
   id: string;
@@ -22,6 +22,8 @@ export interface Channel {
 export interface InitData {
   channel: Channel;
   messages?: Message[];
+  page_start_cursor?: MessagePageCursor | null;
+  page_end_cursor?: MessagePageCursor | null;
   blocked?: { uid: string; reason: string }[];
   viewerBlocked?: boolean;
   viewerModerationStatus?: "frozen" | null;

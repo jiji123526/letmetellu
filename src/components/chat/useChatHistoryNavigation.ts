@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import { fetchMessageContext, fetchMessagePage, fetchMessages } from "@/lib/api-chat";
 import { MAX_MOUNTED_HISTORY_MESSAGES, trimMessageWindow } from "./chatMessageUtils";
-import type { Message } from "./chatTypes";
+import type { Message, MessagePageCursor } from "./chatTypes";
 
 type HistoryMode = "latest" | "context";
 
@@ -15,6 +15,8 @@ interface BannerState {
 interface UseChatHistoryNavigationArgs {
   channelId: string;
   messages: Message[];
+  initialPageStartCursor: MessagePageCursor | null;
+  initialPageEndCursor: MessagePageCursor | null;
   historyMode: HistoryMode;
   enabled: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -61,6 +63,20 @@ interface SavedScrollPosition {
 }
 
 const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
+
+function messageCursor(message: Message | undefined): MessagePageCursor | null {
+  return message?.id && message.created_at
+    ? { id: message.id, created_at: message.created_at }
+    : null;
+}
+
+function responseCursor(value: unknown): MessagePageCursor | null {
+  if (!value || typeof value !== "object") return null;
+  const cursor = value as Partial<MessagePageCursor>;
+  return typeof cursor.id === "string" && typeof cursor.created_at === "string"
+    ? { id: cursor.id, created_at: cursor.created_at }
+    : null;
+}
 
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
@@ -265,6 +281,8 @@ async function waitForCompleteHistoryWindow(
 export function useChatHistoryNavigation({
   channelId,
   messages,
+  initialPageStartCursor,
+  initialPageEndCursor,
   historyMode,
   enabled,
   messagesContainerRef,
@@ -291,6 +309,8 @@ export function useChatHistoryNavigation({
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
   const pendingNavigationRequestRef = useRef(0);
+  const olderPageCursorRef = useRef<MessagePageCursor | null>(initialPageStartCursor);
+  const newerPageCursorRef = useRef<MessagePageCursor | null>(initialPageEndCursor);
 
   const scrollStorageKey = `chatScrollPosition:${channelId}`;
 
@@ -333,6 +353,11 @@ export function useChatHistoryNavigation({
   useEffect(() => {
     historyModeRef.current = historyMode;
   }, [historyMode]);
+
+  useEffect(() => {
+    olderPageCursorRef.current = initialPageStartCursor;
+    newerPageCursorRef.current = initialPageEndCursor;
+  }, [initialPageEndCursor, initialPageStartCursor]);
 
   const updateScrollAnchor = useCallback(() => {
     if (lockedScrollAnchorRef.current) return;
@@ -450,6 +475,10 @@ export function useChatHistoryNavigation({
       hasMoreMessagesRef.current = typeof data.has_more === "boolean"
         ? data.has_more
         : (data.messages?.length || 0) >= 50;
+      olderPageCursorRef.current = responseCursor(data.page_start_cursor)
+        || messageCursor(data.messages?.[0]);
+      newerPageCursorRef.current = responseCursor(data.page_end_cursor)
+        || messageCursor(data.messages?.at(-1));
       isNearBottomRef.current = true;
       scrollAnchorRef.current = null;
       requestAnimationFrame(() => {
@@ -476,8 +505,8 @@ export function useChatHistoryNavigation({
       && hasMoreMessagesRef.current
       && messages.length > 0
     ) {
-      const oldest = messages[0];
-      if (!oldest?.created_at) return;
+      const oldest = olderPageCursorRef.current || messageCursor(messages[0]);
+      if (!oldest) return;
 
       loadingMoreRef.current = true;
       const prependRequestId = ++historyLoadAnchorRequestRef.current;
@@ -492,6 +521,11 @@ export function useChatHistoryNavigation({
       fetchMessagePage(fetchChannel, "before", { createdAt: oldest.created_at, id: oldest.id })
         .then(async (data) => {
           if (data.messages && data.messages.length > 0) {
+            const responseStartCursor = responseCursor(data.page_start_cursor)
+              || messageCursor(data.messages[0]);
+            const responseEndCursor = responseCursor(data.page_end_cursor)
+              || messageCursor(data.messages.at(-1));
+            olderPageCursorRef.current = responseStartCursor;
             hasMoreMessagesRef.current = typeof data.has_more === "boolean"
               ? data.has_more
               : data.messages.length >= 50;
@@ -503,6 +537,7 @@ export function useChatHistoryNavigation({
               historyModeRef.current = "context";
               setHistoryMode("context");
               hasMoreNewerMessagesRef.current = true;
+              newerPageCursorRef.current = responseEndCursor;
               return trimMessageWindow(combined, "older");
             });
             await nextAnimationFrame();
@@ -556,8 +591,8 @@ export function useChatHistoryNavigation({
       && hasMoreNewerMessagesRef.current
       && messages.length > 0
     ) {
-      const newest = messages[messages.length - 1];
-      if (!newest?.created_at) return;
+      const newest = newerPageCursorRef.current || messageCursor(messages.at(-1));
+      if (!newest) return;
 
       loadingMoreRef.current = true;
       const appendRequestId = ++historyLoadAnchorRequestRef.current;
@@ -572,6 +607,11 @@ export function useChatHistoryNavigation({
       fetchMessagePage(fetchChannel, "after", { createdAt: newest.created_at, id: newest.id })
         .then((data) => {
           if (data.messages?.length) {
+            const responseStartCursor = responseCursor(data.page_start_cursor)
+              || messageCursor(data.messages[0]);
+            const responseEndCursor = responseCursor(data.page_end_cursor)
+              || messageCursor(data.messages.at(-1));
+            newerPageCursorRef.current = responseEndCursor;
             hasMoreNewerMessagesRef.current = typeof data.has_more === "boolean"
               ? data.has_more
               : data.messages.length >= 50;
@@ -585,6 +625,7 @@ export function useChatHistoryNavigation({
               );
               if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
               hasMoreMessagesRef.current = true;
+              olderPageCursorRef.current = responseStartCursor;
               return trimMessageWindow(combined, "newer");
             });
             requestAnimationFrame(() => {
@@ -705,6 +746,10 @@ export function useChatHistoryNavigation({
           setNewerMessageCount(0);
           hasMoreMessagesRef.current = data.has_older !== false;
           hasMoreNewerMessagesRef.current = data.has_newer !== false;
+          olderPageCursorRef.current = responseCursor(data.page_start_cursor)
+            || messageCursor(data.messages[0]);
+          newerPageCursorRef.current = responseCursor(data.page_end_cursor)
+            || messageCursor(data.messages.at(-1));
           element = await waitForMessageElement(msgId);
         } catch {
           element = fallbackElement || null;
@@ -778,6 +823,10 @@ export function useChatHistoryNavigation({
         setNewerMessageCount(0);
         hasMoreMessagesRef.current = data.has_older !== false;
         hasMoreNewerMessagesRef.current = data.has_newer !== false;
+        olderPageCursorRef.current = responseCursor(data.page_start_cursor)
+          || messageCursor(data.messages[0]);
+        newerPageCursorRef.current = responseCursor(data.page_end_cursor)
+          || messageCursor(data.messages.at(-1));
         element = await waitForMessageElement(position.messageId);
       } catch {
         return false;

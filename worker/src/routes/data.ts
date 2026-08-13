@@ -59,7 +59,12 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const cursor = url.searchParams.get("cursor");
       const cursorId = url.searchParams.get("cursor_id");
       const direction = url.searchParams.get("direction") as "before" | "after" | null;
-      const { messages: expandedResults, hasMore } = await readVisibleMessagePage(env, channelId, {
+      const {
+        messages: expandedResults,
+        hasMore,
+        pageStartCursor,
+        pageEndCursor,
+      } = await readVisibleMessagePage(env, channelId, {
         cursor,
         cursorId,
         direction,
@@ -68,7 +73,16 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const messages = isReportsChannel(parentChannelId, env) && isOwner
         ? await hydrateReportInboxMessages(expandedResults as Array<{ id: string }>, env, reportsOwnerLocale)
         : expandedResults;
-      return Response.json({ messages, has_more: hasMore });
+      return Response.json({
+        messages,
+        has_more: hasMore,
+        page_start_cursor: pageStartCursor
+          ? { id: pageStartCursor.id, created_at: pageStartCursor.createdAt }
+          : null,
+        page_end_cursor: pageEndCursor
+          ? { id: pageEndCursor.id, created_at: pageEndCursor.createdAt }
+          : null,
+      });
     }
 
     case "message-context": {
@@ -135,6 +149,12 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const hasNewer = afterResult.results.length > 25;
       const beforeMessages = beforeResult.results.slice(0, 26);
       const afterMessages = afterResult.results.slice(0, 25);
+      const contextPageRows = [...beforeMessages, ...afterMessages].sort((left, right) =>
+        String(left.created_at || "").localeCompare(String(right.created_at || ""))
+        || String(left.id || "").localeCompare(String(right.id || ""))
+      );
+      const pageStart = contextPageRows[0] as { id?: string; created_at?: string } | undefined;
+      const pageEnd = contextPageRows.at(-1) as { id?: string; created_at?: string } | undefined;
       const byId = new Map<string, Record<string, unknown>>();
       for (const message of [
         ...beforeMessages,
@@ -154,6 +174,12 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         target_id: target.id,
         has_older: hasOlder,
         has_newer: hasNewer,
+        page_start_cursor: pageStart?.id && pageStart.created_at
+          ? { id: pageStart.id, created_at: pageStart.created_at }
+          : null,
+        page_end_cursor: pageEnd?.id && pageEnd.created_at
+          ? { id: pageEnd.id, created_at: pageEnd.created_at }
+          : null,
       });
     }
 

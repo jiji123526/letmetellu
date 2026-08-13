@@ -428,16 +428,17 @@ export const MessageList = React.memo(function MessageList({
     }
   }
 
+  const replyArrowTone = getReplyArrowTone({
+    backgroundType,
+    backgroundColor,
+    backgroundOverlay,
+  });
   const commonProps = {
     effectiveAdmin,
     uid,
     authUserId,
     bubbleColor,
-    replyArrowTone: getReplyArrowTone({
-      backgroundType,
-      backgroundColor,
-      backgroundOverlay,
-    }),
+    replyArrowTone,
     deletedMessageLabel,
     editedMessageLabel,
     onLongPress,
@@ -461,7 +462,13 @@ export const MessageList = React.memo(function MessageList({
         <div
           key={`date-${message.id}`}
           className="self-center"
-          style={{ color: "var(--meta)", fontSize: "calc(var(--bubble-font-size, 17px) - 4px)", fontWeight: 400, margin: "16px 0 8px", letterSpacing: ".1px" }}
+          style={{
+            color: replyArrowTone === "bright" ? "rgba(255,255,255,0.92)" : "var(--meta)",
+            fontSize: "calc(var(--bubble-font-size, 17px) - 4px)",
+            fontWeight: 400,
+            margin: "16px 0 8px",
+            letterSpacing: ".1px",
+          }}
         >
           {chatDateLabel(message.created_at, locale, timeZone)}
         </div>,

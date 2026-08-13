@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   expandVisibleRootThreads,
+  readVisibleMessagePage,
   readVisibleFlatThreads,
 } from "../src/lib/visible-messages.ts";
 
@@ -186,4 +187,70 @@ test("flat thread expansion merges and sorts batched roots and children", async 
   );
 
   assert.deepEqual(messages.map((message) => message.id), ["root-a", "reply-b"]);
+});
+
+test("message page cursors use raw rows instead of expanded thread edges", async () => {
+  const env = {
+    DB: {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async all() {
+                return {
+                  results: [
+                    {
+                      id: "page-a",
+                      reply_to: "root-old",
+                      created_at: "2026-08-09T00:10:00.000Z",
+                    },
+                    {
+                      id: "page-b",
+                      reply_to: null,
+                      created_at: "2026-08-09T00:11:00.000Z",
+                    },
+                  ],
+                };
+              },
+            };
+          },
+        };
+      },
+      async batch() {
+        return [
+          {
+            results: [{
+              id: "root-old",
+              reply_to: null,
+              created_at: "2026-08-09T00:00:00.000Z",
+            }],
+          },
+          {
+            results: [{
+              id: "reply-new",
+              reply_to: "page-b",
+              created_at: "2026-08-09T00:20:00.000Z",
+            }],
+          },
+        ];
+      },
+    },
+  };
+
+  const page = await readVisibleMessagePage(env as never, "channel-a", { limit: 50 });
+
+  assert.deepEqual(page.messages.map((message) => message.id), [
+    "root-old",
+    "page-a",
+    "page-b",
+    "reply-new",
+  ]);
+  assert.deepEqual(page.pageStartCursor, {
+    id: "page-a",
+    createdAt: "2026-08-09T00:10:00.000Z",
+  });
+  assert.deepEqual(page.pageEndCursor, {
+    id: "page-b",
+    createdAt: "2026-08-09T00:11:00.000Z",
+  });
 });

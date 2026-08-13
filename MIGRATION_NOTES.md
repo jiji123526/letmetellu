@@ -4,6 +4,27 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Expanded replies no longer create missing message windows — 2026-08-13
+
+- Message pages select 50 chronological rows and then include related reply roots and children outside that raw page. The client previously used the first and last expanded messages as its next pagination cursors.
+- An older expanded parent could therefore move the backward cursor past a contiguous interval of normal messages; a newer expanded reply could produce the equivalent gap while paging forward.
+- The Worker now returns explicit start and end cursors from the unexpanded SQL page. Initial loading, older/newer paging, message navigation and refresh restoration retain those raw boundaries independently from the rendered message array.
+- When the bounded 300-message client window trims one side, the opposite cursor uses the newly loaded raw-page boundary. This can deliberately refetch overlapping rows, which the existing ID merge removes, but it cannot skip the interval between pages.
+- Regression coverage verifies that expanded thread rows outside a page do not alter its cursor contract.
+
+Trade-off: responses carry two small cursor objects and the client maintains them separately from rendered messages. Older frontend or mock responses remain compatible through a rendered-edge fallback, which retains their prior behavior until both frontend and Worker are updated.
+
+Deployment note: this requires both a frontend and Worker deploy. No D1 migration is required.
+
+### Date separators follow the background-aware reply-arrow tone — 2026-08-13
+
+- Chat date separators previously always used the muted metadata color, which could become difficult to read over dark channel colors or darkened background images.
+- Date separators now reuse the same luminance and image-overlay decision already used by reply arrows. Dark backgrounds receive the bright white tone, while default and light backgrounds retain the muted metadata color.
+
+Trade-off: image readability is still inferred from the configured overlay strength rather than the pixels directly beneath each date. This keeps rendering inexpensive and consistent with reply arrows.
+
+Deployment note: this is frontend-only and requires no Worker deploy or D1 migration.
+
 ### Realtime gaps recover without resetting chat position — 2026-08-13
 
 - A `message-new` event received while browsing contextual history previously incremented the newer-message badge but did not reopen the newer-page cursor. If that cursor had already reached its former end, scrolling down could not request the newly persisted message, so it appeared only after refresh or an explicit return to latest.

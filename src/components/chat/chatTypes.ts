@@ -49,3 +49,8 @@ export interface Message {
   petition_meta?: PetitionMeta;
   protected_sender?: boolean;
 }
+
+export interface MessagePageCursor {
+  id: string;
+  created_at: string;
+}

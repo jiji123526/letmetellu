@@ -241,6 +241,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       hasPasscode: Boolean((channel as any).passcode),
       passcodeHint: (channel as any).passcode_hint || "",
       messages: protectedMessages,
+      page_start_cursor: messagePage.pageStartCursor
+        ? { id: messagePage.pageStartCursor.id, created_at: messagePage.pageStartCursor.createdAt }
+        : null,
+      page_end_cursor: messagePage.pageEndCursor
+        ? { id: messagePage.pageEndCursor.id, created_at: messagePage.pageEndCursor.createdAt }
+        : null,
       blocked,
       viewerBlocked,
       viewerModerationStatus,

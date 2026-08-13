@@ -14,7 +14,7 @@ import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local
 import { clearChannelBackground, storeChannelBackground } from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
-import type { Message } from "./chatTypes";
+import type { Message, MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 
 interface BannerState {
@@ -40,6 +40,8 @@ interface UseChatChannelBootstrapArgs {
   setUid: Dispatch<SetStateAction<string>>;
   setChannel: Dispatch<SetStateAction<Channel | null>>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
+  setInitialPageStartCursor: Dispatch<SetStateAction<MessagePageCursor | null>>;
+  setInitialPageEndCursor: Dispatch<SetStateAction<MessagePageCursor | null>>;
   setHistoryMode: Dispatch<SetStateAction<"latest" | "context">>;
   setNewerMessageCount: Dispatch<SetStateAction<number>>;
   setBlockedUsers: Dispatch<SetStateAction<{ uid: string; reason: string }[]>>;
@@ -88,6 +90,8 @@ export function useChatChannelBootstrap({
   setUid,
   setChannel,
   setMessages,
+  setInitialPageStartCursor,
+  setInitialPageEndCursor,
   setHistoryMode,
   setNewerMessageCount,
   setBlockedUsers,
@@ -170,6 +174,8 @@ export function useChatChannelBootstrap({
       setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
     } else {
       setMessages(data.messages || []);
+      setInitialPageStartCursor(data.page_start_cursor || null);
+      setInitialPageEndCursor(data.page_end_cursor || null);
       setHistoryMode("latest");
       setNewerMessageCount(0);
     }
@@ -204,6 +210,8 @@ export function useChatChannelBootstrap({
     setDmEnabled,
     setDmMessages,
     setHistoryMode,
+    setInitialPageEndCursor,
+    setInitialPageStartCursor,
     setLocalBubbleColor,
     setMessages,
     setNewerMessageCount,
