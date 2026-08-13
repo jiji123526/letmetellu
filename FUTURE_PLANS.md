@@ -88,11 +88,18 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Completed on 2026-08-07: owner-channel popup reads now flow through the existing same-origin `/api/user` proxy instead of fetching the Worker directly from the browser, so preview and production share one request path and avoid CORS-specific behavior.
 - Completed on 2026-08-07: reply-parent recovery now uses a narrow batched parent lookup and merges each resolved batch in one pass instead of issuing one `message-context` request and one full message-window re-sort per missing parent.
 - Production measurement on 2026-08-13 showed the non-recursive `requested_roots` CTE still reading roughly `2.7k-3.6k` rows per returned row, with its largest fingerprint reaching `212.62M` rows read. It has been replaced by batched primary-key root reads and indexed direct-child reads.
+- Completed on 2026-08-13: page expansion now reuses root messages already present in the current page and queries only missing roots. The indexed child query still covers every requested root so complete reply groups are preserved. This removes at most roughly 50 inexpensive primary-key reads per page and is an incremental saving rather than another major query-shape change.
 - Flat reply rollout phases 1–4 remain complete: new replies store the top-level `reply_to`, the production audit found all 747 existing replies already flat, and both normal message paging and `message-context` expand roots and indexed direct children without recursion. Remaining work is operational verification: rerun the flat-reply audit and confirm the new `id IN (...)` plus `reply_to IN (...)` fingerprints materially reduce rows read before considering a persisted `thread_root_id` migration. The product intentionally does not retain the originally clicked child reply.
 - Completed on 2026-08-07: browser-local diagnostics now record chat bootstrap, reconnect and visibility-resume request counts plus settle time, and the dashboard trace now records per-request counts and durations, including repeated `/api/user` bootstrap reads across a session.
 - The owner-channel-count lookup is already keyed only to channel identity and profile-visibility changes, while the owner-channel popup fetches on demand. Do not broaden either dependency set during later refactors.
 - Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
 - Remaining Phase 3 validation is to collect representative baselines from those local diagnostics before calling the phase complete.
+
+#### Later message-query optimizations
+
+- Normalize dynamic `IN (?, ...)` sizes only if D1 Insights fingerprint fragmentation materially interferes with production analysis. Padding or fixed-size query buckets improve observability but do not inherently reduce rows read or execution cost.
+- Audit potentially overlapping `messages` indexes against production query plans and Insights before removing any. Fewer indexes reduce write amplification and storage, but removing an index that still serves another route can trade a small write saving for a large read regression.
+- Continue checking browser diagnostics and edge analytics for duplicate `/api/init` or message-page requests. Query tuning cannot compensate for unnecessary request fan-out, although the latest dashboard and chat traces indicate the known duplicate startup paths are largely controlled.
 
 #### Phase 4: support dashboard query tuning
 

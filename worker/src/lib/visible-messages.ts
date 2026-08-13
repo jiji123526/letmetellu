@@ -37,7 +37,13 @@ export async function expandVisibleRootThreads(
   const rootIds = [...new Set(pageMessages
     .map((message) => String(message.reply_to || message.id))
     .filter(Boolean))];
-  const threadRows = await readVisibleFlatThreads(env, channelId, rootIds);
+  const loadedMessageIds = new Set(pageMessages.map((message) => String(message.id)));
+  const threadRows = await readVisibleFlatThreads(
+    env,
+    channelId,
+    rootIds,
+    loadedMessageIds,
+  );
 
   const byId = new Map<string, VisibleMessageRow>();
   for (const message of [...pageMessages, ...threadRows]) {
@@ -50,31 +56,34 @@ export async function readVisibleFlatThreads(
   env: Env,
   channelId: string,
   requestedRootIds: string[],
+  loadedMessageIds: ReadonlySet<string> = new Set(),
 ): Promise<VisibleMessageRow[]> {
   const rootIds = [...new Set(requestedRootIds.map(String).filter(Boolean))];
   if (rootIds.length === 0) return [];
 
-  const placeholders = rootIds.map(() => "?").join(", ");
-  const [rootResult, childResult] = await env.DB.batch<VisibleMessageRow>([
-    env.DB.prepare(`
+  const statements: D1PreparedStatement[] = [];
+  const missingRootIds = rootIds.filter((rootId) => !loadedMessageIds.has(rootId));
+  if (missingRootIds.length > 0) {
+    const rootPlaceholders = missingRootIds.map(() => "?").join(", ");
+    statements.push(env.DB.prepare(`
       SELECT *
       FROM messages
       WHERE channel_id = ?
-        AND id IN (${placeholders})
-    `).bind(channelId, ...rootIds),
-    env.DB.prepare(`
-      SELECT *
-      FROM messages
-      WHERE channel_id = ?
-        AND reply_to IN (${placeholders})
-        AND deleted = 0
-    `).bind(channelId, ...rootIds),
-  ]);
+        AND id IN (${rootPlaceholders})
+    `).bind(channelId, ...missingRootIds));
+  }
 
-  return sortVisibleMessages([
-    ...(rootResult.results || []),
-    ...(childResult.results || []),
-  ]);
+  const childPlaceholders = rootIds.map(() => "?").join(", ");
+  statements.push(env.DB.prepare(`
+      SELECT *
+      FROM messages
+      WHERE channel_id = ?
+        AND reply_to IN (${childPlaceholders})
+        AND deleted = 0
+    `).bind(channelId, ...rootIds));
+
+  const results = await env.DB.batch<VisibleMessageRow>(statements);
+  return sortVisibleMessages(results.flatMap((result) => result.results || []));
 }
 
 export async function readVisibleMessagePage(

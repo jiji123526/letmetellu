@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message paging reuses roots already loaded in the page — 2026-08-13
+
+- Visible-message paging already has the selected page rows before expanding their complete reply groups. It now passes those loaded message IDs into thread expansion instead of querying every root by primary key again.
+- The root statement is omitted when every requested root is already present, or restricted to only missing roots when a page starts on a reply whose parent is outside the page.
+- The indexed child lookup still covers every requested root, preserving complete visible reply groups. Standalone `message-context` reads do not supply loaded IDs and continue fetching both roots and children.
+- Regression coverage verifies all-loaded, mixed loaded/missing and standalone lookup behavior, along with parameter bounds and chronological merging.
+
+Trade-off: the saving is bounded to roughly 50 inexpensive primary-key reads per full page and is much smaller than replacing the high-read `requested_roots` CTE. The conditional batch shape also creates separate one-statement and two-statement execution patterns, but does not change the response contract.
+
+Deployment note: this requires a Worker deploy only. No D1 migration or frontend deploy is required.
+
 ### Durable Object presence resets no longer fail channel initialization — 2026-08-13
 
 - Production correlation found three `/api/init` `500`s and one `/ws/:channel` `500` for `zziks` within 21 milliseconds. All four carried the same Cloudflare Durable Object storage-reset reference, identifying one realtime infrastructure incident rather than four independent application failures.

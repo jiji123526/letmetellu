@@ -1,9 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { expandVisibleRootThreads } from "../src/lib/visible-messages.ts";
+import {
+  expandVisibleRootThreads,
+  readVisibleFlatThreads,
+} from "../src/lib/visible-messages.ts";
 
-test("flat thread expansion uses direct root and child index lookups", async () => {
+test("flat thread expansion skips root lookups already present in the page", async () => {
+  const calls: Array<{ query: string; params: unknown[] }> = [];
+  const env = {
+    DB: {
+      prepare(query: string) {
+        return {
+          bind(...params: unknown[]) {
+            calls.push({ query, params });
+            return { query, params };
+          },
+        };
+      },
+      async batch() {
+        return [{ results: [] }];
+      },
+    },
+  };
+
+  await expandVisibleRootThreads(
+    env as never,
+    "channel-a",
+    [
+      { id: "root-a", reply_to: null, created_at: "2026-08-09T00:00:00.000Z" },
+      { id: "reply-b", reply_to: "root-a", created_at: "2026-08-09T00:01:00.000Z" },
+      { id: "reply-c", reply_to: "root-a", created_at: "2026-08-09T00:02:00.000Z" },
+      { id: "root-d", reply_to: null, created_at: "2026-08-09T00:03:00.000Z" },
+    ],
+  );
+
+  assert.equal(calls.length, 1);
+  const [childCall] = calls;
+  assert.doesNotMatch(childCall.query, /WITH requested_roots|UNION ALL/);
+  assert.match(childCall.query, /channel_id = \?[\s\S]*reply_to IN \(\?, \?\)[\s\S]*deleted = 0/);
+  assert.deepEqual(childCall.params, ["channel-a", "root-a", "root-d"]);
+});
+
+test("flat thread expansion fetches only missing roots but all children", async () => {
   const calls: Array<{ query: string; params: unknown[] }> = [];
   const env = {
     DB: {
@@ -25,20 +64,42 @@ test("flat thread expansion uses direct root and child index lookups", async () 
     env as never,
     "channel-a",
     [
-      { id: "root-a", reply_to: null, created_at: "2026-08-09T00:00:00.000Z" },
       { id: "reply-b", reply_to: "root-a", created_at: "2026-08-09T00:01:00.000Z" },
-      { id: "reply-c", reply_to: "root-a", created_at: "2026-08-09T00:02:00.000Z" },
-      { id: "root-d", reply_to: null, created_at: "2026-08-09T00:03:00.000Z" },
+      { id: "root-d", reply_to: null, created_at: "2026-08-09T00:02:00.000Z" },
     ],
   );
 
   assert.equal(calls.length, 2);
   const [rootCall, childCall] = calls;
-  assert.doesNotMatch(rootCall.query + childCall.query, /WITH requested_roots|UNION ALL/);
-  assert.match(rootCall.query, /channel_id = \?[\s\S]*id IN \(\?, \?\)/);
+  assert.match(rootCall.query, /channel_id = \?[\s\S]*id IN \(\?\)/);
+  assert.deepEqual(rootCall.params, ["channel-a", "root-a"]);
   assert.match(childCall.query, /channel_id = \?[\s\S]*reply_to IN \(\?, \?\)[\s\S]*deleted = 0/);
-  assert.deepEqual(rootCall.params, ["channel-a", "root-a", "root-d"]);
   assert.deepEqual(childCall.params, ["channel-a", "root-a", "root-d"]);
+});
+
+test("standalone thread reads fetch roots and children", async () => {
+  const calls: Array<{ query: string; params: unknown[] }> = [];
+  const env = {
+    DB: {
+      prepare(query: string) {
+        return {
+          bind(...params: unknown[]) {
+            calls.push({ query, params });
+            return { query, params };
+          },
+        };
+      },
+      async batch() {
+        return [{ results: [] }, { results: [] }];
+      },
+    },
+  };
+
+  await readVisibleFlatThreads(env as never, "channel-a", ["root-a", "root-d"]);
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].params, ["channel-a", "root-a", "root-d"]);
+  assert.deepEqual(calls[1].params, ["channel-a", "root-a", "root-d"]);
 });
 
 test("each full-page thread lookup stays below the D1 variable limit", async () => {
@@ -58,16 +119,9 @@ test("each full-page thread lookup stays below the D1 variable limit", async () 
       },
     },
   };
+  const rootIds = Array.from({ length: 50 }, (_, index) => `root-${index}`);
 
-  await expandVisibleRootThreads(
-    env as never,
-    "channel-a",
-    Array.from({ length: 50 }, (_, index) => ({
-      id: `root-${index}`,
-      reply_to: null,
-      created_at: `2026-08-09T00:00:${String(index).padStart(2, "0")}.000Z`,
-    })),
-  );
+  await readVisibleFlatThreads(env as never, "channel-a", rootIds);
 
   assert.deepEqual(boundParameterCounts, [51, 51]);
   assert.ok(boundParameterCounts.every((count) => count < 100));
