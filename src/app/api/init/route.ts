@@ -48,7 +48,10 @@ export async function GET(request: Request) {
   delete data.anonymousToken;
   delete data.deviceToken;
   delete data.roomToken;
-  const signedData = await signProtectedMediaInPayload(data);
+  const signedData = await signProtectedMediaInPayload(data, {
+    roomToken,
+    userId: session?.user?.id,
+  });
 
   const response = NextResponse.json(signedData, { status: res.status });
   setIdentityCookies(response, request, {

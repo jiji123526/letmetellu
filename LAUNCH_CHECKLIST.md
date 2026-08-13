@@ -31,10 +31,11 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] The production guided-support lifecycle audit found zero users with duplicate open sessions or tickets before migration `0038`.
 - [x] Migration `0038` and its race-recovering guided-support Worker changes are deployed.
 - [x] Cross-tab logout and account deletion were deployed and verified to remove owner controls and reconnect chat without stale WebSocket privileges.
+- [x] Fresh protected-media requests and direct capabilities reject stale room access and deleted parent channels before reading R2; bounded private browser-cache reuse is explicitly documented.
 
 ### Still required before a broad public launch
 
-- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization and cross-tab socket revocation are covered; deployed support/report and media-revocation transitions remain.
+- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization, cross-tab socket revocation and media-access revocation are covered; deployed support/report transitions remain.
 - [ ] Collect normal production health baselines, calibrate thresholds and document an operator response procedure; add external alerts for degraded/critical states after calibration.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.

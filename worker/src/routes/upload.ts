@@ -1,16 +1,16 @@
-import { Env } from "../types";
-import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
-import { ensureActiveLiveSession } from "../lib/live-sessions";
-import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
-import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
-import { matchesImageSignature } from "../lib/image-signature";
-import { getMediaCacheControl } from "../lib/media-cache-control";
+import type { Env } from "../types.ts";
+import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity.ts";
+import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
+import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels.ts";
+import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets.ts";
+import { matchesImageSignature } from "../lib/image-signature.ts";
+import { getMediaCacheControl } from "../lib/media-cache-control.ts";
 import {
   readPublicBackgroundCache,
   storePublicBackgroundCache,
-} from "../lib/public-background-cache";
-import { authorizeRoomToken } from "./passcode";
-import { getChannelPasscodeInfo } from "../lib/validation";
+} from "../lib/public-background-cache.ts";
+import { authorizeRoomToken, isCurrentRoomTokenBinding } from "./passcode.ts";
+import { getChannelPasscodeInfo } from "../lib/validation.ts";
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -21,10 +21,23 @@ function decodeBase64Url(value: string): Uint8Array {
   return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
 }
 
-async function verifyMediaAccessToken(token: string, mediaKey: string, env: Env): Promise<boolean> {
+interface MediaAccessTokenPayload {
+  type: "media-access";
+  key: string;
+  user_id?: string;
+  channel_id?: string;
+  passcode_binding?: string;
+  exp: number;
+}
+
+async function verifyMediaAccessToken(
+  token: string,
+  mediaKey: string,
+  env: Env,
+): Promise<MediaAccessTokenPayload | null> {
   try {
     const [payloadPart, signaturePart, extra] = token.split(".");
-    if (!payloadPart || !signaturePart || extra) return false;
+    if (!payloadPart || !signaturePart || extra) return null;
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",
@@ -39,18 +52,18 @@ async function verifyMediaAccessToken(token: string, mediaKey: string, env: Env)
       decodeBase64Url(signaturePart),
       encoder.encode(payloadPart),
     );
-    if (!valid) return false;
-    const payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(payloadPart))) as {
-      type?: string;
-      key?: string;
-      exp?: number;
-    };
+    if (!valid) return null;
+    const payload = JSON.parse(
+      new TextDecoder().decode(decodeBase64Url(payloadPart)),
+    ) as Partial<MediaAccessTokenPayload>;
     return payload.type === "media-access"
       && payload.key === mediaKey
       && typeof payload.exp === "number"
-      && payload.exp > Math.floor(Date.now() / 1000);
+      && payload.exp > Math.floor(Date.now() / 1000)
+      ? payload as MediaAccessTokenPayload
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -208,14 +221,16 @@ export async function handleMediaServe(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const decodedKey = decodeURIComponent(key);
-  const cachedPublicBackground = await readPublicBackgroundCache(request, decodedKey);
-  if (cachedPublicBackground) return cachedPublicBackground;
-
   const mediaSuffix = `/api/media/${decodedKey}`;
   const inferredChannelId = readChannelIdFromMediaKey(decodedKey);
   let mediaRow: { channel_id: string; source_type: string } | null = null;
   let pendingTicket: { purpose: UploadPurpose; expires_at: string } | null = null;
   let backgroundRequiresPrivateCache = false;
+  let resolvedChannelInfo: {
+    exists: boolean;
+    passcode: string | null;
+    owner_uid: string;
+  } | null = null;
 
   if (inferredChannelId) {
     // Message and DM uploads already have a unique indexed key in
@@ -294,6 +309,18 @@ export async function handleMediaServe(
       || null;
   }
 
+  if (!mediaRow && !pendingTicket && inferredChannelId) {
+    const parentChannelId = getParentChannelId(inferredChannelId);
+    resolvedChannelInfo = await getChannelPasscodeInfo(parentChannelId, env);
+    if (!resolvedChannelInfo.exists) {
+      return new Response("not found", { status: 404 });
+    }
+    mediaRow = {
+      channel_id: inferredChannelId,
+      source_type: "channel-media",
+    };
+  }
+
   if (pendingTicket && pendingTicket.purpose !== "channel-asset") {
     if (pendingTicket.expires_at <= new Date().toISOString()) {
       await env.MEDIA.delete(decodedKey).catch(() => {});
@@ -305,27 +332,40 @@ export async function handleMediaServe(
   const requiresRoomAccess = mediaRow?.source_type !== "channel-profile";
   if (mediaRow?.channel_id && requiresRoomAccess) {
     const mediaAccessToken = new URL(request.url).searchParams.get("media_token");
-    if (mediaAccessToken && await verifyMediaAccessToken(mediaAccessToken, decodedKey, env)) {
-      const object = await env.MEDIA.get(decodedKey);
-      if (!object) return new Response("not found", { status: 404 });
-
-      const headers = new Headers();
-      headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
-      headers.set("Cache-Control", "private, max-age=900");
-      return new Response(object.body, { headers });
-    }
+    const mediaAccess = mediaAccessToken
+      ? await verifyMediaAccessToken(mediaAccessToken, decodedKey, env)
+      : null;
 
     const parentChannelId = getParentChannelId(mediaRow.channel_id);
-    const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+    const { exists, passcode, owner_uid } = resolvedChannelInfo
+      || await getChannelPasscodeInfo(parentChannelId, env);
+    if (!exists) {
+      return new Response("not found", { status: 404 });
+    }
     backgroundRequiresPrivateCache = Boolean(passcode) || isReportsChannel(parentChannelId, env);
 
+    const trustedUserId = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
+      ? request.headers.get("X-User-Id") || ""
+      : "";
+    const directUserId = mediaAccess?.user_id || "";
+    const authorizedUserId = trustedUserId || directUserId;
+    const isOwner = authorizedUserId === owner_uid;
+    const isReportsOwnerViewer = !isOwner
+      && await isReportsChannelOwner(authorizedUserId, env);
+    const hasCurrentRoomBinding = Boolean(
+      passcode
+      && mediaAccess?.channel_id === parentChannelId
+      && mediaAccess.passcode_binding
+      && await isCurrentRoomTokenBinding(
+        mediaAccess.passcode_binding,
+        parentChannelId,
+        passcode,
+        env,
+      ),
+    );
+
     if (passcode) {
-      const trustedUserId = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
-        ? request.headers.get("X-User-Id") || ""
-        : "";
-      const isOwner = trustedUserId === owner_uid;
-      const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
-      if (!isOwner && !isReportsOwnerViewer) {
+      if (!isOwner && !isReportsOwnerViewer && !hasCurrentRoomBinding) {
         const token = new URL(request.url).searchParams.get("token") || request.headers.get("X-Room-Token");
         if (!token) return Response.json({ error: "passcode required" }, { status: 403 });
         const decoded = await authorizeRoomToken(token, parentChannelId, passcode, env);
@@ -333,7 +373,14 @@ export async function handleMediaServe(
           return Response.json({ error: "invalid token" }, { status: 403 });
         }
       }
+    } else if (isReportsChannel(parentChannelId, env) && !isOwner && !isReportsOwnerViewer) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
     }
+  }
+
+  if (mediaRow?.source_type === "channel-background" && !backgroundRequiresPrivateCache) {
+    const cachedPublicBackground = await readPublicBackgroundCache(request, decodedKey);
+    if (cachedPublicBackground) return cachedPublicBackground;
   }
 
   const object = await env.MEDIA.get(decodedKey);

@@ -85,8 +85,9 @@ Status as of 2026-08-13:
   under the current session state.
 - [x] A hidden or disconnected live tab reconciles ended/replaced session state
   before restoring presence, and an end action in one tab updates another tab.
-- [ ] Media access revocation tests distinguish a new unauthorized network
-  request from a copy already retained in the browser's bounded private cache.
+- [x] Media access revocation tests distinguish fresh network authorization
+  from a copy already retained in the browser's bounded private cache; stale
+  room tokens, direct capabilities and deleted parent channels fail closed.
 
 ## Review rules
 

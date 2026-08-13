@@ -33,6 +33,9 @@ export async function GET(request: Request) {
 
   const response = await fetch(targetUrl, { headers, cache: "no-store" });
   const data = await response.json();
-  const signedData = await signProtectedMediaInPayload(data);
+  const signedData = await signProtectedMediaInPayload(data, {
+    roomToken,
+    userId: session?.user?.id,
+  });
   return NextResponse.json(signedData, { status: response.status });
 }

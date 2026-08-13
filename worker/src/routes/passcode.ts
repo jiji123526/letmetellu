@@ -122,6 +122,19 @@ async function createRoomTokenBinding(
   return toBase64Url(signature);
 }
 
+export async function isCurrentRoomTokenBinding(
+  binding: string,
+  channelId: string,
+  storedPasscodeHash: string,
+  env: Env,
+): Promise<boolean> {
+  const expectedBinding = await createRoomTokenBinding(channelId, storedPasscodeHash, env);
+  return timingSafeEqual(
+    new TextEncoder().encode(binding),
+    new TextEncoder().encode(expectedBinding),
+  );
+}
+
 function getPasscodeRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
     || request.headers.get("X-Client-IP")
@@ -305,10 +318,11 @@ export async function authorizeRoomToken(
   const payload = await verifyRoomToken(token, env);
   if (!payload || payload.channel_id !== channelId) return null;
 
-  const expectedBinding = await createRoomTokenBinding(channelId, storedPasscodeHash, env);
-  return timingSafeEqual(
-    new TextEncoder().encode(payload.passcode_binding),
-    new TextEncoder().encode(expectedBinding),
+  return await isCurrentRoomTokenBinding(
+    payload.passcode_binding,
+    channelId,
+    storedPasscodeHash,
+    env,
   )
     ? payload
     : null;
