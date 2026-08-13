@@ -64,6 +64,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - The most recent API split reduced `/support` by about `16 KB`, `/dashboard` by about `16 KB`, and `/ch/[slug]` by about `14 KB` compared with the previous `c2f272b` build, while `/` and the already-optimized legal pages stayed effectively flat.
 - Treat that route-bundle snapshot, plus request counts for dashboard refresh and chat reconnect paths, as the baseline for the next optimization pass. Re-measure after each phase instead of stacking another broad rewrite.
 - Start with bundle and request-churn reductions that do not require a schema migration. Keep larger derived-data redesigns conditional on measured backend hotspots that remain after the cheaper changes ship.
+- Completed on 2026-08-13: the chat shell now defers search, edit, context-menu and conditional overlay/admin interfaces while retaining initial welcome, messages, composer and realtime UI. Comparable webpack builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`) and the route-specific chunk by `31.0%`. Re-measure a deployed cold load before splitting core chat code.
 
 #### Phase 1: global bundle reduction
 
@@ -93,6 +94,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Completed and production-verified on 2026-08-13: migration `0037_message_root_pagination.sql` supports root-owned chronological paging. A page now selects parent messages first and expands each complete reply group, so late replies cannot consume adjacent parent slots or pull old threads into the latest window. Client trimming, reconnect merging and realtime insertion follow the same parent-owned boundary.
 - The migration and functional checks through `0037` are complete. Continue using D1 Insights to compare the root and indexed-child fingerprints against the former `requested_roots` baseline before considering a persisted `thread_root_id`; that larger schema change is not currently justified.
 - Completed on 2026-08-07: browser-local diagnostics now record chat bootstrap, reconnect and visibility-resume request counts plus settle time, and the dashboard trace now records per-request counts and durations, including repeated `/api/user` bootstrap reads across a session.
+- Superseded bootstrap cycles now terminate with an explicit `superseded` outcome instead of remaining `pending`, so auth-hydration rerenders no longer resemble hung requests in local diagnostics.
 - The owner-channel-count lookup is already keyed only to channel identity and profile-visibility changes, while the owner-channel popup fetches on demand. Do not broaden either dependency set during later refactors.
 - Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
 - Remaining Phase 3 validation is to collect representative baselines from those local diagnostics before calling the phase complete.

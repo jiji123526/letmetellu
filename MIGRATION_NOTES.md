@@ -4,6 +4,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Cold chat startup defers noncritical interface code — 2026-08-13
+
+- Production diagnostics for `/ch/synkongii` showed the channel page waiting on cold client startup while authenticated `/api/init` itself completed in about `267 ms`; later cached bootstrap calls completed in about `202 ms`.
+- Search, edit, context-menu, settings, gallery, links, owner-channel, reporting, moderation, admin and other conditional overlay components now load through route-level dynamic chunks only when opened.
+- Search highlighting moved into a small eager helper so normal message rendering no longer imports the full search interface.
+- Welcome content, channel bootstrap, message rendering, composer and realtime/live banners remain eager because they can affect the initial usable view.
+- A bootstrap superseded by auth hydration or effect cleanup now completes its local performance cycle as `superseded` instead of remaining falsely `pending`.
+- Focused source coverage protects the lazy boundaries and the superseded-cycle contract.
+- An apples-to-apples webpack production build reduced initial channel scripts from `920,889` to `838,210` uncompressed bytes (`9.0%`). The route-specific chat chunk fell from `267,964` to `184,866` bytes (`31.0%`).
+
+Trade-off: the first use of a deferred panel may wait briefly for its chunk on a cold connection. Normal chat entry downloads and evaluates less optional interface code, while subsequent panel opens use the browser cache. No API, D1 or WebSocket behavior changes.
+
+Deployment note: this is frontend-only. After deployment, test one cold channel load plus the search, edit, context menu, settings, gallery, links, report and owner-admin overlays.
+
 ### Calibrated health states deliver deduplicated external alerts — 2026-08-13
 
 - A five-minute scheduled evaluator uses the same shared 15-minute health thresholds as the super-admin dashboard.

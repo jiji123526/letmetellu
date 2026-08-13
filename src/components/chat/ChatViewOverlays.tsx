@@ -1,22 +1,28 @@
 "use client";
 
-import { AdminPanel } from "../admin/AdminPanel";
 import { chatDateLabel } from "@/lib/chat-date";
-import { ChannelReportDialog } from "./ChannelReportDialog";
-import { EmojiPresetPanel } from "./EmojiBar";
-import { EmojiPicker } from "./EmojiPicker";
-import { GalleryPanel } from "./GalleryPanel";
-import { HeaderMenu } from "./HeaderMenu";
-import { LinksPanel } from "./LinksPanel";
+import dynamic from "next/dynamic";
 import { LiveEndedPopup, LivePopup, LiveTitlePrompt } from "./LiveMode";
-import { ModerationPetitionDialog } from "./ModerationPetitionDialog";
-import { NoticeEditDialog } from "./NoticeEditDialog";
-import { NoticePanel } from "./NoticePanel";
-import { OwnerChannelsPopup } from "./OwnerChannelsPopup";
-import { PlusMenu } from "./PlusMenu";
-import { ConfirmDialog } from "./ConfirmDialog";
-import { SettingsPanel } from "./SettingsPanel";
 import { WelcomePopup } from "./WelcomePopup";
+
+const AdminPanel = dynamic(() => import("../admin/AdminPanel").then((module) => module.AdminPanel));
+const ChannelReportDialog = dynamic(() => import("./ChannelReportDialog").then((module) => module.ChannelReportDialog));
+const ConfirmDialog = dynamic(() => import("./ConfirmDialog").then((module) => module.ConfirmDialog));
+const EmojiPicker = dynamic(() => import("./EmojiPicker").then((module) => module.EmojiPicker));
+const EmojiPresetPanel = dynamic(() => import("./EmojiBar").then((module) => module.EmojiPresetPanel));
+const GalleryPanel = dynamic(() => import("./GalleryPanel").then((module) => module.GalleryPanel));
+const HeaderMenu = dynamic(() => import("./HeaderMenu").then((module) => module.HeaderMenu));
+const LinksPanel = dynamic(() => import("./LinksPanel").then((module) => module.LinksPanel));
+const ModerationPetitionDialog = dynamic(
+  () => import("./ModerationPetitionDialog").then((module) => module.ModerationPetitionDialog),
+);
+const NoticeEditDialog = dynamic(() => import("./NoticeEditDialog").then((module) => module.NoticeEditDialog));
+const NoticePanel = dynamic(() => import("./NoticePanel").then((module) => module.NoticePanel));
+const OwnerChannelsPopup = dynamic(
+  () => import("./OwnerChannelsPopup").then((module) => module.OwnerChannelsPopup),
+);
+const PlusMenu = dynamic(() => import("./PlusMenu").then((module) => module.PlusMenu));
+const SettingsPanel = dynamic(() => import("./SettingsPanel").then((module) => module.SettingsPanel));
 
 interface GalleryItem {
   id: string;

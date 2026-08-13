@@ -4,7 +4,7 @@ import React, { useCallback, useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 import { MessageEmbeds } from "./MessageEmbeds";
-import { highlightText } from "./SearchBar";
+import { highlightText } from "./search-highlight";
 
 interface MessageImageProps {
   src: string;

@@ -256,17 +256,3 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
     </div>
   );
 }
-
-// Helper: highlight text with search query
-export function highlightText(text: string, query: string, isActive: boolean): React.ReactNode {
-  if (!query || !text) return text;
-  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
-  const parts = text.split(regex);
-  return parts.map((part, i) =>
-    regex.test(part) ? (
-      <mark key={i} style={{ background: isActive ? "#ff9800" : "#ffd54f", color: isActive ? "#fff" : "#000", borderRadius: "2px", padding: "0 1px" }}>{part}</mark>
-    ) : (
-      <span key={i}>{part}</span>
-    )
-  );
-}

@@ -268,7 +268,10 @@ export function useChatChannelBootstrap({
     fetchInit(initChannel)
       .then(async (data: InitData) => {
         finishChatPerformanceRequest(channelId, traceCycleId, "init");
-        if (requestId !== initRequestIdRef.current) return;
+        if (requestId !== initRequestIdRef.current) {
+          completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
+          return;
+        }
         if (typeof data.anonymousUid === "string" && data.anonymousUid) {
           setUid(data.anonymousUid);
         }
@@ -293,7 +296,10 @@ export function useChatChannelBootstrap({
           startChatPerformanceRequest(channelId, traceCycleId, "init");
           const normalData = await fetchInit(channelId) as InitData;
           finishChatPerformanceRequest(channelId, traceCycleId, "init");
-          if (requestId !== initRequestIdRef.current) return;
+          if (requestId !== initRequestIdRef.current) {
+            completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
+            return;
+          }
           applyInitData(normalData);
         }
 
@@ -302,7 +308,10 @@ export function useChatChannelBootstrap({
       })
       .catch((error) => {
         finishChatPerformanceRequest(channelId, traceCycleId, "init");
-        if (requestId !== initRequestIdRef.current) return;
+        if (requestId !== initRequestIdRef.current) {
+          completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
+          return;
+        }
         console.error(error);
         if (error instanceof Error && error.message.includes("Init failed: 404")) {
           clearChannelLocalState(channelId);
@@ -311,6 +320,12 @@ export function useChatChannelBootstrap({
         setLoading(false);
         completeChatPerformanceCycle(channelId, traceCycleId, "failed");
       });
+    return () => {
+      if (initRequestIdRef.current === requestId) {
+        initRequestIdRef.current += 1;
+      }
+      completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
+    };
   }, [
     applyInitData,
     channelId,

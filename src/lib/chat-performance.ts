@@ -3,7 +3,7 @@ const MAX_CYCLES_PER_CHANNEL = 12;
 
 type ChatPerformanceRequest = "init" | "messages" | "ws-token";
 type ChatPerformanceCycleKind = "bootstrap" | "reconnect" | "visibility-resume";
-type ChatPerformanceOutcome = "pending" | "settled" | "failed" | "passcode-gated";
+type ChatPerformanceOutcome = "pending" | "settled" | "failed" | "passcode-gated" | "superseded";
 
 interface ChatPerformanceMetadata {
   [key: string]: boolean | number | string | null;

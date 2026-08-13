@@ -52,6 +52,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
 - [ ] When a genuine post-deployment Durable Object failure occurs, confirm `realtime_unavailable` produces degraded health without an `/api/init` `500`; independently verify WebSocket reconnect restores the live presence count.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
+- [ ] After the conditional chat chunks deploy, perform one cache-disabled channel load and open search, edit, context menu, settings, gallery, links, report and owner-admin overlays once.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
 
 ## Current release verification — completed 2026-08-13

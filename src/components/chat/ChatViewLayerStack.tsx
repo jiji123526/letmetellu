@@ -1,6 +1,6 @@
 "use client";
 
-import { ContextMenu } from "./ContextMenu";
+import dynamic from "next/dynamic";
 import { ChatViewOverlays } from "./ChatViewOverlays";
 import type { Channel } from "./chatViewTypes";
 import type { UseChatAdminChannelActionsResult } from "./useChatAdminChannelActions";
@@ -8,6 +8,8 @@ import type { UseChatChannelSettingsResult } from "./useChatChannelSettings";
 import type { UseChatContextMenuActionsResult } from "./useChatContextMenuActions";
 import type { ContextMenuState, EmojiPickerState, FullViewImageState } from "./useChatInteractions";
 import type { UseChatOverlayCallbacksResult } from "./useChatOverlayCallbacks";
+
+const ContextMenu = dynamic(() => import("./ContextMenu").then((module) => module.ContextMenu));
 
 interface GalleryItem {
   id: string;

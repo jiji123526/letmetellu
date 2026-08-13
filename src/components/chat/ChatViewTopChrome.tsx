@@ -1,9 +1,11 @@
 "use client";
 
 import { useLocale } from "@/hooks/useLocale";
-import { EditDialog } from "./EditDialog";
+import dynamic from "next/dynamic";
 import { LiveCountdownBanner, LiveExitBanner, LiveJoinBanner } from "./LiveMode";
-import { SearchBar } from "./SearchBar";
+
+const EditDialog = dynamic(() => import("./EditDialog").then((module) => module.EditDialog));
+const SearchBar = dynamic(() => import("./SearchBar").then((module) => module.SearchBar));
 
 interface SearchMessage {
   id: string;
