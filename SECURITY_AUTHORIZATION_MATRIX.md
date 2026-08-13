@@ -40,7 +40,7 @@ Status as of 2026-08-13:
 | `/api/dm` | Signed actor and channel policy required | Same, with room token for locked room | Owner receives data through owner-only data route | No implicit override | Idempotency/identity controls plus deleted-channel and expired-live route invariants; broader action regression pending |
 | `/api/channel-reports` POST | Signed actor/device required | Locked channel additionally requires room token | Owner cannot report own channel | Same submission rules | Durable quota and target-channel lookup; direct target/evidence expansion pending |
 | `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity, platform-role, per-action denial and target-lookup tests |
-| `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation and direct ownership-mutation tests; guided-state/browser regression pending |
+| `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation, owned lifecycle transitions and database-enforced one-open-session/ticket invariants; browser regression pending |
 | `/api/platform-admin/support` | Denied | Denied | Denied unless platform admin | Allowed | Shared trusted-identity and platform-role check tests |
 | `/api/user` account reads/writes | Denied except documented public profile/channel-existence reads | Same | Own account through trusted proxy | Own account through trusted proxy | Functional forged preference-update rejection test |
 | `/api/recent-channels` | Browser-local only; Worker account route denied | Same | Own rows through trusted proxy | Own rows through trusted proxy | Identity/email canonicalization exists; action regression pending |
@@ -67,16 +67,19 @@ Status as of 2026-08-13:
   and channel deletion.
 - [x] Verify expired live sessions reject live-channel messages, uploads, DMs
   and presence joins while leaving valid normal-room access unchanged.
+- [x] Verify guided-support start/escalate races converge on one open session
+  and ticket, and close/reset mutations remain bound to the owning user.
 
 ### Browser-visible state transitions
 
-- [ ] Guided support close/reset/escalate and one-open-ticket enforcement.
+- [ ] Exercise guided support close/reset/escalate and one-open-ticket behavior
+  through the deployed browser UI; Worker lifecycle invariants are covered.
 - [ ] User ticket close/delete reflected in the platform-admin dashboard.
 - [ ] Report open/warn/freeze/unfreeze/petition state reflected in both inbox
   and channel UI without stale privileged data.
 - [ ] Logout and account deletion invalidate privileged HTTP and WebSocket
   behavior in another open tab.
-- [ ] A hidden or disconnected live tab reconciles ended/replaced session state
+- [x] A hidden or disconnected live tab reconciles ended/replaced session state
   before restoring presence, and an end action in one tab updates another tab.
 - [ ] Media access revocation tests distinguish a new unauthorized network
   request from a copy already retained in the browser's bounded private cache.

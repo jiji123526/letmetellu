@@ -544,6 +544,57 @@ async function insertBotMessages(input: {
   );
 }
 
+async function buildOpenSupportThreadResponse(input: {
+  env: Env;
+  locale: UserLocale;
+  thread: SupportThreadRow;
+}): Promise<Response> {
+  const messages = await fetchSupportMessages(input.thread.id, input.env);
+  return Response.json({
+    thread: serializeThread(input.thread, input.locale),
+    messages,
+    session: null,
+    transcript: [],
+    currentNode: null,
+  });
+}
+
+async function reuseOpenSupportThread(input: {
+  env: Env;
+  locale: UserLocale;
+  session: SupportSessionRow;
+  thread: SupportThreadRow;
+  entryTopic: string | null;
+  escalationNodeId: string;
+}): Promise<Response> {
+  const createdAt = new Date().toISOString();
+  await input.env.DB.batch([
+    input.env.DB.prepare(`
+      INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
+      VALUES (?, ?, 'escalation', ?, ?, ?)
+    `).bind(
+      crypto.randomUUID(),
+      input.session.id,
+      input.escalationNodeId,
+      JSON.stringify({ thread_id: input.thread.id, reused_existing_thread: true }),
+      createdAt,
+    ),
+    input.env.DB.prepare(`
+      UPDATE support_sessions
+      SET entry_topic = ?, current_node_id = ?, status = 'escalated', escalated_thread_id = ?, updated_at = ?, completed_at = ?
+      WHERE id = ? AND status = 'open'
+    `).bind(
+      input.entryTopic,
+      input.escalationNodeId,
+      input.thread.id,
+      createdAt,
+      createdAt,
+      input.session.id,
+    ),
+  ]);
+  return buildOpenSupportThreadResponse(input);
+}
+
 async function createEscalatedSupportThread(input: {
   env: Env;
   locale: UserLocale;
@@ -554,31 +605,9 @@ async function createEscalatedSupportThread(input: {
 }): Promise<Response> {
   const existingThread = await fetchOpenSupportThreadForUser(input.userId, input.env);
   if (existingThread) {
-    const createdAt = new Date().toISOString();
-    await input.env.DB.batch([
-      input.env.DB.prepare(`
-        INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
-        VALUES (?, ?, 'escalation', ?, ?, ?)
-      `).bind(
-        crypto.randomUUID(),
-        input.session.id,
-        input.escalationNodeId,
-        JSON.stringify({ thread_id: existingThread.id, reused_existing_thread: true }),
-        createdAt,
-      ),
-      input.env.DB.prepare(`
-        UPDATE support_sessions
-        SET entry_topic = ?, current_node_id = ?, status = 'escalated', escalated_thread_id = ?, updated_at = ?, completed_at = ?
-        WHERE id = ?
-      `).bind(input.entryTopic, input.escalationNodeId, existingThread.id, createdAt, createdAt, input.session.id),
-    ]);
-    const messages = await fetchSupportMessages(existingThread.id, input.env);
-    return Response.json({
-      thread: serializeThread(existingThread, input.locale),
-      messages,
-      session: null,
-      transcript: [],
-      currentNode: null,
+    return reuseOpenSupportThread({
+      ...input,
+      thread: existingThread,
     });
   }
 
@@ -592,32 +621,50 @@ async function createEscalatedSupportThread(input: {
   const messageId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  await input.env.DB.batch([
-    input.env.DB.prepare(`
-      INSERT INTO support_threads (
-        id, user_id, source_session_id, entry_topic, summary, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
-    `).bind(threadId, input.userId, input.session.id, input.entryTopic, summary, createdAt, createdAt),
-    input.env.DB.prepare(`
-      INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, text, created_at)
-      VALUES (?, ?, 'user', ?, ?, ?)
-    `).bind(messageId, threadId, input.userId, summary, createdAt),
-    input.env.DB.prepare(`
-      INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
-      VALUES (?, ?, 'escalation', ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(),
-      input.session.id,
-      input.escalationNodeId,
-      JSON.stringify({ thread_id: threadId, summary }),
-      createdAt,
-    ),
-    input.env.DB.prepare(`
-      UPDATE support_sessions
-      SET entry_topic = ?, current_node_id = ?, status = 'escalated', escalated_thread_id = ?, updated_at = ?, completed_at = ?
-      WHERE id = ?
-    `).bind(input.entryTopic, input.escalationNodeId, threadId, createdAt, createdAt, input.session.id),
-  ]);
+  try {
+    await input.env.DB.batch([
+      input.env.DB.prepare(`
+        INSERT INTO support_threads (
+          id, user_id, source_session_id, entry_topic, summary, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+      `).bind(threadId, input.userId, input.session.id, input.entryTopic, summary, createdAt, createdAt),
+      input.env.DB.prepare(`
+        INSERT INTO support_messages (id, thread_id, sender_role, sender_user_id, text, created_at)
+        VALUES (?, ?, 'user', ?, ?, ?)
+      `).bind(messageId, threadId, input.userId, summary, createdAt),
+      input.env.DB.prepare(`
+        INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
+        VALUES (?, ?, 'escalation', ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        input.session.id,
+        input.escalationNodeId,
+        JSON.stringify({ thread_id: threadId, summary }),
+        createdAt,
+      ),
+      input.env.DB.prepare(`
+        UPDATE support_sessions
+        SET entry_topic = ?, current_node_id = ?, status = 'escalated', escalated_thread_id = ?, updated_at = ?, completed_at = ?
+        WHERE id = ? AND status = 'open'
+      `).bind(input.entryTopic, input.escalationNodeId, threadId, createdAt, createdAt, input.session.id),
+    ]);
+  } catch (error) {
+    const concurrentThread = await fetchOpenSupportThreadForUser(input.userId, input.env);
+    if (!concurrentThread) throw error;
+    const latestSession = await fetchSupportSessionById(input.session.id, input.env);
+    if (latestSession?.status !== "open") {
+      return buildOpenSupportThreadResponse({
+        env: input.env,
+        locale: input.locale,
+        thread: concurrentThread,
+      });
+    }
+    return reuseOpenSupportThread({
+      ...input,
+      session: latestSession,
+      thread: concurrentThread,
+    });
+  }
 
   await markSupportThreadRead({
     env: input.env,
@@ -751,11 +798,27 @@ async function handleSupportStartSession(subjectId: string, locale: UserLocale, 
 
   const sessionId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  await env.DB.prepare(`
-    INSERT INTO support_sessions (
-      id, user_id, status, current_node_id, created_at, updated_at
-    ) VALUES (?, ?, 'open', 'start', ?, ?)
-  `).bind(sessionId, subjectId, createdAt, createdAt).run();
+  try {
+    await env.DB.prepare(`
+      INSERT INTO support_sessions (
+        id, user_id, status, current_node_id, created_at, updated_at
+      ) VALUES (?, ?, 'open', 'start', ?, ?)
+    `).bind(sessionId, subjectId, createdAt, createdAt).run();
+  } catch (error) {
+    const concurrentSession = await fetchOpenSupportSessionForUser(subjectId, env);
+    if (!concurrentSession) throw error;
+    const [transcript, messages] = await Promise.all([
+      fetchSupportSessionEvents(concurrentSession.id, env),
+      existingThread ? fetchSupportMessages(existingThread.id, env) : Promise.resolve<SupportMessageRow[]>([]),
+    ]);
+    return Response.json({
+      thread: existingThread ? serializeThread(existingThread, locale) : null,
+      messages,
+      session: serializeSession(concurrentSession, locale),
+      transcript,
+      currentNode: serializeNode(getSupportNode(concurrentSession.current_node_id, locale)),
+    });
+  }
   await insertBotMessages({
     env,
     sessionId,

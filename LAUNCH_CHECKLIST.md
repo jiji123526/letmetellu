@@ -22,14 +22,18 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
 - [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
 - [x] Channel and owned-channel account deletion record retryable Durable Object/R2 cleanup, with bounded scheduled retries and operational-health visibility.
-- [x] All D1 migrations through `0037_message_root_pagination.sql` are applied in production.
+- [x] All D1 migrations through `0038_support_open_lifecycle_invariants.sql` are applied in production.
 - [x] Cross-store channel cleanup was verified end to end, including D1 deletion, R2 media removal, cleanup-job completion and operational-health visibility.
 - [x] Message history was verified with root-owned pagination: replies remain under their parent, adjacent parent windows do not disappear, and replies to unmounted historical parents do not reappear as latest messages.
 - [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
+- [x] Locked-room passcode rotation and deletion were verified across open viewer tabs; stale access returned to the gate or not-found state.
+- [x] Hidden and disconnected live tabs were verified to reject ended-session actions, avoid restoring stale presence and retain normal-room access.
+- [x] The production guided-support lifecycle audit found zero users with duplicate open sessions or tickets before migration `0038`.
+- [x] Migration `0038` and its race-recovering guided-support Worker changes are deployed.
 
 ### Still required before a broad public launch
 
-- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. The first shared-identity and privileged-route invariant suite now covers forged user headers, server-side owner/role checks, owner-only collection ordering, report moderation, platform support and socket authorization boundaries; cross-object mutations, guided support, report-state and dashboard transitions remain.
+- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle and guided-support server invariants are covered; deployed support, report-state and dashboard browser transitions remain.
 - [ ] Collect normal production health baselines, calibrate thresholds and document an operator response procedure; add external alerts for degraded/critical states after calibration.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
@@ -68,7 +72,7 @@ Do not treat the app as public-launch ready until these are complete:
 
 1. Regression coverage for state-heavy flows
 - Existing Worker hardening and query-shape tests are useful but do not exercise the complete browser-visible state transitions.
-- Add automated tests for guided support reset/escalation, support ticket visibility and reports inbox filtering.
+- Guided support reset/escalation and one-open-ticket Worker invariants are covered. Complete deployed browser checks for support ticket visibility and reports inbox filtering.
 - Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
 2. Monitoring and operator alerting
@@ -231,11 +235,14 @@ Run these after deployment.
 
 1. Open the dashboard help menu as a guest and as a logged-in user.
 2. Start guided `1:1` support, close it mid-flow and confirm reopening starts from the first step.
-3. Escalate a support ticket and confirm it appears immediately for the super admin.
-4. Confirm the user cannot submit a second ticket while one is still open.
-5. Confirm deleting the temporary user support item closes the thread on the super-admin side.
-6. Open the reports inbox and confirm `Open`, `Warned`, and `Frozen` filters work.
-7. Confirm the restricted-channel summary matches the currently warned/frozen channels.
+3. Open support in two tabs and start the flow concurrently; both tabs must converge on the same open guided session.
+4. Escalate concurrently from both tabs; exactly one open ticket must appear for the super admin.
+5. Confirm the user cannot submit a second ticket while one is still open.
+6. Close the ticket as the user and confirm the super-admin dashboard updates without retaining a stale open item.
+7. Close a ticket as the super admin and confirm the user receives and can acknowledge the closed state.
+8. Rerun `worker/scripts/audit-support-lifecycle.sql` and confirm both invariants still report zero duplicate users and zero excess records.
+9. Open the reports inbox and confirm `Open`, `Warned`, and `Frozen` filters work.
+10. Confirm the restricted-channel summary matches the currently warned/frozen channels.
 
 ## Observability checks
 

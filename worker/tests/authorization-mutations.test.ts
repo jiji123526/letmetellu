@@ -14,6 +14,9 @@ const OWNER_ID = "owner-a";
 
 interface FakeDbOptions {
   channelPasscode?: string | null;
+  openSupportSession?: boolean;
+  openSupportThread?: boolean;
+  supportSessionNode?: string;
   supportSessionOwner?: string;
   supportThreadOwner?: string;
 }
@@ -43,13 +46,19 @@ function createFakeEnv(options: FakeDbOptions = {}): {
     if (sql.includes("SELECT reactions FROM messages WHERE id = ? AND channel_id = ?")) return null;
     if (sql.includes("FROM upload_tickets")) return null;
     if (sql.includes("SELECT locale FROM users WHERE id = ?")) return { locale: "en" };
-    if (sql.includes("FROM support_sessions") && sql.includes("WHERE id = ?")) {
+    if (
+      sql.includes("FROM support_sessions")
+      && (
+        sql.includes("WHERE id = ?")
+        || (options.openSupportSession && sql.includes("WHERE user_id = ? AND status = 'open'"))
+      )
+    ) {
       return {
         id: "foreign-session",
         user_id: options.supportSessionOwner || "victim-user",
         status: "open",
         entry_topic: null,
-        current_node_id: "start",
+        current_node_id: options.supportSessionNode || "start",
         resolved_via_tree: 0,
         escalated_thread_id: null,
         created_at: now,
@@ -57,7 +66,13 @@ function createFakeEnv(options: FakeDbOptions = {}): {
         completed_at: null,
       };
     }
-    if (sql.includes("FROM support_threads st") && sql.includes("WHERE st.id = ?")) {
+    if (
+      sql.includes("FROM support_threads st")
+      && (
+        sql.includes("WHERE st.id = ?")
+        || (options.openSupportThread && sql.includes("WHERE st.user_id = ? AND st.status = 'open'"))
+      )
+    ) {
       return {
         id: "foreign-thread",
         user_id: options.supportThreadOwner || "victim-user",
@@ -288,6 +303,82 @@ test("guided support mutations hide sessions and threads owned by another user",
     await expectError(response, 404, "thread_not_found");
     assertOnlyRateLimitWrites(current.writes);
   }
+});
+
+test("guided support lifecycle reuses active state and closes or clears owned records", async () => {
+  const userId = "support-user";
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Internal-Token": INTERNAL_SECRET,
+    "X-User-Id": userId,
+  };
+
+  const startFixture = createFakeEnv({
+    openSupportSession: true,
+    supportSessionOwner: userId,
+  });
+  const startResponse = await handleSupport(jsonRequest("POST", {
+    action: "start_session",
+  }, headers), startFixture.env);
+  assert.equal(startResponse.status, 200);
+  assert.equal(
+    ((await startResponse.json()) as { session?: { id?: string } }).session?.id,
+    "foreign-session",
+  );
+  assert.equal(
+    startFixture.writes.some((write) => write.includes("INSERT INTO support_sessions")),
+    false,
+  );
+
+  const escalateFixture = createFakeEnv({
+    openSupportThread: true,
+    supportSessionNode: "other-escalate",
+    supportSessionOwner: userId,
+    supportThreadOwner: userId,
+  });
+  const escalateResponse = await handleSupport(jsonRequest("POST", {
+    action: "escalate_session",
+    session_id: "foreign-session",
+  }, headers), escalateFixture.env);
+  assert.equal(escalateResponse.status, 200);
+  assert.equal(
+    ((await escalateResponse.json()) as { thread?: { id?: string } }).thread?.id,
+    "foreign-thread",
+  );
+  assert.equal(
+    escalateFixture.writes.some((write) => write.includes("INSERT INTO support_threads")),
+    false,
+  );
+  assert.equal(
+    escalateFixture.writes.some((write) => write.startsWith("batch:2")),
+    true,
+  );
+
+  const clearFixture = createFakeEnv({ supportSessionOwner: userId });
+  const clearResponse = await handleSupport(jsonRequest("POST", {
+    action: "clear_session",
+    session_id: "foreign-session",
+  }, headers), clearFixture.env);
+  assert.equal(clearResponse.status, 200);
+  assert.equal(
+    clearFixture.writes.some((write) =>
+      write.includes("UPDATE support_sessions SET status = 'abandoned'")
+    ),
+    true,
+  );
+
+  const closeFixture = createFakeEnv({ supportThreadOwner: userId });
+  const closeResponse = await handleSupport(jsonRequest("POST", {
+    action: "close_thread",
+    thread_id: "foreign-thread",
+  }, headers), closeFixture.env);
+  assert.equal(closeResponse.status, 200);
+  assert.equal(
+    closeFixture.writes.some((write) =>
+      write.includes("UPDATE support_threads SET status = 'closed'")
+    ),
+    true,
+  );
 });
 
 test("all report and petition actions require the platform-admin role", async () => {

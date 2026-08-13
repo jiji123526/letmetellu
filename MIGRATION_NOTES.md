@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Guided support enforces one active lifecycle per user — 2026-08-13
+
+- Guided support already checked for an existing open session or ticket before creating another, but simultaneous requests from duplicate clicks or separate tabs could both pass the lookup before either insert completed.
+- Migration `0038_support_open_lifecycle_invariants.sql` adds partial unique indexes that allow at most one `open` guided session and one `open` support thread per user while preserving unlimited resolved, abandoned, escalated and closed history.
+- Session start and ticket escalation now recover a uniqueness race by loading and returning the winning open record. Concurrent callers converge on the same session or ticket instead of creating duplicates or surfacing a database `500`.
+- Escalation updates now claim only sessions that are still open. Existing-ticket reuse, owned close/reset behavior and cross-user hiding have focused Worker regression coverage.
+- `worker/scripts/audit-support-lifecycle.sql` reports legacy users with duplicate open sessions or tickets. The production audit returned zero duplicate users and zero excess records for both invariants before migration `0038`.
+- The locked-room and live-session multi-tab checks from the preceding authorization tranche passed in production and are recorded in the launch checklist and authorization matrix.
+
+Trade-off: support creation performs the same preflight reads as before, plus a uniqueness check maintained by SQLite on writes. Race losers perform one recovery read. This adds negligible write overhead in exchange for a durable invariant across tabs and Worker isolates.
+
+Deployment note: the production audit passed, migration `0038_support_open_lifecycle_invariants.sql` was applied and the Worker was deployed. No frontend deployment was required. Deployed guided-support close/reset/escalate and dashboard synchronization still need browser verification.
+
 ### Room and live-session lifecycle authorization is regression-tested — 2026-08-13
 
 - Room tokens are now covered as credentials bound to both the channel ID and current passcode hash. A token issued before a passcode change cannot authorize later message mutations, and deleted channels reject old tokens instead of being interpreted as unlocked rooms.
