@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Room and live-session lifecycle authorization is regression-tested — 2026-08-13
+
+- Room tokens are now covered as credentials bound to both the channel ID and current passcode hash. A token issued before a passcode change cannot authorize later message mutations, and deleted channels reject old tokens instead of being interpreted as unlocked rooms.
+- Passcode authorization reads no longer use a 30-second isolate-local cache. Every affected request reads the current indexed channel row, so a change made through one Worker isolate cannot leave another isolate accepting stale room credentials.
+- Data, DM and non-asset upload routes now distinguish a missing channel from an existing channel with no passcode and return `404` for the missing channel.
+- Expired live-session enforcement now applies to edit, delete and reaction mutations as well as new messages, uploads and DMs. All live message mutations use one shared guard that expires stale state before rejecting the action.
+- WebSocket live-presence joins use a tested decision boundary: only the current unexpired session ID joins; an old session is redirected to current session metadata, and a missing or expired session is rejected.
+- The focused authorization suite covers passcode-hash rotation, deletion, every message mutation method, live content route invariants, presence decisions and unchanged normal-room access.
+
+Trade-off: affected room requests now perform one indexed channel lookup instead of reusing a value for up to 30 seconds, increasing D1 reads in exchange for immediate global revocation. Live edit, delete and reaction requests also perform the same indexed live-state lookup as live sends. Normal-room mutations do not pay the live-state cost.
+
+Deployment note: deploy the Worker. No D1 migration or frontend deployment is required. Multi-tab browser transition checks remain in the authorization matrix because automated Worker tests cannot verify client routing and stale UI cleanup.
+
 ### Message history windows now follow parent-message order — 2026-08-13
 
 - Pagination previously counted roots and replies as equal chronological rows, then moved replies beneath their parents only during rendering. A late reply to `parent 1` could therefore consume a page slot and leave the adjacent `parent 2` outside the mounted window.

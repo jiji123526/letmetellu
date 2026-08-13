@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity";
-import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
+import { ensureActiveLiveSession } from "../lib/live-sessions";
 import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets";
 import { matchesImageSignature } from "../lib/image-signature";
@@ -90,11 +90,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   // Passcode gate
   const parentChannelId = getParentChannelId(channelId);
   if (channelId.endsWith("_live") && purpose !== "channel-asset") {
-    const liveSession = await readLiveSessionState(env, parentChannelId);
-    if (!liveSession || isLiveSessionExpired(liveSession)) {
-      if (liveSession) {
-        await endLiveSession(env, parentChannelId, "expired", liveSession.sessionId);
-      }
+    if (!await ensureActiveLiveSession(env, parentChannelId)) {
       return Response.json({ error: "live_session_ended" }, { status: 403 });
     }
   }
@@ -121,7 +117,8 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   let anonymousPayload: { uid: string } | null = null;
   let ipHash: string | null = null;
   if (purpose !== "channel-asset") {
-    const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     if (!ownerUpload && passcode) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });

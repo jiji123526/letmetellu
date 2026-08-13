@@ -3,7 +3,7 @@ import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/
 import { isReportsChannel } from "../lib/special-channels";
 import { attachUploadTicket } from "../lib/upload-tickets";
 import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation";
-import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
+import { ensureActiveLiveSession } from "../lib/live-sessions";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
 import { authorizeRoomToken } from "./passcode";
 import { isValidClientMessageId } from "../lib/message-idempotency";
@@ -51,18 +51,15 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
     if (isLiveChannel) {
-      const liveSession = await readLiveSessionState(env, parentChannelId);
-      if (!liveSession || isLiveSessionExpired(liveSession)) {
-        if (liveSession) {
-          await endLiveSession(env, parentChannelId, "expired", liveSession.sessionId);
-        }
+      if (!await ensureActiveLiveSession(env, parentChannelId)) {
         return Response.json({ error: "live_session_ended" }, { status: 403 });
       }
     }
     if (isReportsChannel(parentChannelId, env)) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
-    const { passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     if (passcode) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });

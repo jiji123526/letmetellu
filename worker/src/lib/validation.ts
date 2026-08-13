@@ -37,25 +37,20 @@ export async function checkBannedWords(text: string, channelId: string, env: Env
   return true;
 }
 
-// Passcode cache — per channel (30s TTL)
-const passcodeCache = new Map<string, { passcode: string | null; ownerUid: string; expires: number }>();
-
 export function invalidatePasscodeCache(channelId: string) {
-  passcodeCache.delete(channelId);
+  // Retained for callers that also invalidate other channel policy state.
+  // Authorization reads intentionally bypass isolate-local caches so passcode
+  // changes and deletions take effect on every Worker isolate immediately.
+  void channelId;
 }
 
-export async function getChannelPasscodeInfo(channelId: string, env: Env): Promise<{ passcode: string | null; owner_uid: string }> {
-  const now = Date.now();
-  const cached = passcodeCache.get(channelId);
-  if (cached && now < cached.expires) {
-    return { passcode: cached.passcode, owner_uid: cached.ownerUid };
-  }
-
+export async function getChannelPasscodeInfo(
+  channelId: string,
+  env: Env,
+): Promise<{ exists: boolean; passcode: string | null; owner_uid: string }> {
   const channel = await env.DB.prepare("SELECT passcode, owner_uid FROM channels WHERE id = ?")
     .bind(channelId).first() as { passcode: string | null; owner_uid: string } | null;
 
-  if (!channel) return { passcode: null, owner_uid: "" };
-
-  passcodeCache.set(channelId, { passcode: channel.passcode, ownerUid: channel.owner_uid, expires: now + 30000 });
-  return { passcode: channel.passcode, owner_uid: channel.owner_uid };
+  if (!channel) return { exists: false, passcode: null, owner_uid: "" };
+  return { exists: true, passcode: channel.passcode, owner_uid: channel.owner_uid };
 }

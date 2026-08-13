@@ -5,7 +5,7 @@ import { isReportsChannel } from "../lib/special-channels.ts";
 import { checkMessageLength, checkBannedWords, getChannelPasscodeInfo } from "../lib/validation.ts";
 import { deleteMediaByUrl } from "../lib/media.ts";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
-import { endLiveSession, isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions.ts";
+import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
 import { syncMessageLink } from "../lib/message-links.ts";
 import { withOperationalErrorContext } from "../lib/operational-events.ts";
@@ -104,12 +104,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       parentChannelId = liveChannel ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       if (liveChannel) {
         routeStage = "load_live_state";
-        const liveSession = await readLiveSessionState(env, parentChannelId);
-        if (!liveSession || isLiveSessionExpired(liveSession)) {
-          if (liveSession) {
-            routeStage = "expire_live_state";
-            await endLiveSession(env, parentChannelId, "expired", liveSession.sessionId);
-          }
+        if (!await ensureActiveLiveSession(env, parentChannelId)) {
           return Response.json({ error: "live_session_ended" }, { status: 403 });
         }
       }
@@ -333,6 +328,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       requestChannelId = String(channel_id);
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      if (liveChannel) {
+        routeStage = "load_live_state";
+        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+          return Response.json({ error: "live_session_ended" }, { status: 403 });
+        }
+      }
 
       routeStage = "verify_channel_access";
       if (isReportsChannel(parentChannelId, env)) {
@@ -347,7 +348,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         }
       }
       routeStage = "verify_room_access";
-      const { passcode: delPasscode } = await getChannelPasscodeInfo(parentChannelId, env);
+      const { exists: delChannelExists, passcode: delPasscode } = await getChannelPasscodeInfo(parentChannelId, env);
+      if (!delChannelExists) return Response.json({ error: "channel not found" }, { status: 404 });
       if (delPasscode) {
         const roomToken = request.headers.get("X-Room-Token");
         if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
@@ -428,6 +430,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       // Passcode gate
       liveChannel = requestChannelId.endsWith("_live");
       parentChannelId = liveChannel ? requestChannelId.replace(/_live$/, "") : requestChannelId;
+      if (liveChannel) {
+        routeStage = "load_live_state";
+        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+          return Response.json({ error: "live_session_ended" }, { status: 403 });
+        }
+      }
       routeStage = "load_channel_state";
       const channel = await env.DB.prepare(`
         SELECT id, is_frozen, owner_uid, passcode,
@@ -552,6 +560,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      if (liveChannel) {
+        routeStage = "load_live_state";
+        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+          return Response.json({ error: "live_session_ended" }, { status: 403 });
+        }
+      }
       const internalToken = request.headers.get("X-Internal-Token");
       const verifiedUserId = request.headers.get("X-User-Id");
       const isVerifiedAdmin = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
@@ -579,7 +593,8 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         }
       }
       routeStage = "verify_room_access";
-      const { passcode: patchPasscode } = await getChannelPasscodeInfo(parentChannelId, env);
+      const { exists: patchChannelExists, passcode: patchPasscode } = await getChannelPasscodeInfo(parentChannelId, env);
+      if (!patchChannelExists) return Response.json({ error: "channel not found" }, { status: 404 });
       if (patchPasscode && !isVerifiedAdmin) {
         const roomToken = request.headers.get("X-Room-Token");
         if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });

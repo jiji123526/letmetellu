@@ -25,7 +25,10 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
   // Passcode gate for data endpoints
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
-  const { passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+  const { exists, passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+  if (!exists) {
+    return Response.json({ error: "channel not found" }, { status: 404 });
+  }
   const trustedUserId = getTrustedUserId(request, env) || "";
   const isOwner = trustedUserId === owner_uid;
   const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);

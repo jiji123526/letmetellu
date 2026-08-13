@@ -41,7 +41,7 @@ test("live reconnect and websocket presence remain session-aware", () => {
 
   assert.match(realtimeSource, /await reconcileCurrentLiveSession\(traceCycleId\)/);
   assert.match(realtimeSource, /send\(\{ type: "join-live", sessionId: result\.sessionId \}\)/);
-  assert.match(chatRoomSource, /requestedSessionId !== activeLiveSession\.sessionId/);
+  assert.match(chatRoomSource, /getLiveJoinDisposition\(liveSession, requestedSessionId\)/);
   assert.match(chatRoomSource, /connection\.inLive = false/);
   assert.match(adminSource, /error: "missing_live_session_id"/);
   assert.match(adminSource, /error: "live_session_changed"/);

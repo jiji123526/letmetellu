@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { verifyAdminWsToken, verifyRoomViewerWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
-import { isLiveSessionExpired, readLiveSessionState } from "../lib/live-sessions";
+import { getLiveJoinDisposition, readLiveSessionState } from "../lib/live-sessions";
 import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 import { advanceChannelRateLimit, type ChannelRateLimitBucket } from "../lib/channel-rate-limit";
@@ -294,25 +294,23 @@ export class ChatRoom {
       if (data.type === "join-live" && connection.authorized) {
         const liveSession = await readLiveSessionState(this.env, connection.channelId);
         const requestedSessionId = typeof data.sessionId === "string" ? data.sessionId : "";
-        const activeLiveSession = liveSession && !isLiveSessionExpired(liveSession)
-          ? liveSession
-          : null;
-        if (!activeLiveSession) {
+        const disposition = getLiveJoinDisposition(liveSession, requestedSessionId);
+        if (disposition === "ended") {
           connection.inLive = false;
           socket.send(JSON.stringify({
             type: "live-ended",
             channel_id: connection.channelId,
             reason: "stale-session",
           }));
-        } else if (requestedSessionId !== activeLiveSession.sessionId) {
+        } else if (disposition === "session_changed") {
           connection.inLive = false;
           socket.send(JSON.stringify({
             type: "live-started",
             channel_id: connection.channelId,
-            title: activeLiveSession.title,
-            sessionId: activeLiveSession.sessionId,
-            startedAt: activeLiveSession.startedAt,
-            expiresAt: activeLiveSession.expiresAt,
+            title: liveSession!.title,
+            sessionId: liveSession!.sessionId,
+            startedAt: liveSession!.startedAt,
+            expiresAt: liveSession!.expiresAt,
           }));
         } else {
           connection.inLive = true;

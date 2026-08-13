@@ -73,11 +73,31 @@ export function isLiveSessionExpired(session: LiveSessionState | null, nowMs = D
   return Date.parse(session.expiresAt) <= nowMs;
 }
 
+export type LiveJoinDisposition = "join" | "ended" | "session_changed";
+
+export function getLiveJoinDisposition(
+  session: LiveSessionState | null,
+  requestedSessionId: string,
+  nowMs = Date.now(),
+): LiveJoinDisposition {
+  if (!session || isLiveSessionExpired(session, nowMs)) return "ended";
+  return requestedSessionId === session.sessionId ? "join" : "session_changed";
+}
+
 export async function readLiveSessionState(env: Env, channelId: string): Promise<LiveSessionState | null> {
   const row = await env.DB.prepare(
     "SELECT text, updated_at FROM config WHERE id = ? LIMIT 1"
   ).bind(`live_${channelId}`).first<{ text: string | null; updated_at: string | null }>();
   return parseLiveSessionState(row?.text, row?.updated_at);
+}
+
+export async function ensureActiveLiveSession(env: Env, channelId: string): Promise<boolean> {
+  const liveSession = await readLiveSessionState(env, channelId);
+  if (liveSession && !isLiveSessionExpired(liveSession)) return true;
+  if (liveSession) {
+    await endLiveSession(env, channelId, "expired", liveSession.sessionId);
+  }
+  return false;
 }
 
 export async function endLiveSession(
