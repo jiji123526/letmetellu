@@ -76,6 +76,12 @@ interface UseChatModerationResult {
   handleModerationPetitionSubmit: (text: string) => Promise<void>;
 }
 
+interface ReportInboxUpdate {
+  message_id: string;
+  report: ReportMeta;
+  message_text: string;
+}
+
 export function useChatModeration({
   isOwner,
   effectiveAdmin,
@@ -123,6 +129,21 @@ export function useChatModeration({
     }));
   }, [setMessages]);
 
+  const applyReportInboxUpdates = useCallback((updates: ReportInboxUpdate[] | undefined) => {
+    if (!updates?.length) return;
+    const updatesByMessageId = new Map(updates.map((update) => [update.message_id, update]));
+    setMessages((previous) => previous.map((message) => {
+      const update = updatesByMessageId.get(message.id);
+      if (!update) return message;
+      return {
+        ...message,
+        text: update.message_text,
+        edited: true,
+        report_meta: update.report,
+      };
+    }));
+  }, [setMessages]);
+
   const handleReportAction = useCallback(async (
     report: ReportMeta,
     action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss",
@@ -138,15 +159,20 @@ export function useChatModeration({
         error?: string;
         report?: ReportMeta;
         message_text?: string;
+        report_updates?: ReportInboxUpdate[];
       };
 
       if (result?.ok && result.report) {
-        patchReportMessage(report.report_id, (message) => ({
-          ...message,
-          text: result.message_text || message.text,
-          edited: true,
-          report_meta: result.report,
-        }));
+        if (result.report_updates?.length) {
+          applyReportInboxUpdates(result.report_updates);
+        } else {
+          patchReportMessage(report.report_id, (message) => ({
+            ...message,
+            text: result.message_text || message.text,
+            edited: true,
+            report_meta: result.report,
+          }));
+        }
         const reportActionBanner = {
           resolve: { text: text.reportResolvedBanner, color: "#2a9d4e" },
           dismiss: { text: text.reportDismissedBanner, color: "var(--meta)" },
@@ -183,7 +209,7 @@ export function useChatModeration({
     } finally {
       setReportActionPendingId(null);
     }
-  }, [patchReportMessage, reportActionPendingId, setBanner, text]);
+  }, [applyReportInboxUpdates, patchReportMessage, reportActionPendingId, setBanner, text]);
 
   const handlePetitionAction = useCallback(async (
     petition: PetitionMeta,
@@ -200,9 +226,11 @@ export function useChatModeration({
         error?: string;
         petition?: PetitionMeta;
         message_text?: string;
+        report_updates?: ReportInboxUpdate[];
       };
 
       if (result?.ok && result.petition) {
+        applyReportInboxUpdates(result.report_updates);
         patchPetitionMessage(petition.petition_id, (message) => ({
           ...message,
           text: result.message_text || message.text,
@@ -228,7 +256,7 @@ export function useChatModeration({
     } finally {
       setReportActionPendingId(null);
     }
-  }, [patchPetitionMessage, reportActionPendingId, setBanner, text]);
+  }, [applyReportInboxUpdates, patchPetitionMessage, reportActionPendingId, setBanner, text]);
 
   const handleModerationPetitionSubmit = useCallback(async (petitionText: string) => {
     if (submittingModerationPetition) return;

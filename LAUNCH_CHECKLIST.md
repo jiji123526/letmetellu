@@ -13,7 +13,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Google login/signup callbacks and Resend delivery use the production domain.
 - [x] Email signup verification and password reset were exercised in production during the beta setup.
 - [x] The super-admin operational-health view and bounded operational-event retention are deployed.
-- [x] Worker hardening coverage currently passes 60 focused tests covering trusted identity, privileged route boundaries, origin checks, upload and preview validation, YouTube URL parsing, live-session ending, message idempotency, reply normalization, rate limiting, support query shape, cleanup reliability and health-state derivation.
+- [x] Worker hardening coverage includes focused tests for trusted identity, privileged route boundaries, report-state synchronization, origin checks, upload and preview validation, live-session ending, message idempotency, reply normalization, rate limiting, support query shape, cleanup reliability and health-state derivation.
 - [x] GitHub Actions runs the Worker hardening suite, TypeScript check and Wrangler dry-run on every relevant `main` push and pull request. It performs no production deploy and requires no production secrets.
 - [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
 - [x] New replies are normalized to their top-level message. The 2026-08-13 production audit found 1,057 replies across 6,855 messages with no nested, broken, cross-channel, cyclic or over-depth relationships; maximum observed depth was one.
@@ -33,7 +33,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 ### Still required before a broad public launch
 
-- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants and authoritative ticket refresh logic are covered; deployed support/report browser transitions remain.
+- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket refresh and report-state synchronization are covered; deployed support/report browser transitions remain.
 - [ ] Collect normal production health baselines, calibrate thresholds and document an operator response procedure; add external alerts for degraded/critical states after calibration.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.

@@ -39,7 +39,7 @@ Status as of 2026-08-13:
 | `/api/media/*` | Public media only where channel policy permits | Protected media requires current room authorization on network access/revalidation | Owned-channel media allowed | No blanket media override | Cache/access focused tests; an already cached private response can remain reusable for its bounded browser-cache window |
 | `/api/dm` | Signed actor and channel policy required | Same, with room token for locked room | Owner receives data through owner-only data route | No implicit override | Idempotency/identity controls plus deleted-channel and expired-live route invariants; broader action regression pending |
 | `/api/channel-reports` POST | Signed actor/device required | Locked channel additionally requires room token | Owner cannot report own channel | Same submission rules | Durable quota and target-channel lookup; direct target/evidence expansion pending |
-| `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity, platform-role, per-action denial and target-lookup tests |
+| `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity, platform-role, per-action denial, target lookup, atomic terminal transitions and complete report-state response coverage |
 | `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation, owned lifecycle transitions and database-enforced one-open-session/ticket invariants; browser regression pending |
 | `/api/platform-admin/support` | Denied | Denied | Denied unless platform admin | Allowed | Shared trusted-identity/platform-role tests plus focused authoritative dashboard-state synchronization coverage |
 | `/api/user` account reads/writes | Denied except documented public profile/channel-existence reads | Same | Own account through trusted proxy | Own account through trusted proxy | Functional forged preference-update rejection test |
@@ -69,14 +69,17 @@ Status as of 2026-08-13:
   and presence joins while leaving valid normal-room access unchanged.
 - [x] Verify guided-support start/escalate races converge on one open session
   and ticket, and close/reset mutations remain bound to the owning user.
+- [x] Report and petition terminal actions use conditional state transitions,
+  and channel-level moderation responses reconcile every affected report row.
 
 ### Browser-visible state transitions
 
 - [ ] Exercise guided support close/reset/escalate and one-open-ticket behavior
   through the deployed browser UI; Worker lifecycle invariants are covered.
 - [ ] User ticket close/delete reflected in the platform-admin dashboard.
-- [ ] Report open/warn/freeze/unfreeze/petition state reflected in both inbox
-  and channel UI without stale privileged data.
+- [ ] Verify the deployed report open/warn/freeze/unfreeze/petition flow in
+  both inbox and channel UI; mutation-wide reconciliation and owner refresh
+  have focused automated coverage.
 - [ ] Logout and account deletion invalidate privileged HTTP and WebSocket
   behavior in another open tab.
 - [x] A hidden or disconnected live tab reconciles ended/replaced session state

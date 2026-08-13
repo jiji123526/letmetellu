@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Report moderation state synchronizes across privileged views — 2026-08-13
+
+- Channel-level moderation actions previously rewrote every related report message on the server, but the acting reports inbox patched only the selected message and depended on receiving its own WebSocket broadcasts for the rest.
+- Moderation and petition mutation responses now include the complete set of affected report inbox updates. The acting browser applies them together, so report filters and restricted-channel summaries immediately reflect warn, suspend, freeze, unfreeze and petition changes.
+- Channel owners now refresh authoritative moderation details after every non-live moderation-state event, including warning and suspension transitions rather than only freeze changes.
+- Report resolve/dismiss and petition accept/reject updates now verify that their conditional `open`-state write changed a row. Concurrent or repeated terminal actions return a conflict instead of producing duplicate audit or notification side effects.
+- Focused regression coverage preserves the mutation response, client reconciliation, owner refresh and compare-and-set transition contracts.
+
+Trade-off: successful channel-level moderation responses are larger because they carry metadata and formatted text for every report associated with that channel. Report counts are normally small, and this bounded mutation-time cost avoids polling and stale privileged UI state.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required. Verify warn, freeze, petition resolution and unfreeze from the reports inbox while the owner channel is open in another browser or tab.
+
 ### Support ticket closures authoritatively refresh the admin dashboard — 2026-08-13
 
 - The platform dashboard already polled a lightweight support/report version, but a detected change reloaded tickets without statistics and merged the response into the existing paginated list.

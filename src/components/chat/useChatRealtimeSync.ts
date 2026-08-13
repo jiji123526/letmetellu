@@ -419,6 +419,7 @@ export function useChatRealtimeSync({
 
       if (event.type === "moderation-state-change" && !event.live) {
         setViewerModerationStatus(event.status === "frozen" ? "frozen" : null);
+        if (isOwner) refreshOwnerModeration();
       }
 
       if (event.type === "profile-change") {

@@ -484,7 +484,7 @@ async function syncChannelReportInboxMessages(
   channelId: string,
   env: Env,
   locale: UserLocale,
-): Promise<void> {
+): Promise<Array<{ message_id: string; report: ReportMeta; message_text: string }>> {
   const parentChannelId = getParentChannelId(channelId);
   const rows = await env.DB.prepare(`
     SELECT
@@ -510,16 +510,24 @@ async function syncChannelReportInboxMessages(
     WHERE cr.channel_id = ? AND cr.inbox_message_id IS NOT NULL
   `).bind(parentChannelId).all<ChannelReportRow>();
 
+  const updates: Array<{ message_id: string; report: ReportMeta; message_text: string }> = [];
   for (const row of rows.results || []) {
     if (!row.inbox_message_id) continue;
     const reportMeta = buildReportMeta(row, env, locale);
+    const messageText = formatReportMessageFromMeta(reportMeta, locale);
     await editReportsInboxMessage({
       env,
       messageId: row.inbox_message_id,
-      text: formatReportMessageFromMeta(reportMeta, locale),
+      text: messageText,
       extra: { report_meta: reportMeta },
     });
+    updates.push({
+      message_id: row.inbox_message_id,
+      report: reportMeta,
+      message_text: messageText,
+    });
   }
+  return updates;
 }
 
 async function maybeSendAutomaticOwnerWarning(input: {
@@ -577,11 +585,14 @@ async function handleReportResolutionAction(input: {
 
   const resolvedAt = new Date().toISOString();
   const nextStatus = input.action === "resolve" ? "resolved" : "dismissed";
-  await input.env.DB.prepare(`
+  const updateResult = await input.env.DB.prepare(`
     UPDATE channel_reports
     SET status = ?, resolution_note = ?, resolved_at = ?
     WHERE id = ? AND status = 'open'
   `).bind(nextStatus, input.resolutionNote || null, resolvedAt, input.reportId).run();
+  if (!updateResult.meta.changes) {
+    return Response.json({ error: "report_already_processed" }, { status: 409 });
+  }
 
   await appendModerationAuditLog({
     env: input.env,
@@ -887,7 +898,29 @@ async function handleModerationAction(input: {
   }
 
   if (input.action === "warn_owner" || input.action === "send_suspend_notice" || input.action === "freeze_channel" || input.action === "unfreeze_channel") {
-    await syncChannelReportInboxMessages(existing.channel_id, input.env, input.actorLocale);
+    const reportUpdates = await syncChannelReportInboxMessages(
+      existing.channel_id,
+      input.env,
+      input.actorLocale,
+    );
+    const selectedUpdate = reportUpdates.find((update) => update.report.report_id === existing.id);
+    const updatedSelected = selectedUpdate
+      ? null
+      : await fetchChannelReportById(existing.id, input.env);
+    if (!selectedUpdate && !updatedSelected) {
+      return Response.json({ error: "report_not_found" }, { status: 404 });
+    }
+    const selectedReport = selectedUpdate?.report
+      || buildReportMeta(updatedSelected!, input.env, input.actorLocale);
+    const selectedMessageText = selectedUpdate?.message_text
+      || formatReportMessageFromMeta(selectedReport, input.actorLocale);
+    return Response.json({
+      ok: true,
+      report: selectedReport,
+      message_text: selectedMessageText,
+      report_updates: reportUpdates,
+      acted_by: input.actorUserId,
+    });
   }
 
   const synced = await syncReportInboxMessage(existing.id, input.env, input.actorLocale);
@@ -952,7 +985,11 @@ async function handleChannelPetitionAction(input: {
     });
     await broadcastFreezeChange(petition.channel_id, false, input.env);
     await broadcastModerationStateChange(petition.channel_id, "active", input.env);
-    await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
+    const reportUpdates = await syncChannelReportInboxMessages(
+      petition.channel_id,
+      input.env,
+      input.actorLocale,
+    );
     await appendModerationAuditLog({
       env: input.env,
       actorUserId: input.actorUserId,
@@ -1008,6 +1045,7 @@ async function handleChannelPetitionAction(input: {
       ok: true,
       petition: petitionMeta,
       message_text: petitionText,
+      report_updates: reportUpdates,
       acted_by: input.actorUserId,
     });
   }
@@ -1018,11 +1056,14 @@ async function handleChannelPetitionAction(input: {
 
   const resolvedAt = new Date().toISOString();
   const nextStatus = input.action === "accept_petition" ? "accepted" : "rejected";
-  await input.env.DB.prepare(`
+  const updateResult = await input.env.DB.prepare(`
     UPDATE channel_petitions
     SET status = ?, resolved_at = ?, resolved_by = ?, resolution_note = ?
     WHERE id = ? AND status = 'open'
   `).bind(nextStatus, resolvedAt, input.actorUserId, input.resolutionNote || null, petition.id).run();
+  if (!updateResult.meta.changes) {
+    return Response.json({ error: "petition_already_processed" }, { status: 409 });
+  }
 
   if (nextStatus === "accepted") {
     await input.env.DB.prepare("UPDATE channels SET is_frozen = 0 WHERE id = ?")
@@ -1123,7 +1164,11 @@ async function handleChannelPetitionAction(input: {
     },
   });
 
-  await syncChannelReportInboxMessages(petition.channel_id, input.env, input.actorLocale);
+  const reportUpdates = await syncChannelReportInboxMessages(
+    petition.channel_id,
+    input.env,
+    input.actorLocale,
+  );
 
   const updated = await fetchChannelPetitionById(petition.id, input.env);
   if (!updated) {
@@ -1144,6 +1189,7 @@ async function handleChannelPetitionAction(input: {
     ok: true,
     petition: petitionMeta,
     message_text: petitionText,
+    report_updates: reportUpdates,
     acted_by: input.actorUserId,
   });
 }
