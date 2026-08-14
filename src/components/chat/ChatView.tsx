@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { getStoredUid } from "@/lib/api-core";
-import { adminAction, fetchInit, fetchOwnerChannels } from "@/lib/api-chat";
+import { adminAction, fetchInit } from "@/lib/api-chat";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -92,8 +92,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [galleryHasMore, setGalleryHasMore] = useState(true);
   const galleryLoading = useRef(false);
   const [showChannelDeleted, setShowChannelDeleted] = useState(false);
-  const [ownerChannelCount, setOwnerChannelCount] = useState(0);
   const { isOwner, isLoggedIn, userId: authUserId } = useAuth(channel?.owner_uid);
+  const ownerChannelCount = channel?.owner_channel_count || 0;
   const { t, locale, timeZone } = useLocale();
   const [manualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -102,18 +102,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const isAdmin = isOwner || manualAdmin;
   const [adminViewAsUser, setAdminViewAsUser] = useState(false);
 
-  useEffect(() => {
-    if (!channel?.id) return;
-    let active = true;
-    fetchOwnerChannels(channelId)
-      .then((data) => {
-        if (active) {
-          setOwnerChannelCount((data.channels || []).length);
-        }
-      })
-      .catch(() => { if (active) setOwnerChannelCount(0); });
-    return () => { active = false; };
-  }, [channel?.id, channel?.show_on_profile, channelId]);
   const [activeNotice, setActiveNotice] = useState(() => {
     if (typeof window === "undefined") return "";
     return localStorage.getItem(`activeNotice_${channelId}`) || "";

@@ -134,8 +134,8 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
          AND id NOT LIKE '%_live'
          ${reportsChannelId ? "AND id != ?" : ""}
          AND show_on_profile = 1
-       ORDER BY created_at ASC
-       LIMIT 50`
+       ORDER BY created_at ASC, id ASC
+       LIMIT 5`
     ).bind(channel.owner_uid, ...(reportsChannelId ? [reportsChannelId] : [])).all();
     return Response.json({ channels });
   }

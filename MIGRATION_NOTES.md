@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Owner-channel navigation no longer fetches a full list during chat startup — 2026-08-14
+
+- Every mounted chat previously issued a separate `/api/user?channel=...` request and loaded up to 50 public channels from the current owner only to decide whether the header profile button should be enabled.
+- The product already enforces at most five normal channels per owner. The 50-row endpoint limit matched the separate beta-wide channel ceiling, not the per-owner invariant.
+- D1 Insights recorded 2,218 executions, `59.89k` rows read and `104` rows read per returned row. Individual SQL latency was already low at `0.2 ms` p50 and `0.4 ms` p99; the larger waste was one additional browser request per chat load and a global channel scan caused by the missing owner-leading index.
+- Migration `0042_owner_channel_profile_lookup.sql` adds `(owner_uid, show_on_profile, created_at, id)`. The existing init batch now performs a covering probe capped at two IDs and returns `owner_channel_count` as `0`, `1` or `2`; the client only needs to know whether multiple public channels exist.
+- `ChatView` derives the header state from init metadata and no longer fetches the owner list during startup. The full list is requested only when the popup opens, uses the same index for deterministic chronological ordering and is capped at the real five-channel maximum.
+- `worker/scripts/audit-owner-channel-query.sql` verifies both the two-row init probe and five-row popup plan. Focused source coverage preserves the lazy request boundary, product limit and init contract.
+
+Trade-off: every full init, including reconnect recovery init, now executes one tiny indexed probe, while the previous separate request usually ran once per mounted page. The probe reads at most two index entries and shares the existing D1 batch, so this may increase statement count during reconnect-heavy sessions while removing normal startup HTTP fan-out and reducing total rows read. The popup remains authoritative if ownership or profile visibility changes after init.
+
+Deployment note: apply migration `0042`, deploy the Worker, then deploy the frontend. No data backfill is required. Verify single-channel headers remain disabled, multi-channel headers open the complete list, and D1 Insights shows the old 50-row owner-list fingerprint no longer accumulating from ordinary chat loads.
+
 ### Retention and message cursors avoid broad read scans — 2026-08-14
 
 - D1 Insights showed scheduled actor-identity retention reading `206.58k` rows across only 25 executions, with `11.7 ms` p50 and `16.7 ms` p99 latency. Each bounded cleanup selection scanned roughly `8.3k` rows because the existing actor indexes began with `channel_id`, while retention filters globally by `created_at`.

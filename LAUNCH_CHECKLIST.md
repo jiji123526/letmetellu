@@ -40,6 +40,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Conditional chat interfaces are split from the initial route bundle. Comparable production builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`), and superseded bootstrap traces no longer remain falsely `pending`.
 - [x] Gallery paging now uses ordered gallery rows plus indexed active image-message lookups, replacing a production plan that read `97.53k` rows across 31 requests. Migration `0040` and Worker/frontend rollout remain.
 - [x] Actor-identity retention and message cursor/parent reads now use age, composite-cursor and child-existence index ranges. Migration `0041` and Worker rollout remain.
+- [x] Owner-channel navigation state now comes from an indexed two-row init probe; the separate startup list request is removed and the popup list matches the five-channel product limit. Migration `0042` and Worker/frontend rollout remain.
 
 ### Still required before a broad public launch
 
@@ -57,6 +58,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [ ] In D1 Insights, confirm the retired `WITH requested_roots` fingerprint stops accumulating post-deployment executions and compare new root/child rows-read-per-row against the recorded `2.7k-3.6k` baseline.
 - [ ] After applying migration `0040` and deploying Worker/frontend, run `worker/scripts/audit-gallery-query.sql`, load at least two gallery pages, and confirm the new `CROSS JOIN` fingerprint materially improves on the recorded `30.6 ms` p50, `38.9 ms` p99 and `63` rows-read-per-row baseline.
 - [ ] After applying migration `0041` and deploying the Worker, run `worker/scripts/audit-query-read-optimizations.sql`; verify older/newer paging plus message navigation and compare retention/cursor/parent fingerprints against the recorded `11.7 ms`, `39` and `77` baselines.
+- [ ] After applying migration `0042` and deploying Worker/frontend, run `worker/scripts/audit-owner-channel-query.sql`; verify one- and multi-channel headers, then confirm ordinary chat startup no longer accumulates the old owner-list fingerprint recorded at `2,218` executions and `104` rows-read-per-row.
 - [ ] Audit remaining chronological query shapes before considering removal of `messages_channel_idx`; root-owned paging no longer provides evidence for removing it because that path now uses the dedicated `0037` index.
 - [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
 - [ ] When a genuine post-deployment Durable Object failure occurs, confirm `realtime_unavailable` produces degraded health without an `/api/init` `500`; independently verify WebSocket reconnect restores the live presence count.

@@ -84,6 +84,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### Phase 3: chat init and reconnect shaping
 
+- Implemented on 2026-08-14, rollout verification pending: owner-channel navigation state now comes from a two-row indexed probe inside the existing init batch. Chat startup no longer makes a separate full owner-list request, and the popup alone loads the complete list capped at the enforced five-channel maximum. Compare request counts and the old `104` rows-read-per-row fingerprint after migration `0042` and the Worker/frontend rollout.
 - Completed on 2026-08-14: the delayed reconnect notice now renders only when realtime loss affects the active view. Normal chat shows it at the live edge, historical context and scrolled-up rendered history suppress it, and active live/DM modes retain it. Socket retries and recovery synchronization continue in every case.
 - The first reconnect-shaping slice is complete: initial WebSocket authorization is no longer treated as a reconnect, so it does not repeat the page bootstrap reads. A true reconnect now performs one recovery request instead of independently fetching messages and channel init state.
 - Normal viewers merge the message snapshot carried by their reconnect init without leaving contextual-history mode; owners retain a full recovery init, and the legacy manual-admin path keeps a message-only refresh.

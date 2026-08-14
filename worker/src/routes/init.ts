@@ -5,7 +5,7 @@ import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
 import { readInitPresenceCount } from "../lib/init-presence";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
 import { withOperationalErrorContext } from "../lib/operational-events";
-import { getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
@@ -136,6 +136,22 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
       env.DB.prepare("SELECT status FROM channel_moderation WHERE channel_id = ? LIMIT 1").bind(parentChannelId),
     ];
+    const reportsChannelId = getReportsChannelId(env);
+    const ownerChannelCountIndex = statements.length;
+    statements.push(
+      env.DB.prepare(`
+        SELECT id
+        FROM channels
+        WHERE owner_uid = ?
+          AND show_on_profile = 1
+          AND id NOT LIKE '%_live'
+          ${reportsChannelId ? "AND id != ?" : ""}
+        LIMIT 2
+      `).bind(
+        (channel as { owner_uid: string }).owner_uid,
+        ...(reportsChannelId ? [reportsChannelId] : []),
+      )
+    );
 
     routeStage = "prepare_viewer_block_lookup";
 
@@ -182,6 +198,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const config = new Map(configRows.map((row) => [row.id, row.text]));
     const liveRow = batchResults[1].results?.[0] as { is_frozen?: number } | undefined;
     const moderationRow = batchResults[2].results?.[0] as { status?: string } | undefined;
+    const ownerChannelCount = Math.min(
+      batchResults[ownerChannelCountIndex].results?.length || 0,
+      2,
+    );
     const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
     const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
     const viewerBlocked = viewerBlockedIndex === null
@@ -217,6 +237,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     // need to know whether a gate exists, never the hash itself.
     const safeChannel = { ...(responseChannel as Record<string, unknown>) };
     delete safeChannel.passcode;
+    safeChannel.owner_channel_count = ownerChannelCount;
 
     const ownerRoomToken = isOwner && (channel as any).passcode
       ? await createRoomToken(parentChannelId, (channel as any).passcode, env)

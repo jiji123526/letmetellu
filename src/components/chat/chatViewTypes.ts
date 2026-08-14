@@ -10,6 +10,7 @@ export interface Channel {
   notice: string;
   passcode_hint?: string | null;
   owner_name?: string | null;
+  owner_channel_count?: number;
   instance_id?: string | null;
   show_on_profile?: number;
   background_type?: "default" | "color" | "image";
