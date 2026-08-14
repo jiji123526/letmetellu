@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Authentication outcomes and legacy upgrades are operationally visible — 2026-08-14
+
+- Verification email delivery/completion, password-reset delivery/completion and one-time legacy SHA-256-to-PBKDF2 login upgrades now record bounded operational outcomes.
+- Events retain only the opaque user ID needed for investigation. They exclude email addresses, passwords, tokens, hashes, provider responses and exception text.
+- The platform health card shows rolling 24-hour sent, completed and failed counts plus the number of credential users whose hash still uses the legacy format. These counts are informational and do not change calibrated core-health thresholds; actual email-delivery `502`s still flow through existing `5xx` health alerts.
+- `worker/scripts/audit-auth-monitoring.sql` reports aggregate outcomes, remaining legacy hashes and recent failure timestamps without selecting account identifiers. `OPERATIONS_RUNBOOK.md` defines a precondition-guarded disposable-account rehearsal.
+- Focused regression coverage preserves every event boundary, aggregate normalization and dashboard contract.
+
+Trade-off: each actual email send, token completion or one-time legacy upgrade adds one best-effort D1 operational-event write. Normal PBKDF2 logins add no write, and monitoring failure cannot reject an otherwise valid account action.
+
+Deployment note: deploy the Worker before the frontend. No D1 migration is required. Rehearse one verification, one reset and one disposable legacy login, then run the audit and confirm the health card matches.
+
 ### Owner-channel navigation no longer fetches a full list during chat startup — 2026-08-14
 
 - Every mounted chat previously issued a separate `/api/user?channel=...` request and loaded up to 50 public channels from the current owner only to decide whether the header profile button should be enabled.

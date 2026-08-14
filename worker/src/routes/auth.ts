@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { recordAuthMonitoringEvent } from "../lib/auth-monitoring.ts";
 
 // Cloudflare Workers Web Crypto currently caps PBKDF2 at 100,000 iterations.
 const PBKDF2_ITERATIONS = 100_000;
@@ -240,8 +241,20 @@ async function handlePasswordResetRequest(
     await sendPasswordResetEmail(env, user.email, rawToken, tokenHash, body.locale === "en" ? "en" : "ko");
   } catch {
     await env.DB.prepare("DELETE FROM password_reset_tokens WHERE token_hash = ?").bind(tokenHash).run();
+    await recordAuthMonitoringEvent({
+      env,
+      eventType: "password_reset_delivery_failed",
+      actorUserId: user.id,
+      severity: "warn",
+      statusCode: 502,
+    });
     return Response.json({ error: "email_delivery_failed" }, { status: 502 });
   }
+  await recordAuthMonitoringEvent({
+    env,
+    eventType: "password_reset_sent",
+    actorUserId: user.id,
+  });
   return Response.json({ ok: true });
 }
 
@@ -287,6 +300,11 @@ async function handlePasswordReset(
   await env.DB.prepare(
     "DELETE FROM email_auth_requests WHERE email_hash = ? AND action = 'login-failed'"
   ).bind(await sha256(normalizeEmail(record.email))).run();
+  await recordAuthMonitoringEvent({
+    env,
+    eventType: "password_reset_completed",
+    actorUserId: record.user_id,
+  });
   return Response.json({ ok: true });
 }
 
@@ -363,9 +381,21 @@ async function handleSignup(
   } catch {
     await env.DB.prepare("DELETE FROM email_verification_tokens WHERE token_hash = ?")
       .bind(tokenHash).run();
+    await recordAuthMonitoringEvent({
+      env,
+      eventType: "email_verification_delivery_failed",
+      actorUserId: userId,
+      severity: "warn",
+      statusCode: 502,
+    });
     return Response.json({ error: "email_delivery_failed" }, { status: 502 });
   }
 
+  await recordAuthMonitoringEvent({
+    env,
+    eventType: "email_verification_sent",
+    actorUserId: userId,
+  });
   return Response.json({ ok: true, pending: true });
 }
 
@@ -397,7 +427,7 @@ async function handleVerifyEmail(body: { token?: string }, env: Env) {
     return Response.json({ error: "invalid_or_expired_token" }, { status: 400 });
   }
 
-  await env.DB.batch([
+  const results = await env.DB.batch([
     env.DB.prepare(
       "UPDATE email_verification_tokens SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
     ).bind(now, tokenHash),
@@ -405,6 +435,13 @@ async function handleVerifyEmail(body: { token?: string }, env: Env) {
       "UPDATE users SET email_verified_at = datetime('now') WHERE id = ? AND lower(email) = ? AND email_verified_at IS NULL"
     ).bind(record.user_id, normalizeEmail(record.email)),
   ]);
+  if (results[1].meta.changes) {
+    await recordAuthMonitoringEvent({
+      env,
+      eventType: "email_verification_completed",
+      actorUserId: record.user_id,
+    });
+  }
   return Response.json({ ok: true });
 }
 
@@ -488,10 +525,24 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
     // A legacy hash upgrade is best-effort and must never reject valid credentials.
     if (!user.password_hash.startsWith("pbkdf2-sha256$")) {
       try {
-        await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?")
-          .bind(await createPasswordHash(password), user.id).run();
+        const result = await env.DB.prepare(
+          "UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?"
+        ).bind(await createPasswordHash(password), user.id, user.password_hash).run();
+        if (result.meta.changes) {
+          await recordAuthMonitoringEvent({
+            env,
+            eventType: "legacy_password_upgrade_succeeded",
+            actorUserId: user.id,
+          });
+        }
       } catch (error) {
         console.error("Legacy password upgrade failed", user.id, error);
+        await recordAuthMonitoringEvent({
+          env,
+          eventType: "legacy_password_upgrade_failed",
+          actorUserId: user.id,
+          severity: "warn",
+        });
       }
     }
     await env.DB.prepare(

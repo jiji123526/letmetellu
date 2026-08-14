@@ -234,3 +234,57 @@ The dashboard being critical during this test is expected.
 
 After verification, confirm one critical email, one recovery email, no duplicate
 email on intervening evaluations, and a final `notified_status = 'healthy'`.
+
+## Account Authentication Monitoring
+
+The expanded platform health card reports these rolling 24-hour authentication
+outcomes separately from core service severity:
+
+- verification email sent, verification completed and delivery failed;
+- password-reset email sent, reset completed and delivery failed;
+- legacy SHA-256 password upgraded, upgrade failed and legacy hashes remaining.
+
+Delivery failures still return `502`, so the existing core `5xx` health and
+alert path also sees an actual provider outage. A failed legacy upgrade does
+not reject valid login and therefore appears only in the account-security
+summary. The events store an opaque user ID for investigation but never store
+an email address, password, reset/verification token, password hash, provider
+response or exception text.
+
+Run the privacy-bounded audit from `worker/`:
+
+```bash
+npx wrangler d1 execute letsplay-db --remote \
+  --command "$(cat scripts/audit-auth-monitoring.sql)"
+```
+
+### Legacy Password Upgrade Rehearsal
+
+Use a disposable, verified credential account and a unique test password. Do
+not alter a real user or an OAuth-only account.
+
+1. Create and verify the disposable account through the production UI. Record
+   its opaque user ID and confirm the account owns no data that must be kept.
+2. Locally calculate the 64-character lowercase SHA-256 digest of the test
+   password. Do not place the cleartext password in SQL or shell history.
+3. Update only that exact user ID from its existing `pbkdf2-sha256$...` value
+   to the calculated legacy digest. Include `email_verified_at IS NOT NULL`
+   and `password_hash LIKE 'pbkdf2-sha256$%'` preconditions so an unexpected
+   row cannot be changed.
+4. Log in through the normal email-login UI. The login must succeed without a
+   password-reset detour.
+5. Query only `id` and `substr(password_hash, 1, 14)` for the test user. Confirm
+   the prefix is now `pbkdf2-sha256$`, the dashboard reports one successful
+   upgrade, no upgrade failure was recorded, and the remaining count decreased.
+6. Log out and log in again to prove the PBKDF2 value verifies normally. A
+   second upgrade event must not appear.
+7. Delete the disposable account through the normal account-deletion flow.
+
+Also rehearse one new-account verification and one password reset with a
+non-owner mailbox. Confirm the links arrive, complete once, reject reuse, and
+the old password fails after reset while the new password succeeds. Compare
+the health-card totals with `audit-auth-monitoring.sql`.
+
+Operational-event recording is best-effort and must never block signup, reset
+or login. Each actual send, completion or one-time legacy upgrade adds one
+small D1 event write; ordinary PBKDF2 logins add no monitoring write.

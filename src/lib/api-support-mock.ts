@@ -538,6 +538,13 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
       last_alert_kind: null,
       last_alert_at: null,
     },
+    auth_monitoring: {
+      window_hours: 24,
+      email_verification: { sent: 2, completed: 1, delivery_failed: 0 },
+      password_reset: { sent: 1, completed: 1, delivery_failed: 0 },
+      legacy_password_upgrade: { succeeded: 0, failed: 0, remaining: 0 },
+      last_failure_at: null,
+    },
     routes: [],
     _status: 200,
   };

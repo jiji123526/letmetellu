@@ -44,7 +44,7 @@ Status as of 2026-08-13:
 | `/api/platform-admin/support` | Denied | Denied | Denied unless platform admin | Allowed | Shared trusted-identity/platform-role tests plus focused authoritative dashboard-state synchronization coverage |
 | `/api/user` account reads/writes | Denied except documented public profile/channel-existence reads | Same | Own account through trusted proxy | Own account through trusted proxy | Functional forged preference-update rejection test |
 | `/api/recent-channels` | Browser-local only; Worker account route denied | Same | Own rows through trusted proxy | Own rows through trusted proxy | Identity/email canonicalization exists; action regression pending |
-| `/api/auth` | Public credential flow through trusted app origin/proxy contract | Same | Same | Same | Rate limits and token lifecycle implemented; email/legacy monitoring pending |
+| `/api/auth` | Public credential flow through trusted app origin/proxy contract | Same | Same | Same | Rate limits and token lifecycle implemented; privacy-bounded email/reset/legacy-upgrade monitoring implemented, rollout rehearsal pending |
 | `/api/preview` | Allowed with durable IP-derived quota and SSRF policy | Same | Same | Same | Server-side fetch policy remains authoritative; YouTube uses validated video IDs and deterministic thumbnails without client widgets or metadata fetches |
 
 ## Required regression scenarios

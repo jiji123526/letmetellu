@@ -22,7 +22,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
 - [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
 - [x] Channel and owned-channel account deletion record retryable Durable Object/R2 cleanup, with bounded scheduled retries and operational-health visibility.
-- [x] All D1 migrations through `0038_support_open_lifecycle_invariants.sql` are applied in production.
+- [x] All D1 migrations through `0039_operational_health_alert_state.sql` are applied in production.
 - [x] Cross-store channel cleanup was verified end to end, including D1 deletion, R2 media removal, cleanup-job completion and operational-health visibility.
 - [x] Message history was verified with root-owned pagination: replies remain under their parent, adjacent parent windows do not disappear, and replies to unmounted historical parents do not reappear as latest messages.
 - [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
@@ -33,10 +33,10 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Cross-tab logout and account deletion were deployed and verified to remove owner controls and reconnect chat without stale WebSocket privileges.
 - [x] Fresh protected-media requests and direct capabilities reject stale room access and deleted parent channels before reading R2; bounded private browser-cache reuse is explicitly documented.
 - [x] The first seven-day operational-health baseline was reviewed across 672 fifteen-minute windows. Normal p50/p95/p99 counts were zero, the existing thresholds were retained, and the operator response runbook is complete.
+- [x] External operational-health alerting is deployed with `OPERATIONAL_ALERT_EMAIL` configured. The health card reports alerting enabled, and one controlled critical/recovery cycle delivered exactly one alert and one recovery email without duplicates.
 
 ### Implemented, rollout verification pending
 
-- [x] External operational-health alerting is implemented with shared thresholds, five-minute evaluation, durable deduplication, delivery retry and recovery notifications.
 - [x] Conditional chat interfaces are split from the initial route bundle. Comparable production builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`), and superseded bootstrap traces no longer remain falsely `pending`.
 - [x] The reconnect notice is now visibility-aware: normal chat suppresses it while the user is reading rendered history or historical context, but the socket continues recovering and the notice remains visible at the live edge and in active live/DM modes. Frontend rollout verification remains.
 - [x] Gallery paging now uses ordered gallery rows plus indexed active image-message lookups, replacing a production plan that read `97.53k` rows across 31 requests. Migration `0040` and Worker/frontend rollout remain.
@@ -46,8 +46,8 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 ### Still required before a broad public launch
 
 - [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization, cross-tab socket revocation and media-access revocation are covered; deployed support/report transitions remain.
-- [ ] Finish the external-alert rollout: apply migration `0039`, configure `OPERATIONAL_ALERT_EMAIL`, deploy the Worker/frontend, confirm the health card reports alerting enabled, and verify one critical/recovery cycle without duplicate email.
-- [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
+- [x] Finished the external-alert rollout: migration `0039`, recipient configuration, Worker/frontend deployment, health-card status and a duplicate-free critical/recovery delivery cycle are verified.
+- [x] Privacy-bounded monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades is implemented in the platform health card; Worker/frontend rollout and the disposable-account rehearsal remain.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
 - [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
 - [ ] Expand durable abuse controls and validate direct-API report evidence/targets before materially widening access.
@@ -60,6 +60,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [ ] After applying migration `0040` and deploying Worker/frontend, run `worker/scripts/audit-gallery-query.sql`, load at least two gallery pages, and confirm the new `CROSS JOIN` fingerprint materially improves on the recorded `30.6 ms` p50, `38.9 ms` p99 and `63` rows-read-per-row baseline.
 - [ ] After applying migration `0041` and deploying the Worker, run `worker/scripts/audit-query-read-optimizations.sql`; verify older/newer paging plus message navigation and compare retention/cursor/parent fingerprints against the recorded `11.7 ms`, `39` and `77` baselines.
 - [ ] After applying migration `0042` and deploying Worker/frontend, run `worker/scripts/audit-owner-channel-query.sql`; verify one- and multi-channel headers, then confirm ordinary chat startup no longer accumulates the old owner-list fingerprint recorded at `2,218` executions and `104` rows-read-per-row.
+- [ ] After deploying Worker/frontend authentication monitoring, run `worker/scripts/audit-auth-monitoring.sql`; rehearse verification, reset and a disposable legacy-hash login, then confirm one upgrade event, no failure, a `pbkdf2-sha256$` replacement and no second upgrade event on the next login.
 - [x] Reviewed the remaining top-read D1 fingerprints on 2026-08-14. Main root/child paging was already efficient at `2` and `8` rows read per returned row. The 672-window recursive health query was a manually run audit, not application traffic. Substring message search read `21.48k` rows across 14 executions but remained only `0.13%` of runtime at `1.4 ms` p50 and `1.6 ms` p99, so a full-text index is not currently justified.
 - [ ] Audit remaining chronological query shapes before considering removal of `messages_channel_idx`; root-owned paging no longer provides evidence for removing it because that path now uses the dedicated `0037` index.
 - [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
@@ -93,8 +94,8 @@ Do not treat the app as public-launch ready until these are complete:
 - Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
 
 2. Monitoring and operator alerting
-- The health dashboard, repeatable seven-day baseline audit, initial production calibration, response runbook and deduplicated email-alert implementation are complete.
-- Apply migration `0039`, configure the recipient secret, deploy, and test one critical/recovery cycle. Preview failures, expected forbidden requests and media misses remain outside core paging.
+- The health dashboard, repeatable seven-day baseline audit, initial production calibration, response runbook and deduplicated email-alert rollout are complete.
+- Migration `0039`, recipient configuration, deployment, enabled-state reporting and one duplicate-free critical/recovery email cycle are production-verified. Preview failures, expected forbidden requests and media misses remain outside core paging.
 - Add bounded operator summaries for moderation/support audit trends.
 - Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
 

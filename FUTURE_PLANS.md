@@ -10,11 +10,10 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 1. Remove transition origins after rollback readiness, then complete the nonce-based CSP hardening sequence.
 2. Complete deployed browser regression checks for support and report transitions; cross-tab auth and fresh media-access revocation are covered.
-3. Finish production rollout and critical/recovery verification for the completed external health-alert delivery path.
-4. Add explicit monitoring for production email and legacy credential-upgrade paths.
-5. Extend the production-verified retryable channel-cleanup foundation only to remaining cross-store retention workflows that need it.
-6. Expand durable abuse controls beyond the current first pass.
-7. Use the new dashboard startup measurements to decide whether any larger derived-activity redesign is justified.
+3. Add explicit monitoring for production email and legacy credential-upgrade paths.
+4. Extend the production-verified retryable channel-cleanup foundation only to remaining cross-store retention workflows that need it.
+5. Expand durable abuse controls beyond the current first pass.
+6. Use the new dashboard startup measurements to decide whether any larger derived-activity redesign is justified.
 
 ## Remaining Ship Work
 
@@ -49,10 +48,10 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Repeat `worker/scripts/audit-operational-health-baseline.sql` weekly during beta and after material traffic changes. The first production sample retained the existing `5xx`, exception and `429` thresholds.
 - Track WebSocket disconnect, reconnect-attempt and authorization-failure counts so the jittered exponential reconnect policy can be calibrated from production recovery behavior. Init presence fallbacks are now recorded as `realtime_unavailable`; use them to distinguish provider resets from ordinary client disconnects.
-- Finish the implemented Resend alert rollout: apply migration `0039`, configure `OPERATIONAL_ALERT_EMAIL`, deploy Worker/frontend, confirm the health card reports alerting enabled, and verify one deduplicated critical/recovery cycle. The calibrated decisions and response path are documented in `OPERATIONS_RUNBOOK.md`.
+- Completed on 2026-08-14: migration `0039`, `OPERATIONAL_ALERT_EMAIL`, Worker/frontend deployment and enabled-state reporting are active in production. One controlled critical/recovery cycle delivered exactly one alert and one recovery email without duplicates. The calibrated decisions and response path remain documented in `OPERATIONS_RUNBOOK.md`.
 - Add bounded summaries for moderation action volume, report volume, petition outcomes and support queue age; the underlying audit records already exist, but these trends are not yet presented.
 - Add explicit operational-event coverage for upload failures, preview failures and WebSocket authorization/origin failures.
-- Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
+- Implemented on 2026-08-14, rollout rehearsal pending: email verification, password reset and one-time legacy SHA-256-to-PBKDF2 upgrades now emit privacy-bounded operational outcomes. The platform health card shows 24-hour sent/completed/failed counts and remaining legacy hashes; `worker/scripts/audit-auth-monitoring.sql` and `OPERATIONS_RUNBOOK.md` define production verification without exposing credentials or email addresses.
 - Measure `/api/user`, platform-support dashboard and support-thread latency before pursuing another query redesign.
 - Track scheduled-maintenance duration and per-table deletion counts. Channel cleanup now records R2/Durable Object stage failures and recoveries, but broader scheduled retention still needs equivalent visibility.
 

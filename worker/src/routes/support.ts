@@ -3,6 +3,10 @@ import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityT
 import { getUserLocale, type UserLocale } from "../lib/channel-moderation.ts";
 import { recordOperationalEvent } from "../lib/operational-events.ts";
 import {
+  serializeAuthMonitoringSummary,
+  type AuthMonitoringRow,
+} from "../lib/auth-monitoring.ts";
+import {
   deriveOperationalHealthStatus,
   OPERATIONAL_HEALTH_THRESHOLDS,
   serializeOperationalHealthWindow,
@@ -1503,7 +1507,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
     WHERE created_at >= ?
   `;
 
-  const [last15mRow, last24hRow, routeResults, alertState] = await Promise.all([
+  const [last15mRow, last24hRow, routeResults, alertState, authMonitoringRow] = await Promise.all([
     env.DB.prepare(summarySql).bind(cutoff15m).first<OperationalHealthWindowRow>(),
     env.DB.prepare(summarySql).bind(cutoff24h).first<OperationalHealthWindowRow>(),
     env.DB.prepare(`
@@ -1549,6 +1553,43 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       last_alert_kind: "degraded" | "critical" | "recovery" | null;
       last_alert_at: string | null;
     }>(),
+    env.DB.prepare(`
+      SELECT
+        SUM(event_type = 'email_verification_sent') AS email_verification_sent_count,
+        SUM(event_type = 'email_verification_completed') AS email_verification_completed_count,
+        SUM(event_type = 'email_verification_delivery_failed') AS email_verification_delivery_failed_count,
+        SUM(event_type = 'password_reset_sent') AS password_reset_sent_count,
+        SUM(event_type = 'password_reset_completed') AS password_reset_completed_count,
+        SUM(event_type = 'password_reset_delivery_failed') AS password_reset_delivery_failed_count,
+        SUM(event_type = 'legacy_password_upgrade_succeeded') AS legacy_password_upgrade_succeeded_count,
+        SUM(event_type = 'legacy_password_upgrade_failed') AS legacy_password_upgrade_failed_count,
+        (
+          SELECT COUNT(*)
+          FROM users
+          WHERE password_hash IS NOT NULL
+            AND password_hash NOT LIKE 'pbkdf2-sha256$%'
+        ) AS remaining_legacy_password_count,
+        MAX(CASE
+          WHEN event_type IN (
+            'email_verification_delivery_failed',
+            'password_reset_delivery_failed',
+            'legacy_password_upgrade_failed'
+          )
+          THEN created_at
+        END) AS last_failure_at
+      FROM operational_events
+      WHERE created_at >= ?
+        AND event_type IN (
+          'email_verification_sent',
+          'email_verification_completed',
+          'email_verification_delivery_failed',
+          'password_reset_sent',
+          'password_reset_completed',
+          'password_reset_delivery_failed',
+          'legacy_password_upgrade_succeeded',
+          'legacy_password_upgrade_failed'
+        )
+    `).bind(cutoff24h).first<AuthMonitoringRow>(),
   ]);
 
   const last15m = serializeOperationalHealthWindow(last15mRow);
@@ -1568,6 +1609,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
       last_alert_kind: alertState?.last_alert_kind || null,
       last_alert_at: alertState?.last_alert_at || null,
     },
+    auth_monitoring: serializeAuthMonitoringSummary(authMonitoringRow),
     routes: (routeResults.results || []).map((row) => ({
       route: row.route,
       ...serializeOperationalHealthWindow(row),

@@ -27,6 +27,7 @@ export function PlatformOperationalHealthCard({
       ? t("operationalHealthDegraded")
       : t("operationalHealthHealthy");
   const recent = health?.windows.last_15m;
+  const authMonitoring = health?.auth_monitoring;
   const problemRoutes = (health?.routes || []).filter((route) => (
     route.request_5xx_count
     || route.preview_upstream_failure_count
@@ -110,6 +111,51 @@ export function PlatformOperationalHealthCard({
                 </div>
               ))}
             </div>
+            {authMonitoring && (
+              <div className="mt-3 pt-2.5" style={{ borderTop: "0.5px solid var(--hairline)" }}>
+                <div className="text-[10px] font-semibold mb-1.5" style={{ color: "var(--meta)" }}>
+                  {t("operationalAuthMonitoring").replace("{hours}", String(authMonitoring.window_hours))}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {[
+                    {
+                      label: t("operationalAuthVerification"),
+                      value: t("operationalAuthEmailCounts")
+                        .replace("{sent}", String(authMonitoring.email_verification.sent))
+                        .replace("{completed}", String(authMonitoring.email_verification.completed))
+                        .replace("{failed}", String(authMonitoring.email_verification.delivery_failed)),
+                      failed: authMonitoring.email_verification.delivery_failed,
+                    },
+                    {
+                      label: t("operationalAuthPasswordReset"),
+                      value: t("operationalAuthEmailCounts")
+                        .replace("{sent}", String(authMonitoring.password_reset.sent))
+                        .replace("{completed}", String(authMonitoring.password_reset.completed))
+                        .replace("{failed}", String(authMonitoring.password_reset.delivery_failed)),
+                      failed: authMonitoring.password_reset.delivery_failed,
+                    },
+                    {
+                      label: t("operationalAuthLegacyUpgrade"),
+                      value: t("operationalAuthUpgradeCounts")
+                        .replace("{succeeded}", String(authMonitoring.legacy_password_upgrade.succeeded))
+                        .replace("{failed}", String(authMonitoring.legacy_password_upgrade.failed))
+                        .replace("{remaining}", String(authMonitoring.legacy_password_upgrade.remaining)),
+                      failed: authMonitoring.legacy_password_upgrade.failed,
+                    },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between gap-3 text-[10px]">
+                      <span className="font-medium">{item.label}</span>
+                      <span
+                        className="shrink-0 tabular-nums"
+                        style={{ color: item.failed > 0 ? "#dc2626" : "var(--meta)" }}
+                      >
+                        {item.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {problemRoutes.length > 0 && (
               <div className="mt-3 pt-2.5" style={{ borderTop: "0.5px solid var(--hairline)" }}>
                 <div className="text-[10px] font-semibold mb-1.5" style={{ color: "var(--meta)" }}>{t("operationalHealthProblemRoutes")}</div>

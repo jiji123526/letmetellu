@@ -193,6 +193,25 @@ export interface PlatformOperationalHealthResponse {
     last_alert_kind: "degraded" | "critical" | "recovery" | null;
     last_alert_at: string | null;
   };
+  auth_monitoring?: {
+    window_hours: number;
+    email_verification: {
+      sent: number;
+      completed: number;
+      delivery_failed: number;
+    };
+    password_reset: {
+      sent: number;
+      completed: number;
+      delivery_failed: number;
+    };
+    legacy_password_upgrade: {
+      succeeded: number;
+      failed: number;
+      remaining: number;
+    };
+    last_failure_at: string | null;
+  };
   routes: PlatformOperationalHealthRoute[];
 }
 
