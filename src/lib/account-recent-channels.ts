@@ -13,6 +13,7 @@ interface AccountRecentRow {
   owner_uid: string;
   pinned: number;
   last_visited_at: number;
+  live_active: number;
 }
 
 const ACCOUNT_RECENT_CACHE_PREFIX = "letmetellu_account_recent_channels_v1_";
@@ -40,6 +41,7 @@ export function readCachedAccountRecentChannels(userId: string): RecentChannel[]
         && typeof channel.bubbleColor === "string"
         && typeof channel.lastVisitedAt === "number"
       )
+      .map((channel) => ({ ...channel, liveActive: false }))
       .slice(0, ACCOUNT_RECENT_CACHE_LIMIT);
   } catch {
     return [];
@@ -53,7 +55,10 @@ export function storeCachedAccountRecentChannels(userId: string, channels: Recen
       `${ACCOUNT_RECENT_CACHE_PREFIX}${userId}`,
       JSON.stringify({
         cachedAt: Date.now(),
-        channels: channels.slice(0, ACCOUNT_RECENT_CACHE_LIMIT),
+        channels: channels.slice(0, ACCOUNT_RECENT_CACHE_LIMIT).map((channel) => ({
+          ...channel,
+          liveActive: false,
+        })),
       }),
     );
   } catch {
@@ -98,6 +103,7 @@ export async function fetchAccountRecentChannels(): Promise<RecentChannel[]> {
     hasPasscode: channel.has_passcode === 1,
     ownerName: channel.owner_name || "",
     ownerUid: channel.owner_uid,
+    liveActive: channel.live_active === 1,
     pinned: channel.pinned === 1,
     lastVisitedAt: channel.last_visited_at,
   }));

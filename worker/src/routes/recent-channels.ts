@@ -88,10 +88,20 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
       SELECT c.id, c.name, c.profile_image, c.bubble_color, c.created_at, c.owner_uid,
              c.passcode IS NOT NULL AS has_passcode,
              u.name AS owner_name,
-             r.last_visited_at, r.pinned, r.bubble_color AS personal_bubble_color
+             r.last_visited_at, r.pinned, r.bubble_color AS personal_bubble_color,
+             CASE WHEN live_config.id IS NOT NULL THEN 1 ELSE 0 END AS live_active
       FROM user_recent_channels r
       INNER JOIN channels c ON c.id = r.channel_id AND c.id NOT LIKE '%_live'
       LEFT JOIN users u ON u.id = c.owner_uid
+      LEFT JOIN config AS live_config
+        ON live_config.id = 'live_' || c.id
+       AND live_config.text IS NOT NULL
+       AND live_config.text != 'false'
+       AND json_extract(live_config.text, '$.active') = 1
+       AND COALESCE(
+         json_extract(live_config.text, '$.expiresAt'),
+         strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
+       ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE r.user_id = ?
       ORDER BY r.pinned DESC, r.last_visited_at DESC, r.channel_id DESC
       LIMIT ?

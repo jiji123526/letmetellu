@@ -22,7 +22,7 @@ import {
   type PlatformDashboardResponse,
   type PlatformOperationalHealthResponse,
 } from "@/lib/api-support";
-import { clearRecentChannels, getRecentChannels, markRecentChannelsValidated, removeRecentChannel, shouldValidateRecentChannels, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
+import { clearRecentChannels, getRecentChannels, removeRecentChannel, toggleRecentChannelPinned, type RecentChannel } from "@/lib/recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { parseServerDate } from "@/lib/chat-date";
@@ -64,6 +64,25 @@ interface Channel {
   has_passcode: number;
   owner_name: string | null;
   live_active: number;
+}
+
+async function fetchPublicChannelStates(channelIds: string[]): Promise<Channel[]> {
+  const uniqueIds = [...new Set(channelIds)];
+  const chunks: string[][] = [];
+  for (let index = 0; index < uniqueIds.length; index += 20) {
+    chunks.push(uniqueIds.slice(index, index + 20));
+  }
+  const responses = await Promise.all(chunks.map(async (ids) => {
+    const response = await fetch(
+      `/api/channels/exists?ids=${encodeURIComponent(ids.join(","))}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) throw new Error("channel validation failed");
+    const data = await response.json() as { channels?: Channel[] };
+    if (!Array.isArray(data.channels)) throw new Error("invalid channel validation");
+    return data.channels;
+  }));
+  return responses.flat();
 }
 
 interface SupportDashboardPreview {
@@ -108,7 +127,12 @@ const ADMIN_DASHBOARD_STATS_POLL_MS = 5 * 60 * 1000;
 const OPERATIONAL_HEALTH_POLL_MS = 5 * 60 * 1000;
 const OPERATIONAL_HEALTH_MIN_REFRESH_MS = 60 * 1000;
 const SUPPORT_PREVIEW_POLL_MS = 60000;
-const DASHBOARD_REFRESH_TICK_MS = Math.min(ADMIN_DASHBOARD_POLL_MS, SUPPORT_PREVIEW_POLL_MS);
+const RECENT_CHANNELS_POLL_MS = 60000;
+const DASHBOARD_REFRESH_TICK_MS = Math.min(
+  ADMIN_DASHBOARD_POLL_MS,
+  SUPPORT_PREVIEW_POLL_MS,
+  RECENT_CHANNELS_POLL_MS,
+);
 type PlatformTicketFilter = "open" | "needs_reply" | "waiting_user" | "unread" | "stale" | "critical" | null;
 
 function formatDate(value: string, locale: "ko" | "en") {
@@ -351,6 +375,7 @@ function DashboardPageContent() {
   const operationalHealthLoadedAtRef = useRef(0);
   const loadSupportPreviewInFlightRef = useRef<Promise<void> | null>(null);
   const supportPreviewLoadedAtRef = useRef(0);
+  const recentChannelsLoadedAtRef = useRef(0);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const swipeStartRef = useRef<{ id: string; x: number; y: number; startOffset: number; moved: boolean; width: number } | null>(null);
@@ -463,32 +488,79 @@ function DashboardPageContent() {
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
     setRecentChannels(stored);
-    if (stored.length === 0) return;
-    if (!shouldValidateRecentChannels(stored)) return;
+    if (stored.length === 0) {
+      recentChannelsLoadedAtRef.current = Date.now();
+      return;
+    }
     try {
-      const chunks: RecentChannel[][] = [];
-      for (let index = 0; index < stored.length; index += 20) {
-        chunks.push(stored.slice(index, index + 20));
-      }
-      const responses = await Promise.all(chunks.map(async (chunk) => {
-        const ids = chunk.map((channel) => channel.id).join(",");
-        const response = await fetch(`/api/channels/exists?ids=${encodeURIComponent(ids)}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("channel validation failed");
-        const data = await response.json() as { existingIds?: string[] };
-        if (!Array.isArray(data.existingIds)) throw new Error("invalid channel validation");
-        return data.existingIds;
-      }));
-      const existingIds = new Set(responses.flat());
+      const responses = await fetchPublicChannelStates(stored.map((channel) => channel.id));
+      const authoritativeChannels = new Map(
+        responses.map((channel) => [channel.id, channel]),
+      );
+      const existingIds = new Set(authoritativeChannels.keys());
       stored.forEach((channel) => {
         if (!existingIds.has(channel.id)) removeRecentChannel(channel.id);
       });
-      const refreshed = getRecentChannels();
+      const refreshed = getRecentChannels().map((channel) => {
+        const authoritative = authoritativeChannels.get(channel.id);
+        if (!authoritative) return channel;
+        return {
+          ...channel,
+          name: authoritative.name,
+          profileImage: decorateMediaUrl(authoritative.profile_image),
+          hasPasscode: authoritative.has_passcode === 1,
+          ownerName: authoritative.owner_name || "",
+          liveActive: authoritative.live_active === 1,
+        };
+      });
       setRecentChannels(refreshed);
-      markRecentChannelsValidated(refreshed);
     } catch {
       // Keep locally stored channels when validation is temporarily unavailable.
+    } finally {
+      recentChannelsLoadedAtRef.current = Date.now();
     }
   }, []);
+
+  const refreshDashboardLiveStates = useCallback(async () => {
+    const channelIds = [
+      ...channels.map((channel) => channel.id),
+      ...recentChannels.map((channel) => channel.id),
+    ];
+    if (channelIds.length === 0) {
+      recentChannelsLoadedAtRef.current = Date.now();
+      return;
+    }
+    try {
+      const channelStates = await fetchPublicChannelStates(channelIds);
+      const liveById = new Map(
+        channelStates.map((channel) => [channel.id, channel.live_active === 1]),
+      );
+      setChannels((current) => {
+        let changed = false;
+        const next = current.map((channel) => {
+          const liveActive = liveById.get(channel.id);
+          if (liveActive === undefined || liveActive === (channel.live_active === 1)) return channel;
+          changed = true;
+          return { ...channel, live_active: liveActive ? 1 : 0 };
+        });
+        return changed ? next : current;
+      });
+      setRecentChannels((current) => {
+        let changed = false;
+        const next = current.map((channel) => {
+          const liveActive = liveById.get(channel.id);
+          if (liveActive === undefined || liveActive === (channel.liveActive === true)) return channel;
+          changed = true;
+          return { ...channel, liveActive };
+        });
+        return changed ? next : current;
+      });
+    } catch {
+      // Preserve the last known state when the public status refresh is unavailable.
+    } finally {
+      recentChannelsLoadedAtRef.current = Date.now();
+    }
+  }, [channels, recentChannels]);
 
   const loadAccountRecentChannels = useCallback(async (
     userId: string,
@@ -524,6 +596,7 @@ function DashboardPageContent() {
       // Do not replace account data with device-local history on a transient failure.
       setRecentChannels([]);
     } finally {
+      recentChannelsLoadedAtRef.current = Date.now();
       finishDashboardRequest("recent-channels");
     }
   }, []);
@@ -883,10 +956,21 @@ function DashboardPageContent() {
       }
       return;
     }
+    if (now - recentChannelsLoadedAtRef.current >= RECENT_CHANNELS_POLL_MS) {
+      void refreshDashboardLiveStates();
+    }
     if (now - supportPreviewLoadedAtRef.current >= SUPPORT_PREVIEW_POLL_MS) {
       void loadSupportPreview();
     }
-  }, [isPlatformAdmin, loadOperationalHealth, loadSupportPreview, operationalHealth, operationalHealthExpanded, refreshPlatformDashboardIfChanged]);
+  }, [
+    isPlatformAdmin,
+    loadOperationalHealth,
+    loadSupportPreview,
+    operationalHealth,
+    operationalHealthExpanded,
+    refreshDashboardLiveStates,
+    refreshPlatformDashboardIfChanged,
+  ]);
 
   useForegroundPolling({
     enabled: status !== "loading",
@@ -1030,7 +1114,7 @@ function DashboardPageContent() {
         owned: true,
         pinned: channel.id === prioritizedOwnedId,
         activityAt: new Date(channel.lastVisitedAt).toISOString(),
-        liveActive: false,
+        liveActive: channel.liveActive === true,
       }))
       .sort((left, right) => Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId));
     const recentItems: DashboardListItem[] = recentChannels
@@ -1050,7 +1134,7 @@ function DashboardPageContent() {
           owned: false,
           pinned: channel.pinned,
           activityAt: new Date(channel.lastVisitedAt).toISOString(),
-          liveActive: false,
+          liveActive: channel.liveActive === true,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
     const items: DashboardListItem[] = isPlatformAdmin
@@ -1072,7 +1156,7 @@ function DashboardPageContent() {
         owned: false,
         pinned: false,
         activityAt: linkedChannel.created_at,
-        liveActive: false,
+        liveActive: linkedChannel.live_active === 1,
       });
     }
     const platformItems: DashboardListItem[] = [];

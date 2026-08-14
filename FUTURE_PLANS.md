@@ -75,6 +75,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 #### Phase 2: dashboard refresh consolidation
 
 - Completed on 2026-08-05: replaced the overlapping dashboard timers plus focus and visibility listeners with one stale-time-aware foreground polling path.
+- Implemented on 2026-08-14, rollout verification pending: LIVE badges now use expiry-aware channel summaries for anonymous recent, logged-in joined, owner and direct-search rows. One bounded public batch refreshes displayed channels every visible minute or stale foreground return; cached snapshots cannot flash stale live state.
 - The consolidated scheduler retains in-flight dedupe and independently enforces 30-second admin-dashboard, 60-second support-preview and five-minute operational-health freshness windows.
 - Follow-up validation fixed two edge cases before merge: request locale now reaches the document-level `lang`, and support-preview polling remains active from an empty state so another tab or device can create a ticket that this dashboard later discovers.
 - Startup timing is now measurable through local `letmetellu:dashboard:*` Performance API entries. Remaining validation is to collect representative production baselines for request fan-out and usable-state timing.

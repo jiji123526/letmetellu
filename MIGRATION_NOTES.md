@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Dashboard LIVE badges are visible to channel visitors — 2026-08-14
+
+- The red dashboard `LIVE` badge previously used an owner-only `/api/user` field. Anonymous device-local recent channels, logged-in joined channels and direct channel search results always forced the badge off.
+- Public batched channel summaries and authenticated recent-channel rows now include an expiry-aware `live_active` flag. Passcode-protected channels expose only that a live session is active; they do not expose the title, messages or access credentials before unlock.
+- Anonymous dashboard startup reuses its existing batched channel-validation request to apply authoritative live status. Logged-in recent channels receive it with their normal recent-channel response.
+- Visible dashboards refresh displayed channel live flags once per minute and on foreground checks through one batched public request. This covers owner, joined and anonymous recent rows without opening room WebSockets or issuing one request per channel.
+- Cached account snapshots force live state off until the authoritative response arrives, preventing a stale LIVE flash after a session ends. SQL also treats `expiresAt` as authoritative, so badges do not wait for hourly cleanup to hide an expired session.
+
+Trade-off: a non-admin dashboard with channel rows performs one additional batched status refresh per visible minute and foreground return after staleness. The endpoint accepts at most 20 IDs per request, so unusually large recent lists use bounded chunks. Updates are eventually consistent by up to one minute because dashboards do not subscribe to every channel's realtime connection.
+
+Deployment note: deploy the Worker before the frontend. No D1 migration is required. Verify an anonymous recent channel, a logged-in joined channel and an owner channel show and clear LIVE after the next foreground/minute refresh.
+
 ### Authentication outcomes and legacy upgrades are operationally visible — 2026-08-14
 
 - Verification email delivery/completion, password-reset delivery/completion and one-time legacy SHA-256-to-PBKDF2 login upgrades now record bounded operational outcomes.

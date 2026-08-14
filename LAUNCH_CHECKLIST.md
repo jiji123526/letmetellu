@@ -42,6 +42,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Gallery paging now uses ordered gallery rows plus indexed active image-message lookups, replacing a production plan that read `97.53k` rows across 31 requests. Migration `0040` and Worker/frontend rollout remain.
 - [x] Actor-identity retention and message cursor/parent reads now use age, composite-cursor and child-existence index ranges. Migration `0041` and Worker rollout remain.
 - [x] Owner-channel navigation state now comes from an indexed two-row init probe; the separate startup list request is removed and the popup list matches the five-channel product limit. Migration `0042` and Worker/frontend rollout remain.
+- [x] Dashboard LIVE badges now cover anonymous recent channels, logged-in joined channels, owner channels and direct search results through expiry-aware batched status reads. Worker/frontend rollout verification remains.
 
 ### Still required before a broad public launch
 

@@ -57,10 +57,14 @@ async function readUserState(
               END AS live_active
        FROM owner_channels
        LEFT JOIN config AS live_config
-         ON live_config.id = 'live_' || owner_channels.id
+        ON live_config.id = 'live_' || owner_channels.id
         AND live_config.text IS NOT NULL
         AND live_config.text != 'false'
-        AND json_extract(live_config.text, '$.active') = 1`
+        AND json_extract(live_config.text, '$.active') = 1
+        AND COALESCE(
+          json_extract(live_config.text, '$.expiresAt'),
+          strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
+        ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
     ).bind(userId, ...(reportsChannelId ? [reportsChannelId] : [])).all(),
     env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
       .bind(userId).first<{ font_size: number | null; locale: string | null }>(),
@@ -90,9 +94,19 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
         `SELECT channels.id, channels.name, channels.profile_image,
                 channels.bubble_color, channels.created_at,
                 channels.passcode IS NOT NULL AS has_passcode,
-                users.name AS owner_name
+                users.name AS owner_name,
+                CASE WHEN live_config.id IS NOT NULL THEN 1 ELSE 0 END AS live_active
          FROM channels
          LEFT JOIN users ON users.id = channels.owner_uid
+         LEFT JOIN config AS live_config
+           ON live_config.id = 'live_' || channels.id
+          AND live_config.text IS NOT NULL
+          AND live_config.text != 'false'
+          AND json_extract(live_config.text, '$.active') = 1
+          AND COALESCE(
+            json_extract(live_config.text, '$.expiresAt'),
+            strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
+          ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE channels.id IN (${placeholders}) AND channels.id NOT LIKE '%_live'
            ${reportsChannelId ? "AND channels.id != ?" : ""}`
       ).bind(...ids, ...(reportsChannelId ? [reportsChannelId] : [])).all<{ id: string }>();
