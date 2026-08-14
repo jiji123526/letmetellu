@@ -4,6 +4,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Retention and message cursors avoid broad read scans — 2026-08-14
+
+- D1 Insights showed scheduled actor-identity retention reading `206.58k` rows across only 25 executions, with `11.7 ms` p50 and `16.7 ms` p99 latency. Each bounded cleanup selection scanned roughly `8.3k` rows because the existing actor indexes began with `channel_id`, while retention filters globally by `created_at`.
+- Migration `0041_retention_lookup_index.sql` adds `message_actor_identities_created_idx(created_at)`. The 90-day cleanup now uses a covering age-range scan and stops after its existing 250-row batch limit.
+- Cursor-based root paging separately read `160.03k` rows across 85 executions, with `39` rows read per returned row and `8.9 ms` p99 latency. Parent recovery showed the same amplification: 22 calls read `44.08k` rows at `77` rows per returned row.
+- The shared visible-message condition previously built a list of every active reply in a channel on each request so deleted parents with visible replies could remain rendered. It now performs a correlated existence check through `messages_channel_deleted_reply_idx` only when a deleted candidate parent needs that decision.
+- Older/newer page and message-context cursors now compare `(created_at, id)` as one tuple. This lets `messages_channel_root_created_id_idx` apply the complete stable cursor as an indexed range instead of applying the timestamp range first and evaluating the ID tie-breaker separately.
+- Timestamp-only legacy cursor requests retain their existing fallback. Visibility semantics are unchanged: normal messages remain visible, deleted parents remain visible only while they have an active direct reply, and deleted messages without active replies stay hidden.
+- `worker/scripts/audit-query-read-optimizations.sql` verifies the retention range, root cursor range and indexed child-existence plans after deployment. Focused tests preserve tuple bind order, context boundaries and deleted-parent behavior.
+
+Trade-off: each actor-identity record adds one small retention-index entry, increasing message/DM identity write and storage cost slightly. Deleted parent candidates now perform individual indexed child probes instead of sharing a channel-wide reply list; deleted roots are uncommon and page candidates are bounded, making this preferable to rereading every reply on every page.
+
+Deployment note: apply migration `0041` and deploy the Worker. No frontend deployment is required. Run the audit script, exercise older/newer paging and message navigation, then compare the new D1 fingerprints against the `11.7 ms` retention, `39` rows-per-result cursor and `77` rows-per-result parent-recovery baselines.
+
 ### Reconnect notice appears only when realtime loss affects the active view — 2026-08-14
 
 - The WebSocket reconnect notice previously appeared after any visible-tab disconnect lasting three seconds, even while the user was reading older mounted messages or a historical context window.

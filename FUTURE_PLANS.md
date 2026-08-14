@@ -104,6 +104,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 #### Later message-query optimizations
 
+- Implemented on 2026-08-14, rollout verification pending: root cursor paging and parent recovery no longer build a channel-wide active-reply list to decide whether deleted parents remain visible. They use indexed child-existence probes, while older/newer and context cursors use composite `(created_at, id)` ranges. Compare production results against the recorded `39` rows-read-per-row cursor and `77` rows-read-per-row parent-recovery baselines after the Worker rollout.
 - Implemented on 2026-08-14, rollout verification pending: the gallery query that read `97.53k` rows across only 31 executions now drives from an exact `(channel_id, created_at, id)` gallery index and checks active image-message mappings through a small partial index. The previous plan scanned all visible channel messages and sorted the joined result, producing `30.6 ms` p50, `38.9 ms` p99 and `63` rows read per returned row. After migration `0040` and the Worker/frontend rollout, run `worker/scripts/audit-gallery-query.sql` and compare the new fingerprint in D1 Insights.
 - Keep the older `gallery_channel_idx(channel_id, created_at)` during initial rollout. The new ordered gallery index covers the same leading columns, so the old index is a removal candidate after production plans and normal gallery behavior are verified.
 - Completed on 2026-08-13: root and child `IN (?, ...)` lookups now use eight bounded query sizes (`1`, `2`, `4`, `8`, `16`, `32`, `50`, `64`) instead of potentially producing a separate D1 Insights fingerprint for every page size. The `64` bucket covers the 51-root context window while staying below D1's variable limit. Repeating the final ID as padding is result-neutral; this improves observability but does not inherently reduce rows read or execution cost.
@@ -125,6 +126,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Cleanup and deletion reliability
 
+- Implemented on 2026-08-14, rollout verification pending: migration `0041` adds the global actor-identity `created_at` index required by 90-day retention. The previous bounded selector still scanned roughly `8.3k` rows per run because its indexes were channel-prefixed. Verify the new covering range plan and compare against the recorded `11.7 ms` p50 and `16.7 ms` p99 baseline.
 - Completed first phase on 2026-08-12: channel deletion atomically records a media snapshot and cleanup job with the D1 deletion, then tracks and retries Durable Object invalidation and R2 removal independently. Account deletion reuses this path for owned channels.
 - Production verification is complete after migration `0036`: D1 channel deletion, R2 media removal, cleanup-job completion and operational-health failure visibility were checked end to end.
 - Use observed retry age and attempt counts to set an operator threshold for cleanup jobs that remain pending beyond the normal recovery window.

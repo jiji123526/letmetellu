@@ -136,26 +136,24 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         env.DB.prepare(`
           SELECT * FROM messages
           WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
-            AND (created_at < ? OR (created_at = ? AND id <= ?))
+            AND (created_at, id) <= (?, ?)
           ORDER BY created_at DESC, id DESC
           LIMIT 27
         `).bind(
           channelId,
           channelId,
           target.thread_root_created_at,
-          target.thread_root_created_at,
           target.thread_root_id,
         ).all<VisibleMessageRow>(),
         env.DB.prepare(`
           SELECT * FROM messages
           WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
-            AND (created_at > ? OR (created_at = ? AND id > ?))
+            AND (created_at, id) > (?, ?)
           ORDER BY created_at ASC, id ASC
           LIMIT 26
         `).bind(
           channelId,
           channelId,
-          target.thread_root_created_at,
           target.thread_root_created_at,
           target.thread_root_id,
         ).all<VisibleMessageRow>(),

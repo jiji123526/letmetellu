@@ -5,7 +5,14 @@ import {
   expandVisibleRootThreads,
   readVisibleMessagePage,
   readVisibleFlatThreads,
+  VISIBLE_MESSAGE_CONDITION,
 } from "../src/lib/visible-messages.ts";
+
+test("deleted parent visibility uses an indexed child existence probe", () => {
+  assert.match(VISIBLE_MESSAGE_CONDITION, /EXISTS/);
+  assert.match(VISIBLE_MESSAGE_CONDITION, /child\.reply_to = messages\.id/);
+  assert.doesNotMatch(VISIBLE_MESSAGE_CONDITION, /id IN/);
+});
 
 test("flat thread expansion skips root lookups already present in the page", async () => {
   const calls: Array<{ query: string; params: unknown[] }> = [];
@@ -273,4 +280,52 @@ test("message pages select root indexes and expand replies without moving cursor
     id: "page-b",
     createdAt: "2026-08-09T00:11:00.000Z",
   });
+});
+
+test("message page cursors use composite timestamp and id ranges", async () => {
+  const calls: Array<{ query: string; params: unknown[] }> = [];
+  const env = {
+    DB: {
+      prepare(query: string) {
+        return {
+          bind(...params: unknown[]) {
+            calls.push({ query, params });
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+    },
+  };
+
+  await readVisibleMessagePage(env as never, "channel-a", {
+    cursor: "2026-08-09T00:10:00.000Z",
+    cursorId: "root-a",
+    direction: "before",
+  });
+  await readVisibleMessagePage(env as never, "channel-a", {
+    cursor: "2026-08-09T00:10:00.000Z",
+    cursorId: "root-a",
+    direction: "after",
+  });
+
+  assert.match(calls[0].query, /\(created_at, id\) < \(\?, \?\)/);
+  assert.deepEqual(calls[0].params, [
+    "channel-a",
+    "channel-a",
+    "2026-08-09T00:10:00.000Z",
+    "root-a",
+    51,
+  ]);
+  assert.match(calls[1].query, /\(created_at, id\) > \(\?, \?\)/);
+  assert.deepEqual(calls[1].params, [
+    "channel-a",
+    "channel-a",
+    "2026-08-09T00:10:00.000Z",
+    "root-a",
+    51,
+  ]);
 });

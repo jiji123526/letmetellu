@@ -17,9 +17,11 @@ export const VISIBLE_MESSAGE_CONDITION = `
     deleted = 0
     OR (
       deleted = 1
-      AND id IN (
-        SELECT reply_to FROM messages
-        WHERE channel_id = ? AND deleted = 0 AND reply_to IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM messages child
+        WHERE child.channel_id = ?
+          AND child.deleted = 0
+          AND child.reply_to = messages.id
       )
     )
   )
@@ -132,14 +134,14 @@ export async function readVisibleMessagePage(
   if (cursor) {
     if (direction === "after") {
       innerQuery += cursorId
-        ? " AND (created_at > ? OR (created_at = ? AND id > ?))"
+        ? " AND (created_at, id) > (?, ?)"
         : " AND created_at > ?";
-      params.push(cursor, ...(cursorId ? [cursor, cursorId] : []));
+      params.push(cursor, ...(cursorId ? [cursorId] : []));
     } else {
       innerQuery += cursorId
-        ? " AND (created_at < ? OR (created_at = ? AND id < ?))"
+        ? " AND (created_at, id) < (?, ?)"
         : " AND created_at < ?";
-      params.push(cursor, ...(cursorId ? [cursor, cursorId] : []));
+      params.push(cursor, ...(cursorId ? [cursorId] : []));
     }
   }
 
