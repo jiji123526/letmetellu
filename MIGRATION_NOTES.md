@@ -4,6 +4,31 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Reconnect notice appears only when realtime loss affects the active view — 2026-08-14
+
+- The WebSocket reconnect notice previously appeared after any visible-tab disconnect lasting three seconds, even while the user was reading older mounted messages or a historical context window.
+- Chat history navigation now exposes a reactive near-bottom state in addition to its existing ref. The notice renders only at the normal chat live edge, where missing new messages directly affects what the user expects to see.
+- Historical context and scrolled-up latest windows suppress the notice while reconnect attempts, authorization and recovery synchronization continue unchanged in the background.
+- If the socket is still disconnected when the user returns to the live edge, the already-pending notice appears immediately. If reconnection completes first, no stale notice flashes.
+- Active live sessions and DM composition retain the notice regardless of scroll position because their presence and incoming state are realtime-sensitive.
+- Focused regression coverage preserves live-edge visibility, history suppression, live/DM exceptions and the integration between socket state and reactive scroll position.
+
+Trade-off: a user reading older messages is not proactively told that live updates are temporarily unavailable until they return to the latest edge or enter a realtime-sensitive mode. No reconnect, recovery fetch, presence or D1 behavior changes.
+
+Deployment note: this is frontend-only. After deployment, disconnect for more than three seconds at the latest edge, while scrolled up, in a historical context window, in live mode and in DM mode; verify the notice appears only in the realtime-sensitive cases and that returning to latest reveals it if the socket is still offline.
+
+### Gallery paging no longer scans all visible channel messages — 2026-08-14
+
+- D1 Insights showed the gallery query executing only 31 times but consuming about one second of database runtime, with `97.53k` rows read, `30.6 ms` p50 and `38.9 ms` p99 latency. That is roughly `3,146` rows read per request and `63` rows read per returned row.
+- SQLite was starting from every visible message in the channel through `messages_channel_deleted_created_id_idx`, joining matching gallery rows by primary key, then sorting the result. Cost therefore grew with total channel history rather than with the 50 requested gallery items.
+- Gallery paging now starts from gallery rows in display order and performs one indexed visible-message mapping lookup per candidate. Migration `0040_gallery_lookup_indexes.sql` adds the exact gallery ordering index and a partial index containing only non-deleted image-message mappings.
+- Pagination now carries both `created_at` and `id`, preventing equal-timestamp gallery rows from being skipped between pages.
+- `worker/scripts/audit-gallery-query.sql` verifies both indexes and the production query plan after rollout. Focused regression coverage preserves the gallery-first plan, visibility check and stable cursor.
+
+Trade-off: each gallery row and each active image message adds one small index entry. Ordinary text messages are excluded from the partial message index. The older `gallery_channel_idx` remains during rollout; consider removing it only after production confirms the new ordered index serves all gallery reads.
+
+Deployment note: apply migration `0040`, deploy the Worker, then deploy the frontend. Open a gallery with more than 50 images and load the next page, then confirm D1 Insights shows the new `CROSS JOIN` fingerprint with substantially lower rows read and latency.
+
 ### Cold chat startup defers noncritical interface code — 2026-08-13
 
 - Production diagnostics for `/ch/synkongii` showed the channel page waiting on cold client startup while authenticated `/api/init` itself completed in about `267 ms`; later cached bootstrap calls completed in about `202 ms`.

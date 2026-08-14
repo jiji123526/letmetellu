@@ -224,7 +224,7 @@ export function useChatAdminChannelActions<TChannel extends ChannelState>({
     galleryLoadingRef.current = true;
     const oldest = galleryItems[galleryItems.length - 1];
     const fetchChannel = inLiveMode ? `${channelId}_live` : channelId;
-    void fetchGallery(fetchChannel, oldest.created_at)
+    void fetchGallery(fetchChannel, oldest.created_at, oldest.id)
       .then((data) => {
         if (data.gallery && data.gallery.length > 0) {
           setGalleryItems((previous) => [...previous, ...data.gallery]);

@@ -37,6 +37,7 @@ import {
 } from "./ChatViewStateScreens";
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
+import { shouldShowReconnectNotice } from "./chatConnectionNotice";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -504,6 +505,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const {
     historyModeRef,
     isNearBottomRef,
+    isNearBottom,
     hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
@@ -533,6 +535,14 @@ export function ChatView({ channelId }: { channelId: string }) {
     await loadLiveChannelData();
     positionAtLatest();
   }, [loadLiveChannelData, positionAtLatest]);
+
+  const reconnectNoticeVisible = shouldShowReconnectNotice({
+    reconnectPending: showReconnectNotice,
+    historyMode,
+    isNearBottom,
+    inLiveMode,
+    dmMode,
+  });
 
   useChatRealtimeSync({
     channelId,
@@ -893,7 +903,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         liveLastMinuteBannerText={liveLastMinuteBannerText}
         liveCountdownNotice={liveCountdownNotice}
         effectiveAdmin={effectiveAdmin}
-        showReconnectNotice={showReconnectNotice}
+        showReconnectNotice={reconnectNoticeVisible}
         onJoinLive={() => {
           enterLiveMode();
           void loadLiveChannelAtLatest().catch(() => {});

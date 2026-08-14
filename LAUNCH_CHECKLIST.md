@@ -38,6 +38,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 - [x] External operational-health alerting is implemented with shared thresholds, five-minute evaluation, durable deduplication, delivery retry and recovery notifications.
 - [x] Conditional chat interfaces are split from the initial route bundle. Comparable production builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`), and superseded bootstrap traces no longer remain falsely `pending`.
+- [x] Gallery paging now uses ordered gallery rows plus indexed active image-message lookups, replacing a production plan that read `97.53k` rows across 31 requests. Migration `0040` and Worker/frontend rollout remain.
 
 ### Still required before a broad public launch
 
@@ -53,6 +54,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Reran `worker/scripts/audit-flat-replies.sql` against production after the 2026-08-13 rollout: 6,855 messages and 1,057 replies were all flat and valid, with zero broken, cross-channel, nested, cyclic or over-depth relationships.
 - [x] Verified production query plans for root paging and reply operations. Root windows use `messages_channel_root_created_id_idx`; deleted-state child expansion uses `messages_channel_deleted_reply_idx`; thread deletion uses `messages_channel_reply_deleted_idx`. Both reply indexes remain justified, and no query/schema fix is required.
 - [ ] In D1 Insights, confirm the retired `WITH requested_roots` fingerprint stops accumulating post-deployment executions and compare new root/child rows-read-per-row against the recorded `2.7k-3.6k` baseline.
+- [ ] After applying migration `0040` and deploying Worker/frontend, run `worker/scripts/audit-gallery-query.sql`, load at least two gallery pages, and confirm the new `CROSS JOIN` fingerprint materially improves on the recorded `30.6 ms` p50, `38.9 ms` p99 and `63` rows-read-per-row baseline.
 - [ ] Audit remaining chronological query shapes before considering removal of `messages_channel_idx`; root-owned paging no longer provides evidence for removing it because that path now uses the dedicated `0037` index.
 - [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
 - [ ] When a genuine post-deployment Durable Object failure occurs, confirm `realtime_unavailable` produces degraded health without an `/api/init` `500`; independently verify WebSocket reconnect restores the live presence count.

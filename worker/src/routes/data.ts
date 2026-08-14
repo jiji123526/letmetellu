@@ -228,6 +228,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
     case "gallery": {
       const cursor = url.searchParams.get("cursor");
+      const cursorId = url.searchParams.get("cursor_id");
+      // CROSS JOIN keeps the ordered gallery index as the outer loop.
       let query = `
         SELECT
           m.id AS id,
@@ -236,11 +238,17 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           g.channel_id,
           g.created_at
         FROM gallery g
-        INNER JOIN messages m ON m.gallery_id = g.id AND m.channel_id = g.channel_id
-        WHERE g.channel_id = ? AND m.deleted = 0
+        CROSS JOIN messages m
+        WHERE g.channel_id = ?
+          AND m.channel_id = g.channel_id
+          AND m.gallery_id = g.id
+          AND m.deleted = 0
       `;
       const params: unknown[] = [channelId];
-      if (cursor) {
+      if (cursor && cursorId) {
+        query += " AND (g.created_at < ? OR (g.created_at = ? AND g.id < ?))";
+        params.push(cursor, cursor, cursorId);
+      } else if (cursor) {
         query += " AND g.created_at < ?";
         params.push(cursor);
       }

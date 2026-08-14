@@ -236,10 +236,11 @@ export async function fetchReplyParents(channelId: string, parentIds: string[]) 
   return data;
 }
 
-export async function fetchGallery(channelId: string, cursor?: string) {
+export async function fetchGallery(channelId: string, cursor?: string, cursorId?: string) {
   if (IS_MOCK) return { gallery: [] };
   const params = new URLSearchParams({ type: "gallery", channel: channelId });
   if (cursor) params.set("cursor", cursor);
+  if (cursorId) params.set("cursor_id", cursorId);
   const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(),
   });

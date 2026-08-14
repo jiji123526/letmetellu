@@ -32,6 +32,7 @@ interface UseChatHistoryNavigationArgs {
 interface UseChatHistoryNavigationResult {
   historyModeRef: MutableRefObject<HistoryMode>;
   isNearBottomRef: MutableRefObject<boolean>;
+  isNearBottom: boolean;
   hasMoreNewerMessagesRef: MutableRefObject<boolean>;
   isMessageNavigationPending: boolean;
   isOlderHistoryLoading: boolean;
@@ -304,6 +305,7 @@ export function useChatHistoryNavigation({
 }: UseChatHistoryNavigationArgs): UseChatHistoryNavigationResult {
   const [isMessageNavigationPending, setIsMessageNavigationPending] = useState(false);
   const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
+  const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
   const historyModeRef = useRef<HistoryMode>(historyMode);
   const loadingMoreRef = useRef(false);
@@ -321,6 +323,11 @@ export function useChatHistoryNavigation({
   const newerPageCursorRef = useRef<MessagePageCursor | null>(initialPageEndCursor);
 
   const scrollStorageKey = `chatScrollPosition:${channelId}`;
+
+  const updateNearBottom = useCallback((nextIsNearBottom: boolean) => {
+    isNearBottomRef.current = nextIsNearBottom;
+    setIsNearBottom(nextIsNearBottom);
+  }, []);
 
   const saveScrollPosition = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -487,7 +494,7 @@ export function useChatHistoryNavigation({
         || messageCursor(data.messages?.[0]);
       newerPageCursorRef.current = responseCursor(data.page_end_cursor)
         || messageCursor(data.messages?.at(-1));
-      isNearBottomRef.current = true;
+      updateNearBottom(true);
       scrollAnchorRef.current = null;
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
@@ -496,14 +503,14 @@ export function useChatHistoryNavigation({
       setBanner({ text: "Failed to load latest messages", color: "#d32f2f" });
       setTimeout(() => setBanner(null), 2000);
     }
-  }, [channelId, inLiveModeRef, messagesEndRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount]);
+  }, [channelId, inLiveModeRef, messagesEndRef, setBanner, setHistoryMode, setMessages, setNewerMessageCount, updateNearBottom]);
 
   const handleScroll = useCallback(() => {
     const element = messagesContainerRef.current;
     if (!element) return;
 
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-    isNearBottomRef.current = distanceFromBottom <= 120;
+    updateNearBottom(distanceFromBottom <= 120);
     setShowScrollBtn(distanceFromBottom > 200);
     updateScrollAnchor();
 
@@ -678,6 +685,7 @@ export function useChatHistoryNavigation({
     setHistoryMode,
     setMessages,
     setShowScrollBtn,
+    updateNearBottom,
     updateScrollAnchor,
   ]);
 
@@ -686,18 +694,18 @@ export function useChatHistoryNavigation({
       void returnToLatest();
       return;
     }
-    isNearBottomRef.current = true;
+    updateNearBottom(true);
     scrollAnchorRef.current = null;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setShowScrollBtn(false);
-  }, [messagesEndRef, returnToLatest, setShowScrollBtn]);
+  }, [messagesEndRef, returnToLatest, setShowScrollBtn, updateNearBottom]);
 
   const positionAtLatest = useCallback(() => {
     historyModeRef.current = "latest";
     setHistoryMode("latest");
     setNewerMessageCount(0);
     hasMoreNewerMessagesRef.current = false;
-    isNearBottomRef.current = true;
+    updateNearBottom(true);
     scrollAnchorRef.current = null;
     setShowScrollBtn(false);
     requestAnimationFrame(() => {
@@ -705,7 +713,7 @@ export function useChatHistoryNavigation({
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       });
     });
-  }, [messagesEndRef, setHistoryMode, setNewerMessageCount, setShowScrollBtn]);
+  }, [messagesEndRef, setHistoryMode, setNewerMessageCount, setShowScrollBtn, updateNearBottom]);
 
   const scrollToMessage = useCallback(async (
     msgId: string,
@@ -855,15 +863,16 @@ export function useChatHistoryNavigation({
     await waitForStableMessageLayout(container, element);
     alignToSavedOffset();
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    isNearBottomRef.current = distanceFromBottom <= 120;
+    updateNearBottom(distanceFromBottom <= 120);
     scrollAnchorRef.current = isNearBottomRef.current ? null : findScrollAnchor(container);
     setShowScrollBtn(distanceFromBottom > 200);
     return true;
-  }, [channelId, inLiveModeRef, messagesContainerRef, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn]);
+  }, [channelId, inLiveModeRef, messagesContainerRef, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn, updateNearBottom]);
 
   return {
     historyModeRef,
     isNearBottomRef,
+    isNearBottom,
     hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
