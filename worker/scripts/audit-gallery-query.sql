@@ -1,7 +1,3 @@
--- Run after migration 0040:
--- npx wrangler d1 execute letsplay-db --remote \
---   --command "$(cat scripts/audit-gallery-query.sql)"
-
 PRAGMA index_info('gallery_channel_created_id_idx');
 PRAGMA index_info('messages_visible_gallery_lookup_idx');
 

@@ -1,7 +1,3 @@
--- Run after migration 0042:
--- npx wrangler d1 execute letsplay-db --remote \
---   --command "$(cat scripts/audit-owner-channel-query.sql)"
-
 PRAGMA index_info('channels_owner_profile_created_id_idx');
 
 EXPLAIN QUERY PLAN

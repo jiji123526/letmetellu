@@ -1,7 +1,3 @@
--- Run after migration 0041:
--- npx wrangler d1 execute letsplay-db --remote \
---   --command "$(cat scripts/audit-query-read-optimizations.sql)"
-
 PRAGMA index_info('message_actor_identities_created_idx');
 
 EXPLAIN QUERY PLAN

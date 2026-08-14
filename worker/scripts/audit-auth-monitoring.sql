@@ -1,8 +1,3 @@
--- Review authentication outcomes without selecting email addresses, tokens or hashes.
--- Run from worker/:
--- npx wrangler d1 execute letsplay-db --remote \
---   --command "$(cat scripts/audit-auth-monitoring.sql)"
-
 SELECT
   event_type,
   COUNT(*) AS events,
