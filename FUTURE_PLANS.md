@@ -2,13 +2,15 @@
 
 This file tracks remaining product and platform work. Implemented behavior and deployment history belong in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+Status reviewed: 2026-08-14.
+
 ## Recommended Order
 
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
 
 1. Remove transition origins after rollback readiness, then complete the nonce-based CSP hardening sequence.
 2. Complete deployed browser regression checks for support and report transitions; cross-tab auth and fresh media-access revocation are covered.
-3. Deploy and verify the completed external health-alert delivery path.
+3. Finish production rollout and critical/recovery verification for the completed external health-alert delivery path.
 4. Add explicit monitoring for production email and legacy credential-upgrade paths.
 5. Extend the production-verified retryable channel-cleanup foundation only to remaining cross-store retention workflows that need it.
 6. Expand durable abuse controls beyond the current first pass.
@@ -47,7 +49,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 - Repeat `worker/scripts/audit-operational-health-baseline.sql` weekly during beta and after material traffic changes. The first production sample retained the existing `5xx`, exception and `429` thresholds.
 - Track WebSocket disconnect, reconnect-attempt and authorization-failure counts so the jittered exponential reconnect policy can be calibrated from production recovery behavior. Init presence fallbacks are now recorded as `realtime_unavailable`; use them to distinguish provider resets from ordinary client disconnects.
-- Deploy and verify the implemented Resend alert path after migration `0039` and recipient-secret configuration; the calibrated decisions and response path are documented in `OPERATIONS_RUNBOOK.md`.
+- Finish the implemented Resend alert rollout: apply migration `0039`, configure `OPERATIONAL_ALERT_EMAIL`, deploy Worker/frontend, confirm the health card reports alerting enabled, and verify one deduplicated critical/recovery cycle. The calibrated decisions and response path are documented in `OPERATIONS_RUNBOOK.md`.
 - Add bounded summaries for moderation action volume, report volume, petition outcomes and support queue age; the underlying audit records already exist, but these trends are not yet presented.
 - Add explicit operational-event coverage for upload failures, preview failures and WebSocket authorization/origin failures.
 - Add explicit monitoring for email verification, password reset and legacy password-hash upgrade behavior.
@@ -60,16 +62,16 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 
 ### Measured performance follow-up
 
-- The current post-Phase-1 frontend measurement from writable webpack builds is still heavy for the simplest routes: `/` at about `526 KB`, `/support` at about `638 KB`, `/privacy` and `/terms` at about `535 KB`, `/dashboard` at about `718 KB`, and `/ch/[slug]` at about `848 KB` of first-load uncompressed JS.
+- The post-Phase-1 baseline measured `/` at about `526 KB`, `/support` at about `638 KB`, `/privacy` and `/terms` at about `535 KB`, `/dashboard` at about `718 KB`, and `/ch/[slug]` at about `848 KB` of first-load uncompressed JS.
 - The most recent API split reduced `/support` by about `16 KB`, `/dashboard` by about `16 KB`, and `/ch/[slug]` by about `14 KB` compared with the previous `c2f272b` build, while `/` and the already-optimized legal pages stayed effectively flat.
-- Treat that route-bundle snapshot, plus request counts for dashboard refresh and chat reconnect paths, as the baseline for the next optimization pass. Re-measure after each phase instead of stacking another broad rewrite.
+- Treat those route measurements, plus request counts for dashboard refresh and chat reconnect paths, as historical baselines. Re-measure after each phase instead of stacking another broad rewrite.
 - Start with bundle and request-churn reductions that do not require a schema migration. Keep larger derived-data redesigns conditional on measured backend hotspots that remain after the cheaper changes ship.
 - Completed on 2026-08-13: the chat shell now defers search, edit, context-menu and conditional overlay/admin interfaces while retaining initial welcome, messages, composer and realtime UI. Comparable webpack builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`) and the route-specific chunk by `31.0%`. Re-measure a deployed cold load before splitting core chat code.
 
 #### Phase 1: global bundle reduction
 
 - Completed on 2026-08-05: the root layout no longer mounts the full provider shell for every route, `/privacy` plus `/terms` now render on the server from request locale, and the old `src/lib/api.ts` monolith is split by domain with mock-only helpers lazy-loaded behind dynamic imports.
-- Phase 1 is complete. The remaining route-bundle problem is now concentrated in the interactive chat, support and dashboard shells rather than in global providers or mixed-domain API code.
+- Phase 1 is complete. Conditional chat UI has received a second measured reduction; remaining bundle work is concentrated in core interactive chat, support and dashboard code rather than global providers, mock helpers or optional chat overlays.
 
 #### Phase 2: dashboard refresh consolidation
 
@@ -97,7 +99,7 @@ If the goal is to ship safely, the next work should stay focused on hardening an
 - Superseded bootstrap cycles now terminate with an explicit `superseded` outcome instead of remaining `pending`, so auth-hydration rerenders no longer resemble hung requests in local diagnostics.
 - The owner-channel-count lookup is already keyed only to channel identity and profile-visibility changes, while the owner-channel popup fetches on demand. Do not broaden either dependency set during later refactors.
 - Keep the current correctness bias for passcode, moderation and live-state transitions, but separate "must refetch full init" cases from "message snapshot or targeted field refresh is enough" cases.
-- Remaining Phase 3 validation is to collect representative baselines from those local diagnostics before calling the phase complete.
+- One production channel sample confirmed fast `/api/init` (`202-267 ms`) and exposed cold client startup as the larger delay. Collect additional cache-disabled device/network samples and verify the deployed conditional chunks before calling Phase 3 complete.
 
 #### Later message-query optimizations
 

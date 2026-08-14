@@ -4,7 +4,7 @@ This checklist is for shipping **yap.** beyond ad hoc internal testing.
 It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
 backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
-## Status snapshot — 2026-08-13
+## Status snapshot — 2026-08-14
 
 ### Completed and verified
 
@@ -34,10 +34,15 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Fresh protected-media requests and direct capabilities reject stale room access and deleted parent channels before reading R2; bounded private browser-cache reuse is explicitly documented.
 - [x] The first seven-day operational-health baseline was reviewed across 672 fifteen-minute windows. Normal p50/p95/p99 counts were zero, the existing thresholds were retained, and the operator response runbook is complete.
 
+### Implemented, rollout verification pending
+
+- [x] External operational-health alerting is implemented with shared thresholds, five-minute evaluation, durable deduplication, delivery retry and recovery notifications.
+- [x] Conditional chat interfaces are split from the initial route bundle. Comparable production builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`), and superseded bootstrap traces no longer remain falsely `pending`.
+
 ### Still required before a broad public launch
 
 - [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization, cross-tab socket revocation and media-access revocation are covered; deployed support/report transitions remain.
-- [ ] Apply migration `0039`, configure `OPERATIONAL_ALERT_EMAIL`, deploy Worker/frontend alert delivery, and verify one critical/recovery cycle without duplicate email. The implementation and response runbook are complete.
+- [ ] Finish the external-alert rollout: apply migration `0039`, configure `OPERATIONAL_ALERT_EMAIL`, deploy the Worker/frontend, confirm the health card reports alerting enabled, and verify one critical/recovery cycle without duplicate email.
 - [ ] Add explicit monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades, then rehearse the legacy credential upgrade path end to end.
 - [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
 - [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
@@ -52,7 +57,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
 - [ ] When a genuine post-deployment Durable Object failure occurs, confirm `realtime_unavailable` produces degraded health without an `/api/init` `500`; independently verify WebSocket reconnect restores the live presence count.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
-- [ ] After the conditional chat chunks deploy, perform one cache-disabled channel load and open search, edit, context menu, settings, gallery, links, report and owner-admin overlays once.
+- [ ] Verify the conditional chat chunks in production with one cache-disabled channel load, then open search, edit, context menu, settings, gallery, links, report and owner-admin overlays once.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
 
 ## Current release verification — completed 2026-08-13
