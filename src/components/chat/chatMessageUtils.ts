@@ -1,5 +1,6 @@
 export interface ChatMessageSnapshot {
   id: string;
+  client_message_id?: string | null;
   uid: string;
   auth_uid?: string | null;
   nick: string | null;
@@ -116,6 +117,7 @@ export function parseReactions(reactionsStr: string): Record<string, string> {
 
 function messagesEqual(left: ChatMessageSnapshot, right: ChatMessageSnapshot): boolean {
   return left.id === right.id
+    && left.client_message_id === right.client_message_id
     && left.uid === right.uid
     && left.auth_uid === right.auth_uid
     && left.nick === right.nick

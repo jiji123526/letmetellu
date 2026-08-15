@@ -30,6 +30,7 @@ export interface PetitionMeta {
 
 export interface Message {
   id: string;
+  client_message_id?: string | null;
   uid: string;
   auth_uid?: string | null;
   nick: string | null;

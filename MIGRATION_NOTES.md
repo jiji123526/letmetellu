@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message sends survive ambiguous connection failures without creating duplicates — 2026-08-15
+
+- Production inspection found two identical messages from the same actor roughly 14 minutes apart with different `client_message_id` values. The first request had been persisted, but the browser missed both its HTTP/WebSocket confirmation; leaving and re-entering the channel then generated a new ID for the retry, so the database correctly treated it as a new message.
+- Normal message responses now return the complete persisted message and the client immediately reconciles that acknowledgement into the visible list. WebSocket delivery remains the realtime path, but it is no longer the only way a successful send becomes visible.
+- An unresolved send attempt is stored in tab-scoped `sessionStorage` for up to 30 minutes. Re-entering the same channel and retrying the same payload reuses its original client ID, allowing the existing database uniqueness constraint to return the already-persisted row instead of inserting another copy.
+- Stored attempt signatures are deterministic hashes of the channel, mode, reply target, text and attachment metadata. Raw message text is not written to storage. A confirmed response or a matching message observed from the server clears the attempt immediately, so deliberately sending the same text again after success still creates a new message.
+- Single and batch idempotency responses now include the existing persisted message. Focused tests cover acknowledgement payloads, signature stability, payload separation and expiry.
+
+Trade-off: a genuinely unresolved identical retry in the same tab and channel within 30 minutes is treated as the original attempt. This is intentional for ambiguous network failures; once the server confirms or displays the send, the retry marker is cleared. Responses are also slightly larger because they include one message record, while `sessionStorage` remains tab-local and contains no plaintext message content.
+
+Deployment note: deploy the Worker before the frontend. No D1 migration is required because the existing `client_message_id` uniqueness indexes remain the source of truth. Verify a normal send appears from the HTTP acknowledgement with WebSocket delivery suppressed, then abort a request after persistence, leave/re-enter, retry, and confirm only one database row exists.
+
 ### Dashboard LIVE badges are visible to channel visitors — 2026-08-14
 
 - The red dashboard `LIVE` badge previously used an owner-only `/api/user` field. Anonymous device-local recent channels, logged-in joined channels and direct channel search results always forced the badge off.

@@ -387,7 +387,9 @@ export async function sendMessage(payload: {
     body: JSON.stringify(payload),
   });
   if (res.status >= 500) throw new Error(`Message send failed: ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result?.message) result.message = decorateMessageMedia(result.message);
+  return result;
 }
 
 export async function sendMessageAsAdmin(payload: {
@@ -413,7 +415,9 @@ export async function sendMessageAsAdmin(payload: {
     body: JSON.stringify(payload),
   });
   if (res.status >= 500) throw new Error(`Message send failed: ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (result?.message) result.message = decorateMessageMedia(result.message);
+  return result;
 }
 
 export function getWebSocketUrl(channelId: string, uid: string): string {

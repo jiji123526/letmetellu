@@ -169,7 +169,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         }
         routeStage = "rebroadcast_duplicate";
         await broadcastPersistedMessage(env, parentChannelId, existingMessage);
-        return Response.json({ id: existingMessage.id, created_at: existingMessage.created_at, duplicate: true });
+        return Response.json({
+          id: existingMessage.id,
+          created_at: existingMessage.created_at,
+          duplicate: true,
+          message: existingMessage,
+        });
       }
 
       routeStage = "apply_rate_limit";
@@ -295,7 +300,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         if (duplicate?.uid === requesterUid && duplicate.channel_id === requestChannelId) {
           routeStage = "rebroadcast_batch_duplicate";
           await broadcastPersistedMessage(env, parentChannelId, duplicate);
-          return Response.json({ id: duplicate.id, created_at: duplicate.created_at, duplicate: true });
+          return Response.json({
+            id: duplicate.id,
+            created_at: duplicate.created_at,
+            duplicate: true,
+            message: duplicate,
+          });
         }
         throw error;
       }
@@ -304,7 +314,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
 
       // Broadcast through the same parent-channel Durable Object used above.
       const newMessage = {
-        id, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
+        id, client_message_id: clientMessageId, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
         channel_id: requestChannelId, image: image || null, reply_to: resolvedReplyTo,
         report: report ? 1 : 0, reported_msg_id: resolvedReportedMessageId, gallery_id: image ? id : null,
         deleted: 0, edited: 0, reactions: "{}", created_at,
@@ -313,7 +323,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       await broadcastPersistedMessage(env, parentChannelId, newMessage);
 
       routeStage = "build_response";
-      return Response.json({ id, created_at });
+      return Response.json({ id, created_at, message: newMessage });
     }
 
     // DELETE — hard delete (remove message) or soft delete (mark as deleted)

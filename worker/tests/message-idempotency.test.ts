@@ -29,4 +29,7 @@ test("duplicate message retries rebroadcast the persisted message", () => {
   assert.match(route, /routeStage = "rebroadcast_batch_duplicate"[\s\S]*broadcastPersistedMessage/);
   assert.match(route, /routeStage = "broadcast_message"[\s\S]*broadcastPersistedMessage/);
   assert.match(route, /message_broadcast_failed/);
+  assert.match(route, /duplicate: true,[\s\S]*message: existingMessage/);
+  assert.match(route, /duplicate: true,[\s\S]*message: duplicate/);
+  assert.match(route, /Response\.json\(\{ id, created_at, message: newMessage \}\)/);
 });

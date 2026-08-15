@@ -16,6 +16,11 @@ import {
   uploadAdminImage,
   uploadImage,
 } from "@/lib/api-chat";
+import {
+  hashMessageSendSignature,
+  parseStoredMessageSendAttempt,
+  type StoredMessageSendAttempt,
+} from "@/lib/message-send-attempt";
 import { mergeServerMessageSnapshot, parseReactions } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 import type { PendingPhoto } from "./useChatComposerState";
@@ -127,7 +132,7 @@ export function useChatMessageMutations({
   text,
 }: UseChatMessageMutationsArgs): UseChatMessageMutationsResult {
   const sendInFlightRef = useRef(false);
-  const sendAttemptRef = useRef<{ signature: string; id: string } | null>(null);
+  const sendAttemptRef = useRef<StoredMessageSendAttempt | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [petitionSentUid, setPetitionSentUid] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -135,6 +140,38 @@ export function useChatMessageMutations({
   });
 
   const hasPetitioned = petitionSentUid === uid;
+
+  const activeSendChannelId = inLiveMode ? `${channelId}_live` : channelId;
+  const sendAttemptStorageKey = `pendingMessageSend:${activeSendChannelId}:${dmMode ? "dm" : "chat"}:${authUserId || uid}`;
+
+  const clearStoredSendAttempt = useCallback((submissionId?: string) => {
+    if (typeof window === "undefined") return;
+    const current = sendAttemptRef.current;
+    if (submissionId && current?.id !== submissionId) return;
+    sessionStorage.removeItem(sendAttemptStorageKey);
+    sendAttemptRef.current = null;
+  }, [sendAttemptStorageKey]);
+
+  useEffect(() => {
+    if (dmMode || typeof window === "undefined") return;
+    const rawAttempt = sessionStorage.getItem(sendAttemptStorageKey);
+    if (!rawAttempt) return;
+    try {
+      const stored = JSON.parse(rawAttempt) as Partial<StoredMessageSendAttempt>;
+      if (
+        typeof stored.id === "string"
+        && messages.some((message) =>
+          message.client_message_id === stored.id
+          || message.client_message_id?.startsWith(`${stored.id}:`)
+        )
+      ) {
+        sessionStorage.removeItem(sendAttemptStorageKey);
+        if (sendAttemptRef.current?.id === stored.id) sendAttemptRef.current = null;
+      }
+    } catch {
+      sessionStorage.removeItem(sendAttemptStorageKey);
+    }
+  }, [dmMode, messages, sendAttemptStorageKey]);
 
   const updatePetitionSentUid = useCallback((nextValue: string) => {
     setPetitionSentUid(nextValue);
@@ -219,17 +256,32 @@ export function useChatMessageMutations({
     sendInFlightRef.current = true;
     setIsSending(true);
 
-    const submissionSignature = JSON.stringify([
-      inLiveMode ? `${channelId}_live` : channelId,
+    const submissionSignature = hashMessageSendSignature(JSON.stringify([
+      activeSendChannelId,
       dmMode,
       nextText,
       replyingToId || "",
-      pendingPhotos.map((photo) => photo.previewUrl),
-    ]);
-    const submissionId = sendAttemptRef.current?.signature === submissionSignature
-      ? sendAttemptRef.current.id
-      : crypto.randomUUID();
-    sendAttemptRef.current = { signature: submissionSignature, id: submissionId };
+      pendingPhotos.map((photo) => [photo.blob.size, photo.blob.type, photo.width, photo.height]),
+    ]));
+    const storedAttempt = typeof window === "undefined"
+      ? null
+      : parseStoredMessageSendAttempt(
+          sessionStorage.getItem(sendAttemptStorageKey),
+          submissionSignature,
+        );
+    const currentAttempt = sendAttemptRef.current?.signature === submissionSignature
+      ? sendAttemptRef.current
+      : storedAttempt;
+    const sendAttempt: StoredMessageSendAttempt = currentAttempt || {
+      signature: submissionSignature,
+      id: crypto.randomUUID(),
+      savedAt: Date.now(),
+    };
+    const submissionId = sendAttempt.id;
+    sendAttemptRef.current = sendAttempt;
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(sendAttemptStorageKey, JSON.stringify(sendAttempt));
+    }
     let retainSubmissionId = false;
 
     try {
@@ -294,6 +346,7 @@ export function useChatMessageMutations({
         return;
       }
 
+      clearStoredSendAttempt(submissionId);
       setBanner({ text: text.sentToAdmin, color: "#7b3fa0" });
       clearBannerSoon();
       return;
@@ -308,6 +361,7 @@ export function useChatMessageMutations({
     const senderUid = effectiveAdmin && authUserId ? authUserId : uid;
     let sendError: string | undefined;
     let unsentPhotos: typeof photos = [];
+    const acknowledgedMessages: Message[] = [];
 
     try {
       if (photos.length === 0) {
@@ -319,6 +373,7 @@ export function useChatMessageMutations({
           reply_to: savedReplyTo,
         });
         sendError = result.error;
+        if (result.message) acknowledgedMessages.push(result.message as Message);
       } else {
         for (let index = 0; index < photos.length; index += 1) {
           const upload = effectiveAdmin && authUserId
@@ -345,6 +400,7 @@ export function useChatMessageMutations({
             unsentPhotos = photos.slice(index);
             break;
           }
+          if (result.message) acknowledgedMessages.push(result.message as Message);
 
           URL.revokeObjectURL(photos[index].previewUrl);
           if (index === 0) {
@@ -366,6 +422,9 @@ export function useChatMessageMutations({
       return;
     }
 
+    if (acknowledgedMessages.length > 0) {
+      setMessages((previous) => mergeServerMessageSnapshot(previous, acknowledgedMessages));
+    }
     resetInput();
     } catch (error) {
       retainSubmissionId = true;
@@ -374,15 +433,17 @@ export function useChatMessageMutations({
       if (dmMode) setDmMode(true);
       showMutationError(error instanceof MediaUploadTooLargeError ? "media_too_large" : "network_error");
     } finally {
-      if (!retainSubmissionId) sendAttemptRef.current = null;
+      if (!retainSubmissionId) clearStoredSendAttempt(submissionId);
       sendInFlightRef.current = false;
       setIsSending(false);
     }
   }, [
+    activeSendChannelId,
     authUserId,
     blockedUsers,
     channelFrozen,
     channelId,
+    clearStoredSendAttempt,
     clearBannerSoon,
     consumeComposerState,
     dmMode,
@@ -401,6 +462,8 @@ export function useChatMessageMutations({
     setBanner,
     setDmMode,
     setPendingPhotos,
+    setMessages,
+    sendAttemptStorageKey,
     showMutationError,
     text.blockReason,
     text.blocked,
