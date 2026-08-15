@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Three-character message searches use a trigram index — 2026-08-15
+
+- Production search remained fast but literal substring matching read hundreds of message rows per returned result and scaled linearly with channel history.
+- Migration `0044_trigram_message_search.sql` replaces the unused default-tokenizer FTS5 table with a trigram external-content index and rebuilds it from all existing messages.
+- Queries containing at least three Unicode code points now use `messages_fts MATCH ?`; the input is wrapped as an escaped FTS5 phrase so quotes and operators remain literal rather than becoming search syntax.
+- One- and two-code-point queries retain the previous `instr(lower(...))` path. This preserves short Korean substring search, which a trigram index cannot accelerate without a separate bigram index.
+- The update trigger now runs only when `messages.text` changes. Reaction, report and other non-text message updates no longer rewrite the FTS index.
+- `worker/scripts/audit-trigram-message-search.sql` verifies tokenizer SQL, trigger scope, FTS integrity and the virtual-table query plan. Focused tests cover Unicode thresholds and FTS phrase escaping.
+
+Trade-off: the rebuilt trigram index consumes additional D1 storage and every message insert, text edit and hard delete maintains search data. Search becomes unavailable if migration or index synchronization fails, while short searches still scan a bounded channel range. The FTS candidate set is global before the authoritative channel/deleted filters are applied, so very common phrases can read more candidates than channel-local indexing would; a separate search service or channel-specific n-gram table is not justified at the current scale.
+
+Deployment note: apply migration `0044`, run the audit, then deploy the Worker. No frontend deployment is required. Test Korean, English, quotes, punctuation, one/two-character queries, live-mode search, edits and deletions; then compare D1 Insights for the new `MATCH` fingerprint against the prior substring-search baseline.
+
 ### Parent-message deletion no longer scans the reply table — 2026-08-15
 
 - D1 Insights showed `DELETE FROM messages WHERE id = ? AND channel_id = ?` reading `391.53k` rows across only 27 executions, roughly `14.5k` rows per deletion, despite the target message using its primary key.

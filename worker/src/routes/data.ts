@@ -11,7 +11,11 @@ import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
-import { normalizeMessageSearchQuery } from "../lib/message-search";
+import {
+  normalizeMessageSearchQuery,
+  shouldUseTrigramMessageSearch,
+  toFts5Phrase,
+} from "../lib/message-search";
 import { getTrustedUserId } from "../lib/trusted-identity";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
@@ -289,14 +293,26 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const cursor = url.searchParams.get("cursor");
       const cursorId = url.searchParams.get("cursor_id");
       const limit = 30;
-      let searchQuery = `
-        SELECT m.id, m.text, m.created_at
-        FROM messages m
-        WHERE m.channel_id = ?
-          AND m.deleted = 0
-          AND instr(lower(COALESCE(m.text, '')), lower(?)) > 0
-      `;
-      const params: unknown[] = [channelId, query];
+      const useTrigram = shouldUseTrigramMessageSearch(query);
+      let searchQuery = useTrigram
+        ? `
+          SELECT m.id, m.text, m.created_at
+          FROM messages_fts
+          INNER JOIN messages m ON m.rowid = messages_fts.rowid
+          WHERE messages_fts MATCH ?
+            AND m.channel_id = ?
+            AND m.deleted = 0
+        `
+        : `
+          SELECT m.id, m.text, m.created_at
+          FROM messages m
+          WHERE m.channel_id = ?
+            AND m.deleted = 0
+            AND instr(lower(COALESCE(m.text, '')), lower(?)) > 0
+        `;
+      const params: unknown[] = useTrigram
+        ? [toFts5Phrase(query), channelId]
+        : [channelId, query];
       if (cursor && cursorId) {
         searchQuery += " AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))";
         params.push(cursor, cursor, cursorId);
