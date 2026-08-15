@@ -26,8 +26,14 @@ Last updated: 2026-08-15
 
 Proposed beta founding price:
 
-- USD 2 per month; or
-- USD 12 per year.
+- Korean domestic launch candidate: KRW 2,900 for 30 days; or
+- Korean domestic launch candidate: KRW 17,000 for 365 days.
+
+Recommended beta behavior is a non-renewing pass paid through Toss Payments. It supports a straightforward card, KakaoPay or Naver Pay purchase without storing a billing key. Before expiry, the dashboard invites the user to purchase another pass.
+
+If automatic renewal is later validated as necessary, Toss Payments can provide card or account billing after additional review and contract. Its billing product does not support automatic renewal through Toss Pay, KakaoPay or Naver Pay. Supporting recurring Korean wallets would require a different PG or direct integration, potentially through PortOne.
+
+An overseas Polar product at USD 2 monthly or USD 12 yearly remains a future option rather than the initial Korean launch path.
 
 Benefits:
 
@@ -117,35 +123,81 @@ Do not silently erase existing settings.
 
 ## Billing provider direction
 
-Polar is the leading Merchant of Record candidate because it supports South Korean payouts, subscriptions, a hosted customer portal, webhook synchronization and a TypeScript/Next.js SDK.
+The initial launch should prioritize Korean customers, KRW settlement and Korean tax reporting through a domestic business and PG contract.
 
-Before implementation:
+### Recommended beta path: Toss Payments passes
 
-- Ask Polar to confirm that a moderated anonymous user-generated-content SaaS is acceptable.
-- Explain reporting, blocking, prohibited-word controls, platform moderation, suspension and content removal.
-- Create monthly and annual products in the Polar sandbox.
-- Confirm the Korean-customer card, currency and tax experience in sandbox or provider review.
-- Confirm whether founding subscribers retain their original product price.
+- Sell a 30-day and 365-day Plus pass without automatic renewal.
+- Offer contracted domestic cards and easy-pay methods through the Toss Payments payment window or widget.
+- Naver Pay can be exercised with general test keys; KakaoPay becomes available for testing only after the merchant contract and MID test keys are issued.
+- Treat the payment-window success redirect as untrusted input. The Worker must compare the authenticated user, pending order, plan and authoritative amount before calling the Toss payment confirmation API.
+- Grant the entitlement only after server-side confirmation succeeds and is durably recorded.
+- Use payment status webhooks for cancellation and refund reconciliation; make event handling idempotent.
 
-The low monthly price has a high proportional transaction cost because Polar currently charges a fixed per-transaction component. The annual product should therefore be the default presentation, while monthly remains the low-commitment option.
+### Optional later path: Toss automatic billing
+
+Toss automatic billing supports cards and account transfer, not domestic easy-pay wallets. It also requires risk review and an additional contract. yap. would need to issue and securely store a billing key, schedule charges itself, implement retry and dunning rules, stop scheduling after cancellation, and handle expired or replaced payment instruments.
+
+Do not add this complexity until pass renewal behavior demonstrates a real need for automatic renewal.
+
+### Overseas path: Polar
+
+Polar remains a Merchant of Record candidate for meaningful overseas demand. It can handle international indirect sales tax and foreign subscriptions, but running Polar and Toss simultaneously creates two checkout, refund, reconciliation and entitlement paths. Add it only after the Korean billing flow is stable.
+
+### Business and storefront prerequisites
+
+Before applying for live domestic payments:
+
+- Register an appropriate Korean sole proprietorship or company and settlement account.
+- Confirm business category, VAT treatment and simplified or general taxpayer status with a tax professional or the relevant authority.
+- Determine whether a mail-order business report is required and complete it where applicable.
+- Display business name, representative, registration number, mail-order registration number where applicable, address and customer contact details in the site footer.
+- Publish pass duration, supply timing, cancellation, refund, expiry and downgrade terms.
+- Provide Toss and card reviewers a production-like website and test account.
+- Ask Toss for the exact contracted methods, transaction fee, setup, annual or minimum fee and settlement schedule. Do not infer them from SDK availability.
+
+Domestic PG sales, advertising revenue and related expenses remain part of Korean bookkeeping and tax reporting. Customer-facing KRW pricing should state clearly whether VAT is included; VAT-inclusive display is the recommended consumer presentation subject to professional confirmation.
 
 ## Server-side source of truth
 
-Neither a successful checkout redirect nor a browser flag grants Plus. Polar webhooks update D1, and Worker authorization reads D1 before enforcing paid capabilities.
+Neither a successful redirect nor a browser flag grants Plus. The Worker verifies the provider result, updates D1, and reads D1 before enforcing paid capabilities.
 
 Suggested records:
 
-### `user_subscriptions`
+### `billing_orders`
+
+- `order_id`
+- `user_id`
+- `plan`
+- `amount`
+- `currency`
+- `status`
+- `created_at`
+- `expires_at`
+
+### `payments`
+
+- `provider_payment_id` with a unique constraint
+- `order_id`
+- `user_id`
+- `provider`
+- `method`
+- `amount`
+- `currency`
+- `status`
+- `approved_at`
+- `canceled_at`
+
+### `user_entitlements`
 
 - `user_id`
 - `provider`
-- `provider_customer_id`
-- `provider_subscription_id`
-- `product_id`
 - `plan`
 - `status`
-- `current_period_end`
-- `cancel_at_period_end`
+- `starts_at`
+- `ends_at`
+- `source_order_id`
+- optional `provider_customer_id` and `provider_subscription_id` for later recurring billing
 - `updated_at`
 
 ### `billing_webhook_events`
@@ -194,11 +246,48 @@ The advertisement should appear only after the form is valid so users do not wat
 
 ### Plus purchase
 
-Open Plus sheet → select annual by default or monthly → hosted checkout → webhook confirms entitlement → dashboard refreshes account state → premium controls unlock.
+Open Plus sheet → select 365 days by default or 30 days → create a server-priced pending order → Toss payment window → Worker confirms payment with Toss → D1 entitlement begins → dashboard refreshes account state → premium controls unlock.
 
 ### Cancellation
 
-Open hosted customer portal → cancel → retain Plus until the paid period ends → downgrade non-destructively → preserve recoverable settings.
+For a non-renewing pass, no cancellation is needed to stop future charges. A refund request follows the published policy and provider cancellation API, with the entitlement adjusted only after the server records the result. At normal expiry, downgrade non-destructively and preserve recoverable premium settings.
 
 ## Metrics for deciding whether this model works
 
+- Percentage of active channel owners who encounter an ad gate.
+- Ad start, verified completion, unavailable-inventory and abandonment rates.
+- Photo bundle and additional-channel creation success after ad completion.
+- Plus checkout start, server-confirmed completion, refund and repeat-purchase rates.
+- 30-day versus 365-day selection.
+- Renewal purchase rate before and after pass expiry.
+- Conversion after encountering each paid gate.
+- Infrastructure and storage cost per Free and Plus owner.
+- Reports or spam changes after rewarded media and channel creation launches.
+
+Do not optimize for ad views alone. The primary health measures are successful channel creation, successful media sends, retained channel owners and paid conversion.
+
+## Recommended rollout
+
+1. Register the Korean business and tax setup and ask Toss about the specific UGC SaaS, payment methods, fees and review requirements.
+2. Finalize the unresolved product decisions below.
+3. Add provider-neutral D1 order, payment, entitlement, webhook-event and rewarded-ad grant schema.
+4. Implement Toss test-key order creation, payment confirmation, cancellation and refund reconciliation, and idempotency tests.
+5. Add one server-side entitlement helper used by channel creation, media sending and customization updates.
+6. Complete merchant and card review, then test all contracted methods with the merchant MID test keys, including mobile redirect behavior.
+7. Launch Plus passes without ads first to validate purchase, expiry and downgrade behavior.
+8. Add rewarded ads behind a feature flag for a small percentage of Free users.
+9. Measure ad availability and completion before enforcing the gate for all Free users.
+10. Consider card automatic billing only after repeat-purchase data demonstrates sufficient demand.
+11. Add Polar only after overseas demand justifies a second billing and tax path.
+
+## Decisions still required
+
+- Whether the initial Korean product is definitively a non-renewing 30-day and 365-day pass; recommended for beta.
+- Final VAT-inclusive KRW prices and refund amounts after receiving the PG fee quote.
+- Whether Plus removes ads for every visitor in the owner channels or only for the owner; recommended: every visitor.
+- The exact placement and maximum frequency of non-rewarded advertisements in free-owned channels.
+- The fallback when no rewarded advertisement is available; recommended during beta: one bounded daily fallback grant.
+- The migration treatment for existing customized channels; recommended: grandfather until changed or offer a transition trial.
+- Whether active founding users keep their launch price on later repeat purchases.
+- The retention period for premium background images after downgrade.
+- Minimum account age or verification requirements before rewarded channel creation.
