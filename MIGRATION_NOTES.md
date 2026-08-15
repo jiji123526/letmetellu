@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Parent-message deletion no longer scans the reply table — 2026-08-15
+
+- D1 Insights showed `DELETE FROM messages WHERE id = ? AND channel_id = ?` reading `391.53k` rows across only 27 executions, roughly `14.5k` rows per deletion, despite the target message using its primary key.
+- The amplification came from SQLite enforcing `FOREIGN KEY (reply_to) REFERENCES messages(id) ON DELETE SET NULL`. Its child lookup is effectively `WHERE reply_to = ?`, while every existing reply index began with `channel_id` and could not serve that foreign-key lookup without a broad scan.
+- Migration `0043_message_reply_foreign_key_lookup.sql` adds `messages_reply_to_idx(reply_to)` for the exact generated lookup. It does not change deletion, reply or soft-delete behavior.
+- `worker/scripts/audit-message-delete-index.sql` verifies the index columns, query plan and foreign-key integrity. Focused regression coverage preserves the schema relationship and audit fingerprint.
+
+Trade-off: every reply adds one small index entry and reply writes/deletes maintain one additional B-tree. Root messages store `NULL` in this non-partial index, so it also consumes entries for roots; the extra write and storage cost is expected to be much smaller than scanning the growing message table on every hard parent deletion.
+
+Deployment note: apply migration `0043`; no Worker or frontend behavior change is required. Run the audit and confirm the plan reports `messages_reply_to_idx`, then perform representative hard deletions and compare the new D1 Insights fingerprint against the `14.5k` rows-read-per-delete baseline.
+
 ### Message sends survive ambiguous connection failures without creating duplicates — 2026-08-15
 
 - Production inspection found two identical messages from the same actor roughly 14 minutes apart with different `client_message_id` values. The first request had been persisted, but the browser missed both its HTTP/WebSocket confirmation; leaving and re-entering the channel then generated a new ID for the retry, so the database correctly treated it as a new message.
