@@ -848,7 +848,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   return (
     <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
       <ChatViewTopChrome
-        channelId={channelId}
+        channelId={inLiveMode ? `${channelId}_live` : channelId}
         channelName={channel?.name || ""}
         channelProfileImage={channel?.profile_image || null}
         ownerChannelCount={ownerChannelCount}

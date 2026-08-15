@@ -201,6 +201,7 @@ export function ChatViewTopChrome({
 
       {showSearch && (
         <SearchBar
+          key={channelId}
           channelId={channelId}
           messages={searchMessages}
           onNavigate={onSearchNavigate}

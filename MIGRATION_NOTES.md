@@ -466,6 +466,14 @@ Deployment note: this is frontend-only and requires no D1 migration or Worker de
 
 Trade-off: the values CTE adds a small amount of SQL planning structure, but removes duplicated bindings and preserves the same returned thread rows and ordering.
 
+### Live-session search uses the active message channel — 2026-08-15
+
+- The in-chat search bar now targets the active live message channel (`<channel>_live`) while the viewer is in live mode instead of querying the normal channel's history.
+- Switching between normal and live chat remounts the search bar so query results, pagination cursors and the active result cannot leak across the two message stores.
+- The Worker search and authorization paths already support live channel IDs, so this is a frontend routing correction with no schema or API response change.
+
+Trade-off: an open search is cleared when the viewer enters or leaves live mode. This avoids showing stale results that belong to the other message store.
+
 ### Bounded Worker cache for failed link previews — 2026-08-09
 
 - The Worker preview route now caches unsupported or stable client failures for 15 minutes, transient upstream gateway and timeout failures for 60 seconds, and successful responses without usable title/image metadata for five minutes.
