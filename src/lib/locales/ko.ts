@@ -35,6 +35,7 @@ export const ko = {
   blocked: "차단되어 전송할 수 없습니다",
   chatFrozen: "채팅이 얼려져 있습니다",
   sendFailed: "전송 실패",
+  mediaTooLarge: "미디어 용량이 너무 큽니다 (파일당 최대 10MB)",
   adminDataAuthFailed: "방장 데이터를 불러오지 못했습니다. 서버 인증 설정을 확인해 주세요.",
   roomAuthExpired: "채널 인증이 만료되었습니다. 비밀번호를 다시 입력해 주세요.",
   passcodeChanged: "채널 비밀번호가 변경되었습니다. 작성 중인 내용은 그대로 보관됩니다.",

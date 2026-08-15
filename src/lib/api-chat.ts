@@ -18,6 +18,18 @@ let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
 const initRequests = new Map<string, Promise<unknown>>();
 const messagePageRequests = new Map<string, Promise<unknown>>();
 const MESSAGE_SEND_TIMEOUT_MS = 15_000;
+const MAX_MEDIA_UPLOAD_SIZE = 10 * 1024 * 1024;
+
+export class MediaUploadTooLargeError extends Error {
+  constructor() {
+    super("Media upload exceeds the 10MB limit");
+    this.name = "MediaUploadTooLargeError";
+  }
+}
+
+export function isMediaUploadTooLarge(blob: Blob): boolean {
+  return blob.size > MAX_MEDIA_UPLOAD_SIZE;
+}
 
 async function fetchMessageMutation(input: RequestInfo | URL, init: RequestInit) {
   const controller = new AbortController();
@@ -546,6 +558,7 @@ export async function uploadImage(
   purpose: Exclude<UploadPurpose, "channel-asset"> = "message",
 ): Promise<UploadResult | null> {
   if (IS_MOCK) return { url: URL.createObjectURL(blob) };
+  if (isMediaUploadTooLarge(blob)) throw new MediaUploadTooLargeError();
   const params = new URLSearchParams({ channel: channelId, purpose });
   const res = await fetch(`/api/upload?${params.toString()}`, {
     method: "POST",
@@ -556,6 +569,7 @@ export async function uploadImage(
     },
     body: blob,
   });
+  if (res.status === 413) throw new MediaUploadTooLargeError();
   const result = await res.json() as { ok?: boolean; key?: string; upload_id?: string; url?: string };
   if (result.ok && result.key) {
     return {
@@ -571,12 +585,14 @@ export async function uploadAdminImage(
   channelId: string,
   purpose: UploadPurpose = "channel-asset",
 ): Promise<UploadResult | null> {
+  if (isMediaUploadTooLarge(blob)) throw new MediaUploadTooLargeError();
   const params = new URLSearchParams({ channel: channelId, purpose });
   const res = await fetch(`/api/upload?${params.toString()}`, {
     method: "POST",
     headers: { "Content-Type": blob.type || "image/jpeg" },
     body: blob,
   });
+  if (res.status === 413) throw new MediaUploadTooLargeError();
   const result = await res.json() as { ok?: boolean; key?: string; upload_id?: string; url?: string };
   if (result.ok && result.key) {
     return {

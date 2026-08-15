@@ -711,6 +711,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       chatFrozen: t("chatFrozen"),
       dmDisabledMessage: t("dmDisabledMessage"),
       sendFailed: t("sendFailed"),
+      mediaTooLarge: t("mediaTooLarge"),
       blockReason: t("blockReason"),
       petitionPrefix: t("petitionPrefix"),
       petitionSent: t("petitionSent"),

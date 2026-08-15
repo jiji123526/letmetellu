@@ -6,6 +6,8 @@ import {
   deleteMessage,
   editMessageApi,
   fetchMessages,
+  isMediaUploadTooLarge,
+  MediaUploadTooLargeError,
   sendDm,
   sendMessage as sendMessageApi,
   sendMessageAsAdmin,
@@ -39,6 +41,7 @@ interface MutationText {
   chatFrozen: string;
   dmDisabledMessage: string;
   sendFailed: string;
+  mediaTooLarge: string;
   blockReason: string;
   petitionPrefix: string;
   petitionSent: string;
@@ -175,6 +178,8 @@ export function useChatMessageMutations({
       });
     } else if (error === "dm_disabled") {
       setBanner({ text: text.dmDisabledMessage, color: "#d32f2f" });
+    } else if (error === "media_too_large") {
+      setBanner({ text: text.mediaTooLarge, color: "#d32f2f" });
     } else {
       setBanner({ text: text.sendFailed, color: "#d32f2f" });
     }
@@ -188,6 +193,7 @@ export function useChatMessageMutations({
     text.chatFrozen,
     text.dmDisabledMessage,
     text.messageTooLong,
+    text.mediaTooLarge,
     text.moderationFrozenBanner,
     text.ownerSuspendedBanner,
     text.petitionExists,
@@ -201,6 +207,11 @@ export function useChatMessageMutations({
   const handleSend = useCallback(async () => {
     const nextText = input.trim();
     if ((!nextText && pendingPhotos.length === 0) || ownerModerationBlocked || (channelFrozen && !effectiveAdmin && !dmMode)) {
+      return;
+    }
+
+    if (pendingPhotos.some((photo) => isMediaUploadTooLarge(photo.blob))) {
+      showMutationError("media_too_large");
       return;
     }
 
@@ -341,9 +352,9 @@ export function useChatMessageMutations({
           }
         }
       }
-    } catch {
+    } catch (error) {
       retainSubmissionId = true;
-      sendError = "network_error";
+      sendError = error instanceof MediaUploadTooLargeError ? "media_too_large" : "network_error";
       unsentPhotos = photos;
     }
 
@@ -356,12 +367,12 @@ export function useChatMessageMutations({
     }
 
     resetInput();
-    } catch {
+    } catch (error) {
       retainSubmissionId = true;
       restoreInput(nextText);
       if (pendingPhotos.length > 0) setPendingPhotos(pendingPhotos);
       if (dmMode) setDmMode(true);
-      showMutationError("network_error");
+      showMutationError(error instanceof MediaUploadTooLargeError ? "media_too_large" : "network_error");
     } finally {
       if (!retainSubmissionId) sendAttemptRef.current = null;
       sendInFlightRef.current = false;

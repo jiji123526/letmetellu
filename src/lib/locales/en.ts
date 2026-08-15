@@ -37,6 +37,7 @@ export const en: Record<LocaleKeys, string> = {
   blocked: "You are blocked from sending",
   chatFrozen: "Chat is frozen",
   sendFailed: "Failed to send",
+  mediaTooLarge: "Media is too large (10MB max per file)",
   adminDataAuthFailed: "Could not load admin data. Check the server authentication configuration.",
   roomAuthExpired: "Channel access has expired. Enter the passcode again.",
   passcodeChanged: "The channel passcode changed. Your draft has been preserved.",

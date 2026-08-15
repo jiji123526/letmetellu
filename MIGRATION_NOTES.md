@@ -474,6 +474,14 @@ Trade-off: the values CTE adds a small amount of SQL planning structure, but rem
 
 Trade-off: an open search is cleared when the viewer enters or leaves live mode. This avoids showing stale results that belong to the other message store.
 
+### Explicit media-size upload feedback — 2026-08-15
+
+- Chat and DM sends now validate every selected media Blob against the existing 10MB-per-file limit before starting any upload, so a mixed selection cannot be partially sent before an oversized item is discovered.
+- The upload client preserves HTTP 413 responses as a distinct `MediaUploadTooLargeError` instead of collapsing them into the generic null upload result.
+- Korean and English chat banners now state that the media is too large and identify the 10MB per-file maximum. Other upload, network and message failures retain the existing generic send-failure handling.
+
+Trade-off: if any selected file exceeds 10MB, the entire send attempt remains in the composer until the oversized item is removed or replaced. This favors predictable all-or-nothing feedback over partial multi-image delivery.
+
 ### Bounded Worker cache for failed link previews — 2026-08-09
 
 - The Worker preview route now caches unsupported or stable client failures for 15 minutes, transient upstream gateway and timeout failures for 60 seconds, and successful responses without usable title/image metadata for five minutes.
