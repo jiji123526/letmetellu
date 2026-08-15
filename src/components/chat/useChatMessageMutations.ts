@@ -21,7 +21,7 @@ import {
   parseStoredMessageSendAttempt,
   type StoredMessageSendAttempt,
 } from "@/lib/message-send-attempt";
-import { mergeServerMessageSnapshot, parseReactions } from "./chatMessageUtils";
+import { mergeServerMessageSnapshot, parseReactions, upsertAcknowledgedMessages } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 import type { PendingPhoto } from "./useChatComposerState";
 
@@ -423,7 +423,7 @@ export function useChatMessageMutations({
     }
 
     if (acknowledgedMessages.length > 0) {
-      setMessages((previous) => mergeServerMessageSnapshot(previous, acknowledgedMessages));
+      setMessages((previous) => upsertAcknowledgedMessages(previous, acknowledgedMessages));
     }
     resetInput();
     } catch (error) {

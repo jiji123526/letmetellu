@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   MAX_MOUNTED_HISTORY_MESSAGES,
   mergeServerMessageSnapshot,
+  upsertAcknowledgedMessages,
   trimMessageWindow,
 } from "../../src/components/chat/chatMessageUtils.ts";
 
@@ -50,6 +51,27 @@ test("history trimming follows root order instead of late reply timestamps", () 
   assert.equal(ids.has(lateReply.id), false);
   assert.equal(ids.has(roots[1].id), true);
   assert.equal(ids.has(newestRoot.id), true);
+});
+
+test("acknowledged messages append or replace by id without rebuilding the snapshot", () => {
+  const first = message("first", "2026-08-15T00:00:00.000Z");
+  const existing = message("existing", "2026-08-15T00:01:00.000Z");
+  const acknowledgedExisting = { ...existing, client_message_id: "send-1" };
+  const acknowledgedNew = {
+    ...message("new", "2026-08-15T00:02:00.000Z"),
+    client_message_id: "send-2",
+  };
+
+  const result = upsertAcknowledgedMessages(
+    [first, existing],
+    [acknowledgedExisting, acknowledgedNew],
+  );
+
+  assert.deepEqual(result.map((entry) => entry.id), ["first", "existing", "new"]);
+  assert.equal(result[0], first);
+  assert.equal(result[1], acknowledgedExisting);
+  assert.equal(result[2], acknowledgedNew);
+  assert.equal(upsertAcknowledgedMessages(result, [acknowledgedExisting]), result);
 });
 
 test("latest snapshots replace mounted threads without removing unrelated old replies", () => {

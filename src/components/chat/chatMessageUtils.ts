@@ -138,6 +138,30 @@ function messagesEqual(left: ChatMessageSnapshot, right: ChatMessageSnapshot): b
     && JSON.stringify(left.petition_meta || null) === JSON.stringify(right.petition_meta || null);
 }
 
+export function upsertAcknowledgedMessages<T extends ChatMessageSnapshot>(previous: T[], acknowledged: T[]): T[] {
+  if (acknowledged.length === 0) return previous;
+
+  const next = [...previous];
+  const indexById = new Map(next.map((message, index) => [message.id, index]));
+  let changed = false;
+
+  for (const message of acknowledged) {
+    const existingIndex = indexById.get(message.id);
+    if (existingIndex === undefined) {
+      indexById.set(message.id, next.length);
+      next.push(message);
+      changed = true;
+      continue;
+    }
+    if (!messagesEqual(next[existingIndex], message)) {
+      next[existingIndex] = message;
+      changed = true;
+    }
+  }
+
+  return changed ? next : previous;
+}
+
 export function mergeServerMessageSnapshot<T extends ChatMessageSnapshot>(previous: T[], incoming: T[]): T[] {
   if (previous.length === 0) return incoming;
   if (incoming.length === 0) return [];
