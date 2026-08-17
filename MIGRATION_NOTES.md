@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel social previews refresh immediately after appearance changes — 2026-08-16
+
+- Public channel preview reads keep their five-minute cache but now carry a channel-scoped cache tag.
+- Successful channel profile, name, bubble-color and passcode mutations immediately expire that tag and invalidate both the channel metadata page and its Open Graph image route.
+- Profile uploads already use unique R2 object keys with immutable media caching, so no global media-cache purge is needed. The change targets only the stale channel row and generated social image.
+- This preserves low D1 read volume for ordinary shares while removing the former zero-to-five-minute delay after an owner changes the channel profile photo.
+
 ### Root sharing card and X channel-card crawling — 2026-08-16
 
 - The root `yapndot.com` page now publishes a 1200×630 `summary_large_image` card with deterministic `yap.` typography and the product's white, blue, rounded-message visual language.

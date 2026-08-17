@@ -16,6 +16,10 @@ interface PublicChannelRow {
 
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 
+export function channelPreviewCacheTag(channelId: string): string {
+  return `channel-preview:${channelId}`;
+}
+
 function workerOrigin(): URL {
   return new URL(process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787");
 }
@@ -43,7 +47,12 @@ export async function getPublicChannelPreview(channelId: string): Promise<Public
   try {
     const endpoint = new URL("/api/user", workerOrigin());
     endpoint.searchParams.set("exists", channelId);
-    const response = await fetch(endpoint, { next: { revalidate: 300 } });
+    const response = await fetch(endpoint, {
+      next: {
+        revalidate: 300,
+        tags: [channelPreviewCacheTag(channelId)],
+      },
+    });
     if (!response.ok) return null;
 
     const data = await response.json() as { channels?: PublicChannelRow[] };
