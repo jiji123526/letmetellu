@@ -290,45 +290,147 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         return Response.json({ results: [], has_more: false, next_cursor: null });
       }
 
-      const cursor = url.searchParams.get("cursor");
+      const cursorCreatedAt = url.searchParams.get("cursor");
       const cursorId = url.searchParams.get("cursor_id");
+      let cursorRootCreatedAt = url.searchParams.get("cursor_root_created_at");
+      let cursorRootId = url.searchParams.get("cursor_root_id");
+      let cursorDepth = Number.parseInt(url.searchParams.get("cursor_depth") || "", 10);
       const limit = 30;
       const useTrigram = shouldUseTrigramMessageSearch(query);
+      if (
+        cursorCreatedAt
+        && cursorId
+        && (!cursorRootCreatedAt || !cursorRootId || !Number.isInteger(cursorDepth))
+      ) {
+        const legacyCursor = await env.DB.prepare(`
+          SELECT
+            COALESCE(root.created_at, m.created_at) AS visual_root_created_at,
+            COALESCE(root.id, m.id) AS visual_root_id,
+            CASE WHEN m.reply_to IS NULL THEN 0 ELSE 1 END AS visual_depth
+          FROM messages m
+          LEFT JOIN messages root
+            ON root.id = m.reply_to AND root.channel_id = m.channel_id
+          WHERE m.id = ? AND m.channel_id = ?
+          LIMIT 1
+        `).bind(cursorId, channelId).first<{
+          visual_root_created_at: string;
+          visual_root_id: string;
+          visual_depth: number;
+        }>();
+        cursorRootCreatedAt = legacyCursor?.visual_root_created_at || null;
+        cursorRootId = legacyCursor?.visual_root_id || null;
+        cursorDepth = legacyCursor?.visual_depth ?? Number.NaN;
+      }
+
       let searchQuery = useTrigram
         ? `
-          SELECT m.id, m.text, m.created_at
-          FROM messages_fts
-          INNER JOIN messages m ON m.rowid = messages_fts.rowid
-          WHERE messages_fts MATCH ?
-            AND m.channel_id = ?
-            AND m.deleted = 0
+          WITH search_matches AS (
+            SELECT
+              m.id,
+              m.text,
+              m.created_at,
+              m.reply_to,
+              COALESCE(root.created_at, m.created_at) AS visual_root_created_at,
+              COALESCE(root.id, m.id) AS visual_root_id,
+              CASE WHEN m.reply_to IS NULL THEN 0 ELSE 1 END AS visual_depth
+            FROM messages_fts
+            INNER JOIN messages m ON m.rowid = messages_fts.rowid
+            LEFT JOIN messages root
+              ON root.id = m.reply_to AND root.channel_id = m.channel_id
+            WHERE messages_fts MATCH ?
+              AND m.channel_id = ?
+              AND m.deleted = 0
+          )
+          SELECT *
+          FROM search_matches
+          WHERE 1 = 1
         `
         : `
-          SELECT m.id, m.text, m.created_at
-          FROM messages m
-          WHERE m.channel_id = ?
-            AND m.deleted = 0
-            AND instr(lower(COALESCE(m.text, '')), lower(?)) > 0
+          WITH search_matches AS (
+            SELECT
+              m.id,
+              m.text,
+              m.created_at,
+              m.reply_to,
+              COALESCE(root.created_at, m.created_at) AS visual_root_created_at,
+              COALESCE(root.id, m.id) AS visual_root_id,
+              CASE WHEN m.reply_to IS NULL THEN 0 ELSE 1 END AS visual_depth
+            FROM messages m
+            LEFT JOIN messages root
+              ON root.id = m.reply_to AND root.channel_id = m.channel_id
+            WHERE m.channel_id = ?
+              AND m.deleted = 0
+              AND instr(lower(COALESCE(m.text, '')), lower(?)) > 0
+          )
+          SELECT *
+          FROM search_matches
+          WHERE 1 = 1
         `;
       const params: unknown[] = useTrigram
         ? [toFts5Phrase(query), channelId]
         : [channelId, query];
-      if (cursor && cursorId) {
-        searchQuery += " AND (m.created_at < ? OR (m.created_at = ? AND m.id < ?))";
-        params.push(cursor, cursor, cursorId);
+      if (
+        cursorCreatedAt
+        && cursorId
+        && cursorRootCreatedAt
+        && cursorRootId
+        && Number.isInteger(cursorDepth)
+      ) {
+        searchQuery += `
+          AND (
+            visual_root_created_at < ?
+            OR (visual_root_created_at = ? AND visual_root_id < ?)
+            OR (visual_root_created_at = ? AND visual_root_id = ? AND visual_depth < ?)
+            OR (
+              visual_root_created_at = ? AND visual_root_id = ? AND visual_depth = ?
+              AND created_at < ?
+            )
+            OR (
+              visual_root_created_at = ? AND visual_root_id = ? AND visual_depth = ?
+              AND created_at = ? AND id < ?
+            )
+          )
+        `;
+        params.push(
+          cursorRootCreatedAt,
+          cursorRootCreatedAt, cursorRootId,
+          cursorRootCreatedAt, cursorRootId, cursorDepth,
+          cursorRootCreatedAt, cursorRootId, cursorDepth, cursorCreatedAt,
+          cursorRootCreatedAt, cursorRootId, cursorDepth, cursorCreatedAt, cursorId,
+        );
       }
-      searchQuery += " ORDER BY m.created_at DESC, m.id DESC LIMIT ?";
+      searchQuery += `
+        ORDER BY
+          visual_root_created_at DESC,
+          visual_root_id DESC,
+          visual_depth DESC,
+          created_at DESC,
+          id DESC
+        LIMIT ?
+      `;
       params.push(limit + 1);
 
       const { results } = await env.DB.prepare(searchQuery).bind(...params).all();
       const page = results.slice(0, limit);
       const hasMore = results.length > limit;
-      const last = page.at(-1) as { id?: unknown; created_at?: unknown } | undefined;
+      const last = page.at(-1) as {
+        id?: unknown;
+        created_at?: unknown;
+        visual_root_created_at?: unknown;
+        visual_root_id?: unknown;
+        visual_depth?: unknown;
+      } | undefined;
       return Response.json({
         results: page,
         has_more: hasMore,
         next_cursor: hasMore && last
-          ? { created_at: String(last.created_at || ""), id: String(last.id || "") }
+          ? {
+              visual_root_created_at: String(last.visual_root_created_at || ""),
+              visual_root_id: String(last.visual_root_id || ""),
+              visual_depth: Number(last.visual_depth || 0),
+              created_at: String(last.created_at || ""),
+              id: String(last.id || ""),
+            }
           : null,
       });
     }

@@ -473,6 +473,9 @@ export async function editMessageApi(payload: {
 }
 
 export interface MessageSearchCursor {
+  visual_root_created_at?: string;
+  visual_root_id?: string;
+  visual_depth?: number;
   created_at: string;
   id: string;
 }
@@ -481,6 +484,10 @@ export interface MessageSearchResult {
   id: string;
   text: string;
   created_at: string;
+  reply_to?: string | null;
+  visual_root_created_at?: string;
+  visual_root_id?: string;
+  visual_depth?: number;
 }
 
 export interface MessageSearchResponse {
@@ -499,6 +506,15 @@ export async function searchMessages(
   if (cursor) {
     params.set("cursor", cursor.created_at);
     params.set("cursor_id", cursor.id);
+    if (
+      cursor.visual_root_created_at
+      && cursor.visual_root_id
+      && Number.isInteger(cursor.visual_depth)
+    ) {
+      params.set("cursor_root_created_at", cursor.visual_root_created_at);
+      params.set("cursor_root_id", cursor.visual_root_id);
+      params.set("cursor_depth", String(cursor.visual_depth));
+    }
   }
   const res = await fetch(`/api/data?${params}`, {
     headers: roomTokenHeaders(),

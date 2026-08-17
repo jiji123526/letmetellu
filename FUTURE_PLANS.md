@@ -10,6 +10,8 @@ Status reviewed: 2026-08-14.
 
 - Completed on 2026-08-17: normal message deletion, Undo and permanent cleanup now process large threads in bounded ID groups, group prior deletion states into bulk restores, and bulk-clean upload metadata/R2 keys. The focused 205-record regression keeps every D1 statement below the 100-parameter ceiling; no schema migration is required.
 
+- Completed on 2026-08-17: in-chat search now orders matches by their rendered root/thread position and starts at the bottom-most visual result. Local and remote matches use the same comparator, pagination carries the complete visual cursor, and legacy cursors remain accepted during rollout. Monitor the computed parent-join/sort fingerprint before considering denormalized root-order columns.
+
 - Completed on 2026-08-16: senders now receive the authoritative D1 acknowledgement before link indexing and realtime fan-out finish. Both post-commit tasks run concurrently, retry once and record bounded operational failures. Monitor `message_post_commit_failed` before considering a durable delivery outbox or scheduled replay queue.
 
 - Completed on 2026-08-16: ordinary new messages without URLs no longer issue an impossible `message_links` cleanup write, and anonymous/device token verification now runs concurrently. Sender acknowledgement still waits for persistence and realtime broadcast; add sampled stage timing before moving any post-persistence guarantee into background work.

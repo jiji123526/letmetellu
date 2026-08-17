@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### In-chat search follows rendered thread order — 2026-08-17
+
+- Search navigation now uses the same root-owned order as the message list. A late reply remains beneath its older root and no longer outranks a visually lower root merely because the reply was created later.
+- Every result carries a visual position consisting of root creation time, root ID, root/reply depth, message creation time and message ID. The first target remains the last result in top-to-bottom order, which is the bottom-most rendered match.
+- Search pagination uses the complete visual position as its cursor, so page boundaries inside a thread do not duplicate or skip matching replies. Local mounted matches and Worker results share one comparator.
+- The Worker accepts the previous timestamp/message-ID cursor during a staggered rollout and reconstructs its root position with one indexed lookup.
+
+Trade-off: the Worker performs an indexed parent lookup for each matching reply and sorts matching candidates by the computed root position. This is preferable to DOM measurement, which cannot order unloaded history. Review the new search fingerprint in D1 Insights before considering denormalized root-order columns.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required. Search for text shared by a newer root and a later reply to an older root; the newer root should be selected first because it is visually lower.
+
 ### Private DM replies support one image — 2026-08-17
 
 - Migration `0047_dm_reply_media.sql` adds a nullable image to owner-authored private replies. Each reply accepts text, one image, or both; the existing 20-reply and five-per-ten-second limits remain unchanged.

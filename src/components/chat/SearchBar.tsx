@@ -8,11 +8,15 @@ import {
   type MessageSearchCursor,
   type MessageSearchResult,
 } from "@/lib/api-chat";
+import {
+  addSearchVisualOrder,
+  sortSearchMessagesByVisualOrder,
+  type SearchOrderMessage,
+} from "./search-order";
 
-interface SearchMessage {
+interface SearchMessage extends SearchOrderMessage {
   id: string;
   text: string;
-  created_at?: string;
 }
 
 interface SearchBarProps {
@@ -31,10 +35,7 @@ function mergeSearchResults(
 ): SearchMessage[] {
   const byId = new Map(existing.map((message) => [message.id, message]));
   incoming.forEach((message) => byId.set(message.id, message));
-  return [...byId.values()].sort((left, right) => {
-    const dateOrder = (left.created_at || "").localeCompare(right.created_at || "");
-    return dateOrder || left.id.localeCompare(right.id);
-  });
+  return sortSearchMessagesByVisualOrder([...byId.values()]);
 }
 
 function stripLinksForSearch(text: string): string {
@@ -108,7 +109,7 @@ export function SearchBar({ channelId, messages, onNavigate, onSearchState, onCl
       return;
     }
 
-    let matched = filterSearchResults(messages, normalizedQuery);
+    let matched = filterSearchResults(addSearchVisualOrder(messages), normalizedQuery);
     let nextHasMore = false;
     let nextPageCursor: MessageSearchCursor | null = null;
 
