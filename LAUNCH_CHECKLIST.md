@@ -1,323 +1,66 @@
 # Launch Checklist
 
-This checklist is for shipping **yap.** beyond ad hoc internal testing.
-It reflects the current architecture: Next.js on Vercel, a Cloudflare Worker
-backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
-
-## Status snapshot — 2026-08-14
-
-### Completed and verified
-
-- [x] The limited-beta production gate and core smoke-test pass were completed on 2026-08-04.
-- [x] `yapndot.com` is the canonical production origin and `www.yapndot.com` permanently redirects to it.
-- [x] Google login/signup callbacks and Resend delivery use the production domain.
-- [x] Email signup verification and password reset were exercised in production during the beta setup.
-- [x] The super-admin operational-health view and bounded operational-event retention are deployed.
-- [x] Worker hardening coverage includes focused tests for trusted identity, privileged route boundaries, report-state synchronization, origin checks, upload and preview validation, live-session ending, message idempotency, reply normalization, rate limiting, support query shape, cleanup reliability and health-state derivation.
-- [x] GitHub Actions runs the Worker hardening suite, TypeScript check and Wrangler dry-run on every relevant `main` push and pull request. It performs no production deploy and requires no production secrets.
-- [x] Dashboard bootstrap and preference synchronization share one `/api/user` read. A production sample recorded one request at about `163 ms`, channels ready at about `355 ms`, and usable state at about `367 ms`; this is not currently a launch bottleneck.
-- [x] New replies are normalized to their top-level message. The 2026-08-13 production audit found 1,057 replies across 6,855 messages with no nested, broken, cross-channel, cyclic or over-depth relationships; maximum observed depth was one.
-- [x] Normal history paging uses indexed root/direct-child reads. `message-context` uses bounded recursion only to resolve a legacy target to its root, then loads the surrounding root window through the same indexed expansion path.
-- [x] YouTube and Instagram use lightweight preview cards rather than client-side widgets or iframes. YouTube cards no longer depend on an external title provider.
-- [x] Live-session end requests are session-ID guarded, and reconnecting/background tabs reconcile authoritative state before restoring live presence.
-- [x] Operational health separates third-party preview failures and media `404` traffic from core backend `5xx` severity.
-- [x] Channel and owned-channel account deletion record retryable Durable Object/R2 cleanup, with bounded scheduled retries and operational-health visibility.
-- [x] All D1 migrations through `0039_operational_health_alert_state.sql` are applied in production.
-- [x] Cross-store channel cleanup was verified end to end, including D1 deletion, R2 media removal, cleanup-job completion and operational-health visibility.
-- [x] Message history was verified with root-owned pagination: replies remain under their parent, adjacent parent windows do not disappear, and replies to unmounted historical parents do not reappear as latest messages.
-- [x] Audited pre-beta test-account and orphan-channel cleanup was completed with protected records verified afterward.
-- [x] Locked-room passcode rotation and deletion were verified across open viewer tabs; stale access returned to the gate or not-found state.
-- [x] Hidden and disconnected live tabs were verified to reject ended-session actions, avoid restoring stale presence and retain normal-room access.
-- [x] The production guided-support lifecycle audit found zero users with duplicate open sessions or tickets before migration `0038`.
-- [x] Migration `0038` and its race-recovering guided-support Worker changes are deployed.
-- [x] Cross-tab logout and account deletion were deployed and verified to remove owner controls and reconnect chat without stale WebSocket privileges.
-- [x] Fresh protected-media requests and direct capabilities reject stale room access and deleted parent channels before reading R2; bounded private browser-cache reuse is explicitly documented.
-- [x] The first seven-day operational-health baseline was reviewed across 672 fifteen-minute windows. Normal p50/p95/p99 counts were zero, the existing thresholds were retained, and the operator response runbook is complete.
-- [x] External operational-health alerting is deployed with `OPERATIONAL_ALERT_EMAIL` configured. The health card reports alerting enabled, and one controlled critical/recovery cycle delivered exactly one alert and one recovery email without duplicates.
-
-### Implemented, rollout verification pending
-
-- [x] One-way private DM threads are merged. Visitors retain only their own DM roots and owner replies under a signed same-browser identity, can delete a thread they started, and cannot delete foreign roots or owner replies; owners can send up to 20 replies with text and at most one image each; socket invalidation contains no private payload. Migrations `0045` and `0047`, Worker/frontend rollout and two-profile verification remain.
-- [x] Admin message/DM deletion now stages a server-owned five-second Undo operation. Refresh cannot cancel deletion or reveal pending rows; expired operations are permanently finalized by scheduled maintenance. Normal threads with 100+ replies use bounded 90-ID staging, grouped Undo and chunked finalization rather than exceeding D1 parameter limits. Migration `0046`, Worker/frontend rollout and refresh/Undo verification remain.
-- [x] In-chat search now follows rendered root/reply order rather than each match's independent creation time. The bottom-most visual match opens first, and the full visual cursor preserves ordering across older result pages. Worker/frontend rollout verification remains.
-- [x] Conditional chat interfaces are split from the initial route bundle. Comparable production builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`), and superseded bootstrap traces no longer remain falsely `pending`.
-- [x] The reconnect notice is now visibility-aware: normal chat suppresses it while the user is reading rendered history or historical context, but the socket continues recovering and the notice remains visible at the live edge and in active live/DM modes. Frontend rollout verification remains.
-- [x] Gallery paging now uses ordered gallery rows plus indexed active image-message lookups, replacing a production plan that read `97.53k` rows across 31 requests. Migration `0040` and Worker/frontend rollout remain.
-- [x] Actor-identity retention and message cursor/parent reads now use age, composite-cursor and child-existence index ranges. Migration `0041` and Worker rollout remain.
-- [x] Owner-channel navigation state now comes from an indexed two-row init probe; the separate startup list request is removed and the popup list matches the five-channel product limit. Migration `0042` and Worker/frontend rollout remain.
-- [x] Dashboard LIVE badges now cover anonymous recent channels, logged-in joined channels, owner channels and direct search results through expiry-aware batched status reads. Worker/frontend rollout verification remains.
-
-### Still required before a broad public launch
-
-- [ ] Continue the authorization regression plan in `SECURITY_AUTHORIZATION_MATRIX.md`. Shared identity, privileged routes, cross-object mutations, room/live lifecycle, guided-support invariants, authoritative ticket/report synchronization, cross-tab socket revocation and media-access revocation are covered; deployed support/report transitions remain.
-- [x] Finished the external-alert rollout: migration `0039`, recipient configuration, Worker/frontend deployment, health-card status and a duplicate-free critical/recovery delivery cycle are verified.
-- [x] Privacy-bounded monitoring for email verification, password reset and legacy SHA-256-to-PBKDF2 upgrades is implemented in the platform health card; Worker/frontend rollout and the disposable-account rehearsal remain.
-- [ ] Complete the nonce-based CSP rollout, or perform and record an explicit public-launch security review accepting the remaining `script-src 'unsafe-inline'` risk.
-- [ ] Remove temporary legacy production origins from Worker CORS and OAuth only after rollback readiness no longer depends on them.
-- [ ] Expand durable abuse controls and validate direct-API report evidence/targets before materially widening access.
-
-### Operational follow-up, not a current blocker
-
-- [x] Reran `worker/scripts/audit-flat-replies.sql` against production after the 2026-08-13 rollout: 6,855 messages and 1,057 replies were all flat and valid, with zero broken, cross-channel, nested, cyclic or over-depth relationships.
-- [x] Verified production query plans for root paging and reply operations. Root windows use `messages_channel_root_created_id_idx`; deleted-state child expansion uses `messages_channel_deleted_reply_idx`; thread deletion uses `messages_channel_reply_deleted_idx`. Both reply indexes remain justified, and no query/schema fix is required.
-- [ ] In D1 Insights, confirm the retired `WITH requested_roots` fingerprint stops accumulating post-deployment executions and compare new root/child rows-read-per-row against the recorded `2.7k-3.6k` baseline.
-- [ ] After applying migration `0040` and deploying Worker/frontend, run `worker/scripts/audit-gallery-query.sql`, load at least two gallery pages, and confirm the new `CROSS JOIN` fingerprint materially improves on the recorded `30.6 ms` p50, `38.9 ms` p99 and `63` rows-read-per-row baseline.
-- [ ] After applying migration `0041` and deploying the Worker, run `worker/scripts/audit-query-read-optimizations.sql`; verify older/newer paging plus message navigation and compare retention/cursor/parent fingerprints against the recorded `11.7 ms`, `39` and `77` baselines.
-- [ ] After applying migration `0042` and deploying Worker/frontend, run `worker/scripts/audit-owner-channel-query.sql`; verify one- and multi-channel headers, then confirm ordinary chat startup no longer accumulates the old owner-list fingerprint recorded at `2,218` executions and `104` rows-read-per-row.
-- [ ] After deploying Worker/frontend authentication monitoring, run `worker/scripts/audit-auth-monitoring.sql`; rehearse verification, reset and a disposable legacy-hash login, then confirm one upgrade event, no failure, a `pbkdf2-sha256$` replacement and no second upgrade event on the next login.
-- [x] Reviewed the remaining top-read D1 fingerprints on 2026-08-14. Main root/child paging was already efficient at `2` and `8` rows read per returned row. The 672-window recursive health query was a manually run audit, not application traffic. Substring message search read `21.48k` rows across 14 executions but remained only `0.13%` of runtime at `1.4 ms` p50 and `1.6 ms` p99, so a full-text index is not currently justified.
-- [ ] Audit remaining chronological query shapes before considering removal of `messages_channel_idx`; root-owned paging no longer provides evidence for removing it because that path now uses the dedicated `0037` index.
-- [x] Correlated six historical `/api/init` `500`s into two pre-fallback Durable Object reset incidents and confirmed there are no recorded `/api/init` failures after the first fallback deployment at `2026-08-13T15:38:12.056Z`.
-- [x] Confirmed during the 2026-08-17 Durable Object timeout that `/api/init` fell back through `realtime_unavailable` without an init `500`. The same burst exposed generic WebSocket and message-rate-limit `500`s; the Worker now classifies known resets as retryable `503` realtime failures.
-- [x] Removed the unused general presence query from `/api/init` and limited WebSocket viewer-count work and delivery to active live-session participants.
-- [ ] After deploying the 2026-08-17 Worker fix, verify a later genuine reset does not increment `unhandled_exception`, WebSocket reconnect restores live presence, and retrying an affected send succeeds once without a duplicate.
-- [ ] Apply migrations `0045` and `0047`, deploy Worker/frontend, then verify private DM replies with an owner and two isolated browser profiles. Each visitor must see only their own DM threads; locked-room access, text-only/image-only/text-plus-image replies, the one-image and 20-reply limits, cross-tab refresh, owner deletion and sender-owned whole-thread deletion must remain correct. A second profile must not be able to delete the first sender's root.
-- [ ] Apply migration `0046`, deploy Worker/frontend, then delete normal messages with and without replies plus DM roots/replies. Verify Undo within five seconds restores them, no Undo permanently hides them, and immediate refresh never resurrects a pending deletion.
-- [ ] After deploying the large-thread deletion hardening, delete and Undo a disposable normal root with more than 100 direct replies if a production-sized fixture is available; automated coverage exercises 205 records with every D1 statement below 100 bound parameters.
-- [ ] After deploying visual-order search, match a newer root and a later-created reply under an older root. Confirm search opens the visually lower root first, arrows follow screen order, and loading more than 30 matches introduces no duplicate or skipped target.
-- [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
-- [ ] Verify the conditional chat chunks in production with one cache-disabled channel load, then open search, edit, context menu, settings, gallery, links, report and owner-admin overlays once.
-- [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.
-
-## Current release verification — completed 2026-08-13
-
-The social-preview, live-session, cleanup and root-owned message-history changes were production-verified:
-
-- [x] Applied all production D1 migrations through `0037_message_root_pagination.sql`.
-- [x] Deployed the Worker before the frontend so preview cache `v3`, deterministic thumbnail cards, session-aware live ending, root-owned message pagination and updated operational diagnostics are active.
-- [x] Deployed the frontend and confirmed the production CSP no longer permits unused YouTube, Twitter or Instagram widget origins.
-- [x] Verified standard YouTube watch, `youtu.be`, Shorts and live URLs render static thumbnail cards without iframe/widget requests.
-- [x] Verified an Instagram public URL renders a static card when metadata is available and leaves the original link visible when metadata is unavailable.
-- [x] Verified a stale owner tab cannot end a newer live session.
-- [x] Verified a viewer tab returning from the background exits an ended session or receives the current session prompt before rejoining presence.
-- [x] Confirmed preview upstream failures remain visible separately from core `5xx`, while media `404` remains a non-severity secondary signal.
-- [x] Deleted a disposable channel with a known media object and confirmed D1 deletion, media removal, cleanup-job completion and health-card failure visibility.
-- [x] Verified older/newer scrolling follows parent-message order, complete reply groups remain attached to their roots, and search/gallery navigation centers the correct parent window.
-
-## Public-launch blockers
-
-Do not treat the app as public-launch ready until these are complete:
-
-1. Regression coverage for state-heavy flows
-- Existing Worker hardening and query-shape tests are useful but do not exercise the complete browser-visible state transitions.
-- Guided support reset/escalation and one-open-ticket Worker invariants are covered. Complete deployed browser checks for support ticket visibility and reports inbox filtering.
-- Add regression coverage for user-side ticket close/delete sync and super-admin dashboard ticket updates.
-
-2. Monitoring and operator alerting
-- The health dashboard, repeatable seven-day baseline audit, initial production calibration, response runbook and deduplicated email-alert rollout are complete.
-- Migration `0039`, recipient configuration, deployment, enabled-state reporting and one duplicate-free critical/recovery email cycle are production-verified. Preview failures, expected forbidden requests and media misses remain outside core paging.
-- Add bounded operator summaries for moderation/support audit trends.
-- Confirm a concrete review path for `403`, `429`, `5xx`, moderation actions and support queue age.
-
-3. Production email hardening
-- Resend production delivery is enabled through `yap. <noreply@send.yapndot.com>`.
-- Signup verification and password reset have been exercised. Rehearse and monitor the legacy password-hash upgrade path separately, including a non-owner recipient address where email delivery is involved.
-
-4. Custom production domain
-- `yapndot.com` is attached to Vercel and frontend/Auth.js/Worker origins use `https://yapndot.com`.
-- `www.yapndot.com` permanently redirects to the apex domain instead of serving a second independent app origin.
-- Google OAuth includes `https://yapndot.com` as an authorized JavaScript origin and both `/api/auth/callback/google-login` and `/api/auth/callback/google-signup` redirect URIs.
-- Login cookies, email verification links, password-reset links and Worker CORS were smoke-tested on the custom domain.
-- Temporary legacy origins remain only for rollback readiness and must be removed before broad public launch.
-
-## Current limited-beta gate
-
-The limited-beta gate was completed on 2026-08-04:
-
-1. End-to-end email signup and password-reset testing completed.
-2. Google signup and Google login from `yapndot.com` completed.
-3. `www.yapndot.com` returns a permanent Vercel redirect to the apex hostname.
-4. Core chat, locked-channel, live, support and moderation smoke tests completed.
-5. The super-admin health card is available; keep `wrangler tail` available for the first beta sessions.
-6. Audited pre-beta test-data cleanup completed with the protected keep set verified afterward.
-
-Accepted limited-beta security trade-off:
-
-- The production CSP still permits `script-src 'unsafe-inline'`. No active XSS is known, but this weakens CSP as a fallback containment layer if a separate injection bug exists. Keep normal input/rendering protections in place, monitor browser errors, and complete the nonce/dialog-contract migration before a broad public launch.
-- Do not remove `'unsafe-inline'` during release preparation without testing theme startup, auth, chat dialogs, deferred preview cards and raw-link fallback under the stricter policy.
-
-## Pre-deploy checks
-
-The `Worker security and type checks` GitHub status check mirrors the Worker
-commands below for every relevant pull request and `main` push. Until the
-`main` branch is protected, a failed check reports the regression but does
-not prevent a direct push or a simultaneous Vercel deployment.
-
-1. Confirm the working tree contains only the intended release changes.
-2. Review `README.md`, `MIGRATION_NOTES.md`, and this file if behavior changed.
-3. Run the frontend production build:
-
-```bash
-npm run build
-```
-
-4. Run the Worker typecheck:
-
-```bash
-cd worker
-npx tsc --noEmit
-```
-
-5. Run the Worker hardening suite and verify the deploy bundle:
-
-```bash
-npm run test:hardening
-npx wrangler deploy --dry-run
-```
-
-6. If dependencies changed, rerun the production audit:
-
-```bash
-npm audit --omit=dev
-```
-
-Do not use `npm audit fix --force` on this project. Resolve Next.js-related
-dependency issues through normal version upgrades and full retesting.
-
-## Deployment order
-
-Use the narrowest deployment needed for the change:
-
-- Worker-only change: deploy the Worker only.
-- Frontend-only change: deploy the frontend only.
-- Schema + Worker change: apply D1 migrations first, then deploy the Worker.
-- Mixed Worker + frontend change: deploy the Worker first, then the frontend.
-
-When D1 schema changes are involved:
-
-```bash
-cd worker
-npm run db:migrate:prod
-npm run deploy
-```
-
-Then deploy/publish the frontend.
-
-## Production smoke tests
-
-Run these after deployment.
-
-### Core chat
-
-1. Anonymous viewer joins a public channel.
-2. Send a normal text message.
-3. Send an image.
-4. React to a message.
-5. Delete a message.
-
-### Locked channel
-
-1. Anonymous viewer opens a passcode-protected channel.
-2. Confirm the passcode overlay appears with the current hint.
-3. Enter the passcode and confirm messages and images load.
-4. Open a protected image and confirm the URL is same-origin `/api/media/...`
-   with no `?token=...`.
-5. Open the same image URL in an unauthorized session/incognito and confirm it
-   fails instead of rendering.
-
-### Passcode change flow
-
-1. Keep a non-owner viewer connected to a locked channel.
-2. As owner, change the passcode and hint.
-3. Confirm the connected viewer is forced back to the passcode overlay.
-4. Confirm the updated hint appears immediately without a full page refresh.
-5. Re-enter the new passcode and confirm access is restored.
-
-### Channel assets
-
-1. Locked-channel profile image still appears in the channel list.
-2. Background/profile changes made by the owner appear correctly.
-3. Deleted media disappears from chat/gallery and a new or revalidated request for its old URL returns `404`.
-4. Account for the documented browser-cache window when testing a URL that was already loaded before deletion.
-
-### Link previews
-
-1. Normal public URL produces a preview.
-2. Standard YouTube watch, `youtu.be`, Shorts and live URLs produce static thumbnail cards with no iframe request.
-3. YouTube cards still render when external title/author metadata is unavailable.
-4. Public Instagram and X/Twitter URLs use lightweight cards with no platform widget script.
-5. Private or metadata-restricted Instagram posts leave the original clickable URL visible.
-6. Blocked, non-HTML, oversized, or slow URLs do not crash the Worker.
-7. When any preview does not render, the original clickable URL remains visible.
-8. Reloading a previously viewed link can restore its bounded browser-cached preview without changing authorization behavior.
-
-### Live mode
-
-1. Start a live session.
-2. Join the live session from a viewer tab.
-3. Confirm presence updates.
-4. End the live session.
-5. Confirm live messages/media are cleaned up and the normal room view recovers.
-6. Keep a viewer tab hidden through session end, return to it and confirm it reconciles to normal chat before sending live presence.
-7. Start a newer session, then attempt to end live from an owner tab holding the previous session and confirm the newer session remains active.
-8. End live in one browser tab and confirm another open tab clears its local live state.
-
-### Account flows
-
-1. Login works.
-2. Signup email verification works.
-3. Password reset request and reset completion work.
-4. Logout works.
-
-### Support and moderation
-
-1. Open the dashboard help menu as a guest and as a logged-in user.
-2. Start guided `1:1` support, close it mid-flow and confirm reopening starts from the first step.
-3. Open support in two tabs and start the flow concurrently; both tabs must converge on the same open guided session.
-4. Escalate concurrently from both tabs; exactly one open ticket must appear for the super admin.
-5. Confirm the user cannot submit a second ticket while one is still open.
-6. Close the ticket as the user and confirm the super-admin dashboard updates without retaining a stale open item.
-7. Close a ticket as the super admin and confirm the user receives and can acknowledge the closed state.
-8. Rerun `worker/scripts/audit-support-lifecycle.sql` and confirm both invariants still report zero duplicate users and zero excess records.
-9. Open the reports inbox and confirm `Open`, `Warned`, and `Frozen` filters work.
-10. Confirm the restricted-channel summary matches the currently warned/frozen channels.
-
-## Observability checks
-
-Before wider rollout, verify that you can inspect:
-
-- core backend `5xx` separately from third-party preview upstream failures;
-- preview fetch rejects, timeouts and rate-limit events;
-- media `403`, grouped `404` and `500` outcomes, with media `404` excluded from core severity;
-- `/api/init` and `/api/messages` failure-stage detail;
-- grouped WebSocket failures without per-channel route fragmentation;
-- room-auth failures and passcode verification failures;
-- upload ticket validation failures;
-- report submissions and moderation actions.
-
-Useful commands:
-
-```bash
-cd worker
-unset CLOUDFLARE_ACCOUNT_ID
-npx wrangler tail
-```
-
-## Rollback readiness
-
-Before releasing:
-
-1. Know the last good frontend commit.
-2. Know the last good Worker deploy.
-3. Avoid bundling unrelated features into the release.
-4. Write one short release note covering:
-- auth changes
-- media access changes
-- preview behavior changes
-- migrations, if any
-
-## Beta vs public launch
-
-Internal or limited beta can proceed after:
-
-- successful production smoke tests;
-- monitoring/logging is available;
-- no active core backend `500` regressions remain;
-- the team accepts the remaining isolate-local rate-limit tradeoffs.
-
-Public launch should wait until:
-
-- regression coverage exists for support/report/dashboard state sync;
-- operational-health thresholds are calibrated and operators have either external alerts or an explicit manual response procedure;
-- production signup verification, password reset and legacy password upgrades have been rehearsed and are monitored.
-- the nonce-based CSP migration has been validated or the remaining `'unsafe-inline'` risk has received an explicit public-launch security review.
+Core launch status for **yap.**, reviewed 2026-08-17. Detailed implementation
+history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
+`FUTURE_PLANS.md`.
+
+## Core Tasks Done
+
+- [x] `yapndot.com` is the canonical production origin, `www` redirects to it,
+  and Google OAuth plus Resend use the production domain.
+- [x] Core anonymous chat, locked channels, protected media, live sessions,
+  account flows, support and moderation passed the limited-beta smoke tests.
+- [x] Worker authorization coverage protects trusted identity, privileged
+  routes, cross-object mutations, room/live lifecycle, media revocation,
+  support invariants and private DM boundaries.
+- [x] Cross-tab logout and account deletion revoke stale HTTP and WebSocket
+  owner privileges.
+- [x] Root-owned history paging keeps replies attached to their parent, and
+  production reply audits found no broken, nested or cross-channel threads.
+- [x] In-chat search uses trigram indexing for longer queries and navigates by
+  rendered root/reply order, starting at the bottom-most visual match.
+- [x] Live-session actions are session-ID guarded, stale/background tabs
+  reconcile authoritative state, and viewer-count work is limited to live mode.
+- [x] Private DM threads are sender-isolated. Owners can send up to 20 replies
+  with text and one image, while senders can delete threads they started.
+- [x] Admin message and DM deletion uses a durable five-second Undo operation;
+  large threads use bounded D1 staging, grouped Undo and chunked cleanup.
+- [x] Guided support enforces one active session and ticket per user, and
+  ticket/report views perform authoritative state refreshes.
+- [x] Channel and account deletion use retryable D1, Durable Object and R2
+  cleanup with operational visibility.
+- [x] Production health baselines, calibrated severity, the operator runbook
+  and duplicate-free critical/recovery email alerts are in place.
+- [x] Privacy-bounded monitoring exists for email verification, password reset
+  and legacy SHA-256-to-PBKDF2 password upgrades.
+- [x] GitHub Actions runs Worker tests, TypeScript checks and a Wrangler dry-run
+  for relevant pushes and pull requests.
+
+## Core Tasks To Do
+
+- [ ] Apply every unapplied production migration through `0047`, then deploy
+  the latest Worker and frontend.
+- [ ] Verify the latest private DM flow in two isolated browser profiles:
+  sender isolation, text/image replies, the one-image and 20-reply limits,
+  sender thread deletion, owner reply deletion and cross-tab refresh.
+- [ ] Verify durable deletion in production for normal roots, replies, DM roots
+  and DM replies: refresh must not resurrect pending rows, Undo must restore
+  within five seconds, and expiry must permanently clean records and media.
+- [ ] Verify visual-order search with a newer root and a later reply under an
+  older root. The visually lower match must open first, arrows must follow
+  screen order, and pagination beyond 30 matches must not skip or duplicate.
+- [ ] Complete deployed browser checks for guided-support close/reset/escalate,
+  user/admin ticket closure synchronization, and report
+  open/warn/freeze/unfreeze/petition transitions.
+- [ ] Rehearse production email verification, password reset and one disposable
+  legacy SHA-256 login. Confirm one PBKDF2 upgrade event, no failure, a
+  `pbkdf2-sha256$` replacement and no second upgrade event.
+- [ ] Complete nonce-based CSP enforcement, or record an explicit public-launch
+  security review accepting the remaining `script-src 'unsafe-inline'` risk.
+- [ ] Remove temporary legacy Worker CORS and OAuth origins after rollback no
+  longer depends on them.
+- [ ] Expand durable cross-channel abuse controls and validate direct-API
+  report targets and evidence before materially widening access.
+- [ ] Before public launch, confirm the latest production smoke test has no
+  active core `5xx` regression and record the last known-good Worker and
+  frontend deployments for rollback.
