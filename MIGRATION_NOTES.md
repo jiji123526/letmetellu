@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Normal text sends avoid one write and parallelize identity verification — 2026-08-16
+
+- Creating a message without a URL previously executed `DELETE FROM message_links WHERE message_id = ?` even though a brand-new message cannot have an existing link-index row. New-message link synchronization now returns without touching D1 when no link is present, while linked messages are still indexed normally.
+- Edit-time synchronization remains unchanged: removing a URL from an existing message still deletes its stale `message_links` row.
+- Anonymous identity-token and device-token verification are independent cryptographic checks. Non-owner sends now start both together and wait at one `Promise.all` barrier instead of verifying them serially.
+- Focused tests preserve new-link insertion, edit-time cleanup and the parallel identity-verification boundary.
+
+Trade-off: none of the authorization, blocking, banned-word, persistence, acknowledgement or WebSocket guarantees change. The improvement is intentionally bounded: ordinary text sends remove one unnecessary D1 write and non-owner sends save the overlap between two token checks, but the client still waits for persistence, link insertion when applicable and realtime broadcast before receiving its acknowledgement.
+
+Deployment note: deploy the Worker only; no D1 migration or frontend deployment is required. Compare `/api/messages` duration for ordinary non-owner text sends before and after deployment, and confirm linked-message creation plus link-removal edits still update the Links panel.
+
 ### Three-character message searches use a trigram index — 2026-08-15
 
 - Production search remained fast but literal substring matching read hundreds of message rows per returned result and scaled linearly with channel history.

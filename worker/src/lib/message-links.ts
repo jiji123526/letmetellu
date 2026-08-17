@@ -5,6 +5,32 @@ export function messageHasLinks(text: string | null | undefined): boolean {
   return text.includes("http://") || text.includes("https://") || text.includes("www.");
 }
 
+async function upsertMessageLink(
+  env: Env,
+  messageId: string,
+  channelId: string,
+  createdAt: string,
+): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO message_links (message_id, channel_id, created_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(message_id) DO UPDATE SET
+       channel_id = excluded.channel_id,
+       created_at = excluded.created_at`
+  ).bind(messageId, channelId, createdAt).run();
+}
+
+export async function syncNewMessageLink(
+  env: Env,
+  messageId: string,
+  channelId: string,
+  createdAt: string,
+  text: string | null | undefined,
+): Promise<void> {
+  if (!messageHasLinks(text)) return;
+  await upsertMessageLink(env, messageId, channelId, createdAt);
+}
+
 export async function syncMessageLink(
   env: Env,
   messageId: string,
@@ -13,13 +39,7 @@ export async function syncMessageLink(
   text: string | null | undefined,
 ): Promise<void> {
   if (messageHasLinks(text)) {
-    await env.DB.prepare(
-      `INSERT INTO message_links (message_id, channel_id, created_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(message_id) DO UPDATE SET
-         channel_id = excluded.channel_id,
-         created_at = excluded.created_at`
-    ).bind(messageId, channelId, createdAt).run();
+    await upsertMessageLink(env, messageId, channelId, createdAt);
     return;
   }
 

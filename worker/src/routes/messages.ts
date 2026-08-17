@@ -7,7 +7,7 @@ import { deleteMediaByUrl } from "../lib/media.ts";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
-import { syncMessageLink } from "../lib/message-links.ts";
+import { syncMessageLink, syncNewMessageLink } from "../lib/message-links.ts";
 import { withOperationalErrorContext } from "../lib/operational-events.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
@@ -149,8 +149,12 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
       }
 
       routeStage = "resolve_actor_identity";
-      const anonymousUid = isChannelOwner ? null : await getAnonymousRequesterUid(request, env);
-      const requesterDeviceId = isChannelOwner ? null : await getRequesterDeviceId(request, env);
+      const [anonymousUid, requesterDeviceId] = isChannelOwner
+        ? [null, null]
+        : await Promise.all([
+          getAnonymousRequesterUid(request, env),
+          getRequesterDeviceId(request, env),
+        ]);
       if (!isChannelOwner && !anonymousUid) {
         return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
       }
@@ -310,7 +314,7 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         throw error;
       }
       routeStage = "sync_message_links";
-      await syncMessageLink(env, id, requestChannelId, created_at, text as string | undefined);
+      await syncNewMessageLink(env, id, requestChannelId, created_at, text as string | undefined);
 
       // Broadcast through the same parent-channel Durable Object used above.
       const newMessage = {

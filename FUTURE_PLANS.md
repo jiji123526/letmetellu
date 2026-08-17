@@ -4,6 +4,8 @@ This file tracks remaining product and platform work. Implemented behavior and d
 
 Status reviewed: 2026-08-14.
 
+- Completed on 2026-08-16: ordinary new messages without URLs no longer issue an impossible `message_links` cleanup write, and anonymous/device token verification now runs concurrently. Sender acknowledgement still waits for persistence and realtime broadcast; add sampled stage timing before moving any post-persistence guarantee into background work.
+
 ## Recommended Order
 
 If the goal is to ship safely, the next work should stay focused on hardening and operations rather than new surface area.
