@@ -321,10 +321,17 @@ test("sender DM roots expose deletion without unsupported reaction controls", ()
     new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
     "utf8",
   );
+  const adminRouteSource = readFileSync(
+    new URL("../src/routes/admin.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(actionsSource, /!effectiveAdmin[\s\S]*contextMenu\.isOwn[\s\S]*contextMenu\.msg\.dm[\s\S]*!contextMenu\.msg\.dm_reply/);
+  assert.match(actionsSource, /effectiveAdmin[\s\S]*contextMenu\.isOwn[\s\S]*contextMenu\.msg\.dm[\s\S]*contextMenu\.msg\.dm_reply/);
   assert.match(mutationSource, /targetDm\?\.dm[\s\S]*!targetDm\.dm_reply[\s\S]*targetDm\.uid === uid/);
   assert.match(mutationSource, /deleteDm\(\{[\s\S]*dm_id: messageId/);
+  assert.match(mutationSource, /targetMessage\?\.dm_reply[\s\S]*adminAction\("delete-dm-reply"/);
   assert.match(contextMenuSource, /\{!msg\.dm && !isReportInboxMessage/);
   assert.match(messageListSource, /\{!msg\.dm && \(\s*<ReactionBadge/);
+  assert.match(adminRouteSource, /case "delete-dm-reply"[\s\S]*WHERE id = \? AND channel_id = \? AND owner_uid = \?/);
 });

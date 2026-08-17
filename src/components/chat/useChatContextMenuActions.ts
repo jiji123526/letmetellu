@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
+import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { adminAction } from "@/lib/api-chat";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
@@ -31,8 +31,8 @@ interface ContextMenuText {
   anonBlockedLabel: string;
   anonUnblockedLabel: string;
   reportDismissedBanner: string;
+  deleteFailed: string;
   messageDeleted: string;
-  undo: string;
 }
 
 interface UseChatContextMenuActionsArgs {
@@ -112,10 +112,6 @@ export function useChatContextMenuActions({
   handlePetitionAction,
   text,
 }: UseChatContextMenuActionsArgs): UseChatContextMenuActionsResult {
-  const pendingAdminDeleteRef = useRef<{
-    timer: ReturnType<typeof setTimeout>;
-    commit: () => void;
-  } | null>(null);
   const flashBanner = useCallback((message: string, color: string) => {
     setBanner({ text: message, color });
     setTimeout(() => setBanner(null), 3000);
@@ -163,31 +159,12 @@ export function useChatContextMenuActions({
     setDmMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
     setGalleryItems((previous) => previous.filter((item) => !idsToDelete.has(item.id)));
 
-    if (pendingAdminDeleteRef.current) {
-      clearTimeout(pendingAdminDeleteRef.current.timer);
-      pendingAdminDeleteRef.current.commit();
-    }
-
-    const commit = () => {
-      idsToDelete.forEach((id) => {
-        const message = allMessages.get(id);
-        if (message?.dm) {
-          void adminAction("delete-dm", channelKey, { dm_id: id });
-        } else {
-          void adminAction("delete-message", channelKey, { message_id: id });
-        }
-      });
-    };
     const restoreMessages = (current: Message[], deleted: Message[]) => {
       const existingIds = new Set(current.map((message) => message.id));
       return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
         .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
     };
-    const undo = () => {
-      const pending = pendingAdminDeleteRef.current;
-      if (!pending || pending.commit !== commit) return;
-      clearTimeout(pending.timer);
-      pendingAdminDeleteRef.current = null;
+    const restoreDeletedMessages = () => {
       setMessages((current) => restoreMessages(current, deletedMessages));
       setDmMessages((current) => restoreMessages(current, deletedDmMessages));
       const restoredGallery = [...deletedMessages, ...deletedDmMessages]
@@ -198,17 +175,26 @@ export function useChatContextMenuActions({
         return [...current, ...restoredGallery.filter((item) => !existingIds.has(item.id))]
           .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
       });
-      setBanner(null);
+      flashBanner(text.deleteFailed, "#d32f2f");
     };
-    const timer = setTimeout(() => {
-      if (pendingAdminDeleteRef.current?.commit !== commit) return;
-      pendingAdminDeleteRef.current = null;
-      commit();
-      setBanner((current) => current?.onAction === undo ? null : current);
-    }, 5000);
-    pendingAdminDeleteRef.current = { timer, commit };
-    setBanner({ text: text.messageDeleted, color: "#333333", actionLabel: text.undo, onAction: undo });
-  }, [channelId, dmMessages, inLiveMode, messages, setBanner, setDmMessages, setGalleryItems, setMessages, text.messageDeleted, text.undo]);
+    const requestIds = targetMessage?.report && targetMessage.reported_msg_id
+      ? [msgId, targetMessage.reported_msg_id]
+      : [msgId];
+    const requests = requestIds.map((id) => {
+      const message = allMessages.get(id);
+      if (message?.dm) {
+        return adminAction("delete-dm", channelKey, { dm_id: id }, { keepalive: true });
+      }
+      return adminAction("delete-message", channelKey, { message_id: id }, { keepalive: true });
+    });
+    void Promise.all(requests).then((results) => {
+      if (results.every((result) => result?.ok)) {
+        flashBanner(text.messageDeleted, "#333333");
+        return;
+      }
+      restoreDeletedMessages();
+    }).catch(restoreDeletedMessages);
+  }, [channelId, dmMessages, flashBanner, inLiveMode, messages, setDmMessages, setGalleryItems, setMessages, text.deleteFailed, text.messageDeleted]);
 
   const onEdit = useCallback((msgId: string) => {
     const message = messages.find((item) => item.id === msgId);
@@ -283,7 +269,15 @@ export function useChatContextMenuActions({
     && contextMenu.msg.dm
     && !contextMenu.msg.dm_reply
   );
-  const canDelete = canDeleteOwnDm || Boolean(
+  const canDeleteOwnDmReply = Boolean(
+    contextMenu
+    && effectiveAdmin
+    && contextMenu.isOwn
+    && contextMenu.msg.dm
+    && contextMenu.msg.dm_reply
+    && !ownerModerationBlocked
+  );
+  const canDelete = canDeleteOwnDm || canDeleteOwnDmReply || Boolean(
     contextMenu?.isOwn && !contextMenu.msg.dm && !ownerModerationBlocked
   );
   const canDeleteWithReplies = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn);

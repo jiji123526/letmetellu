@@ -10,17 +10,19 @@ const contextSource = readFileSync(
   new URL("../../src/components/chat/useChatContextMenuActions.ts", import.meta.url),
   "utf8",
 );
-const toastSource = readFileSync(
-  new URL("../../src/components/chat/ChatViewBottomShell.tsx", import.meta.url),
+const apiSource = readFileSync(
+  new URL("../../src/lib/api-chat.ts", import.meta.url),
   "utf8",
 );
 
-test("owner deletion waits five seconds and exposes an undo action", () => {
+test("owner deletion commits immediately and survives page refresh", () => {
   for (const source of [mutationSource, contextSource]) {
-    assert.match(source, /setTimeout\(\(\) => \{[\s\S]*commit\(\);[\s\S]*\}, 5000\)/);
-    assert.match(source, /actionLabel: text\.undo, onAction: undo/);
-    assert.match(source, /clearTimeout\(pending\.timer\)/);
+    assert.doesNotMatch(source, /pendingAdminDeleteRef/);
+    assert.doesNotMatch(source, /actionLabel: text\.undo, onAction: undo/);
+    assert.match(source, /adminAction\("delete-(?:message|dm)/);
+    assert.match(source, /\{ keepalive: true \}/);
+    assert.match(source, /restoreDeletedMessages/);
   }
-  assert.match(toastSource, /banner\.actionLabel && banner\.onAction/);
-  assert.match(toastSource, /onClick=\{banner\.onAction\}/);
+  assert.match(apiSource, /options\?: \{ keepalive\?: boolean \}/);
+  assert.match(apiSource, /keepalive: options\?\.keepalive/);
 });

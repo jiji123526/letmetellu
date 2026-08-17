@@ -4,11 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Admin message deletion preserves reply-FK ordering — 2026-08-17
+
+- Admin deletion of a normal message now deletes direct replies before the parent row. The schema uses `ON DELETE SET NULL` for `messages.reply_to`; deleting the parent first detached its replies, causing the following `WHERE reply_to = ?` deletion to match nothing.
+- The existing gallery, link, actor, upload-ticket and media cleanup remains unchanged. No migration is required.
+
 ### Senders can delete their private DM threads — 2026-08-17
 
 - Visitors can long-press a private DM they originally sent and delete the entire private thread. Editing remains unsupported.
 - Authorization comes from the signed anonymous browser identity. Client-supplied user IDs are ignored, foreign roots and owner reply IDs cannot be deleted, and locked channels still require current room access.
 - Deletion removes the DM root, all owner replies, actor metadata, the upload ticket and managed media before broadcasting content-free thread invalidation.
+- Channel owners can separately delete one of their own private replies without deleting the visitor's root or sibling replies.
 - DM reaction controls are hidden because private DM records do not use the public-message reaction endpoint.
 
 Deployment note: no migration is required. Deploy the Worker and frontend together, then verify deletion from the original browser and rejection from a second browser profile.
@@ -42,14 +48,13 @@ Deployment note: apply migration `0045`, deploy the Worker, then deploy the fron
 - Channel cards already returned valid X metadata and a reachable PNG, but the global robots policy disallowed all `/ch/` paths. `Twitterbot` now has explicit access to channel pages and their Open Graph image routes while ordinary crawlers remain blocked from `/ch/`; API, dashboard, reset, support and verification routes remain disallowed.
 - X can retain a failed card result for an already-posted URL. After deployment, verify a newly shared channel URL first; old posts may require cache expiry or a harmless URL query parameter before X requests the card again.
 
-### Channel-owner message deletion has a five-second undo window — 2026-08-16
+### Channel-owner message deletion commits immediately — 2026-08-17
 
-- Message deletion by a channel owner is now delayed for five seconds. The affected message, direct replies and gallery entries disappear locally immediately, while an action toast offers `Undo` / `실행 취소`.
-- Undo restores the locally hidden rows without overwriting messages that arrived during the five-second window. If the owner does not undo, the existing permanent admin deletion endpoint runs, so this change does not retain deleted message text or media indefinitely.
-- Starting another owner deletion commits the earlier pending deletion first and opens a fresh undo window. This keeps the UI and server from accumulating multiple ambiguous pending operations.
-- Non-owner deletion behavior is unchanged. The delay is intentionally limited to the higher-risk owner moderation controls where an accidental tap can remove another user's message and its replies.
+- Owner deletion previously waited five seconds in a browser timer to provide Undo. Refreshing or closing the page destroyed that timer before the Worker request ran, so the message disappeared locally and returned from D1 on reload.
+- Owner deletion now starts the authoritative request immediately with `keepalive`, while retaining optimistic removal. A rejected or failed request restores the removed messages and gallery rows and shows a deletion failure.
+- Thread deletion sends one request per root; the Worker removes its direct replies. Report relays may additionally delete their separately targeted message root.
 
-Trade-off: for up to five seconds, the owner sees the message as removed while other connected viewers can still see it. Leaving the channel does not cancel the scheduled server deletion. Verify owner deletion for own messages, another user's message with replies, DMs and image messages; test both Undo and timeout paths.
+Trade-off: the client-only Undo action was removed. Reliable deletion across refresh/navigation requires immediate persistence; restoring a committed deletion would require a separate server-side tombstone and recovery design.
 
 ### Senders receive the persisted message before post-commit fan-out finishes — 2026-08-16
 

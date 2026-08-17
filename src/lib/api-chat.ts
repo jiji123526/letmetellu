@@ -340,7 +340,8 @@ export async function actOnChannelReport(payload: {
 export async function adminAction(
   action: string,
   channelId: string,
-  payload?: Record<string, unknown>
+  payload?: Record<string, unknown>,
+  options?: { keepalive?: boolean },
 ) {
   if (IS_MOCK) {
     const mockApi = await loadMockApi();
@@ -351,6 +352,7 @@ export async function adminAction(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, channel_id: channelId, payload }),
+    keepalive: options?.keepalive,
   });
   return res.json();
 }
@@ -573,6 +575,7 @@ export async function deleteDm(payload: {
       ...roomTokenHeaders(),
     },
     body: JSON.stringify(payload),
+    keepalive: true,
   });
   const data = await res.json();
   return res.ok && !data?.error ? { ok: true, ...data } : data;

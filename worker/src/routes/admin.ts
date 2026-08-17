@@ -416,9 +416,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           `DELETE FROM message_actor_identities
            WHERE record_type = 'message' AND record_id IN (${mappingPlaceholders})`
         ).bind(...deletedIds),
-        env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
-          .bind(message_id, channel_id),
+        // Delete children first; the reply FK uses ON DELETE SET NULL.
         env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
+          .bind(message_id, channel_id),
+        env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
           .bind(message_id, channel_id),
       ]);
       await Promise.all([
@@ -462,6 +463,31 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         body: JSON.stringify({ type: "dm-threads-changed" }),
       }));
 
+      return Response.json({ ok: true });
+    }
+
+    case "delete-dm-reply": {
+      const { reply_id } = payload || {};
+      if (typeof reply_id !== "string" || !reply_id) {
+        return Response.json({ error: "missing reply id" }, { status: 400 });
+      }
+      const reply = await env.DB.prepare(`
+        SELECT id
+        FROM dm_replies
+        WHERE id = ? AND channel_id = ? AND owner_uid = ?
+        LIMIT 1
+      `).bind(reply_id, channel_id, userId).first<{ id: string }>();
+      if (!reply) return Response.json({ error: "dm reply not found" }, { status: 404 });
+
+      await env.DB.prepare(
+        "DELETE FROM dm_replies WHERE id = ? AND channel_id = ? AND owner_uid = ?"
+      ).bind(reply_id, channel_id, userId).run();
+
+      const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(channel_id));
+      await chatRoom.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "dm-threads-changed" }),
+      }));
       return Response.json({ ok: true });
     }
 

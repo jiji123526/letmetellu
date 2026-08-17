@@ -731,7 +731,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       deleteFailed: t("deleteFailed"),
       deletedMessage: t("deletedMessage"),
       messageDeleted: t("messageDeleted"),
-      undo: t("undo"),
     },
   });
 
@@ -766,8 +765,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       anonBlockedLabel: t("anonBlocked"),
       anonUnblockedLabel: t("anonUnblocked"),
       reportDismissedBanner: t("reportDismissedBanner"),
+      deleteFailed: t("deleteFailed"),
       messageDeleted: t("messageDeleted"),
-      undo: t("undo"),
     },
   });
 

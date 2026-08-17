@@ -274,7 +274,7 @@ export const en: Record<LocaleKeys, string> = {
   guidePasscode: "Passcode — Add a passcode and optional hint for channel entry. Save an empty passcode to remove protection.",
   guideRules: "Rules — Write the channel rules visitors can open from the ℹ️ button. You can organize them into multiple sections.",
   guideWelcome: "Welcome Popup — Create a helpful introduction for first-time visitors with an image, title, and custom items.",
-  guideDmPrivacy: "Private Messages — Turn DMs on or off under Manage. Long-press a DM to reply privately. Visitors see only their own conversations and can delete a DM thread they started.",
+  guideDmPrivacy: "Private Messages — Turn DMs on or off under Manage. Long-press a DM to reply privately, or long-press your reply to delete it. Visitors can delete a DM thread they started.",
   guideManageTitle: "User Management",
   guideReport: "Review Reports — When a visitor long-presses a message to report it, the admin receives it with a 🚨 marker.",
   guideChannelReport: "Channel Reports — If your channel is reported, you may receive moderation warnings or a freeze notice. When the channel is frozen, you can submit one appeal from the chat view before any later action.",

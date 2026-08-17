@@ -14,6 +14,10 @@ const audit = readFileSync(
   new URL("../scripts/audit-message-delete-index.sql", import.meta.url),
   "utf8",
 );
+const adminRoute = readFileSync(
+  new URL("../src/routes/admin.ts", import.meta.url),
+  "utf8",
+);
 
 test("message deletion has a reply-leading foreign-key lookup index", () => {
   assert.match(
@@ -33,4 +37,17 @@ test("production audit verifies the exact foreign-key child lookup", () => {
     /EXPLAIN QUERY PLAN[\s\S]*FROM messages[\s\S]*WHERE reply_to = '__message_delete_audit__'/,
   );
   assert.match(audit, /PRAGMA foreign_key_check/);
+});
+
+test("admin thread deletion removes replies before the parent can null their foreign keys", () => {
+  const childDelete = adminRoute.indexOf(
+    'env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")',
+  );
+  const parentDelete = adminRoute.indexOf(
+    'env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")',
+    childDelete,
+  );
+
+  assert.ok(childDelete >= 0);
+  assert.ok(parentDelete > childDelete);
 });

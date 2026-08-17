@@ -60,7 +60,6 @@ interface MutationText {
   deleteFailed: string;
   deletedMessage: string;
   messageDeleted: string;
-  undo: string;
 }
 
 interface UseChatMessageMutationsArgs {
@@ -140,10 +139,6 @@ export function useChatMessageMutations({
   consumeComposerState,
   text,
 }: UseChatMessageMutationsArgs): UseChatMessageMutationsResult {
-  const pendingAdminDeleteRef = useRef<{
-    timer: ReturnType<typeof setTimeout>;
-    commit: () => void;
-  } | null>(null);
   const sendInFlightRef = useRef(false);
   const sendAttemptRef = useRef<StoredMessageSendAttempt | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -673,29 +668,22 @@ export function useChatMessageMutations({
       const targetMessage = messages.find((message) => message.id === messageId) || dmMessages.find((message) => message.id === messageId);
       setDmMessages((previous) => previous.filter((message) => message.id !== messageId && message.reply_to !== messageId));
 
-      if (pendingAdminDeleteRef.current) {
-        clearTimeout(pendingAdminDeleteRef.current.timer);
-        pendingAdminDeleteRef.current.commit();
-      }
-
       const channelKey = inLiveMode ? `${channelId}_live` : channelId;
-      const commit = () => {
-        if (targetMessage?.dm) {
-          void adminAction("delete-dm", channelKey, { dm_id: messageId });
-        } else {
-          void adminAction("delete-message", channelKey, { message_id: messageId });
+      const request = () => {
+        if (targetMessage?.dm_reply) {
+          return adminAction("delete-dm-reply", channelKey, { reply_id: messageId }, { keepalive: true });
         }
+        if (targetMessage?.dm) {
+          return adminAction("delete-dm", channelKey, { dm_id: messageId }, { keepalive: true });
+        }
+        return adminAction("delete-message", channelKey, { message_id: messageId }, { keepalive: true });
       };
       const restoreMessages = (current: Message[], deleted: Message[]) => {
         const existingIds = new Set(current.map((message) => message.id));
         return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
           .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
       };
-      const undo = () => {
-        const pending = pendingAdminDeleteRef.current;
-        if (!pending || pending.commit !== commit) return;
-        clearTimeout(pending.timer);
-        pendingAdminDeleteRef.current = null;
+      const restoreDeletedMessages = () => {
         setMessages((current) => restoreMessages(current, deletedMessages));
         setDmMessages((current) => restoreMessages(current, deletedDmMessages));
         const restoredGallery = deletedMessages
@@ -706,16 +694,17 @@ export function useChatMessageMutations({
           return [...current, ...restoredGallery.filter((item) => !existingIds.has(item.id))]
             .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
         });
-        setBanner(null);
+        setBanner({ text: text.deleteFailed, color: "#d32f2f" });
+        clearBannerSoon();
       };
-      const timer = setTimeout(() => {
-        if (pendingAdminDeleteRef.current?.commit !== commit) return;
-        pendingAdminDeleteRef.current = null;
-        commit();
-        setBanner((current) => current?.onAction === undo ? null : current);
-      }, 5000);
-      pendingAdminDeleteRef.current = { timer, commit };
-      setBanner({ text: text.messageDeleted, color: "#333333", actionLabel: text.undo, onAction: undo });
+      void request().then((result) => {
+        if (!result?.ok) {
+          restoreDeletedMessages();
+          return;
+        }
+        setBanner({ text: text.messageDeleted, color: "#333333" });
+        clearBannerSoon();
+      }).catch(restoreDeletedMessages);
       return;
     }
 
@@ -751,7 +740,6 @@ export function useChatMessageMutations({
     text.deleteFailed,
     text.messageDeleted,
     text.ownerSuspendedBanner,
-    text.undo,
     uid,
   ]);
 
