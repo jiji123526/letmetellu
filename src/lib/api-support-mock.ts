@@ -1,5 +1,4 @@
 import { en, ko } from "./locales";
-import { buildSupportFlow, supportTopicLabel } from "../../worker/src/lib/support-flow";
 import type {
   PlatformDashboardResponse,
   PlatformOperationalHealthResponse,
@@ -64,7 +63,77 @@ function getMockSupportText(key: SupportMockLocaleKey): string {
 }
 
 function getMockSupportTopicLabel(topic: string | null): string {
-  return supportTopicLabel(topic, getCurrentLocale());
+  if (topic === "login") return getMockSupportText("supportMockTopicLogin");
+  if (topic === "other") return getMockSupportText("supportMockTopicOther");
+  return getCurrentLocale() === "en" ? en.supportTitle : ko.supportTitle;
+}
+
+function buildMockSupportNodes(): Record<string, SupportNodeState> {
+  return {
+    start: {
+      id: "start",
+      kind: "choice",
+      messages: [getMockSupportText("supportMockStartPrompt")],
+      choices: [
+        { id: "topic-login", label: getMockSupportText("supportMockTopicLogin"), next: "login-details", topic: "login" },
+        { id: "topic-other", label: getMockSupportText("supportMockTopicOther"), next: "other-details", topic: "other" },
+      ],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: "",
+      resolution: null,
+    },
+    "login-details": {
+      id: "login-details",
+      kind: "text",
+      messages: [getMockSupportText("supportMockLoginDetails")],
+      choices: [],
+      placeholder: getMockSupportText("supportMockDescribeIssue"),
+      submitLabel: getMockSupportText("supportMockContinue"),
+      escalationLabel: "",
+      resolution: null,
+    },
+    "other-details": {
+      id: "other-details",
+      kind: "text",
+      messages: [getMockSupportText("supportMockOtherDetails")],
+      choices: [],
+      placeholder: getMockSupportText("supportMockDescribeIssue"),
+      submitLabel: getMockSupportText("supportMockContinue"),
+      escalationLabel: "",
+      resolution: null,
+    },
+    "login-escalate": {
+      id: "login-escalate",
+      kind: "escalate",
+      messages: [getMockSupportText("supportMockEscalatePrompt")],
+      choices: [],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: getMockSupportText("supportMockContactSupport"),
+      resolution: "needs_handoff",
+    },
+    "other-escalate": {
+      id: "other-escalate",
+      kind: "escalate",
+      messages: [getMockSupportText("supportMockEscalatePrompt")],
+      choices: [],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: getMockSupportText("supportMockContactSupport"),
+      resolution: "needs_handoff",
+    },
+    resolved: {
+      id: "resolved",
+      kind: "terminal",
+      messages: [getMockSupportText("supportMockResolved")],
+      choices: [],
+      placeholder: "",
+      submitLabel: "",
+      escalationLabel: "",
+      resolution: "resolved",
+    },
+  };
 }
 
 function createMockSupportEvent(
@@ -82,19 +151,8 @@ function createMockSupportEvent(
 }
 
 function getMockSupportNode(nodeId: string | null | undefined): SupportNodeState | null {
-  if (!nodeId) return null;
-  const node = buildSupportFlow(getCurrentLocale())[nodeId];
-  if (!node) return null;
-  return {
-    id: node.id,
-    kind: node.kind,
-    messages: node.messages,
-    choices: node.choices || [],
-    placeholder: node.placeholder || "",
-    submitLabel: node.submitLabel || "",
-    escalationLabel: node.escalationLabel || "",
-    resolution: node.resolution || null,
-  };
+  const mockSupportNodes = buildMockSupportNodes();
+  return nodeId ? mockSupportNodes[nodeId] || null : null;
 }
 
 function getMockSupportActorType(userId: string): "guest" | "logged_in" {
@@ -255,7 +313,7 @@ function createMockEscalatedSupportThread(): SupportApiResult<PlatformSupportThr
 
 export function startMockSupportSession(): SupportApiResult<SupportStateResponse> {
   if (!mockSupportSession) {
-    const startNode = getMockSupportNode("start");
+    const mockSupportNodes = buildMockSupportNodes();
     const createdAt = new Date().toISOString();
     mockSupportSession = {
       id: crypto.randomUUID(),
@@ -269,7 +327,7 @@ export function startMockSupportSession(): SupportApiResult<SupportStateResponse
       updated_at: createdAt,
       completed_at: null,
     };
-    mockSupportTranscript = (startNode?.messages || []).map((message) =>
+    mockSupportTranscript = mockSupportNodes.start.messages.map((message) =>
       createMockSupportEvent("bot_message", "start", { text: message })
     );
   }
