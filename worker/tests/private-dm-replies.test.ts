@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -227,4 +228,12 @@ test("private threads render for the sender but only owners can reply", () => {
       .map((message) => message.id),
     [root.id, reply.id],
   );
+});
+
+test("DM replies inherit their parent bubble side", () => {
+  const messageListSource = readFileSync(
+    new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(messageListSource, /const isSent = isReply\s*\?\s*parentIsSent\s*:\s*fallbackIsSent/);
 });

@@ -266,7 +266,7 @@ export const en: Record<LocaleKeys, string> = {
   guidePasscode: "Passcode — Add a passcode and optional hint for channel entry. Save an empty passcode to remove protection.",
   guideRules: "Rules — Write the channel rules visitors can open from the ℹ️ button. You can organize them into multiple sections.",
   guideWelcome: "Welcome Popup — Create a helpful introduction for first-time visitors with an image, title, and custom items.",
-  guideDmPrivacy: "Private Messages — Let visitors send messages visible only to the admin. The sender can review the message and private admin replies in the same browser, and you can enable or disable DMs under Manage.",
+  guideDmPrivacy: "Private Messages — Enable or disable visitor DMs under Manage. Long-press a visitor DM or one of your existing replies to send a text-only private reply; each original DM supports up to 20 admin replies. The sender sees only their own threads in the same browser and must send a new DM rather than reply inside the thread.",
   guideManageTitle: "User Management",
   guideReport: "Review Reports — When a visitor long-presses a message to report it, the admin receives it with a 🚨 marker.",
   guideChannelReport: "Channel Reports — If your channel is reported, you may receive moderation warnings or a freeze notice. When the channel is frozen, you can submit one appeal from the chat view before any later action.",
@@ -294,7 +294,7 @@ export const en: Record<LocaleKeys, string> = {
   userGuideBlocked: "Blocked state — If you are blocked, sending stops immediately, and you may see a one-time appeal option if the owner allows it.",
   userGuideFrozen: "Frozen channel — When the channel is frozen, regular messages pause. Private messages may still be available if the owner allows them.",
   userGuideFeaturesTitle: "Extra Features",
-  userGuideDm: "Private messages — In channels where it is enabled, you can send a message visible only to the channel owner.",
+  userGuideDm: "Private messages — In enabled channels, you can send a message visible only to the owner. Your sent DM and the owner's private replies remain visible in the same browser; to answer again, send a new DM rather than replying inside the thread. Clearing site data or switching browsers may remove access to earlier threads.",
   userGuideLive: "Live — Live chat runs as a separate temporary session, and its messages disappear when the session ends.",
   userGuideTip: "If something changes, check the notice, rules, and any status banner shown above the chat first.",
 

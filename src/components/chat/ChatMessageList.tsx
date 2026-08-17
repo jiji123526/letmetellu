@@ -173,7 +173,7 @@ const MessageRow = React.memo(function MessageRow({
     ? (effectiveAdmin ? parentIsAdmin : !parentIsAdmin)
     : fallbackIsSent;
   const isSent = isReply
-    ? (msg.dm ? fallbackIsSent : parentIsSent)
+    ? parentIsSent
     : fallbackIsSent;
   const isMine = fallbackIsSent;
   const showEmbeds = !!msg.text && !msg.report && !msg.image && !isInboxMessage;
