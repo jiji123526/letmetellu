@@ -886,7 +886,7 @@ async function handleSupportAnswerSession(body: JsonObject, subjectId: string, l
       return Response.json({ error: "invalid_choice" }, { status: 400 });
     }
     nextNodeId = choice.next;
-    nextEntryTopic = nextEntryTopic || choice.topic || null;
+    nextEntryTopic = choice.topic || nextEntryTopic || null;
     await env.DB.prepare(`
       INSERT INTO support_session_events (id, session_id, event_type, node_id, payload_json, created_at)
       VALUES (?, ?, 'user_choice', ?, ?, ?)

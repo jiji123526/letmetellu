@@ -626,7 +626,7 @@ export function SupportPanel({ showThreadView = false }: { showThreadView?: bool
           </div>
         )}
         {hasActiveTicket && !hasGuidedSession ? null : supportState.currentNode?.kind === "choice" ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex max-h-[42dvh] flex-wrap gap-2 overflow-y-auto pb-1">
             {supportState.currentNode.choices.map((choice) => (
               <button
                 key={choice.id}

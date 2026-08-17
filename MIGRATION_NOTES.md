@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Guided support answers common user-guide questions before escalation — 2026-08-17
+
+- Guided support now opens category-specific question menus for account and channel creation, channel access, messages and reactions, private messages, reports and restrictions, live chat, and channel information.
+- The bilingual catalog covers 59 direct questions, including how to sign up, create a channel, understand an appeal and use channel freezing. Long categories now split into small intent menus, while already-focused access and channel-information categories remain one level deep.
+- Direct answers are intentionally short and answer one question at a time. The freezing branch separately explains who can freeze, who can send, DM availability, retained history and unfreezing instead of combining those rules in one response.
+- Every answer has three explicit outcomes: resolve the session, describe a still-unresolved problem for operator escalation, or return to the top-level topics. Selecting another topic after returning now updates the eventual ticket category.
+- Existing generic node IDs remain available so a guided session opened immediately before deployment can still finish instead of entering an invalid state.
+- Structural regression coverage walks both locale trees, verifies every transition target, protects English/Korean question parity and confirms that only the unresolved path reaches free text and human support.
+
+Trade-off: the choice area can contain several wrapped question buttons, so the mobile choice area is capped at 42% of the viewport and scrolls internally. This keeps answers selectable without adding client-side fuzzy search or sending simple guide questions into the operator queue.
+
+Deployment note: deploy the Worker and frontend. No D1 migration is required. Start one flow in each language, answer a common question, return to topics, then escalate a different question and confirm the ticket uses the latest category.
+
 ### In-chat search follows rendered thread order — 2026-08-17
 
 - Search navigation now uses the same root-owned order as the message list. A late reply remains beneath its older root and no longer outranks a visually lower root merely because the reply was created later.

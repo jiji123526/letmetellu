@@ -25,7 +25,9 @@ history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
   with text and one image, while senders can delete threads they started.
 - [x] Admin message and DM deletion uses a durable five-second Undo operation;
   large threads use bounded D1 staging, grouped Undo and chunked cleanup.
-- [x] Guided support enforces one active session and ticket per user, and
+- [x] Guided support uses short, multi-level English and Korean answers for 59
+  common questions, including a dedicated channel-freezing branch, before
+  escalation. It enforces one active session and ticket per user, and
   ticket/report views perform authoritative state refreshes.
 - [x] Channel and account deletion use retryable D1, Durable Object and R2
   cleanup with operational visibility.

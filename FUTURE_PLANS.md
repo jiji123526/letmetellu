@@ -66,8 +66,8 @@ Add a separate flat discussion surface for channel notices.
 
 ## Guided Support Enhancements
 
-- Expand the guided decision tree from real support cases while keeping all
-  user-facing copy in the locale files.
+- Refine the guided decision tree only when real support cases expose a missing
+  question or an answer that no longer matches shipped behavior.
 - Add operator macros or close-reason presets after common reply patterns are
   established.
 - Add archive filtering or pagination if closed-ticket volume outgrows the
