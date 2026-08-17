@@ -63,7 +63,16 @@ function validColor(value: unknown): string | null {
   return color === "#3b8df0" ? "#3598fe" : color;
 }
 
-async function pruneRecentChannels(env: Env, userId: string) {
+async function pruneRecentChannelsIfNeeded(env: Env, userId: string) {
+  const overflow = await env.DB.prepare(`
+    SELECT 1
+    FROM user_recent_channels
+    WHERE user_id = ?
+    ORDER BY pinned DESC, last_visited_at DESC, channel_id DESC
+    LIMIT 1 OFFSET ?
+  `).bind(userId, RECENT_CHANNEL_LIMIT).first();
+  if (!overflow) return;
+
   await env.DB.prepare(`
     DELETE FROM user_recent_channels
     WHERE user_id = ?
@@ -136,10 +145,17 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
     if (candidates.length === 0) return Response.json({ ok: true });
     const ids = [...new Set(candidates.map((channel) => channel.id!))];
     const placeholders = ids.map(() => "?").join(", ");
-    const { results } = await env.DB.prepare(
-      `SELECT id FROM channels WHERE id IN (${placeholders}) AND id NOT LIKE '%_live'`
-    ).bind(...ids).all<{ id: string }>();
+    const { results } = await env.DB.prepare(`
+      SELECT c.id, r.channel_id IS NOT NULL AS already_recent
+      FROM channels c
+      LEFT JOIN user_recent_channels r
+        ON r.user_id = ?
+       AND r.channel_id = c.id
+      WHERE c.id IN (${placeholders})
+        AND c.id NOT LIKE '%_live'
+    `).bind(userId, ...ids).all<{ id: string; already_recent: number }>();
     const existingIds = new Set(results.map((row) => row.id));
+    const mayAddRows = results.some((row) => !row.already_recent);
     const now = Date.now();
     const statements = candidates
       .filter((channel) => existingIds.has(channel.id!))
@@ -158,7 +174,9 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
         validColor(channel.bubbleColor),
       ));
     if (statements.length) await env.DB.batch(statements);
-    await pruneRecentChannels(env, userId);
+    if (mayAddRows) {
+      await pruneRecentChannelsIfNeeded(env, userId);
+    }
     return Response.json({ ok: true });
   }
 
@@ -170,11 +188,21 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   if (!channelExists) return Response.json({ error: "channel not found" }, { status: 404 });
 
   if (body.action === "visit") {
-    await env.DB.prepare(`
-      INSERT INTO user_recent_channels (user_id, channel_id, last_visited_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(user_id, channel_id) DO UPDATE SET last_visited_at = excluded.last_visited_at
-    `).bind(userId, channelId, Date.now()).run();
+    const visitedAt = Date.now();
+    const updated = await env.DB.prepare(`
+      UPDATE user_recent_channels
+      SET last_visited_at = ?
+      WHERE user_id = ? AND channel_id = ?
+    `).bind(visitedAt, userId, channelId).run();
+    if (!updated.meta.changes) {
+      await env.DB.prepare(`
+        INSERT INTO user_recent_channels (user_id, channel_id, last_visited_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, channel_id) DO UPDATE SET
+          last_visited_at = excluded.last_visited_at
+      `).bind(userId, channelId, visitedAt).run();
+      await pruneRecentChannelsIfNeeded(env, userId);
+    }
   } else if (body.action === "pin") {
     await env.DB.prepare(
       "UPDATE user_recent_channels SET pinned = ? WHERE user_id = ? AND channel_id = ?"
@@ -182,16 +210,23 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   } else if (body.action === "color") {
     const color = validColor(body.bubble_color);
     if (!color) return Response.json({ error: "invalid color" }, { status: 400 });
-    await env.DB.prepare(`
-      INSERT INTO user_recent_channels (user_id, channel_id, last_visited_at, bubble_color)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id, channel_id) DO UPDATE SET bubble_color = excluded.bubble_color
-    `).bind(userId, channelId, Date.now(), color).run();
+    const updated = await env.DB.prepare(`
+      UPDATE user_recent_channels
+      SET bubble_color = ?
+      WHERE user_id = ? AND channel_id = ?
+    `).bind(color, userId, channelId).run();
+    if (!updated.meta.changes) {
+      await env.DB.prepare(`
+        INSERT INTO user_recent_channels (user_id, channel_id, last_visited_at, bubble_color)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, channel_id) DO UPDATE SET
+          bubble_color = excluded.bubble_color
+      `).bind(userId, channelId, Date.now(), color).run();
+      await pruneRecentChannelsIfNeeded(env, userId);
+    }
   } else {
     return Response.json({ error: "unknown action" }, { status: 400 });
   }
-
-  await pruneRecentChannels(env, userId);
 
   const record = await env.DB.prepare(
     "SELECT bubble_color, pinned, last_visited_at FROM user_recent_channels WHERE user_id = ? AND channel_id = ?"

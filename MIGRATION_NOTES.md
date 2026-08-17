@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Recent-channel pruning runs only when history can grow — 2026-08-17
+
+- D1 Insights showed the recent-channel cap delete running 711 times and reading 24.39k rows without deleting anything. The query was fast, but it ran after every visit, pin and color update even though those common operations usually changed an existing row and could not grow the list.
+- Existing visit and color records now use one indexed update and skip overflow work. A missing row falls back to the existing conflict-safe insert, preserving concurrent-tab behavior, and only then checks the cap.
+- Pin updates never add rows and no longer trigger pruning. Dashboard merge checks which validated channels are already present and probes for overflow only when the merge can add at least one row.
+- Potential growth performs an index-ordered `LIMIT 1 OFFSET 100` probe. The broader delete runs only when row 101 actually exists, while the existing top-100 ordering and cleanup behavior remain unchanged.
+- Focused regression coverage preserves the row-101 guard, no-prune update paths, pin behavior and merge growth check.
+
+Trade-off: adding a genuinely new recent channel performs one bounded overflow probe, and the rare race-loser insert still uses conflict handling. This shifts work away from hundreds of routine updates while retaining the hard 100-row server limit.
+
+Deployment note: deploy the Worker only. No D1 migration or frontend deployment is required. In a new D1 Insights window, the old `DELETE FROM user_recent_channels` fingerprint should stop increasing during repeat channel visits, pin changes and color changes.
+
 ### Guided support answers common user-guide questions before escalation — 2026-08-17
 
 - Guided support now opens category-specific question menus for account and channel creation, channel access, messages and reactions, private messages, reports and restrictions, live chat, and channel information.
