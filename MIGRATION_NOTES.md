@@ -13,6 +13,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Realtime delivery broadcasts only `dm-threads-changed`, with no DM ID, sender ID, text or reply payload. Each tab then fetches its own authorized thread snapshot, avoiding private content on public-room WebSockets whose URL UID is not trusted as an authorization credential.
 - Channel deletion, live-session cleanup, petition cleanup and owner DM deletion remove reply rows before their roots. Focused tests cover forged owner headers, cross-owner targets, signed sender isolation, content-free invalidation and sender/owner reply rules.
 - Existing onboarding text now explains that DM history remains available only while the same signed browser identity is retained. Clearing site cookies, switching browser profiles or identity expiry can remove access to earlier visitor threads.
+- A localized product-update dialog announces the new private-thread behavior once per browser across dashboard, channel, support and account flows. Its versioned browser marker is written before display so route changes do not repeat the announcement.
 
 Trade-off: every private-thread change causes connected channel tabs to make one bounded authorized DM refresh; reply content is rare and channels are small enough that this is preferable to adding private authorization state to every public socket. Owner replies are text-only in this first version. The latest 50 DM roots are retained in the mounted snapshot, with up to 20 replies per root.
 
