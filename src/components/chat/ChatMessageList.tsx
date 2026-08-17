@@ -378,15 +378,17 @@ const MessageRow = React.memo(function MessageRow({
             {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
           </div>
         ) : bubble}
-        <ReactionBadge
-          messageId={msg.id}
-          reactions={msg.reactions}
-          myUid={effectiveAdmin && authUserId ? authUserId : uid}
-          isSent={isSent}
-          isReply={isReply}
-          onReaction={onReaction}
-          onEmojiPicker={onEmojiPicker}
-        />
+        {!msg.dm && (
+          <ReactionBadge
+            messageId={msg.id}
+            reactions={msg.reactions}
+            myUid={effectiveAdmin && authUserId ? authUserId : uid}
+            isSent={isSent}
+            isReply={isReply}
+            onReaction={onReaction}
+            onEmojiPicker={onEmojiPicker}
+          />
+        )}
       </div>
     </div>
   );

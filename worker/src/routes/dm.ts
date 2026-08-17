@@ -10,6 +10,8 @@ import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { readDmThreads } from "../lib/dm-threads.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation.ts";
+import { deleteMediaByUrl } from "../lib/media.ts";
+import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -262,6 +264,61 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         created_at: createdAt,
       }),
     });
+  }
+
+  if (request.method === "DELETE") {
+    const body = await request.json() as Record<string, unknown>;
+    const dmId = typeof body.dm_id === "string" ? body.dm_id : "";
+    const channelId = typeof body.channel_id === "string" ? body.channel_id : "";
+    if (!dmId || !channelId) {
+      return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+
+    const parentChannelId = channelId.endsWith("_live")
+      ? channelId.replace(/_live$/, "")
+      : channelId;
+    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
+    if (isReportsChannel(parentChannelId, env)) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
+    if (passcode) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken || !await authorizeRoomToken(roomToken, parentChannelId, passcode, env)) {
+        return Response.json({ error: "passcode required" }, { status: 403 });
+      }
+    }
+
+    const requesterUid = await getAnonymousRequesterUid(request, env);
+    if (!requesterUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    const dm = await env.DB.prepare(
+      "SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ? LIMIT 1"
+    ).bind(dmId, channelId, requesterUid).first<{ id: string; image: string | null }>();
+    if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'"
+      ).bind(dmId),
+      env.DB.prepare("DELETE FROM dm_replies WHERE dm_id = ?").bind(dmId),
+      env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
+        .bind(dmId, channelId, requesterUid),
+    ]);
+    await deleteMediaByUrl(env, dm.image);
+    await deleteUploadTicketByAttachment(env, "dm", dmId);
+
+    const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(parentChannelId));
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ type: "dm-deleted", dm_id: dmId }),
+    }));
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ type: "dm-threads-changed" }),
+    }));
+    return Response.json({ ok: true });
   }
 
   if (request.method === "POST") {

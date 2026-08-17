@@ -276,7 +276,16 @@ export function useChatContextMenuActions({
 
   const canReply = Boolean(contextMenu && canReplyToMessage(contextMenu.msg, effectiveAdmin));
   const canReport = Boolean(contextMenu && !contextMenu.msg.dm && !effectiveAdmin && !contextMenu.isOwn);
-  const canDelete = Boolean(contextMenu?.isOwn && !contextMenu.msg.dm && !ownerModerationBlocked);
+  const canDeleteOwnDm = Boolean(
+    contextMenu
+    && !effectiveAdmin
+    && contextMenu.isOwn
+    && contextMenu.msg.dm
+    && !contextMenu.msg.dm_reply
+  );
+  const canDelete = canDeleteOwnDm || Boolean(
+    contextMenu?.isOwn && !contextMenu.msg.dm && !ownerModerationBlocked
+  );
   const canDeleteWithReplies = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn);
   const canEdit = Boolean(contextMenu?.isOwn && !contextMenu.msg.dm && !ownerModerationBlocked);
   const canBlock = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn && canBlockMessage(contextMenu.msg));

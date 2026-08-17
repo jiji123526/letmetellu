@@ -728,6 +728,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       sentToAdmin: t("sentToAdmin"),
       dmReplySent: t("dmReplySent"),
       dmReplyLimit: t("dmReplyLimit"),
+      deleteFailed: t("deleteFailed"),
       deletedMessage: t("deletedMessage"),
       messageDeleted: t("messageDeleted"),
       undo: t("undo"),

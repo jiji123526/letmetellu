@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Senders can delete their private DM threads — 2026-08-17
+
+- Visitors can long-press a private DM they originally sent and delete the entire private thread. Editing remains unsupported.
+- Authorization comes from the signed anonymous browser identity. Client-supplied user IDs are ignored, foreign roots and owner reply IDs cannot be deleted, and locked channels still require current room access.
+- Deletion removes the DM root, all owner replies, actor metadata, the upload ticket and managed media before broadcasting content-free thread invalidation.
+- DM reaction controls are hidden because private DM records do not use the public-message reaction endpoint.
+
+Deployment note: no migration is required. Deploy the Worker and frontend together, then verify deletion from the original browser and rejection from a second browser profile.
+
 ### Channel owners can send private replies to visitor DMs — 2026-08-17
 
 - Migration `0045_private_dm_replies.sql` adds owner-authored reply rows beneath existing DM roots. One DM can receive up to 20 text replies, owner sends retain the existing five-per-ten-second channel-local limit, and retry IDs are unique so an ambiguous network retry converges on the original reply.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MutableRefObject, type RefObject, type SetStateAction } from "react";
 import {
   adminAction,
+  deleteDm,
   deleteMessage,
   editMessageApi,
   fetchMessages,
@@ -56,6 +57,7 @@ interface MutationText {
   sentToAdmin: string;
   dmReplySent: string;
   dmReplyLimit: string;
+  deleteFailed: string;
   deletedMessage: string;
   messageDeleted: string;
   undo: string;
@@ -604,9 +606,59 @@ export function useChatMessageMutations({
   ]);
 
   const handleDelete = useCallback((messageId: string) => {
-    if (ownerModerationBlocked) {
+    const targetDm = dmMessages.find((message) => message.id === messageId);
+    const isSenderDmDelete = Boolean(
+      !effectiveAdmin
+      && targetDm?.dm
+      && !targetDm.dm_reply
+      && targetDm.uid === uid
+    );
+    if (ownerModerationBlocked && !isSenderDmDelete) {
       setBanner({ text: text.ownerSuspendedBanner, color: "#8b5cf6" });
       clearBannerSoon();
+      return;
+    }
+
+    if (isSenderDmDelete && targetDm) {
+      const deletedDmMessages = dmMessages.filter(
+        (message) => message.id === messageId || message.reply_to === messageId,
+      );
+      const targetImage = targetDm.image;
+      setDmMessages((previous) =>
+        previous.filter((message) => message.id !== messageId && message.reply_to !== messageId)
+      );
+      setGalleryItems((previous) => previous.filter((item) => item.id !== messageId));
+
+      const restoreDeletedDmMessages = () => {
+        setDmMessages((current) => {
+          const existingIds = new Set(current.map((message) => message.id));
+          return [...current, ...deletedDmMessages.filter((message) => !existingIds.has(message.id))]
+            .sort((left, right) =>
+              left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id)
+            );
+        });
+        if (targetImage) {
+          setGalleryItems((current) => {
+            if (current.some((item) => item.id === targetDm.id)) return current;
+            return [...current, {
+              id: targetDm.id,
+              image: targetImage,
+              created_at: targetDm.created_at,
+            }].sort((left, right) =>
+              right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id)
+            );
+          });
+        }
+        setBanner({ text: text.deleteFailed, color: "#d32f2f" });
+        clearBannerSoon();
+      };
+      void deleteDm({
+        dm_id: messageId,
+        channel_id: targetDm.channel_id || (inLiveMode ? `${channelId}_live` : channelId),
+      }).then((result) => {
+        if (result?.ok) return;
+        restoreDeletedDmMessages();
+      }).catch(restoreDeletedDmMessages);
       return;
     }
 
@@ -696,6 +748,7 @@ export function useChatMessageMutations({
     setGalleryItems,
     setMessages,
     text.deletedMessage,
+    text.deleteFailed,
     text.messageDeleted,
     text.ownerSuspendedBanner,
     text.undo,

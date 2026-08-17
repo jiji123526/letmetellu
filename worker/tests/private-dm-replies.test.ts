@@ -47,6 +47,11 @@ function createFakeEnv(options: { dmOwner?: string; insertChanges?: number } = {
         if (sql.includes("SELECT passcode, owner_uid FROM channels")) {
           return { passcode: null, owner_uid: OWNER_ID };
         }
+        if (sql.includes("SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")) {
+          return params[0] === root.id && params[1] === root.channel_id && params[2] === root.uid
+            ? { id: root.id, image: root.image }
+            : null;
+        }
         if (sql.includes("FROM dm JOIN channels")) {
           return {
             id: root.id,
@@ -76,8 +81,8 @@ function createFakeEnv(options: { dmOwner?: string; insertChanges?: number } = {
     REPORTS_CHANNEL_ID: "reports",
     DB: {
       prepare: statement,
-      async batch() {
-        return [];
+      async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+        return Promise.all(statements.map((item) => item.run()));
       },
     },
     CHAT_ROOM: {
@@ -111,6 +116,22 @@ function ownerRequest(body: Record<string, unknown>, headers: HeadersInit = {}):
       ...headers,
     },
     body: JSON.stringify(body),
+  });
+}
+
+async function senderDeleteRequest(
+  env: Env,
+  senderUid: string,
+  dmId = "dm-a",
+): Promise<Request> {
+  const sender = await createAnonymousIdentity(env, senderUid);
+  return new Request("https://api.example.test/api/dm", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Anonymous-Token": sender.token,
+    },
+    body: JSON.stringify({ dm_id: dmId, channel_id: CHANNEL_ID }),
   });
 }
 
@@ -190,6 +211,51 @@ test("sender thread reads are scoped to the signed anonymous identity", async ()
   assert.deepEqual((await otherResponse.json() as { dm?: Message[] }).dm, []);
 });
 
+test("the original sender can delete their DM root and its private replies", async () => {
+  const { env, writes, broadcasts } = createFakeEnv();
+  const response = await handleDm(await senderDeleteRequest(env, SENDER_ID), env);
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json() as { ok?: boolean }).ok, true);
+  assert.ok(writes.some((write) => write.includes("DELETE FROM dm_replies WHERE dm_id = ?")));
+  assert.ok(writes.some((write) =>
+    write.includes("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
+  ));
+  assert.ok(writes.some((write) => write.includes("DELETE FROM upload_tickets")));
+  assert.deepEqual(broadcasts, [
+    { type: "dm-deleted", dm_id: "dm-a" },
+    { type: "dm-threads-changed" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(broadcasts), /private question|sender-a/);
+});
+
+test("another anonymous identity cannot delete a sender's DM", async () => {
+  const { env, writes, broadcasts } = createFakeEnv();
+  const response = await handleDm(await senderDeleteRequest(env, "other-sender"), env);
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(broadcasts, []);
+});
+
+test("sender deletion rejects an owner reply id and an unsigned request", async () => {
+  const { env, writes, broadcasts } = createFakeEnv();
+  const replyResponse = await handleDm(
+    await senderDeleteRequest(env, SENDER_ID, "reply-a"),
+    env,
+  );
+  const unsignedResponse = await handleDm(new Request("https://api.example.test/api/dm", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dm_id: "dm-a", channel_id: CHANNEL_ID }),
+  }), env);
+
+  assert.equal(replyResponse.status, 404);
+  assert.equal(unsignedResponse.status, 401);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(broadcasts, []);
+});
+
 test("private threads render for the sender but only owners can reply", () => {
   const root = {
     id: "dm-a",
@@ -236,4 +302,29 @@ test("DM replies inherit their parent bubble side", () => {
     "utf8",
   );
   assert.match(messageListSource, /const isSent = isReply\s*\?\s*parentIsSent\s*:\s*fallbackIsSent/);
+});
+
+test("sender DM roots expose deletion without unsupported reaction controls", () => {
+  const actionsSource = readFileSync(
+    new URL("../../src/components/chat/useChatContextMenuActions.ts", import.meta.url),
+    "utf8",
+  );
+  const mutationSource = readFileSync(
+    new URL("../../src/components/chat/useChatMessageMutations.ts", import.meta.url),
+    "utf8",
+  );
+  const contextMenuSource = readFileSync(
+    new URL("../../src/components/chat/ContextMenu.tsx", import.meta.url),
+    "utf8",
+  );
+  const messageListSource = readFileSync(
+    new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(actionsSource, /!effectiveAdmin[\s\S]*contextMenu\.isOwn[\s\S]*contextMenu\.msg\.dm[\s\S]*!contextMenu\.msg\.dm_reply/);
+  assert.match(mutationSource, /targetDm\?\.dm[\s\S]*!targetDm\.dm_reply[\s\S]*targetDm\.uid === uid/);
+  assert.match(mutationSource, /deleteDm\(\{[\s\S]*dm_id: messageId/);
+  assert.match(contextMenuSource, /\{!msg\.dm && !isReportInboxMessage/);
+  assert.match(messageListSource, /\{!msg\.dm && \(\s*<ReactionBadge/);
 });

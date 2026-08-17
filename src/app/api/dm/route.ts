@@ -59,3 +59,20 @@ export async function PUT(request: Request) {
   const data = await response.json();
   return NextResponse.json(data, { status: response.status });
 }
+
+export async function DELETE(request: Request) {
+  const body = await request.json() as Record<string, unknown>;
+  const channelId = typeof body.channel_id === "string" ? body.channel_id : "";
+  if (!channelId) {
+    return NextResponse.json({ error: "missing channel" }, { status: 400 });
+  }
+
+  const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
+  const response = await fetch(`${workerUrl}/api/dm`, {
+    method: "DELETE",
+    headers: workerHeaders(request, null, channelId),
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  return NextResponse.json(data, { status: response.status });
+}

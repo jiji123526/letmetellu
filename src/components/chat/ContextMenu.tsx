@@ -220,7 +220,7 @@ export function ContextMenu({
       onClick={onClose}
     >
       {/* Reaction bar */}
-      {!isReportInboxMessage && !isPetitionInboxMessage && !isAdminReportRelayMessage && (
+      {!msg.dm && !isReportInboxMessage && !isPetitionInboxMessage && !isAdminReportRelayMessage && (
         <div
           className="absolute flex animate-[ctxPop_0.2s_ease]"
           style={{

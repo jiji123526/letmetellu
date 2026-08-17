@@ -561,6 +561,23 @@ export async function sendDmReply(payload: {
   return res.ok && !data?.error ? { ok: true, ...data } : data;
 }
 
+export async function deleteDm(payload: {
+  dm_id: string;
+  channel_id: string;
+}) {
+  if (IS_MOCK) return { ok: true };
+  const res = await fetchMessageMutation("/api/dm", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...roomTokenHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  return res.ok && !data?.error ? { ok: true, ...data } : data;
+}
+
 export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
   if (IS_MOCK) return { ok: true };
   const res = await fetch("/api/messages", {
