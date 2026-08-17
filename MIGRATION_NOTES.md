@@ -22,11 +22,13 @@ Deployment note: apply migration `0047`, deploy the Worker, then deploy the fron
 - Admin deletion immediately stages the root and its direct replies in D1, broadcasts their removal, and returns a server operation ID with a five-second deadline. Refreshing or closing the page cannot cancel deletion or make the row visible again.
 - Undo is accepted only for the matching authenticated channel owner before the server deadline. It restores the prior message deletion states or clears the DM pending flags, then broadcasts an authoritative refresh.
 - Expired operations are permanently finalized by scheduled maintenance. Replies are removed before their parent to avoid `ON DELETE SET NULL` detaching them; gallery, links, actor identities, upload tickets and managed media are then cleaned up.
+- Normal message threads are processed in bounded groups of 90 IDs. This keeps every D1 statement below the 100-bound-parameter ceiling even when a root has more than 100 direct replies.
+- Undo groups rows by their previous `deleted` value and restores each group in bounded updates instead of creating one D1 statement per message. Finalization applies the same chunking to metadata and child deletion, removes upload tickets in bulk, and sends managed R2 keys in bounded delete batches.
 - The UI keeps optimistic removal and restores local rows only after the Worker confirms Undo. Failed staging restores them and reports a deletion failure.
 
-Trade-off: refreshing during the five-second window preserves the deletion but closes that tab's Undo toast. Recovering Undo across navigation would require persisting and safely rehydrating operation IDs in the browser.
+Trade-off: unusually large threads require several indexed updates instead of one statement, but remain one logical deletion operation and avoid hard D1 parameter or batch-shape failures. Refreshing during the five-second window preserves the deletion but closes that tab's Undo toast. Recovering Undo across navigation would require persisting and safely rehydrating operation IDs in the browser.
 
-Deployment note: apply migration `0046`, deploy the Worker, then deploy the frontend.
+Deployment note: apply migration `0046`, then deploy the Worker and frontend. The large-thread hardening itself is Worker-only and requires no additional migration.
 
 ### Senders can delete their private DM threads — 2026-08-17
 

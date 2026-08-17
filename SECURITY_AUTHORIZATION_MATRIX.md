@@ -81,6 +81,9 @@ Status as of 2026-08-17:
   identity; foreign roots, owner reply IDs and unsigned requests cannot delete.
 - [x] Admin deletion Undo is bound to the trusted channel owner, channel and
   unexpired server operation ID; pending message and DM rows reject mutations.
+- [x] Normal message deletion, Undo and expiry finalization preserve the same
+  owner/channel operation boundary for 100+ reply threads while keeping every
+  D1 ID set bounded below the platform parameter limit.
 
 ### Browser-visible state transitions
 

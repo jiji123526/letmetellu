@@ -1,8 +1,10 @@
 import type { Env } from "../types.ts";
-import { deleteMediaByUrl } from "./media.ts";
+import { deleteMediaByUrl, extractMediaKey } from "./media.ts";
 import { deleteUploadTicketByAttachment } from "./upload-tickets.ts";
 
 export const ADMIN_DELETE_UNDO_MS = 5_000;
+export const ADMIN_DELETE_ID_CHUNK_SIZE = 90;
+const R2_DELETE_CHUNK_SIZE = 1000;
 
 type PendingRecordType = "message" | "dm" | "dm_reply";
 
@@ -59,6 +61,21 @@ function parseMessageStates(raw: string | null): MessageState[] {
 
 function placeholders(values: readonly unknown[]): string {
   return values.map(() => "?").join(", ");
+}
+
+function chunks<T>(values: readonly T[], size = ADMIN_DELETE_ID_CHUNK_SIZE): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
+async function deleteManagedMedia(env: Env, sources: Array<string | null>): Promise<void> {
+  const keys = [...new Set(sources.map(extractMediaKey).filter((key): key is string => !!key))];
+  for (const keyChunk of chunks(keys, R2_DELETE_CHUNK_SIZE)) {
+    await env.MEDIA.delete(keyChunk).catch(() => {});
+  }
 }
 
 async function insertPendingDeletion(
@@ -126,11 +143,11 @@ export async function stageMessageDeletion(
     rootId,
     recordIds: ids,
     previousStates: states.map((row) => ({ id: row.id, deleted: row.deleted })),
-    updateStatements: [
+    updateStatements: chunks(ids).map((idChunk) =>
       env.DB.prepare(
-        `UPDATE messages SET deleted = 2 WHERE channel_id = ? AND id IN (${placeholders(ids)})`
-      ).bind(channelId, ...ids),
-    ],
+        `UPDATE messages SET deleted = 2 WHERE channel_id = ? AND id IN (${placeholders(idChunk)})`
+      ).bind(channelId, ...idChunk)
+    ),
   });
 }
 
@@ -218,11 +235,17 @@ export async function undoPendingDeletion(
   if (row.record_type === "message") {
     const states = parseMessageStates(row.previous_states_json);
     if (states.length !== ids.length) return null;
-    statements.push(...states.map((state) =>
-      env.DB.prepare(
-        "UPDATE messages SET deleted = ? WHERE id = ? AND channel_id = ? AND deleted = 2"
-      ).bind(state.deleted, state.id, channelId)
-    ));
+    for (const deleted of [0, 1]) {
+      const stateIds = states.filter((state) => state.deleted === deleted).map((state) => state.id);
+      statements.push(...chunks(stateIds).map((idChunk) =>
+        env.DB.prepare(`
+          UPDATE messages
+          SET deleted = ?
+          WHERE channel_id = ? AND deleted = 2
+            AND id IN (${placeholders(idChunk)})
+        `).bind(deleted, channelId, ...idChunk)
+      ));
+    }
   } else if (row.record_type === "dm") {
     statements.push(
       env.DB.prepare(
@@ -254,42 +277,50 @@ export async function undoPendingDeletion(
 }
 
 async function finalizeMessageDeletion(env: Env, row: PendingDeletionRow, ids: string[]): Promise<void> {
-  const { results } = await env.DB.prepare(`
-    SELECT id, image, gallery_id
-    FROM messages
-    WHERE channel_id = ? AND id IN (${placeholders(ids)})
-  `).bind(row.channel_id, ...ids).all<{ id: string; image: string | null; gallery_id: string | null }>();
-  const records = results || [];
+  const records: Array<{ id: string; image: string | null; gallery_id: string | null }> = [];
+  for (const idChunk of chunks(ids)) {
+    const { results } = await env.DB.prepare(`
+      SELECT id, image, gallery_id
+      FROM messages
+      WHERE channel_id = ? AND id IN (${placeholders(idChunk)})
+    `).bind(row.channel_id, ...idChunk)
+      .all<{ id: string; image: string | null; gallery_id: string | null }>();
+    records.push(...(results || []));
+  }
   const galleryIds = records.map((record) => record.gallery_id).filter((id): id is string => !!id);
   const childIds = ids.filter((id) => id !== row.root_id);
   const statements: D1PreparedStatement[] = [];
-  if (galleryIds.length > 0) {
-    statements.push(
-      env.DB.prepare(`DELETE FROM gallery WHERE channel_id = ? AND id IN (${placeholders(galleryIds)})`)
-        .bind(row.channel_id, ...galleryIds),
-    );
-  }
   statements.push(
-    env.DB.prepare(`DELETE FROM message_links WHERE message_id IN (${placeholders(ids)})`).bind(...ids),
-    env.DB.prepare(
-      `DELETE FROM message_actor_identities WHERE record_type = 'message' AND record_id IN (${placeholders(ids)})`
-    ).bind(...ids),
-  );
-  if (childIds.length > 0) {
-    statements.push(
-      env.DB.prepare(`DELETE FROM messages WHERE channel_id = ? AND id IN (${placeholders(childIds)})`)
-        .bind(row.channel_id, ...childIds),
-    );
-  }
-  statements.push(
+    ...chunks(galleryIds).map((idChunk) =>
+      env.DB.prepare(`DELETE FROM gallery WHERE channel_id = ? AND id IN (${placeholders(idChunk)})`)
+        .bind(row.channel_id, ...idChunk)
+    ),
+    ...chunks(ids).map((idChunk) =>
+      env.DB.prepare(`DELETE FROM message_links WHERE message_id IN (${placeholders(idChunk)})`)
+        .bind(...idChunk)
+    ),
+    ...chunks(ids).map((idChunk) =>
+      env.DB.prepare(`
+        DELETE FROM message_actor_identities
+        WHERE record_type = 'message' AND record_id IN (${placeholders(idChunk)})
+      `).bind(...idChunk)
+    ),
+    ...chunks(ids).map((idChunk) =>
+      env.DB.prepare(`
+        DELETE FROM upload_tickets
+        WHERE attached_record_type = 'message'
+          AND attached_record_id IN (${placeholders(idChunk)})
+      `).bind(...idChunk)
+    ),
+    ...chunks(childIds).map((idChunk) =>
+      env.DB.prepare(`DELETE FROM messages WHERE channel_id = ? AND id IN (${placeholders(idChunk)})`)
+        .bind(row.channel_id, ...idChunk)
+    ),
     env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ? AND deleted = 2")
       .bind(row.root_id, row.channel_id),
   );
   await env.DB.batch(statements);
-  await Promise.all([
-    ...ids.map((id) => deleteUploadTicketByAttachment(env, "message", id)),
-    ...records.map((record) => deleteMediaByUrl(env, record.image)),
-  ]);
+  await deleteManagedMedia(env, records.map((record) => record.image));
 }
 
 async function finalizeDmDeletion(env: Env, row: PendingDeletionRow): Promise<void> {
