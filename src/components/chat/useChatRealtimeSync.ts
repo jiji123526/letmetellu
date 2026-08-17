@@ -8,6 +8,7 @@ import {
   decorateProtectedMediaUrl,
 } from "@/lib/api-core";
 import {
+  fetchDmThreads,
   fetchInit,
   fetchMessages,
 } from "@/lib/api-chat";
@@ -155,6 +156,10 @@ export function useChatRealtimeSync({
     adminDataAuthFailed,
   } = text;
   const pendingContextMessageIdsRef = useRef(new Set<string>());
+  const dmRefreshRequestIdRef = useRef(0);
+  useEffect(() => {
+    dmRefreshRequestIdRef.current += 1;
+  }, [channelId]);
 
   const getViewingChannelId = useCallback(() => {
     return inLiveModeRef.current ? `${channelId}_live` : channelId;
@@ -400,6 +405,21 @@ export function useChatRealtimeSync({
       if (event.type === "dm-deleted") {
         const dmId = event.dm_id as string;
         setDmMessages((previous) => previous.filter((message) => message.id !== dmId));
+      }
+
+      if (event.type === "dm-threads-changed") {
+        const viewingChannel = getViewingChannelId();
+        const requestId = ++dmRefreshRequestIdRef.current;
+        void fetchDmThreads(viewingChannel)
+          .then((data) => {
+            if (
+              requestId !== dmRefreshRequestIdRef.current
+              || viewingChannel !== getViewingChannelId()
+              || !Array.isArray(data.dm)
+            ) return;
+            setDmMessages(data.dm.map((message: Message) => ({ ...message, dm: true })));
+          })
+          .catch(() => {});
       }
 
       if (event.type === "freeze-change") {

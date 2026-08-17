@@ -6,6 +6,7 @@ import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveS
 import { withOperationalErrorContext } from "../lib/operational-events";
 import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
+import { readDmThreads } from "../lib/dm-threads";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
@@ -156,17 +157,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     let blockedIndex: number | null = null;
     let viewerBlockedIndex: number | null = null;
-    let dmIndex: number | null = null;
     if (isOwner) {
       blockedIndex = statements.length;
       statements.push(
         env.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?").bind(parentChannelId)
-      );
-      dmIndex = statements.length;
-      statements.push(
-        env.DB.prepare(
-          "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 50) ORDER BY created_at ASC"
-        ).bind(channelId)
       );
     } else {
       const viewerUid = anonymousIdentity.uid;
@@ -184,9 +178,16 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "load_bootstrap_data";
 
-    const [messagePage, batchResults] = await Promise.all([
+    const [messagePage, batchResults, dmMessages] = await Promise.all([
       readVisibleMessagePage(env, channelId, { limit: 50 }),
       env.DB.batch(statements),
+      readDmThreads(
+        env,
+        channelId,
+        isOwner
+          ? { owner: true }
+          : { owner: false, anonymousUid: anonymousIdentity.uid },
+      ),
     ]);
 
     const rawMessages = messagePage.messages;
@@ -199,7 +200,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       2,
     );
     const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
-    const dmMessages = dmIndex === null ? [] : batchResults[dmIndex].results || [];
     const viewerBlocked = viewerBlockedIndex === null
       ? false
       : (batchResults[viewerBlockedIndex].results?.length || 0) > 0;

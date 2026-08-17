@@ -24,7 +24,8 @@ export function isInboxModerationMessage(message: ActionRuleMessage): boolean {
 }
 
 export function canReplyToMessage(message: Pick<ActionRuleMessage, "dm" | "protected_sender">, effectiveAdmin: boolean): boolean {
-  return !effectiveAdmin || (!message.dm && !message.protected_sender);
+  if (message.dm) return effectiveAdmin && !message.protected_sender;
+  return !message.protected_sender;
 }
 
 export function canBlockMessage(message: Pick<ActionRuleMessage, "protected_sender">): boolean {

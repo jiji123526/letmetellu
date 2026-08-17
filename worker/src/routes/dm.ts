@@ -1,16 +1,69 @@
-import { Env } from "../types";
-import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { isReportsChannel } from "../lib/special-channels";
-import { attachUploadTicket } from "../lib/upload-tickets";
-import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation";
-import { ensureActiveLiveSession } from "../lib/live-sessions";
-import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities";
-import { authorizeRoomToken } from "./passcode";
-import { isValidClientMessageId } from "../lib/message-idempotency";
+import type { Env } from "../types.ts";
+import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity.ts";
+import { getReportsChannelOwnerId, isReportsChannel } from "../lib/special-channels.ts";
+import { attachUploadTicket } from "../lib/upload-tickets.ts";
+import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation.ts";
+import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
+import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
+import { authorizeRoomToken } from "./passcode.ts";
+import { isValidClientMessageId } from "../lib/message-idempotency.ts";
+import { readDmThreads } from "../lib/dm-threads.ts";
+import { getTrustedUserId } from "../lib/trusted-identity.ts";
+import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
 const DM_RATE_LIMIT_MAX = 5;
+const DM_REPLY_LIMIT = 20;
+
+interface DmRoot {
+  id: string;
+  client_message_id: string | null;
+  uid: string;
+  auth_uid: string | null;
+  nick: string | null;
+  text: string;
+  image: string | null;
+  channel_id: string;
+  created_at: string;
+}
+
+function serializeDmRoot(dm: DmRoot) {
+  return {
+    ...dm,
+    is_admin: 0,
+    reactions: "{}",
+    reply_to: null,
+    dm: true,
+  };
+}
+
+function serializeDmReply(reply: {
+  id: string;
+  client_reply_id: string;
+  dm_id: string;
+  channel_id: string;
+  owner_uid: string;
+  text: string;
+  created_at: string;
+}) {
+  return {
+    id: reply.id,
+    client_message_id: reply.client_reply_id,
+    uid: reply.owner_uid,
+    auth_uid: reply.owner_uid,
+    nick: null,
+    text: reply.text,
+    is_admin: 1,
+    image: null,
+    reactions: "{}",
+    reply_to: reply.dm_id,
+    channel_id: reply.channel_id,
+    created_at: reply.created_at,
+    dm: true,
+    dm_reply: true,
+  };
+}
 
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
@@ -27,11 +80,201 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
 }
 
 export async function handleDm(request: Request, env: Env): Promise<Response> {
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    const channelId = url.searchParams.get("channel") || "";
+    if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
+
+    const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+    const { exists, passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+    if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
+    const trustedUserId = getTrustedUserId(request, env);
+    const isOwner = trustedUserId === owner_uid;
+    if (isReportsChannel(parentChannelId, env) && !isOwner) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
+    if (passcode && !isOwner) {
+      const roomToken = request.headers.get("X-Room-Token");
+      if (!roomToken || !await authorizeRoomToken(roomToken, parentChannelId, passcode, env)) {
+        return Response.json({ error: "passcode required" }, { status: 403 });
+      }
+    }
+
+    const requesterUid = await getAnonymousRequesterUid(request, env);
+    if (!isOwner && !requesterUid) {
+      return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    const dm = await readDmThreads(
+      env,
+      channelId,
+      isOwner ? { owner: true } : { owner: false, anonymousUid: requesterUid! },
+    );
+    const protectedUid = await getReportsChannelOwnerId(env);
+    return Response.json({
+      dm: dm.map((message) => (
+        message.uid === "system-moderation"
+        || message.uid === protectedUid
+        || message.auth_uid === protectedUid
+          ? { ...message, protected_sender: true }
+          : message
+      )),
+    });
+  }
+
+  if (request.method === "PUT") {
+    const trustedUserId = getTrustedUserId(request, env);
+    if (!trustedUserId) return Response.json({ error: "owner access required" }, { status: 401 });
+    const body = await request.json() as Record<string, unknown>;
+    const dmId = typeof body.dm_id === "string" ? body.dm_id : "";
+    const clientReplyId = typeof body.client_reply_id === "string" ? body.client_reply_id : "";
+    const rawText = typeof body.text === "string" ? body.text : "";
+    if (!dmId || !isValidClientMessageId(clientReplyId) || !rawText.trim()) {
+      return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+    if (!checkMessageLength(rawText)) {
+      return Response.json({ error: "message_too_long" }, { status: 400 });
+    }
+
+    const dm = await env.DB.prepare(`
+      SELECT dm.id, dm.channel_id, channels.owner_uid
+      FROM dm
+      JOIN channels ON channels.id = CASE
+        WHEN dm.channel_id LIKE '%_live' THEN substr(dm.channel_id, 1, length(dm.channel_id) - 5)
+        ELSE dm.channel_id
+      END
+      WHERE dm.id = ?
+      LIMIT 1
+    `).bind(dmId).first<{ id: string; channel_id: string; owner_uid: string }>();
+    if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
+    if (dm.owner_uid !== trustedUserId) {
+      return Response.json({ error: "owner access required" }, { status: 403 });
+    }
+    const parentChannelId = dm.channel_id.endsWith("_live")
+      ? dm.channel_id.replace(/_live$/, "")
+      : dm.channel_id;
+    const moderation = await getChannelModeration(parentChannelId, env);
+    if (isOwnerModerationBlocked(moderation)) {
+      return Response.json({ error: "owner_suspended" }, { status: 403 });
+    }
+    if (!await checkBannedWords(rawText, parentChannelId, env)) {
+      return Response.json({ error: "banned_word" }, { status: 403 });
+    }
+
+    const existing = await env.DB.prepare(`
+      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at
+      FROM dm_replies
+      WHERE owner_uid = ? AND client_reply_id = ?
+      LIMIT 1
+    `).bind(trustedUserId, clientReplyId).first<{
+      id: string;
+      client_reply_id: string;
+      dm_id: string;
+      channel_id: string;
+      owner_uid: string;
+      text: string;
+      created_at: string;
+    }>();
+    if (existing) {
+      if (existing.dm_id !== dmId) {
+        return Response.json({ error: "client_reply_id_conflict" }, { status: 409 });
+      }
+      return Response.json({
+        ok: true,
+        duplicate: true,
+        reply: serializeDmReply(existing),
+      });
+    }
+
+    const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(parentChannelId));
+    const rateLimitResponse = await chatRoom.fetch(new Request("http://internal/channel-rate-limit", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: "dm-reply",
+        subjectKey: trustedUserId,
+        limit: DM_RATE_LIMIT_MAX,
+        windowMs: DM_RATE_LIMIT_WINDOW_MS,
+      }),
+    }));
+    if (!rateLimitResponse.ok) {
+      return Response.json({ error: "rate_limit_unavailable" }, { status: 503 });
+    }
+    const rateLimit = await rateLimitResponse.json() as { ok: boolean };
+    if (!rateLimit.ok) {
+      return Response.json({ error: "rate_limited" }, { status: 429 });
+    }
+
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    let result: D1Result;
+    try {
+      result = await env.DB.prepare(`
+        INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?
+        WHERE (SELECT COUNT(*) FROM dm_replies WHERE dm_id = ?) < ?
+      `).bind(
+        id,
+        clientReplyId,
+        dmId,
+        dm.channel_id,
+        trustedUserId,
+        rawText,
+        createdAt,
+        dmId,
+        DM_REPLY_LIMIT,
+      ).run();
+    } catch (error) {
+      const duplicate = await env.DB.prepare(`
+        SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at
+        FROM dm_replies
+        WHERE owner_uid = ? AND client_reply_id = ?
+        LIMIT 1
+      `).bind(trustedUserId, clientReplyId).first<{
+        id: string;
+        client_reply_id: string;
+        dm_id: string;
+        channel_id: string;
+        owner_uid: string;
+        text: string;
+        created_at: string;
+      }>();
+      if (duplicate?.dm_id === dmId) {
+        return Response.json({ ok: true, duplicate: true, reply: serializeDmReply(duplicate) });
+      }
+      throw error;
+    }
+    if ((result.meta.changes || 0) === 0) {
+      return Response.json({ error: "dm_reply_limit" }, { status: 409 });
+    }
+
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ type: "dm-threads-changed" }),
+    }));
+    return Response.json({
+      ok: true,
+      reply: serializeDmReply({
+        id,
+        client_reply_id: clientReplyId,
+        dm_id: dmId,
+        channel_id: dm.channel_id,
+        owner_uid: trustedUserId,
+        text: rawText,
+        created_at: createdAt,
+      }),
+    });
+  }
+
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
     const { client_message_id, nick, text, channel_id, image, upload_id } = body;
 
-    if (!channel_id) {
+    if (typeof channel_id !== "string" || !channel_id) {
+      return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+    if (nick !== undefined && typeof nick !== "string") {
+      return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+    if (image !== undefined && typeof image !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
     if (client_message_id !== undefined && !isValidClientMessageId(client_message_id)) {
@@ -79,13 +322,19 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
 
     const existingDm = await env.DB.prepare(
-      "SELECT id, uid, channel_id, created_at FROM dm WHERE client_message_id = ? LIMIT 1"
-    ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+      "SELECT * FROM dm WHERE client_message_id = ? LIMIT 1"
+    ).bind(clientMessageId).first<DmRoot>();
     if (existingDm) {
       if (existingDm.uid !== requesterUid || existingDm.channel_id !== channel_id) {
         return Response.json({ error: "client_message_id_conflict" }, { status: 409 });
       }
-      return Response.json({ ok: true, id: existingDm.id, created_at: existingDm.created_at, duplicate: true });
+      return Response.json({
+        ok: true,
+        id: existingDm.id,
+        created_at: existingDm.created_at,
+        dm: serializeDmRoot(existingDm),
+        duplicate: true,
+      });
     }
 
     const doId = env.CHAT_ROOM.idFromName(parentChannelId);
@@ -181,22 +430,46 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       ]);
     } catch (error) {
       const duplicate = await env.DB.prepare(
-        "SELECT id, uid, channel_id, created_at FROM dm WHERE client_message_id = ? LIMIT 1"
-      ).bind(clientMessageId).first<{ id: string; uid: string; channel_id: string; created_at: string }>();
+        "SELECT * FROM dm WHERE client_message_id = ? LIMIT 1"
+      ).bind(clientMessageId).first<DmRoot>();
       if (duplicate?.uid === requesterUid && duplicate.channel_id === channel_id) {
-        return Response.json({ ok: true, id: duplicate.id, created_at: duplicate.created_at, duplicate: true });
+        return Response.json({
+          ok: true,
+          id: duplicate.id,
+          created_at: duplicate.created_at,
+          dm: serializeDmRoot(duplicate),
+          duplicate: true,
+        });
       }
       throw error;
     }
 
     // Broadcast DM with payload — always use parent channel DO
-    const newDm = { id, uid: requesterUid, auth_uid: requesterUid, nick: nick || null, text: rawText, image: image || null, channel_id, created_at };
+    const newDm = {
+      id,
+      uid: requesterUid,
+      auth_uid: requesterUid,
+      nick: nick || null,
+      text: rawText,
+      image: image || null,
+      channel_id,
+      created_at,
+    };
     await chatRoom.fetch(new Request("http://internal/broadcast", {
       method: "POST",
       body: JSON.stringify({ type: "dm-new", dm: newDm }),
     }));
+    await chatRoom.fetch(new Request("http://internal/broadcast", {
+      method: "POST",
+      body: JSON.stringify({ type: "dm-threads-changed" }),
+    }));
 
-    return Response.json({ ok: true, id, created_at });
+    return Response.json({
+      ok: true,
+      id,
+      created_at,
+      dm: serializeDmRoot({ ...newDm, client_message_id: clientMessageId }),
+    });
   }
 
   return Response.json({ error: "method not allowed" }, { status: 405 });

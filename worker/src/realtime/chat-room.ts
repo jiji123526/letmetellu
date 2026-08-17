@@ -178,7 +178,7 @@ export class ChatRoom {
     if (url.pathname.endsWith("/broadcast")) {
       const event = await request.json() as Record<string, unknown>;
       const eventStr = JSON.stringify(event);
-      const isDmEvent = event.type === "dm-new" || event.type === "dm-deleted";
+      const isPrivateDmPayload = event.type === "dm-new" || event.type === "dm-deleted";
 
       if (event.type === "live-ended") {
         for (const [socket, connection] of this.connections) {
@@ -189,7 +189,7 @@ export class ChatRoom {
         this.queueLivePresenceBroadcast();
       }
 
-      if (isDmEvent) {
+      if (isPrivateDmPayload) {
         // Only send DM events to authenticated admin connections
         this.broadcastToAdmin(eventStr);
       } else {

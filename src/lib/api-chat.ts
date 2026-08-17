@@ -532,6 +532,35 @@ export async function sendDm(payload: {
   return data;
 }
 
+export async function fetchDmThreads(channelId: string) {
+  if (IS_MOCK) return { dm: [] };
+  const params = new URLSearchParams({ channel: channelId });
+  const res = await fetch(`/api/dm?${params}`, {
+    headers: roomTokenHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`DM threads failed: ${res.status}`);
+  const data = await res.json();
+  if (Array.isArray(data?.dm)) data.dm = data.dm.map(decorateMessageMedia);
+  return data;
+}
+
+export async function sendDmReply(payload: {
+  client_reply_id: string;
+  dm_id: string;
+  text: string;
+}) {
+  if (IS_MOCK) return { ok: true };
+  const res = await fetchMessageMutation("/api/dm", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (data?.reply) data.reply = decorateMessageMedia(data.reply);
+  return res.ok && !data?.error ? { ok: true, ...data } : data;
+}
+
 export async function toggleReaction(payload: { uid: string; message_id: string; channel_id: string; emoji: string }) {
   if (IS_MOCK) return { ok: true };
   const res = await fetch("/api/messages", {

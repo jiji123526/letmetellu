@@ -40,6 +40,18 @@ export function hasReportsInboxContent(messages: Message[]): boolean {
   return messages.some((message) => !!message.report_meta || !!message.petition_meta);
 }
 
+export function getAnonymousViewerDmMessages(dmMessages: Message[], uid: string): Message[] {
+  const ownRootIds = new Set(
+    dmMessages
+      .filter((message) => !message.reply_to && message.uid === uid)
+      .map((message) => message.id),
+  );
+  return dmMessages.filter((message) =>
+    ownRootIds.has(message.id)
+    || (!!message.reply_to && ownRootIds.has(message.reply_to))
+  );
+}
+
 export function getDisplayMessages(
   messages: Message[],
   dmMessages: Message[],
@@ -48,7 +60,10 @@ export function getDisplayMessages(
   reportsOwnerFilter: ReportsOwnerFilter,
   historyMode: "latest" | "context" = "latest",
 ): Message[] {
-  if (!effectiveAdmin) return messages.filter((message) => !message.report);
+  if (!effectiveAdmin) {
+    return [...messages.filter((message) => !message.report), ...dmMessages]
+      .sort((left, right) => (left.created_at || "").localeCompare(right.created_at || ""));
+  }
   const loadedMessageRange = messages.reduce<{
     oldest: string | null;
     newest: string | null;
@@ -63,14 +78,15 @@ export function getDisplayMessages(
         : range.newest,
     };
   }, { oldest: null, newest: null });
-  const visibleDmMessages = loadedMessageRange.oldest
+  const visibleDmMessages = historyMode === "latest"
+    ? dmMessages
+    : loadedMessageRange.oldest
     ? dmMessages.filter((message) =>
         !message.created_at
         || (
           message.created_at.localeCompare(loadedMessageRange.oldest!) >= 0
           && (
-            historyMode === "latest"
-            || !loadedMessageRange.newest
+            !loadedMessageRange.newest
             || message.created_at.localeCompare(loadedMessageRange.newest) <= 0
           )
         )

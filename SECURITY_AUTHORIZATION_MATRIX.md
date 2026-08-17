@@ -5,7 +5,7 @@ Frontend visibility is not treated as access control. A browser-provided
 `X-User-Id` becomes trusted only when the request also carries the matching
 Worker `INTERNAL_SECRET` from the authenticated Next.js proxy.
 
-Status as of 2026-08-13:
+Status as of 2026-08-17:
 
 - **Focused/source** means a shared authorization primitive or route invariant
   has direct automated coverage, but
@@ -37,7 +37,7 @@ Status as of 2026-08-13:
 | `/ws/:channel` | Public-room connection only after allowed-origin upgrade | Locked viewer authorization requires a scoped viewer token | Admin authorization requires a scoped owner token | Reports authorization follows configured ownership | Durable Object revalidates live joins through a tested current-session decision; browser transitions pending |
 | `/api/upload` | Signed actor required; public message/DM quota applies | Room token plus signed actor required | Channel assets and owner uploads allowed only on owned channel | No implicit cross-channel override | Signature, pre-body authorization, quota ordering, deleted-channel and expired-live route invariants |
 | `/api/media/*` | Public media only where channel policy permits | Protected media requires current room authorization on network access/revalidation | Owned-channel media allowed | No blanket media override | Cache/access focused tests; an already cached private response can remain reusable for its bounded browser-cache window |
-| `/api/dm` | Signed actor and channel policy required | Same, with room token for locked room | Owner receives data through owner-only data route | No implicit override | Idempotency/identity controls plus deleted-channel and expired-live route invariants; broader action regression pending |
+| `/api/dm` | Signed actor can send and read only matching private roots/replies | Same, with a current room token for locked rooms | Owned-channel thread reads and text replies only | No implicit override | Forged owner, cross-owner target, sender isolation, idempotency, content-free realtime invalidation and room/live route invariants have focused coverage |
 | `/api/channel-reports` POST | Signed actor/device required | Locked channel additionally requires room token | Owner cannot report own channel | Same submission rules | Durable quota and target-channel lookup; direct target/evidence expansion pending |
 | `/api/channel-reports` PATCH | Denied | Denied | Denied unless also platform admin | Allowed | Shared trusted-identity, platform-role, per-action denial, target lookup, atomic terminal transitions and complete report-state response coverage |
 | `/api/support` | Signed anonymous/device support subject | Same | Same user support boundary | Same unless using platform route | Actor identity isolation, owned lifecycle transitions and database-enforced one-open-session/ticket invariants; browser regression pending |
@@ -71,6 +71,9 @@ Status as of 2026-08-13:
   and ticket, and close/reset mutations remain bound to the owning user.
 - [x] Report and petition terminal actions use conditional state transitions,
   and channel-level moderation responses reconcile every affected report row.
+- [x] Private DM replies reject forged or cross-owner writes, sender reads are
+  scoped to the signed anonymous identity, and public socket invalidation
+  contains no private thread identifier or content.
 
 ### Browser-visible state transitions
 
@@ -88,6 +91,8 @@ Status as of 2026-08-13:
 - [x] Media access revocation tests distinguish fresh network authorization
   from a copy already retained in the browser's bounded private cache; stale
   room tokens, direct capabilities and deleted parent channels fail closed.
+- [ ] In two deployed browser profiles, verify each visitor retains only their
+  own DM threads and owner replies, including locked-room and deletion flows.
 
 ## Review rules
 

@@ -9,6 +9,7 @@ import {
   isMediaUploadTooLarge,
   MediaUploadTooLargeError,
   sendDm,
+  sendDmReply,
   sendMessage as sendMessageApi,
   sendMessageAsAdmin,
   toggleReaction,
@@ -53,6 +54,8 @@ interface MutationText {
   petitionPrefix: string;
   petitionSent: string;
   sentToAdmin: string;
+  dmReplySent: string;
+  dmReplyLimit: string;
   deletedMessage: string;
   messageDeleted: string;
   undo: string;
@@ -66,7 +69,7 @@ interface UseChatMessageMutationsArgs {
   dmMode: boolean;
   inLiveMode: boolean;
   input: string;
-  replyingToId?: string;
+  replyingTo?: Message | null;
   pendingPhotos: PendingPhoto[];
   messages: Message[];
   dmMessages: Message[];
@@ -110,7 +113,7 @@ export function useChatMessageMutations({
   dmMode,
   inLiveMode,
   input,
-  replyingToId,
+  replyingTo,
   pendingPhotos,
   messages,
   dmMessages,
@@ -223,6 +226,8 @@ export function useChatMessageMutations({
       });
     } else if (error === "dm_disabled") {
       setBanner({ text: text.dmDisabledMessage, color: "#d32f2f" });
+    } else if (error === "dm_reply_limit") {
+      setBanner({ text: text.dmReplyLimit, color: "#d32f2f" });
     } else if (error === "media_too_large") {
       setBanner({ text: text.mediaTooLarge, color: "#d32f2f" });
     } else {
@@ -237,6 +242,7 @@ export function useChatMessageMutations({
     text.blocked,
     text.chatFrozen,
     text.dmDisabledMessage,
+    text.dmReplyLimit,
     text.messageTooLong,
     text.mediaTooLarge,
     text.moderationFrozenBanner,
@@ -268,7 +274,7 @@ export function useChatMessageMutations({
       activeSendChannelId,
       dmMode,
       nextText,
-      replyingToId || "",
+      replyingTo?.id || "",
       pendingPhotos.map((photo) => [photo.blob.size, photo.blob.type, photo.width, photo.height]),
     ]));
     const storedAttempt = typeof window === "undefined"
@@ -323,6 +329,30 @@ export function useChatMessageMutations({
       return;
     }
 
+    if (effectiveAdmin && replyingTo?.dm) {
+      if (pendingPhotos.length > 0) {
+        showMutationError("upload_failed");
+        return;
+      }
+      const result = await sendDmReply({
+        client_reply_id: submissionId,
+        dm_id: replyingTo.reply_to || replyingTo.id,
+        text: nextText,
+      });
+      if (!result?.ok || !result.reply) {
+        restoreInput(nextText);
+        showMutationError(result?.error);
+        return;
+      }
+      setDmMessages((previous) =>
+        upsertAcknowledgedMessages(previous, [result.reply as Message])
+      );
+      resetInput();
+      setBanner({ text: text.dmReplySent, color: "#7b3fa0" });
+      clearBannerSoon();
+      return;
+    }
+
     const { photos, replyToId: savedReplyTo } = consumeComposerState();
 
     if (dmMode) {
@@ -354,6 +384,11 @@ export function useChatMessageMutations({
         return;
       }
 
+      if (result.dm) {
+        setDmMessages((previous) =>
+          upsertAcknowledgedMessages(previous, [result.dm as Message])
+        );
+      }
       clearStoredSendAttempt(submissionId);
       setBanner({ text: text.sentToAdmin, color: "#7b3fa0" });
       clearBannerSoon();
@@ -464,11 +499,12 @@ export function useChatMessageMutations({
     pendingPhotos.length,
     pendingPhotos,
     petitionEnabled,
-    replyingToId,
+    replyingTo,
     resetInput,
     restoreInput,
     setBanner,
     setDmMode,
+    setDmMessages,
     setPendingPhotos,
     setMessages,
     sendAttemptStorageKey,
@@ -477,6 +513,7 @@ export function useChatMessageMutations({
     text.blocked,
     text.petitionPrefix,
     text.petitionSent,
+    text.dmReplySent,
     text.sentToAdmin,
     textareaRef,
     uid,

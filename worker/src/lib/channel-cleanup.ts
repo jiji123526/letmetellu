@@ -239,6 +239,7 @@ export async function deleteChannel(
     env.DB.prepare(`DELETE FROM messages WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM message_links WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM gallery WHERE channel_id IN (${placeholders})`).bind(...channelIds),
+    env.DB.prepare(`DELETE FROM dm_replies WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM dm WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM blocked WHERE channel_id IN (${placeholders})`).bind(...channelIds),
     env.DB.prepare(`DELETE FROM message_actor_identities WHERE channel_id IN (${placeholders})`).bind(...channelIds),

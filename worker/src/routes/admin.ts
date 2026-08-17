@@ -355,8 +355,17 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
         .bind(unblockUid, channel_id).run();
       // Clean up old petition DMs from this user
-      await env.DB.prepare("DELETE FROM dm WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'")
-        .bind(unblockUid, channel_id).run();
+      await env.DB.batch([
+        env.DB.prepare(`
+          DELETE FROM dm_replies
+          WHERE dm_id IN (
+            SELECT id FROM dm
+            WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'
+          )
+        `).bind(unblockUid, channel_id),
+        env.DB.prepare("DELETE FROM dm WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'")
+          .bind(unblockUid, channel_id),
+      ]);
       // Clean up old report messages about this user
       await env.DB.prepare("DELETE FROM messages WHERE uid = ? AND channel_id = ? AND report = 1")
         .bind(unblockUid, channel_id).run();
@@ -434,6 +443,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.batch([
         env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'")
           .bind(dm_id),
+        env.DB.prepare("DELETE FROM dm_replies WHERE dm_id = ?")
+          .bind(dm_id),
         env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
           .bind(dm_id, channel_id),
       ]);
@@ -445,6 +456,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await stub2.fetch(new Request("http://internal/broadcast", {
         method: "POST",
         body: JSON.stringify({ type: "dm-deleted", dm_id }),
+      }));
+      await stub2.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({ type: "dm-threads-changed" }),
       }));
 
       return Response.json({ ok: true });

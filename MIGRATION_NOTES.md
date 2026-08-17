@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel owners can send private replies to visitor DMs — 2026-08-17
+
+- Migration `0045_private_dm_replies.sql` adds owner-authored reply rows beneath existing DM roots. One DM can receive up to 20 text replies, owner sends retain the existing five-per-ten-second channel-local limit, and retry IDs are unique so an ambiguous network retry converges on the original reply.
+- Visitors now retain the DMs they sent and can read the owner's replies in the same browser. Reads are scoped by the Worker-verified signed anonymous identity; another anonymous identity receives no thread data, and locked channels still require a room token bound to the current passcode.
+- Owners can long-press either the original DM or an existing reply and use the normal reply composer. The sender cannot reply inside that private thread; a new message to the owner remains a separate DM.
+- Realtime delivery broadcasts only `dm-threads-changed`, with no DM ID, sender ID, text or reply payload. Each tab then fetches its own authorized thread snapshot, avoiding private content on public-room WebSockets whose URL UID is not trusted as an authorization credential.
+- Channel deletion, live-session cleanup, petition cleanup and owner DM deletion remove reply rows before their roots. Focused tests cover forged owner headers, cross-owner targets, signed sender isolation, content-free invalidation and sender/owner reply rules.
+- Existing onboarding text now explains that DM history remains available only while the same signed browser identity is retained. Clearing site cookies, switching browser profiles or identity expiry can remove access to earlier visitor threads.
+
+Trade-off: every private-thread change causes connected channel tabs to make one bounded authorized DM refresh; reply content is rare and channels are small enough that this is preferable to adding private authorization state to every public socket. Owner replies are text-only in this first version. The latest 50 DM roots are retained in the mounted snapshot, with up to 20 replies per root.
+
+Deployment note: apply migration `0045`, deploy the Worker, then deploy the frontend. In two browser profiles, send DMs from both visitors, verify each profile sees only its own roots and replies, send multiple owner replies from the original and a reply row, verify locked-room behavior, then delete one DM and confirm it disappears from the matching sender without exposing content to the other profile.
+
 ### Channel social previews refresh immediately after appearance changes — 2026-08-16
 
 - Public channel preview reads keep their five-minute cache but now carry a channel-scoped cache tag.

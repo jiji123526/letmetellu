@@ -37,6 +37,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 
 ### Implemented, rollout verification pending
 
+- [x] One-way private DM threads are implemented on the feature branch. Visitors retain only their own DM roots and owner replies under a signed same-browser identity; owners can send up to 20 text replies; socket invalidation contains no private payload. Migration `0045`, Worker/frontend rollout and two-profile verification remain.
 - [x] Conditional chat interfaces are split from the initial route bundle. Comparable production builds reduced initial channel scripts by `82,679` uncompressed bytes (`9.0%`), and superseded bootstrap traces no longer remain falsely `pending`.
 - [x] The reconnect notice is now visibility-aware: normal chat suppresses it while the user is reading rendered history or historical context, but the socket continues recovering and the notice remains visible at the live edge and in active live/DM modes. Frontend rollout verification remains.
 - [x] Gallery paging now uses ordered gallery rows plus indexed active image-message lookups, replacing a production plan that read `97.53k` rows across 31 requests. Migration `0040` and Worker/frontend rollout remain.
@@ -68,6 +69,7 @@ backed by D1/R2/Durable Objects, and passcode-gated anonymous chat rooms.
 - [x] Confirmed during the 2026-08-17 Durable Object timeout that `/api/init` fell back through `realtime_unavailable` without an init `500`. The same burst exposed generic WebSocket and message-rate-limit `500`s; the Worker now classifies known resets as retryable `503` realtime failures.
 - [x] Removed the unused general presence query from `/api/init` and limited WebSocket viewer-count work and delivery to active live-session participants.
 - [ ] After deploying the 2026-08-17 Worker fix, verify a later genuine reset does not increment `unhandled_exception`, WebSocket reconnect restores live presence, and retrying an affected send succeeds once without a duplicate.
+- [ ] Apply migration `0045`, deploy Worker/frontend, then verify private DM replies with an owner and two isolated browser profiles. Each visitor must see only their own DM threads; locked-room access, repeated owner replies, the 20-reply limit, cross-tab refresh and owner deletion must remain correct.
 - [ ] Keep the browser-local dashboard/chat diagnostics during beta. They add no network request or analytics traffic and remain useful for separating API, reconnect and rendering delays.
 - [ ] Verify the conditional chat chunks in production with one cache-disabled channel load, then open search, edit, context menu, settings, gallery, links, report and owner-admin overlays once.
 - [ ] Measure preview-card/media stabilization only if slow-render or navigation reports continue; do not add broad telemetry or precomputed channel activity without evidence.

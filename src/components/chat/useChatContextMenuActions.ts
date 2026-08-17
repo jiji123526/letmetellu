@@ -122,18 +122,19 @@ export function useChatContextMenuActions({
   }, [setBanner]);
 
   const onReply = useCallback((msgId: string) => {
-    const message = messages.find((item) => item.id === msgId);
+    const allMessages = [...messages, ...dmMessages];
+    const message = allMessages.find((item) => item.id === msgId);
     if (!message) return;
 
     if (message.reply_to) {
-      const parent = messages.find((item) => item.id === message.reply_to);
+      const parent = allMessages.find((item) => item.id === message.reply_to);
       setReplyingTo(parent || message);
     } else {
       setReplyingTo(message);
     }
 
     focusTextarea();
-  }, [focusTextarea, messages, setReplyingTo]);
+  }, [dmMessages, focusTextarea, messages, setReplyingTo]);
 
   const onDeleteWithReplies = useCallback((msgId: string) => {
     const targetMessage = messages.find((message) => message.id === msgId);
@@ -274,10 +275,10 @@ export function useChatContextMenuActions({
   }, [contextMenu, handlePetitionAction]);
 
   const canReply = Boolean(contextMenu && canReplyToMessage(contextMenu.msg, effectiveAdmin));
-  const canReport = Boolean(contextMenu && !effectiveAdmin && !contextMenu.isOwn);
-  const canDelete = Boolean(contextMenu?.isOwn && !ownerModerationBlocked);
+  const canReport = Boolean(contextMenu && !contextMenu.msg.dm && !effectiveAdmin && !contextMenu.isOwn);
+  const canDelete = Boolean(contextMenu?.isOwn && !contextMenu.msg.dm && !ownerModerationBlocked);
   const canDeleteWithReplies = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn);
-  const canEdit = Boolean(contextMenu?.isOwn && !ownerModerationBlocked);
+  const canEdit = Boolean(contextMenu?.isOwn && !contextMenu.msg.dm && !ownerModerationBlocked);
   const canBlock = Boolean(contextMenu && canUseAdminMutations && !contextMenu.isOwn && canBlockMessage(contextMenu.msg));
   const canDismissReportMessage = Boolean(contextMenu && canUseAdminMutations && contextMenu.msg.report && contextMenu.msg.reported_msg_id);
   const canModerateReport = Boolean(contextMenu?.msg.report_meta && canUseAdminMutations);

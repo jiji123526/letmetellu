@@ -38,6 +38,7 @@ import {
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
 import { shouldShowReconnectNotice } from "./chatConnectionNotice";
+import { getAnonymousViewerDmMessages } from "./chatMessageSelectors";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -176,6 +177,10 @@ export function ChatView({ channelId }: { channelId: string }) {
     authUserId,
   );
   const effectiveAdmin = isAdmin && !adminViewAsUser;
+  const renderedDmMessages = useMemo(() => {
+    if (!isOwner || effectiveAdmin) return dmMessages;
+    return getAnonymousViewerDmMessages(dmMessages, uid);
+  }, [dmMessages, effectiveAdmin, isOwner, uid]);
   const {
     input,
     replyingTo,
@@ -376,7 +381,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     uid,
     inLiveMode,
     messages,
-    dmMessages,
+    dmMessages: renderedDmMessages,
     historyMode,
     unavailableReplyParentIds,
     effectiveAdmin,
@@ -389,8 +394,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
   const searchMessages = useMemo(
-    () => (effectiveAdmin ? [...messages, ...dmMessages] : messages),
-    [dmMessages, effectiveAdmin, messages],
+    () => [...messages, ...renderedDmMessages],
+    [messages, renderedDmMessages],
   );
 
   const {
@@ -683,7 +688,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     dmMode,
     inLiveMode,
     input,
-    replyingToId: replyingTo?.id,
+    replyingTo,
     pendingPhotos,
     messages,
     dmMessages,
@@ -721,6 +726,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       petitionPrefix: t("petitionPrefix"),
       petitionSent: t("petitionSent"),
       sentToAdmin: t("sentToAdmin"),
+      dmReplySent: t("dmReplySent"),
+      dmReplyLimit: t("dmReplyLimit"),
       deletedMessage: t("deletedMessage"),
       messageDeleted: t("messageDeleted"),
       undo: t("undo"),
