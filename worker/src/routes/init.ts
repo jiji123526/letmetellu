@@ -2,7 +2,6 @@ import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
-import { readInitPresenceCount } from "../lib/init-presence";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
 import { withOperationalErrorContext } from "../lib/operational-events";
 import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
@@ -185,12 +184,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "load_bootstrap_data";
 
-    // Presence is served by the Durable Object, so it can run concurrently with
-    // the single D1 batch instead of extending the critical path.
-    const [messagePage, batchResults, presenceCount] = await Promise.all([
+    const [messagePage, batchResults] = await Promise.all([
       readVisibleMessagePage(env, channelId, { limit: 50 }),
       env.DB.batch(statements),
-      readInitPresenceCount(env, parentChannelId),
     ]);
 
     const rawMessages = messagePage.messages;
@@ -275,7 +271,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       adminDataStatus,
       viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
       isReportsChannel: isReportsChannel(parentChannelId, env),
-      presence: presenceCount,
       bannerNotice: config.get(`notice_${channelId}`) || "",
       welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
       live: liveStatus,

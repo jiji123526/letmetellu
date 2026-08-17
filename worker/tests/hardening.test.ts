@@ -12,6 +12,7 @@ import {
   normalizeOperationalRoute,
   OPERATIONAL_EVENT_OVERRIDE_HEADER,
   getOperationalEventOverride,
+  isTransientDurableObjectError,
   stripOperationalEventHeaders,
   withOperationalErrorContext,
   withOperationalEventOverride,
@@ -337,6 +338,37 @@ test("operational error context merges route detail onto thrown errors", () => {
   });
 });
 
+test("known Durable Object storage resets are classified as transient", () => {
+  assert.equal(
+    isTransientDurableObjectError(
+      new Error("Durable Object storage operation exceeded timeout which caused object to be reset."),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientDurableObjectError(
+      new Error(
+        "Internal error in Durable Object storage caused object to be reset; reference = 0c0djdmom6l4hhungfklh8qi",
+      ),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientDurableObjectError(
+      new Error("request failed", {
+        cause: new Error("Durable Object storage operation exceeded timeout which caused object to be reset."),
+      }),
+    ),
+    true,
+  );
+});
+
+test("unknown failures remain unhandled exceptions", () => {
+  assert.equal(isTransientDurableObjectError(new Error("D1 query failed")), false);
+  assert.equal(isTransientDurableObjectError(new Error("Durable Object returned 500")), false);
+  assert.equal(isTransientDurableObjectError("validation failed"), false);
+});
+
 test("init and messages routes keep operational error context instrumentation", () => {
   const initSource = readFileSync(new URL("../src/routes/init.ts", import.meta.url), "utf8");
   assert.match(initSource, /withOperationalErrorContext/);
@@ -346,4 +378,13 @@ test("init and messages routes keep operational error context instrumentation", 
   assert.match(messagesSource, /withOperationalErrorContext/);
   assert.match(messagesSource, /route_action/);
   assert.match(messagesSource, /route_stage/);
+});
+
+test("worker returns retryable responses for transient Durable Object failures", () => {
+  const workerSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.match(workerSource, /isTransientDurableObjectError\(err\)/);
+  assert.match(workerSource, /eventType: realtimeUnavailable \? "realtime_unavailable" : "unhandled_exception"/);
+  assert.match(workerSource, /statusCode: realtimeUnavailable \? 503 : 500/);
+  assert.match(workerSource, /error: realtimeUnavailable \? "realtime_unavailable" : "internal_error"/);
+  assert.match(workerSource, /!capturedException/);
 });

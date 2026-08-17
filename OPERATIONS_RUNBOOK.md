@@ -90,8 +90,8 @@ latency telemetry is added.
 
 1. Determine whether the signal is isolated, transient or increasing.
 2. Check route concentration and cleanup backlog.
-3. For one realtime fallback, confirm `/api/init` still succeeded and presence
-   recovers after WebSocket reconnect.
+3. For one realtime failure, confirm `/api/init` remained unaffected and live
+   presence recovers after WebSocket reconnect.
 4. For cleanup failure, allow scheduled retry unless attempts or age continue
    increasing.
 5. Escalate to critical handling when users cannot complete a core action,
@@ -121,8 +121,8 @@ LIMIT 100;
 ### `/api/init` Or Core 5xx
 
 - Group by `route_stage` and error text.
-- If the error is a Durable Object reset, verify a `realtime_unavailable`
-  fallback appears without a matching post-fallback `/api/init` 500.
+- `/api/init` no longer contacts the Durable Object. Treat any new init error
+  mentioning Durable Object presence as evidence of an outdated deployment.
 - If failures began after deployment, compare the current and previous Worker
   versions and roll back only the Worker when the frontend contract permits it.
 - Recovery means room entry and refresh succeed and the 15-minute count stops
@@ -131,10 +131,18 @@ LIMIT 100;
 ### Realtime Unavailable
 
 - Treat an isolated event as degraded, not a full outage.
-- Confirm init returned usable room data with temporary presence `0`.
+- Confirm `/api/init` remained unaffected; current chat bootstrap has no Durable
+  Object dependency.
+- A `503` on `/ws/:channel` or a mutation route with
+  `dependency=durable_object` means the Worker recognized a transient Durable
+  Object reset. WebSocket clients reconnect automatically; failed mutations
+  remain unapplied and require a user retry.
+- For `POST /api/messages` at `route_stage=apply_rate_limit`, confirm no message
+  row was committed before the failure. The client keeps its idempotency key,
+  so retrying after recovery is safe.
 - Confirm WebSocket reconnect restores live presence.
-- Escalate when fallbacks repeat across channels or pair with websocket/init
-  5xx responses.
+- Escalate when fallbacks repeat across channels, continue beyond one alert
+  window, or include unknown `unhandled_exception` events.
 
 ### Cleanup Failure
 

@@ -5,6 +5,36 @@ const OPERATIONAL_ERROR_DETAIL = Symbol("letmetellu.operational-error-detail");
 
 export type OperationalErrorDetail = Record<string, unknown>;
 
+const TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS = [
+  "internal error in durable object storage caused object to be reset",
+  "durable object storage operation exceeded timeout which caused object to be reset",
+] as const;
+
+export function isTransientDurableObjectError(error: unknown): boolean {
+  let current: unknown = error;
+  const visited = new Set<unknown>();
+
+  for (let depth = 0; depth < 4 && current && !visited.has(current); depth += 1) {
+    visited.add(current);
+    const message = current instanceof Error
+      ? current.message
+      : typeof current === "object" && "message" in current
+        ? String((current as { message?: unknown }).message ?? "")
+        : String(current);
+    const normalizedMessage = message.toLowerCase();
+    if (TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS.some((fragment) => normalizedMessage.includes(fragment))) {
+      return true;
+    }
+    current = current instanceof Error
+      ? current.cause
+      : typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : null;
+  }
+
+  return false;
+}
+
 export async function recordOperationalEvent(input: {
   env: Env;
   severity: "info" | "warn" | "error";

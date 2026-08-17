@@ -19,6 +19,7 @@ import {
   getOperationalRouteDetail,
   getOperationalErrorDetail,
   getOperationalEventOverride,
+  isTransientDurableObjectError,
   normalizeOperationalRoute,
   recordOperationalEvent,
   stripOperationalEventHeaders,
@@ -100,7 +101,7 @@ export default {
     // WebSocket upgrade → route to Durable Object
     if (url.pathname.startsWith("/ws/")) {
       let response: Response;
-      let capturedUnhandledException = false;
+      let capturedException = false;
 
       try {
         if (request.headers.get("Upgrade") !== "websocket") {
@@ -118,28 +119,34 @@ export default {
           }
         }
       } catch (err) {
-        console.error(err);
-        capturedUnhandledException = true;
+        const realtimeUnavailable = isTransientDurableObjectError(err);
+        if (realtimeUnavailable) console.warn("transient Durable Object failure", err);
+        else console.error(err);
+        capturedException = true;
         const operationalDetail = getOperationalErrorDetail(err);
         ctx.waitUntil(recordOperationalEvent({
           env,
-          severity: "error",
+          severity: realtimeUnavailable ? "warn" : "error",
           route,
-          eventType: "unhandled_exception",
-          statusCode: 500,
+          eventType: realtimeUnavailable ? "realtime_unavailable" : "unhandled_exception",
+          statusCode: realtimeUnavailable ? 503 : 500,
           actorUserId: request.headers.get("X-User-Id"),
           detail: {
             path: url.pathname,
             method: request.method,
             error: err instanceof Error ? err.message : String(err),
             websocket_phase: "upgrade",
+            ...(realtimeUnavailable ? { dependency: "durable_object" } : {}),
             ...(routeDetail || {}),
             ...(operationalDetail || {}),
           },
         }));
         return buildResponse(
           request,
-          Response.json({ error: "internal_error" }, { status: 500 }),
+          Response.json(
+            { error: realtimeUnavailable ? "realtime_unavailable" : "internal_error" },
+            { status: realtimeUnavailable ? 503 : 500 },
+          ),
           origin,
           env.ALLOWED_ORIGIN,
         );
@@ -155,7 +162,7 @@ export default {
           actorUserId: request.headers.get("X-User-Id"),
           detail: routeDetail || undefined,
         }));
-      } else if (response.status >= 500 && !capturedUnhandledException) {
+      } else if (response.status >= 500 && !capturedException) {
         ctx.waitUntil(recordOperationalEvent({
           env,
           severity: "error",
@@ -176,7 +183,7 @@ export default {
 
     // API routes
     let response: Response;
-    let capturedUnhandledException = false;
+    let capturedException = false;
 
     try {
       if (url.pathname.startsWith("/api/messages")) {
@@ -218,25 +225,31 @@ export default {
         response = new Response("not found", { status: 404 });
       }
     } catch (err) {
-      console.error(err);
-      capturedUnhandledException = true;
+      const realtimeUnavailable = isTransientDurableObjectError(err);
+      if (realtimeUnavailable) console.warn("transient Durable Object failure", err);
+      else console.error(err);
+      capturedException = true;
       const operationalDetail = getOperationalErrorDetail(err);
       ctx.waitUntil(recordOperationalEvent({
         env,
-        severity: "error",
+        severity: realtimeUnavailable ? "warn" : "error",
         route,
-        eventType: "unhandled_exception",
-        statusCode: 500,
+        eventType: realtimeUnavailable ? "realtime_unavailable" : "unhandled_exception",
+        statusCode: realtimeUnavailable ? 503 : 500,
         actorUserId: request.headers.get("X-User-Id"),
         detail: {
           path: url.pathname,
           method: request.method,
           error: err instanceof Error ? err.message : String(err),
+          ...(realtimeUnavailable ? { dependency: "durable_object" } : {}),
           ...(routeDetail || {}),
           ...(operationalDetail || {}),
         },
       }));
-      response = Response.json({ error: "internal_error" }, { status: 500 });
+      response = Response.json(
+        { error: realtimeUnavailable ? "realtime_unavailable" : "internal_error" },
+        { status: realtimeUnavailable ? 503 : 500 },
+      );
     }
 
     if (response.status === 429) {
@@ -268,7 +281,7 @@ export default {
         actorUserId: request.headers.get("X-User-Id"),
         detail: routeDetail || undefined,
       }));
-    } else if (response.status >= 500 && !capturedUnhandledException) {
+    } else if (response.status >= 500 && !capturedException) {
       ctx.waitUntil(recordOperationalEvent({
         env,
         severity: "error",

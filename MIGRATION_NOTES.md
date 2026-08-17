@@ -378,6 +378,31 @@ Trade-off: padded statements bind up to the next bucket's number of values, addi
 
 Deployment note: this requires a Worker deploy only. No D1 migration or frontend deploy is required.
 
+### Presence work is limited to active live sessions — 2026-08-17
+
+- Every `/api/init` request previously queried the channel Durable Object for a general authorized-connection count, including ordinary chat loads. The response field was not consumed by the frontend; the displayed live viewer count already comes from WebSocket live-presence events.
+- Chat bootstrap no longer contacts the Durable Object or returns the unused general `presence` field. A Durable Object reset therefore cannot affect `/api/init`, and every ordinary room load avoids one internal DO request.
+- The Durable Object no longer maintains or broadcasts a general room-presence count. Live-count recalculation remains triggered by live joins, leaves, disconnects and authorization changes, and `live-presence` updates are sent only to authorized connections currently participating in the live session.
+- The frontend removes its unused general presence state while retaining the existing `liveCount` state and live-session UI.
+- Focused regression coverage verifies that init has no Durable Object dependency, general presence handling is absent, and live-only counting and delivery remain wired.
+
+Trade-off: ordinary chat users no longer receive an unused count of all connected room sockets. No visible feature used that value. Users inside a live session continue receiving the viewer count after each relevant transition.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
+### Durable Object resets return retryable realtime failures — 2026-08-17
+
+- A production Durable Object storage timeout/reset caused three presence fallbacks, two WebSocket upgrade failures and one message-send rate-limit failure within 124 milliseconds. Channel history still loaded, but two socket connection attempts briefly failed and one send required a retry.
+- The Worker boundary now recognizes Cloudflare's known Durable Object storage-reset and storage-timeout messages. Affected WebSocket and API requests return `503` with `realtime_unavailable` instead of a generic `500` with `internal_error`.
+- These failures are recorded once as `realtime_unavailable`, with the original route, status, dependency and route-stage context. Unknown exceptions remain `unhandled_exception` responses and continue to trigger the stricter critical threshold.
+- Message sends remain fail-closed while their Durable Object rate-limit check is unavailable. No message is written without abuse enforcement, and the frontend retains the idempotent client message ID so a manual retry cannot create a duplicate.
+- WebSocket clients use their existing reconnect policy after the retryable upgrade failure. `/api/init` no longer contacts the Durable Object, so later realtime resets cannot affect chat bootstrap.
+- Focused coverage preserves the exact reset signatures, wrapped-error handling, unknown-error boundary, retryable response contract and single-event guard.
+
+Trade-off: a real Durable Object outage still briefly blocks rate-limited mutations and realtime connection setup. Classifying it as a dependency outage improves recovery behavior and alert accuracy; it does not hide the event or weaken abuse controls.
+
+Deployment note: this requires a Worker deploy only. No D1 migration or frontend deployment is required. After deployment, confirm the next genuine reset appears as `realtime_unavailable` with `503`, does not increment `unhandled_exception`, reconnects automatically, and accepts a retried send once Durable Object storage recovers.
+
 ### Message paging reuses roots already loaded in the page — 2026-08-13
 
 - Visible-message paging already has the selected page rows before expanding their complete reply groups. It now passes those loaded message IDs into thread expansion instead of querying every root by primary key again.
@@ -400,6 +425,8 @@ Deployment note: this requires a Worker deploy only. No D1 migration or frontend
 Trade-off: during a Durable Object reset, users can briefly see a presence count of `0` until the socket reconnects or a later init succeeds. WebSocket establishment can still fail during the reset itself, but existing reconnect behavior can recover without channel bootstrap also failing.
 
 Deployment note: this requires both a Worker deploy and frontend deploy for the updated health card. No D1 migration is required.
+
+Follow-up: the unused init presence query and general room count were removed on 2026-08-17. This fallback remains historical context for the earlier incident but is no longer part of the current bootstrap path.
 
 ### Flat thread expansion now uses direct batched index lookups — 2026-08-13
 

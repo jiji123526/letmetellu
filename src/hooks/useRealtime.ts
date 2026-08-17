@@ -37,7 +37,6 @@ export function useRealtime(
   const [socketConnected, setSocketConnected] = useState(false);
   const [roomAuthenticated, setRoomAuthenticated] = useState(false);
   const [showReconnectNotice, setShowReconnectNotice] = useState(false);
-  const [presence, setPresence] = useState(0);
   const [liveCount, setLiveCount] = useState(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectNoticeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -151,7 +150,6 @@ export function useRealtime(
       // Mock mode — no WebSocket
       setSocketConnected(true);
       setRoomAuthenticated(true);
-      setPresence(3);
       return;
     }
 
@@ -200,10 +198,6 @@ export function useRealtime(
           && data.requestId !== latestRoomAuthRequest.current
         ) {
           return;
-        }
-        if (data.type === "presence") {
-          setPresence(data.count);
-          if (data.liveCount !== undefined) setLiveCount(data.liveCount);
         }
         if (data.type === "live-presence") {
           setLiveCount(data.liveCount);
@@ -352,5 +346,5 @@ export function useRealtime(
   }, []);
 
   const connected = socketConnected && roomAuthenticated;
-  return { connected, showReconnectNotice, socketConnected, roomAuthenticated, presence, liveCount, subscribe, send };
+  return { connected, showReconnectNotice, socketConnected, roomAuthenticated, liveCount, subscribe, send };
 }

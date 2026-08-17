@@ -83,7 +83,7 @@ Browser -- pages and APIs --> | Next.js on Vercel   |
 | --- | --- |
 | Next.js | Pages, dashboard, Auth.js sessions, authenticated API proxies, and response security headers |
 | Cloudflare Worker | Chat APIs, authorization enforcement, previews, uploads, support, moderation, and scheduled maintenance |
-| Durable Objects | Per-channel WebSocket connections, presence, room access state, and channel-scoped rate limits |
+| Durable Objects | Per-channel WebSocket connections, live-session presence, room access state, and channel-scoped rate limits |
 | D1 | Accounts, channels, messages, support, reports, configuration, audit records, and durable quotas |
 | R2 | Uploaded chat media, profile images, and channel backgrounds |
 

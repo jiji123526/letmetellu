@@ -104,7 +104,7 @@ test("ticket lifecycle changes replace stale dashboard state and refresh statist
 test("unhandled requests are not counted again as generic request failures", () => {
   assert.match(
     workerIndexSource,
-    /response\.status >= 500 && !capturedUnhandledException/,
+    /response\.status >= 500 && !capturedException/,
   );
 });
 

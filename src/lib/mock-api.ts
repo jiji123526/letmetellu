@@ -44,7 +44,6 @@ export async function fetchInit(_channelId: string) {
     channel: MOCK_CHANNEL,
     messages: mockMessages,
     blocked: [],
-    presence: 3,
   };
 }
 
