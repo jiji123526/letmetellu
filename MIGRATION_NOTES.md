@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Root sharing card and X channel-card crawling — 2026-08-16
+
+- The root `yapndot.com` page now publishes a 1200×630 `summary_large_image` card with deterministic `yap.` typography and the product's white, blue, rounded-message visual language.
+- Root metadata now includes an absolute metadata base, canonical URL, Open Graph fields and X card fields. The image is rendered by Next.js rather than stored as an AI-generated text asset, preventing malformed brand copy and keeping it deploy-versioned.
+- Channel cards already returned valid X metadata and a reachable PNG, but the global robots policy disallowed all `/ch/` paths. `Twitterbot` now has explicit access to channel pages and their Open Graph image routes while ordinary crawlers remain blocked from `/ch/`; API, dashboard, reset, support and verification routes remain disallowed.
+- X can retain a failed card result for an already-posted URL. After deployment, verify a newly shared channel URL first; old posts may require cache expiry or a harmless URL query parameter before X requests the card again.
+
 ### Channel-owner message deletion has a five-second undo window — 2026-08-16
 
 - Message deletion by a channel owner is now delayed for five seconds. The affected message, direct replies and gallery entries disappear locally immediately, while an action toast offers `Undo` / `실행 취소`.
