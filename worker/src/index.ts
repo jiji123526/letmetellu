@@ -180,7 +180,7 @@ export default {
 
     try {
       if (url.pathname.startsWith("/api/messages")) {
-        response = await handleMessages(request, env);
+        response = await handleMessages(request, env, ctx);
       } else if (url.pathname.startsWith("/api/data")) {
         response = await handleData(request, env);
       } else if (url.pathname.startsWith("/api/init")) {

@@ -27,7 +27,8 @@ test("duplicate message retries rebroadcast the persisted message", () => {
   const route = readFileSync(new URL("../src/routes/messages.ts", import.meta.url), "utf8");
   assert.match(route, /routeStage = "rebroadcast_duplicate"[\s\S]*broadcastPersistedMessage/);
   assert.match(route, /routeStage = "rebroadcast_batch_duplicate"[\s\S]*broadcastPersistedMessage/);
-  assert.match(route, /routeStage = "broadcast_message"[\s\S]*broadcastPersistedMessage/);
+  assert.match(route, /stage: "broadcast_message"[\s\S]*broadcastPersistedMessage/);
+  assert.match(route, /ctx\.waitUntil\(postCommitDelivery\)/);
   assert.match(route, /message_broadcast_failed/);
   assert.match(route, /duplicate: true,[\s\S]*message: existingMessage/);
   assert.match(route, /duplicate: true,[\s\S]*message: duplicate/);

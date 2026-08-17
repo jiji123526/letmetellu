@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Senders receive the persisted message before post-commit fan-out finishes — 2026-08-16
+
+- Successful sends previously waited for link-panel synchronization and Durable Object WebSocket fan-out after the authoritative D1 message batch had already committed.
+- The Worker now returns the persisted message acknowledgement immediately after constructing the committed message response. The existing client acknowledgement path displays that authoritative row; no optimistic or unpersisted message is introduced.
+- New-message link indexing and WebSocket fan-out run concurrently through `ExecutionContext.waitUntil`. Each operation retries once independently, so a transient failure in one does not cancel the other or delay the sender.
+- A final background failure records `message_post_commit_failed` with only the failed stage, channel scope and attempt count. It excludes message text, media URLs, actor tokens and message IDs.
+- Idempotent duplicate recovery still waits for its repair broadcast before responding. This uncommon path intentionally prioritizes repairing an ambiguous earlier send over retry latency.
+- Realtime clients already deduplicate `message-new` events by message ID and perform an authoritative recovery fetch after reconnection, making a harmless duplicate retry preferable to silent loss.
+
+Trade-off: another viewer can receive a message a few milliseconds after the sender sees its HTTP acknowledgement. If both broadcast attempts fail, the message remains durably stored but other connected viewers may not see it until their next reconnect/recovery fetch. Link-index failure can similarly delay appearance in the Links panel. Both partial failures are now operationally visible instead of turning a successfully persisted send into a misleading client-side failure.
+
+Deployment note: deploy the Worker only; no D1 migration or frontend deployment is required. In two browsers, send normal, linked, reply, live and image messages and confirm the sender sees each acknowledgement immediately while the other browser receives one realtime copy. Then review 24-hour operational events for `message_post_commit_failed`; any occurrence should be investigated by its `stage` value.
+
 ### Normal text sends avoid one write and parallelize identity verification — 2026-08-16
 
 - Creating a message without a URL previously executed `DELETE FROM message_links WHERE message_id = ?` even though a brand-new message cannot have an existing link-index row. New-message link synchronization now returns without touching D1 when no link is present, while linked messages are still indexed normally.

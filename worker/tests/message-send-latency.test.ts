@@ -58,3 +58,14 @@ test("anonymous and device identity verification run through one parallel barrie
     /await Promise\.all\(\[\s*getAnonymousRequesterUid\(request, env\),\s*getRequesterDeviceId\(request, env\),\s*\]\)/,
   );
 });
+
+test("successful sends acknowledge persistence before post-commit delivery settles", () => {
+  const source = readFileSync(new URL("../src/routes/messages.ts", import.meta.url), "utf8");
+  assert.match(source, /const postCommitDelivery = completePersistedMessageDelivery/);
+  assert.match(source, /ctx\.waitUntil\(postCommitDelivery\)/);
+  assert.match(source, /POST_COMMIT_DELIVERY_ATTEMPTS = 2/);
+  assert.match(source, /eventType: "message_post_commit_failed"/);
+  assert.ok(
+    source.indexOf("ctx.waitUntil(postCommitDelivery)") < source.indexOf("return Response.json({ id, created_at, message: newMessage })"),
+  );
+});

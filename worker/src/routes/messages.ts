@@ -8,13 +8,14 @@ import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/uploa
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
 import { syncMessageLink, syncNewMessageLink } from "../lib/message-links.ts";
-import { withOperationalErrorContext } from "../lib/operational-events.ts";
+import { recordOperationalEvent, withOperationalErrorContext } from "../lib/operational-events.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
+const POST_COMMIT_DELIVERY_ATTEMPTS = 2;
 
 type PersistedMessage = Record<string, unknown> & {
   id: string;
@@ -39,6 +40,70 @@ async function broadcastPersistedMessage(
   }
 }
 
+async function retryPostCommitTask(task: () => Promise<void>): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < POST_COMMIT_DELIVERY_ATTEMPTS; attempt += 1) {
+    try {
+      await task();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+async function completePersistedMessageDelivery(input: {
+  env: Env;
+  parentChannelId: string;
+  requestChannelId: string;
+  messageId: string;
+  createdAt: string;
+  text: string | undefined;
+  message: PersistedMessage;
+}): Promise<void> {
+  const {
+    env,
+    parentChannelId,
+    requestChannelId,
+    messageId,
+    createdAt,
+    text,
+    message,
+  } = input;
+  const tasks = [
+    {
+      stage: "sync_message_links",
+      run: () => syncNewMessageLink(env, messageId, requestChannelId, createdAt, text),
+    },
+    {
+      stage: "broadcast_message",
+      run: () => broadcastPersistedMessage(env, parentChannelId, message),
+    },
+  ];
+  const results = await Promise.allSettled(
+    tasks.map(({ run }) => retryPostCommitTask(run)),
+  );
+  await Promise.all(results.map(async (result, index) => {
+    if (result.status === "fulfilled") return;
+    const stage = tasks[index].stage;
+    console.error("post-commit message delivery failed", stage, result.reason);
+    await recordOperationalEvent({
+      env,
+      severity: "error",
+      route: "POST /api/messages",
+      eventType: "message_post_commit_failed",
+      targetId: parentChannelId,
+      detail: {
+        stage,
+        request_channel_id: requestChannelId,
+        attempts: POST_COMMIT_DELIVERY_ATTEMPTS,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      },
+    });
+  }));
+}
+
 async function getAnonymousRequesterUid(request: Request, env: Env): Promise<string | null> {
   const token = request.headers.get("X-Anonymous-Token");
   if (!token) return null;
@@ -53,7 +118,11 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
   return payload?.device_id || null;
 }
 
-export async function handleMessages(request: Request, env: Env): Promise<Response> {
+export async function handleMessages(
+  request: Request,
+  env: Env,
+  ctx?: ExecutionContext,
+): Promise<Response> {
   const routeAction = request.method === "POST"
     ? "send"
     : request.method === "DELETE"
@@ -313,18 +382,29 @@ export async function handleMessages(request: Request, env: Env): Promise<Respon
         }
         throw error;
       }
-      routeStage = "sync_message_links";
-      await syncNewMessageLink(env, id, requestChannelId, created_at, text as string | undefined);
-
-      // Broadcast through the same parent-channel Durable Object used above.
       const newMessage = {
         id, client_message_id: clientMessageId, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
         channel_id: requestChannelId, image: image || null, reply_to: resolvedReplyTo,
         report: report ? 1 : 0, reported_msg_id: resolvedReportedMessageId, gallery_id: image ? id : null,
         deleted: 0, edited: 0, reactions: "{}", created_at,
       };
-      routeStage = "broadcast_message";
-      await broadcastPersistedMessage(env, parentChannelId, newMessage);
+
+      // The sender only waits for authoritative D1 persistence. Link indexing
+      // and realtime fan-out continue with the request lifetime and retry once.
+      const postCommitDelivery = completePersistedMessageDelivery({
+        env,
+        parentChannelId,
+        requestChannelId,
+        messageId: id,
+        createdAt: created_at,
+        text: text as string | undefined,
+        message: newMessage,
+      });
+      if (ctx) {
+        ctx.waitUntil(postCommitDelivery);
+      } else {
+        await postCommitDelivery;
+      }
 
       routeStage = "build_response";
       return Response.json({ id, created_at, message: newMessage });
