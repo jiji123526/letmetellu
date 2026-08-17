@@ -60,6 +60,7 @@ interface MutationText {
   deleteFailed: string;
   deletedMessage: string;
   messageDeleted: string;
+  undo: string;
 }
 
 interface UseChatMessageMutationsArgs {
@@ -683,7 +684,7 @@ export function useChatMessageMutations({
         return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
           .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
       };
-      const restoreDeletedMessages = () => {
+      const restoreDeletedMessages = (showFailure = true) => {
         setMessages((current) => restoreMessages(current, deletedMessages));
         setDmMessages((current) => restoreMessages(current, deletedDmMessages));
         const restoredGallery = deletedMessages
@@ -694,16 +695,55 @@ export function useChatMessageMutations({
           return [...current, ...restoredGallery.filter((item) => !existingIds.has(item.id))]
             .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
         });
-        setBanner({ text: text.deleteFailed, color: "#d32f2f" });
-        clearBannerSoon();
+        if (showFailure) {
+          setBanner({ text: text.deleteFailed, color: "#d32f2f" });
+          clearBannerSoon();
+        }
       };
       void request().then((result) => {
         if (!result?.ok) {
           restoreDeletedMessages();
           return;
         }
-        setBanner({ text: text.messageDeleted, color: "#333333" });
-        clearBannerSoon();
+        if (typeof result.deletion_id !== "string" || typeof result.undo_expires_at !== "string") {
+          setBanner({ text: text.messageDeleted, color: "#333333" });
+          clearBannerSoon();
+          return;
+        }
+
+        let active = true;
+        const undo = () => {
+          if (!active) return;
+          active = false;
+          clearTimeout(timer);
+          void adminAction(
+            "undo-delete",
+            channelKey,
+            { deletion_id: result.deletion_id },
+            { keepalive: true },
+          ).then((undoResult) => {
+            if (!undoResult?.ok) {
+              setBanner({ text: text.deleteFailed, color: "#d32f2f" });
+              clearBannerSoon();
+              return;
+            }
+            restoreDeletedMessages(false);
+            setBanner(null);
+          }).catch(() => {
+            setBanner({ text: text.deleteFailed, color: "#d32f2f" });
+            clearBannerSoon();
+          });
+        };
+        const timer = setTimeout(() => {
+          active = false;
+          setBanner((current) => current?.onAction === undo ? null : current);
+        }, Math.max(0, Date.parse(result.undo_expires_at) - Date.now()));
+        setBanner({
+          text: text.messageDeleted,
+          color: "#333333",
+          actionLabel: text.undo,
+          onAction: undo,
+        });
       }).catch(restoreDeletedMessages);
       return;
     }
@@ -740,6 +780,7 @@ export function useChatMessageMutations({
     text.deleteFailed,
     text.messageDeleted,
     text.ownerSuspendedBanner,
+    text.undo,
     uid,
   ]);
 

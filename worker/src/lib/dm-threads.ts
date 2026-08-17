@@ -45,8 +45,8 @@ export async function readDmThreads(
   viewer: { owner: true } | { owner: false; anonymousUid: string },
 ): Promise<PrivateDmMessage[]> {
   const rootQuery = viewer.owner
-    ? "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC"
-    : "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? AND uid = ? ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC";
+    ? "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC"
+    : "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? AND uid = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC";
   const rootStatement = viewer.owner
     ? env.DB.prepare(rootQuery).bind(channelId)
     : env.DB.prepare(rootQuery).bind(channelId, viewer.anonymousUid);
@@ -58,6 +58,7 @@ export async function readDmThreads(
     SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at
     FROM dm_replies
     WHERE dm_id IN (${placeholders})
+      AND pending_delete_at IS NULL
     ORDER BY created_at ASC, id ASC
   `).bind(...roots.map((root) => root.id)).all<DmReplyRow>()).results || [];
 

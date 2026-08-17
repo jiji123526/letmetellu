@@ -33,6 +33,7 @@ interface ContextMenuText {
   reportDismissedBanner: string;
   deleteFailed: string;
   messageDeleted: string;
+  undo: string;
 }
 
 interface UseChatContextMenuActionsArgs {
@@ -164,7 +165,7 @@ export function useChatContextMenuActions({
       return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
         .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
     };
-    const restoreDeletedMessages = () => {
+    const restoreDeletedMessages = (showFailure = true) => {
       setMessages((current) => restoreMessages(current, deletedMessages));
       setDmMessages((current) => restoreMessages(current, deletedDmMessages));
       const restoredGallery = [...deletedMessages, ...deletedDmMessages]
@@ -175,7 +176,7 @@ export function useChatContextMenuActions({
         return [...current, ...restoredGallery.filter((item) => !existingIds.has(item.id))]
           .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
       });
-      flashBanner(text.deleteFailed, "#d32f2f");
+      if (showFailure) flashBanner(text.deleteFailed, "#d32f2f");
     };
     const requestIds = targetMessage?.report && targetMessage.reported_msg_id
       ? [msgId, targetMessage.reported_msg_id]
@@ -189,12 +190,50 @@ export function useChatContextMenuActions({
     });
     void Promise.all(requests).then((results) => {
       if (results.every((result) => result?.ok)) {
-        flashBanner(text.messageDeleted, "#333333");
+        const deletionIds = results
+          .map((result) => result?.deletion_id)
+          .filter((id): id is string => typeof id === "string" && !!id);
+        const deadlineMs = Math.min(...results.map((result) =>
+          typeof result?.undo_expires_at === "string"
+            ? Date.parse(result.undo_expires_at)
+            : Number.NaN
+        ).filter(Number.isFinite));
+        if (deletionIds.length !== results.length || !Number.isFinite(deadlineMs)) {
+          flashBanner(text.messageDeleted, "#333333");
+          return;
+        }
+
+        let active = true;
+        const undo = () => {
+          if (!active) return;
+          active = false;
+          clearTimeout(timer);
+          void Promise.all(deletionIds.map((deletionId) =>
+            adminAction("undo-delete", channelKey, { deletion_id: deletionId }, { keepalive: true })
+          )).then((undoResults) => {
+            if (!undoResults.every((result) => result?.ok)) {
+              flashBanner(text.deleteFailed, "#d32f2f");
+              return;
+            }
+            restoreDeletedMessages(false);
+            setBanner(null);
+          }).catch(() => flashBanner(text.deleteFailed, "#d32f2f"));
+        };
+        const timer = setTimeout(() => {
+          active = false;
+          setBanner((current) => current?.onAction === undo ? null : current);
+        }, Math.max(0, deadlineMs - Date.now()));
+        setBanner({
+          text: text.messageDeleted,
+          color: "#333333",
+          actionLabel: text.undo,
+          onAction: undo,
+        });
         return;
       }
       restoreDeletedMessages();
     }).catch(restoreDeletedMessages);
-  }, [channelId, dmMessages, flashBanner, inLiveMode, messages, setDmMessages, setGalleryItems, setMessages, text.deleteFailed, text.messageDeleted]);
+  }, [channelId, dmMessages, flashBanner, inLiveMode, messages, setBanner, setDmMessages, setGalleryItems, setMessages, text.deleteFailed, text.messageDeleted, text.undo]);
 
   const onEdit = useCallback((msgId: string) => {
     const message = messages.find((item) => item.id === msgId);

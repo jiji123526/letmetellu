@@ -321,8 +321,8 @@ test("sender DM roots expose deletion without unsupported reaction controls", ()
     new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
     "utf8",
   );
-  const adminRouteSource = readFileSync(
-    new URL("../src/routes/admin.ts", import.meta.url),
+  const pendingDeletionSource = readFileSync(
+    new URL("../src/lib/pending-admin-deletions.ts", import.meta.url),
     "utf8",
   );
 
@@ -333,5 +333,5 @@ test("sender DM roots expose deletion without unsupported reaction controls", ()
   assert.match(mutationSource, /targetMessage\?\.dm_reply[\s\S]*adminAction\("delete-dm-reply"/);
   assert.match(contextMenuSource, /\{!msg\.dm && !isReportInboxMessage/);
   assert.match(messageListSource, /\{!msg\.dm && \(\s*<ReactionBadge/);
-  assert.match(adminRouteSource, /case "delete-dm-reply"[\s\S]*WHERE id = \? AND channel_id = \? AND owner_uid = \?/);
+  assert.match(pendingDeletionSource, /stageDmReplyDeletion[\s\S]*WHERE id = \? AND channel_id = \? AND owner_uid = \?/);
 });

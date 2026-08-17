@@ -4,10 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
-### Admin message deletion preserves reply-FK ordering — 2026-08-17
+### Admin deletion Undo is server-backed — 2026-08-17
 
-- Admin deletion of a normal message now deletes direct replies before the parent row. The schema uses `ON DELETE SET NULL` for `messages.reply_to`; deleting the parent first detached its replies, causing the following `WHERE reply_to = ?` deletion to match nothing.
-- The existing gallery, link, actor, upload-ticket and media cleanup remains unchanged. No migration is required.
+- Migration `0046_server_backed_admin_delete_undo.sql` adds durable pending-deletion operations and pending flags for DM roots/replies. Normal messages use reserved `deleted = 2` while pending.
+- Admin deletion immediately stages the root and its direct replies in D1, broadcasts their removal, and returns a server operation ID with a five-second deadline. Refreshing or closing the page cannot cancel deletion or make the row visible again.
+- Undo is accepted only for the matching authenticated channel owner before the server deadline. It restores the prior message deletion states or clears the DM pending flags, then broadcasts an authoritative refresh.
+- Expired operations are permanently finalized by scheduled maintenance. Replies are removed before their parent to avoid `ON DELETE SET NULL` detaching them; gallery, links, actor identities, upload tickets and managed media are then cleaned up.
+- The UI keeps optimistic removal and restores local rows only after the Worker confirms Undo. Failed staging restores them and reports a deletion failure.
+
+Trade-off: refreshing during the five-second window preserves the deletion but closes that tab's Undo toast. Recovering Undo across navigation would require persisting and safely rehydrating operation IDs in the browser.
+
+Deployment note: apply migration `0046`, deploy the Worker, then deploy the frontend.
 
 ### Senders can delete their private DM threads — 2026-08-17
 
@@ -17,7 +24,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Channel owners can separately delete one of their own private replies without deleting the visitor's root or sibling replies.
 - DM reaction controls are hidden because private DM records do not use the public-message reaction endpoint.
 
-Deployment note: no migration is required. Deploy the Worker and frontend together, then verify deletion from the original browser and rejection from a second browser profile.
+Deployment note: sender-owned deletion itself needs no migration. The server-backed owner Undo flow additionally requires migration `0046`; deploy the Worker and frontend together after applying it.
 
 ### Channel owners can send private replies to visitor DMs — 2026-08-17
 
@@ -48,13 +55,13 @@ Deployment note: apply migration `0045`, deploy the Worker, then deploy the fron
 - Channel cards already returned valid X metadata and a reachable PNG, but the global robots policy disallowed all `/ch/` paths. `Twitterbot` now has explicit access to channel pages and their Open Graph image routes while ordinary crawlers remain blocked from `/ch/`; API, dashboard, reset, support and verification routes remain disallowed.
 - X can retain a failed card result for an already-posted URL. After deployment, verify a newly shared channel URL first; old posts may require cache expiry or a harmless URL query parameter before X requests the card again.
 
-### Channel-owner message deletion commits immediately — 2026-08-17
+### Superseded client-only deletion behavior — 2026-08-17
 
 - Owner deletion previously waited five seconds in a browser timer to provide Undo. Refreshing or closing the page destroyed that timer before the Worker request ran, so the message disappeared locally and returned from D1 on reload.
 - Owner deletion now starts the authoritative request immediately with `keepalive`, while retaining optimistic removal. A rejected or failed request restores the removed messages and gallery rows and shows a deletion failure.
 - Thread deletion sends one request per root; the Worker removes its direct replies. Report relays may additionally delete their separately targeted message root.
 
-Trade-off: the client-only Undo action was removed. Reliable deletion across refresh/navigation requires immediate persistence; restoring a committed deletion would require a separate server-side tombstone and recovery design.
+This interim behavior is superseded by migration `0046` and the server-backed Undo lifecycle documented above.
 
 ### Senders receive the persisted message before post-commit fan-out finishes — 2026-08-16
 

@@ -261,7 +261,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
     case "dm": {
       const { results } = await env.DB.prepare(
-        "SELECT * FROM dm WHERE channel_id = ? ORDER BY created_at DESC LIMIT 100"
+        "SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC LIMIT 100"
       ).bind(channelId).all();
       return Response.json({ dm: results });
     }

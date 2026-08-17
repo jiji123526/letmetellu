@@ -76,6 +76,8 @@ Status as of 2026-08-17:
   contains no private thread identifier or content.
 - [x] Private DM deletion accepts only a root owned by the verified anonymous
   identity; foreign roots, owner reply IDs and unsigned requests cannot delete.
+- [x] Admin deletion Undo is bound to the trusted channel owner, channel and
+  unexpired server operation ID; pending message and DM rows reject mutations.
 
 ### Browser-visible state transitions
 

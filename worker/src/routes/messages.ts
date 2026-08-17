@@ -460,7 +460,7 @@ export async function handleMessages(
       }
 
       routeStage = "load_message_owner";
-      const msg = await env.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ?")
+      const msg = await env.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ? AND deleted != 2")
         .bind(message_id, requestChannelId).first();
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
       if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
@@ -620,13 +620,13 @@ export async function handleMessages(
       }
 
       routeStage = "load_message_owner";
-      const msg = await env.DB.prepare("SELECT uid, created_at FROM messages WHERE id = ? AND channel_id = ?")
+      const msg = await env.DB.prepare("SELECT uid, created_at FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
         .bind(message_id, requestChannelId).first<{ uid: string; created_at: string }>();
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
       if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
 
       routeStage = "update_message_text";
-      await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ?")
+      await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND deleted = 0")
         .bind(text, message_id).run();
       routeStage = "sync_message_links";
       await syncMessageLink(env, message_id as string, requestChannelId, msg.created_at, text);
@@ -719,7 +719,7 @@ export async function handleMessages(
       }
 
       routeStage = "load_reactions";
-      const msg = await env.DB.prepare("SELECT reactions FROM messages WHERE id = ? AND channel_id = ?")
+      const msg = await env.DB.prepare("SELECT reactions FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
         .bind(message_id, requestChannelId).first() as { reactions: string } | null;
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
 
@@ -733,7 +733,7 @@ export async function handleMessages(
       }
 
       routeStage = "persist_reactions";
-      await env.DB.prepare("UPDATE messages SET reactions = ? WHERE id = ?")
+      await env.DB.prepare("UPDATE messages SET reactions = ? WHERE id = ? AND deleted = 0")
         .bind(JSON.stringify(reactions), message_id).run();
 
       routeStage = "broadcast_reaction";

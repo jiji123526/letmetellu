@@ -2,6 +2,7 @@ import type { Env } from "../types";
 import { deleteCompletedCleanupJobs, retryPendingChannelCleanups } from "./channel-cleanup";
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState } from "./live-sessions";
 import { cleanupExpiredUploadTickets } from "./upload-tickets";
+import { finalizeExpiredAdminDeletions } from "./pending-admin-deletions";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DURABLE_RATE_LIMIT_RETENTION_MS = 7 * DAY_MS;
@@ -104,8 +105,10 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   channelCleanupJobsCompleted: number;
   channelCleanupJobsPending: number;
   completedCleanupJobsDeleted: number;
+  pendingAdminDeletionsFinalized: number;
 }> {
   const expiredLiveSessionsEnded = await expireTimedOutLiveSessions(env, nowMs);
+  const pendingAdminDeletionsFinalized = await finalizeExpiredAdminDeletions(env, nowMs);
   const channelCleanup = await retryPendingChannelCleanups(env, nowMs, CHANNEL_CLEANUP_RETRY_LIMIT);
   const uploadTicketsDeleted = await drainExpiredUploadTicketRetention(env);
   const durableRateLimitsDeleted = await drainTableRetention(
@@ -155,5 +158,6 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     channelCleanupJobsCompleted: channelCleanup.completed,
     channelCleanupJobsPending: channelCleanup.pending,
     completedCleanupJobsDeleted,
+    pendingAdminDeletionsFinalized,
   };
 }

@@ -1,14 +1,19 @@
 import { Env } from "../types";
 import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
-import { deleteMediaByUrl, extractMediaKey, normalizeManagedMediaUrl } from "../lib/media";
+import { normalizeManagedMediaUrl } from "../lib/media";
 import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
 import { getReportsChannelOwnerId } from "../lib/special-channels";
-import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash } from "./passcode";
 import { isTrustedInternalRequest } from "../lib/trusted-identity";
 import { deleteChannel } from "../lib/channel-cleanup";
+import {
+  stageDmDeletion,
+  stageDmReplyDeletion,
+  stageMessageDeletion,
+  undoPendingDeletion,
+} from "../lib/pending-admin-deletions";
 
 function normalizeBubbleColor(value: unknown): unknown {
   return typeof value === "string" && value.toLowerCase() === "#3b8df0"
@@ -390,67 +395,33 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
     case "delete-message": {
       const { message_id } = payload || {};
-      const { results: replies } = await env.DB.prepare(
-        "SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?"
-      ).bind(message_id, channel_id).all<{ id: string }>();
-      const { results: mediaRows } = await env.DB.prepare(
-        "SELECT image FROM messages WHERE channel_id = ? AND (id = ? OR reply_to = ?) AND image IS NOT NULL"
-      ).bind(channel_id, message_id, message_id).all<{ image: string }>();
-      const deletedIds = [message_id as string, ...replies.map((reply) => reply.id)];
-      const mediaKeys = [...new Set(
-        mediaRows
-          .map((row) => extractMediaKey(row.image))
-          .filter((key): key is string => Boolean(key))
-      )];
-      const mappingPlaceholders = deletedIds.map(() => "?").join(", ");
-
-      // Remove gallery rows before their source messages, including reply media.
-      await env.DB.batch([
-        env.DB.prepare(
-          "DELETE FROM gallery WHERE channel_id = ? AND (id = ? OR id IN (SELECT id FROM messages WHERE reply_to = ? AND channel_id = ?))"
-        ).bind(channel_id, message_id, message_id, channel_id),
-        env.DB.prepare(
-          `DELETE FROM message_links WHERE message_id IN (${mappingPlaceholders})`
-        ).bind(...deletedIds),
-        env.DB.prepare(
-          `DELETE FROM message_actor_identities
-           WHERE record_type = 'message' AND record_id IN (${mappingPlaceholders})`
-        ).bind(...deletedIds),
-        // Delete children first; the reply FK uses ON DELETE SET NULL.
-        env.DB.prepare("DELETE FROM messages WHERE reply_to = ? AND channel_id = ?")
-          .bind(message_id, channel_id),
-        env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
-          .bind(message_id, channel_id),
-      ]);
-      await Promise.all([
-        ...deletedIds.map((id) => deleteUploadTicketByAttachment(env, "message", id)),
-        ...mediaKeys.map((key) => env.MEDIA.delete(key).catch(() => {})),
-      ]);
+      if (typeof message_id !== "string" || !message_id) {
+        return Response.json({ error: "missing message id" }, { status: 400 });
+      }
+      const pending = await stageMessageDeletion(env, channel_id, userId, message_id);
+      if (!pending) return Response.json({ error: "message not found" }, { status: 404 });
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
       const stub = env.CHAT_ROOM.get(doId);
       await stub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "message-deleted", message_id, deleted_ids: deletedIds, soft: false }),
+        body: JSON.stringify({ type: "message-deleted", message_id, soft: false }),
       }));
 
-      return Response.json({ ok: true });
+      return Response.json({
+        ok: true,
+        deletion_id: pending.deletionId,
+        undo_expires_at: pending.expiresAt,
+      });
     }
 
     case "delete-dm": {
       const { dm_id } = payload || {};
-      const dm = await env.DB.prepare("SELECT image FROM dm WHERE id = ? AND channel_id = ?")
-        .bind(dm_id, channel_id).first<{ image: string | null }>();
-      await env.DB.batch([
-        env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'")
-          .bind(dm_id),
-        env.DB.prepare("DELETE FROM dm_replies WHERE dm_id = ?")
-          .bind(dm_id),
-        env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ?")
-          .bind(dm_id, channel_id),
-      ]);
-      await deleteMediaByUrl(env, dm?.image);
-      await deleteUploadTicketByAttachment(env, "dm", dm_id as string);
+      if (typeof dm_id !== "string" || !dm_id) {
+        return Response.json({ error: "missing dm id" }, { status: 400 });
+      }
+      const pending = await stageDmDeletion(env, channel_id, userId, dm_id);
+      if (!pending) return Response.json({ error: "dm not found" }, { status: 404 });
 
       const doId2 = env.CHAT_ROOM.idFromName(channel_id);
       const stub2 = env.CHAT_ROOM.get(doId2);
@@ -463,7 +434,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         body: JSON.stringify({ type: "dm-threads-changed" }),
       }));
 
-      return Response.json({ ok: true });
+      return Response.json({
+        ok: true,
+        deletion_id: pending.deletionId,
+        undo_expires_at: pending.expiresAt,
+      });
     }
 
     case "delete-dm-reply": {
@@ -471,22 +446,38 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       if (typeof reply_id !== "string" || !reply_id) {
         return Response.json({ error: "missing reply id" }, { status: 400 });
       }
-      const reply = await env.DB.prepare(`
-        SELECT id
-        FROM dm_replies
-        WHERE id = ? AND channel_id = ? AND owner_uid = ?
-        LIMIT 1
-      `).bind(reply_id, channel_id, userId).first<{ id: string }>();
-      if (!reply) return Response.json({ error: "dm reply not found" }, { status: 404 });
-
-      await env.DB.prepare(
-        "DELETE FROM dm_replies WHERE id = ? AND channel_id = ? AND owner_uid = ?"
-      ).bind(reply_id, channel_id, userId).run();
+      const pending = await stageDmReplyDeletion(env, channel_id, userId, reply_id);
+      if (!pending) return Response.json({ error: "dm reply not found" }, { status: 404 });
 
       const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(channel_id));
       await chatRoom.fetch(new Request("http://internal/broadcast", {
         method: "POST",
         body: JSON.stringify({ type: "dm-threads-changed" }),
+      }));
+      return Response.json({
+        ok: true,
+        deletion_id: pending.deletionId,
+        undo_expires_at: pending.expiresAt,
+      });
+    }
+
+    case "undo-delete": {
+      const { deletion_id } = payload || {};
+      if (typeof deletion_id !== "string" || !deletion_id) {
+        return Response.json({ error: "missing deletion id" }, { status: 400 });
+      }
+      const restored = await undoPendingDeletion(env, channel_id, userId, deletion_id);
+      if (!restored) {
+        return Response.json({ error: "undo window expired" }, { status: 409 });
+      }
+
+      const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(channel_id));
+      await chatRoom.fetch(new Request("http://internal/broadcast", {
+        method: "POST",
+        body: JSON.stringify({
+          type: restored.recordType === "message" ? "messages-sync" : "dm-threads-changed",
+          channel_id,
+        }),
       }));
       return Response.json({ ok: true });
     }

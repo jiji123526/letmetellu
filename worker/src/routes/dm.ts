@@ -144,7 +144,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         WHEN dm.channel_id LIKE '%_live' THEN substr(dm.channel_id, 1, length(dm.channel_id) - 5)
         ELSE dm.channel_id
       END
-      WHERE dm.id = ?
+      WHERE dm.id = ? AND dm.pending_delete_at IS NULL
       LIMIT 1
     `).bind(dmId).first<{ id: string; channel_id: string; owner_uid: string }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
@@ -294,7 +294,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
     const dm = await env.DB.prepare(
-      "SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ? LIMIT 1"
+      "SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ? AND pending_delete_at IS NULL LIMIT 1"
     ).bind(dmId, channelId, requesterUid).first<{ id: string; image: string | null }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
 

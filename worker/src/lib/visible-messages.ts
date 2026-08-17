@@ -91,6 +91,7 @@ export async function readVisibleFlatThreads(
       FROM messages
       WHERE channel_id = ?
         AND id IN (${rootPlaceholders})
+        AND deleted != 2
     `).bind(channelId, ...normalizedMissingRootIds));
   }
 

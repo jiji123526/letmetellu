@@ -6,6 +6,8 @@ Status reviewed: 2026-08-14.
 
 - Implemented on 2026-08-17, rollout verification pending: channel owners can send up to 20 text-only private replies beneath a visitor DM. Visitors retain their own threads through the signed same-browser anonymous identity and can delete an entire thread they started, while realtime sockets carry only content-free invalidation. Apply migration `0045`, deploy Worker/frontend and complete two-profile privacy/deletion checks.
 
+- Implemented on 2026-08-17, rollout verification pending: admin message and DM deletion uses a server-owned five-second Undo lifecycle. Migration `0046` keeps pending rows hidden across refresh and scheduled maintenance finalizes expired operations; apply it before deploying Worker/frontend.
+
 - Completed on 2026-08-16: senders now receive the authoritative D1 acknowledgement before link indexing and realtime fan-out finish. Both post-commit tasks run concurrently, retry once and record bounded operational failures. Monitor `message_post_commit_failed` before considering a durable delivery outbox or scheduled replay queue.
 
 - Completed on 2026-08-16: ordinary new messages without URLs no longer issue an impossible `message_links` cleanup write, and anonymous/device token verification now runs concurrently. Sender acknowledgement still waits for persistence and realtime broadcast; add sampled stage timing before moving any post-persistence guarantee into background work.
