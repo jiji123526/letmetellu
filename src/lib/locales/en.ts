@@ -305,7 +305,7 @@ export const en: Record<LocaleKeys, string> = {
   userGuideFeaturesTitle: "Extra Features",
   userGuideDm: "Private messages — In enabled channels, you can send a message visible only to the owner. Your sent DM and the owner's private replies, including one photo per reply, remain visible in the same browser. Long-press your original DM to delete the whole thread. To answer again, send a new DM rather than replying inside the thread.",
   userGuideLive: "Live — Live chat runs as a separate temporary session, and its messages disappear when the session ends.",
-  userGuideTip: "If something changes, check the notice, rules, and any status banner shown above the chat first.",
+  userGuideTip: "If something changes, check the notice, rules, or any block and freeze message shown in chat first.",
 
   // Gallery
   galleryEmpty: "No photos shared yet",
@@ -372,7 +372,7 @@ export const en: Record<LocaleKeys, string> = {
   resetPasswordSuccess: "Your password has been changed.",
   resetPasswordInvalid: "This reset link has expired or has already been used.",
   signupError: "Failed to sign up",
-  emailSignupDisabled: "Email ownership verification is being prepared. Please use Google to create a new account for now.",
+  emailSignupDisabled: "Email signup could not be started right now. Please try again.",
   nameOptional: "Name (optional)",
   confirmPassword: "Confirm password",
   passwordLengthRequirement: "Use 8–128 characters.",

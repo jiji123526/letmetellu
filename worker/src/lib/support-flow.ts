@@ -14,6 +14,8 @@ export type GuidedSupportTopic =
   | "live"
   | "info";
 
+export type SupportAudience = "user" | "admin";
+
 export type SupportTopic =
   | GuidedSupportTopic
   | "other"
@@ -59,6 +61,8 @@ const GUIDED_TOPICS: GuidedSupportTopic[] = [
   "info",
 ];
 
+const SUPPORT_AUDIENCES: SupportAudience[] = ["user", "admin"];
+
 export function supportTopicLabel(topic: SupportTopic | string | null | undefined, locale: UserLocale): string {
   const copy = getSupportFlowLocale(locale);
   return topic && topic in copy.topicLabels
@@ -97,24 +101,37 @@ function questionMenuNode(
 }
 
 function questionGroupMenuNode(
+  audience: SupportAudience,
   topic: GuidedSupportTopic,
   groups: SupportQuestionGroupCopy[],
   locale: UserLocale,
 ): SupportNode {
   const copy = getSupportFlowLocale(locale);
   return {
-    id: `${topic}-questions`,
+    id: topicQuestionNodeId(audience, topic),
     kind: "choice",
     messages: [copy.groupPrompt],
-    choices: groups.map((group) => ({
-      id: `group-${topic}-${group.id}`,
-      label: group.label,
-      next: `${topic}-${group.id}-questions`,
-    })),
+    choices: [
+      ...groups.map((group) => ({
+        id: `group-${audience}-${topic}-${group.id}`,
+        label: group.label,
+        next: groupedQuestionNodeId(audience, topic, group.id),
+      })),
+      {
+        id: `back-${audience}-${topic}`,
+        label: copy.backChoice,
+        next: `${audience}-topics`,
+      },
+    ],
   };
 }
 
-function answerNode(topic: GuidedSupportTopic, question: SupportQuestionCopy, locale: UserLocale): SupportNode {
+function answerNode(
+  audience: SupportAudience,
+  topic: GuidedSupportTopic,
+  question: SupportQuestionCopy,
+  locale: UserLocale,
+): SupportNode {
   const copy = getSupportFlowLocale(locale);
   return {
     id: `answer-${question.id}`,
@@ -129,11 +146,55 @@ function answerNode(topic: GuidedSupportTopic, question: SupportQuestionCopy, lo
       {
         id: `need-help-${question.id}`,
         label: copy.needHelpChoice,
-        next: `${topic}-details`,
+        next: detailNodeId(audience, topic),
       },
       {
         id: `back-${question.id}`,
         label: copy.backToTopicsChoice,
+        next: `${audience}-topics`,
+      },
+    ],
+  };
+}
+
+function topicQuestionNodeId(audience: SupportAudience, topic: GuidedSupportTopic): string {
+  return audience === "user" ? `${topic}-questions` : `admin-${topic}-questions`;
+}
+
+function groupedQuestionNodeId(audience: SupportAudience, topic: GuidedSupportTopic, groupId: string): string {
+  return audience === "user" ? `${topic}-${groupId}-questions` : `admin-${topic}-${groupId}-questions`;
+}
+
+function detailNodeId(audience: SupportAudience, topic: SupportTopic): string {
+  return audience === "user" ? `${topic}-details` : `admin-${topic}-details`;
+}
+
+function escalateNodeId(audience: SupportAudience, topic: SupportTopic): string {
+  return audience === "user" ? `${topic}-escalate` : `admin-${topic}-escalate`;
+}
+
+function topicMenuNode(audience: SupportAudience, locale: UserLocale): SupportNode {
+  const copy = getSupportFlowLocale(locale);
+  return {
+    id: `${audience}-topics`,
+    kind: "choice",
+    messages: [copy.topicPrompt(audience)],
+    choices: [
+      ...GUIDED_TOPICS.map((topic) => ({
+        id: `topic-${audience}-${topic}`,
+        label: supportTopicLabel(topic, locale),
+        next: topicQuestionNodeId(audience, topic),
+        topic,
+      })),
+      {
+        id: `topic-${audience}-other`,
+        label: supportTopicLabel("other", locale),
+        next: detailNodeId(audience, "other"),
+        topic: "other" as const,
+      },
+      {
+        id: `back-${audience}-topics`,
+        label: copy.backChoice,
         next: "start",
       },
     ],
@@ -148,17 +209,15 @@ export function buildSupportFlow(locale: UserLocale): Record<string, SupportNode
       kind: "choice",
       messages: [copy.startMessage],
       choices: [
-        ...GUIDED_TOPICS.map((topic) => ({
-          id: `topic-${topic}`,
-          label: supportTopicLabel(topic, locale),
-          next: `${topic}-questions`,
-          topic,
-        })),
         {
-          id: "topic-other",
-          label: supportTopicLabel("other", locale),
-          next: "other-details",
-          topic: "other",
+          id: "audience-user",
+          label: copy.audienceLabels.user,
+          next: "user-topics",
+        },
+        {
+          id: "audience-admin",
+          label: copy.audienceLabels.admin,
+          next: "admin-topics",
         },
       ],
     },
@@ -168,45 +227,52 @@ export function buildSupportFlow(locale: UserLocale): Record<string, SupportNode
       resolution: "resolved",
       messages: [copy.resolvedMessage],
     },
+    "user-topics": topicMenuNode("user", locale),
+    "admin-topics": topicMenuNode("admin", locale),
   };
 
-  for (const topic of GUIDED_TOPICS) {
-    const questions = copy.questions[topic];
-    const groups = copy.questionGroups[topic];
-    nodes[`${topic}-questions`] = groups.length > 0
-      ? questionGroupMenuNode(topic, groups, locale)
-      : questionMenuNode(`${topic}-questions`, questions, locale);
-    const questionsById = new Map(questions.map((question) => [question.id, question]));
-    for (const group of groups) {
-      const groupedQuestions = group.questionIds.map((questionId) => {
-        const question = questionsById.get(questionId);
-        if (!question) {
-          throw new Error(`Missing ${topic} support question: ${questionId}`);
-        }
-        return question;
-      });
-      nodes[`${topic}-${group.id}-questions`] = questionMenuNode(
-        `${topic}-${group.id}-questions`,
-        groupedQuestions,
-        locale,
-        `${topic}-questions`,
-      );
-    }
-    nodes[`${topic}-details`] = textNode(`${topic}-details`, topic, locale);
-    nodes[`${topic}-escalate`] = escalateNode(topic, locale);
-    for (const question of questions) {
-      nodes[`answer-${question.id}`] = answerNode(topic, question, locale);
+  for (const audience of SUPPORT_AUDIENCES) {
+    for (const topic of GUIDED_TOPICS) {
+      const questions = copy.questions[audience][topic];
+      const groups = copy.questionGroups[audience][topic];
+      const questionNodeId = topicQuestionNodeId(audience, topic);
+      nodes[questionNodeId] = groups.length > 0
+        ? questionGroupMenuNode(audience, topic, groups, locale)
+        : questionMenuNode(questionNodeId, questions, locale, `${audience}-topics`);
+      const questionsById = new Map(questions.map((question) => [question.id, question]));
+      for (const group of groups) {
+        const groupedQuestions = group.questionIds.map((questionId) => {
+          const question = questionsById.get(questionId);
+          if (!question) {
+            throw new Error(`Missing ${audience} ${topic} support question: ${questionId}`);
+          }
+          return question;
+        });
+        nodes[groupedQuestionNodeId(audience, topic, group.id)] = questionMenuNode(
+          groupedQuestionNodeId(audience, topic, group.id),
+          groupedQuestions,
+          locale,
+          questionNodeId,
+        );
+      }
+      nodes[detailNodeId(audience, topic)] = textNode(detailNodeId(audience, topic), topic, locale);
+      nodes[escalateNodeId(audience, topic)] = escalateNode(escalateNodeId(audience, topic), topic, locale);
+      for (const question of questions) {
+        nodes[`answer-${question.id}`] = answerNode(audience, topic, question, locale);
+      }
     }
   }
 
   nodes["other-details"] = textNode("other-details", "other", locale);
-  nodes["other-escalate"] = escalateNode("other", locale);
+  nodes["other-escalate"] = escalateNode("other-escalate", "other", locale);
+  nodes["admin-other-details"] = textNode("admin-other-details", "other", locale);
+  nodes["admin-other-escalate"] = escalateNode("admin-other-escalate", "other", locale);
 
   // Keep nodes used by sessions that may still be open during deployment.
   for (const topic of ["login", "passcode", "blocked"] as const) {
     nodes[`${topic}-steps`] = legacyStepNode(topic, locale);
     nodes[`${topic}-details`] = textNode(`${topic}-details`, topic, locale);
-    nodes[`${topic}-escalate`] = escalateNode(topic, locale);
+    nodes[`${topic}-escalate`] = escalateNode(`${topic}-escalate`, topic, locale);
   }
   nodes["reports-steps"] = legacyStepNode("reports", locale);
   nodes["live-steps"] = legacyStepNode("live", locale);
@@ -226,7 +292,7 @@ function legacyStepNode(
     choices: [
       { id: `legacy-resolved-${topic}`, label: copy.resolvedChoice, next: "resolved" },
       { id: `legacy-need-help-${topic}`, label: copy.needHelpChoice, next: `${topic}-details` },
-      { id: `legacy-back-${topic}`, label: copy.backToTopicsChoice, next: "start" },
+      { id: `legacy-back-${topic}`, label: copy.backToTopicsChoice, next: "user-topics" },
     ],
   };
 }
@@ -242,10 +308,10 @@ function textNode(id: string, topic: SupportTopic, locale: UserLocale): SupportN
   };
 }
 
-function escalateNode(topic: SupportTopic, locale: UserLocale): SupportNode {
+function escalateNode(id: string, topic: SupportTopic, locale: UserLocale): SupportNode {
   const copy = getSupportFlowLocale(locale);
   return {
-    id: `${topic}-escalate`,
+    id,
     kind: "escalate",
     resolution: "needs_handoff",
     messages: [copy.escalatePrompt(supportTopicLabel(topic, locale))],

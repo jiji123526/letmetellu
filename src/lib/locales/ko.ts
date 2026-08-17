@@ -303,7 +303,7 @@ export const ko = {
   userGuideFeaturesTitle: "추가 기능",
   userGuideDm: "비밀 메시지 — 허용된 채널에서는 방장에게만 보이는 메시지를 보낼 수 있어요. 다시 답하려면 새 DM을 보내야 해요.",
   userGuideLive: "라이브 — 라이브 채팅은 일반 채팅과 분리된 임시 세션이며, 종료되면 세션 메시지가 사라져요.",
-  userGuideTip: "문제가 생기면 공지, 규칙, 채널 상태 배너를 먼저 확인해 보세요.",
+  userGuideTip: "문제가 생기면 공지, 규칙, 또는 채팅에 표시되는 차단·동결 안내를 먼저 확인해 보세요.",
 
   // Gallery
   galleryEmpty: "아직 공유된 사진이 없습니다",
@@ -370,7 +370,7 @@ export const ko = {
   resetPasswordSuccess: "비밀번호가 변경되었습니다.",
   resetPasswordInvalid: "재설정 링크가 만료되었거나 이미 사용되었습니다.",
   signupError: "가입에 실패했습니다",
-  emailSignupDisabled: "이메일 소유 확인 기능을 준비 중입니다. 현재 신규 가입은 Google 인증을 이용해 주세요.",
+  emailSignupDisabled: "이메일 가입을 지금 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.",
   nameOptional: "이름 (선택)",
   confirmPassword: "비밀번호 확인",
   passwordLengthRequirement: "비밀번호는 8~128자로 입력해 주세요.",
