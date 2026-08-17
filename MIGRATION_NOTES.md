@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-owner message deletion has a five-second undo window — 2026-08-16
+
+- Message deletion by a channel owner is now delayed for five seconds. The affected message, direct replies and gallery entries disappear locally immediately, while an action toast offers `Undo` / `실행 취소`.
+- Undo restores the locally hidden rows without overwriting messages that arrived during the five-second window. If the owner does not undo, the existing permanent admin deletion endpoint runs, so this change does not retain deleted message text or media indefinitely.
+- Starting another owner deletion commits the earlier pending deletion first and opens a fresh undo window. This keeps the UI and server from accumulating multiple ambiguous pending operations.
+- Non-owner deletion behavior is unchanged. The delay is intentionally limited to the higher-risk owner moderation controls where an accidental tap can remove another user's message and its replies.
+
+Trade-off: for up to five seconds, the owner sees the message as removed while other connected viewers can still see it. Leaving the channel does not cancel the scheduled server deletion. Verify owner deletion for own messages, another user's message with replies, DMs and image messages; test both Undo and timeout paths.
+
 ### Senders receive the persisted message before post-commit fan-out finishes — 2026-08-16
 
 - Successful sends previously waited for link-panel synchronization and Durable Object WebSocket fan-out after the authoritative D1 message batch had already committed.

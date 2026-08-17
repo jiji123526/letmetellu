@@ -28,6 +28,8 @@ import type { PendingPhoto } from "./useChatComposerState";
 interface BannerState {
   text: string;
   color: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface ConsumedComposerState {
@@ -52,6 +54,8 @@ interface MutationText {
   petitionSent: string;
   sentToAdmin: string;
   deletedMessage: string;
+  messageDeleted: string;
+  undo: string;
 }
 
 interface UseChatMessageMutationsArgs {
@@ -131,6 +135,10 @@ export function useChatMessageMutations({
   consumeComposerState,
   text,
 }: UseChatMessageMutationsArgs): UseChatMessageMutationsResult {
+  const pendingAdminDeleteRef = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    commit: () => void;
+  } | null>(null);
   const sendInFlightRef = useRef(false);
   const sendAttemptRef = useRef<StoredMessageSendAttempt | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -568,16 +576,57 @@ export function useChatMessageMutations({
     const replyIds = messages.filter((message) => message.reply_to === messageId).map((message) => message.id);
     const hasReplies = replyIds.length > 0;
     if (effectiveAdmin) {
+      const deletedMessages = messages.filter((message) => message.id === messageId || message.reply_to === messageId);
+      const deletedDmMessages = dmMessages.filter((message) => message.id === messageId || message.reply_to === messageId);
       setMessages((previous) => previous.filter((message) => message.id !== messageId && message.reply_to !== messageId));
       const deletedIds = new Set([messageId, ...replyIds]);
       setGalleryItems((previous) => previous.filter((item) => !deletedIds.has(item.id)));
       const targetMessage = messages.find((message) => message.id === messageId) || dmMessages.find((message) => message.id === messageId);
-      if (targetMessage?.dm) {
-        adminAction("delete-dm", inLiveMode ? `${channelId}_live` : channelId, { dm_id: messageId });
-        setDmMessages((previous) => previous.filter((message) => message.id !== messageId));
-      } else {
-        adminAction("delete-message", inLiveMode ? `${channelId}_live` : channelId, { message_id: messageId });
+      setDmMessages((previous) => previous.filter((message) => message.id !== messageId && message.reply_to !== messageId));
+
+      if (pendingAdminDeleteRef.current) {
+        clearTimeout(pendingAdminDeleteRef.current.timer);
+        pendingAdminDeleteRef.current.commit();
       }
+
+      const channelKey = inLiveMode ? `${channelId}_live` : channelId;
+      const commit = () => {
+        if (targetMessage?.dm) {
+          void adminAction("delete-dm", channelKey, { dm_id: messageId });
+        } else {
+          void adminAction("delete-message", channelKey, { message_id: messageId });
+        }
+      };
+      const restoreMessages = (current: Message[], deleted: Message[]) => {
+        const existingIds = new Set(current.map((message) => message.id));
+        return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
+          .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
+      };
+      const undo = () => {
+        const pending = pendingAdminDeleteRef.current;
+        if (!pending || pending.commit !== commit) return;
+        clearTimeout(pending.timer);
+        pendingAdminDeleteRef.current = null;
+        setMessages((current) => restoreMessages(current, deletedMessages));
+        setDmMessages((current) => restoreMessages(current, deletedDmMessages));
+        const restoredGallery = deletedMessages
+          .filter((message): message is Message & { image: string } => typeof message.image === "string" && message.image.length > 0)
+          .map((message) => ({ id: message.id, image: message.image, created_at: message.created_at }));
+        setGalleryItems((current) => {
+          const existingIds = new Set(current.map((item) => item.id));
+          return [...current, ...restoredGallery.filter((item) => !existingIds.has(item.id))]
+            .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
+        });
+        setBanner(null);
+      };
+      const timer = setTimeout(() => {
+        if (pendingAdminDeleteRef.current?.commit !== commit) return;
+        pendingAdminDeleteRef.current = null;
+        commit();
+        setBanner((current) => current?.onAction === undo ? null : current);
+      }, 5000);
+      pendingAdminDeleteRef.current = { timer, commit };
+      setBanner({ text: text.messageDeleted, color: "#333333", actionLabel: text.undo, onAction: undo });
       return;
     }
 
@@ -610,7 +659,9 @@ export function useChatMessageMutations({
     setGalleryItems,
     setMessages,
     text.deletedMessage,
+    text.messageDeleted,
     text.ownerSuspendedBanner,
+    text.undo,
     uid,
   ]);
 

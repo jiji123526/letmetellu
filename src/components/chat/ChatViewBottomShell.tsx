@@ -12,6 +12,8 @@ import { CloseIcon } from "@/components/ui/CloseIcon";
 interface BannerState {
   text: string;
   color: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 function ActionToast({ banner }: { banner: BannerState }) {
@@ -27,7 +29,8 @@ function ActionToast({ banner }: { banner: BannerState }) {
         if (!text) return;
         const baseFontSize = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bubble-font-size")) || 16;
         text.style.fontSize = `${baseFontSize}px`;
-        const availableWidth = Math.max(1, window.innerWidth - 64);
+        const actionAllowance = banner.actionLabel ? 104 : 0;
+        const availableWidth = Math.max(1, window.innerWidth - 64 - actionAllowance);
         const fittedSize = Math.min(baseFontSize, baseFontSize * (availableWidth / Math.max(1, text.scrollWidth)));
         text.style.fontSize = "";
         setFontSize(fittedSize);
@@ -39,11 +42,11 @@ function ActionToast({ banner }: { banner: BannerState }) {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", measure);
     };
-  }, [banner.text]);
+  }, [banner.actionLabel, banner.text]);
 
   return (
     <div
-      className="fixed left-1/2 -translate-x-1/2 z-[550] w-max whitespace-nowrap text-white font-normal px-4 py-[10px] rounded-[12px] text-center"
+      className="fixed left-1/2 -translate-x-1/2 z-[550] w-max whitespace-nowrap text-white font-normal px-4 py-[10px] rounded-[12px] text-center flex items-center"
       role="status"
       aria-live="polite"
       style={{
@@ -58,6 +61,15 @@ function ActionToast({ banner }: { banner: BannerState }) {
       <span ref={textRef} style={{ fontSize: fontSize === null ? "var(--bubble-font-size)" : `${fontSize}px` }}>
         {banner.text}
       </span>
+      {banner.actionLabel && banner.onAction && (
+        <button
+          type="button"
+          className="ml-3 font-semibold underline underline-offset-2"
+          onClick={banner.onAction}
+        >
+          {banner.actionLabel}
+        </button>
+      )}
     </div>
   );
 }

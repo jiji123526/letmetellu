@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { adminAction } from "@/lib/api-chat";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
@@ -8,6 +8,8 @@ import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 interface BannerState {
   text: string;
   color: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface ContextMenuState {
@@ -29,6 +31,8 @@ interface ContextMenuText {
   anonBlockedLabel: string;
   anonUnblockedLabel: string;
   reportDismissedBanner: string;
+  messageDeleted: string;
+  undo: string;
 }
 
 interface UseChatContextMenuActionsArgs {
@@ -50,6 +54,7 @@ interface UseChatContextMenuActionsArgs {
   handleDelete: (messageId: string) => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setDmMessages: Dispatch<SetStateAction<Message[]>>;
+  setGalleryItems: Dispatch<SetStateAction<{ id: string; image: string; created_at: string }[]>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   setBlockedUsers: Dispatch<SetStateAction<BlockedUser[]>>;
   openEditDialog: (message: Message) => void;
@@ -99,6 +104,7 @@ export function useChatContextMenuActions({
   handleDelete,
   setMessages,
   setDmMessages,
+  setGalleryItems,
   setBanner,
   setBlockedUsers,
   openEditDialog,
@@ -106,6 +112,10 @@ export function useChatContextMenuActions({
   handlePetitionAction,
   text,
 }: UseChatContextMenuActionsArgs): UseChatContextMenuActionsResult {
+  const pendingAdminDeleteRef = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    commit: () => void;
+  } | null>(null);
   const flashBanner = useCallback((message: string, color: string) => {
     setBanner({ text: message, color });
     setTimeout(() => setBanner(null), 3000);
@@ -144,22 +154,60 @@ export function useChatContextMenuActions({
       }
     });
 
-    setMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
-    setDmMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
-
     const channelKey = inLiveMode ? `${channelId}_live` : channelId;
     const allMessages = new Map([...messages, ...dmMessages].map((message) => [message.id, message]));
-    idsToDelete.forEach((id) => {
-      const message = allMessages.get(id);
-      if (message?.dm) {
-        void adminAction("delete-dm", channelKey, { dm_id: id });
-      } else {
-        void adminAction("delete-message", channelKey, { message_id: id });
-      }
-    });
+    const deletedMessages = messages.filter((message) => idsToDelete.has(message.id));
+    const deletedDmMessages = dmMessages.filter((message) => idsToDelete.has(message.id));
+    setMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
+    setDmMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
+    setGalleryItems((previous) => previous.filter((item) => !idsToDelete.has(item.id)));
 
-    flashBanner(text.deleteLabel, "#d32f2f");
-  }, [channelId, dmMessages, flashBanner, inLiveMode, messages, setDmMessages, setMessages, text.deleteLabel]);
+    if (pendingAdminDeleteRef.current) {
+      clearTimeout(pendingAdminDeleteRef.current.timer);
+      pendingAdminDeleteRef.current.commit();
+    }
+
+    const commit = () => {
+      idsToDelete.forEach((id) => {
+        const message = allMessages.get(id);
+        if (message?.dm) {
+          void adminAction("delete-dm", channelKey, { dm_id: id });
+        } else {
+          void adminAction("delete-message", channelKey, { message_id: id });
+        }
+      });
+    };
+    const restoreMessages = (current: Message[], deleted: Message[]) => {
+      const existingIds = new Set(current.map((message) => message.id));
+      return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
+        .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
+    };
+    const undo = () => {
+      const pending = pendingAdminDeleteRef.current;
+      if (!pending || pending.commit !== commit) return;
+      clearTimeout(pending.timer);
+      pendingAdminDeleteRef.current = null;
+      setMessages((current) => restoreMessages(current, deletedMessages));
+      setDmMessages((current) => restoreMessages(current, deletedDmMessages));
+      const restoredGallery = [...deletedMessages, ...deletedDmMessages]
+        .filter((message): message is Message & { image: string } => typeof message.image === "string" && message.image.length > 0)
+        .map((message) => ({ id: message.id, image: message.image, created_at: message.created_at }));
+      setGalleryItems((current) => {
+        const existingIds = new Set(current.map((item) => item.id));
+        return [...current, ...restoredGallery.filter((item) => !existingIds.has(item.id))]
+          .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id));
+      });
+      setBanner(null);
+    };
+    const timer = setTimeout(() => {
+      if (pendingAdminDeleteRef.current?.commit !== commit) return;
+      pendingAdminDeleteRef.current = null;
+      commit();
+      setBanner((current) => current?.onAction === undo ? null : current);
+    }, 5000);
+    pendingAdminDeleteRef.current = { timer, commit };
+    setBanner({ text: text.messageDeleted, color: "#333333", actionLabel: text.undo, onAction: undo });
+  }, [channelId, dmMessages, inLiveMode, messages, setBanner, setDmMessages, setGalleryItems, setMessages, text.messageDeleted, text.undo]);
 
   const onEdit = useCallback((msgId: string) => {
     const message = messages.find((item) => item.id === msgId);

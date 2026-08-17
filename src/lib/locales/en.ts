@@ -87,6 +87,7 @@ export const en: Record<LocaleKeys, string> = {
   petitionRequired: "Enter your appeal details",
   petitionUnavailable: "An appeal cannot be submitted right now",
   messageDeleted: "Message deleted",
+  undo: "Undo",
   unblocked: "User unblocked",
   chatFrozenEmoji: "Chat is frozen 🧊",
   petitionAllowed: "Appeals enabled",

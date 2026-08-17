@@ -119,7 +119,12 @@ export function ChatView({ channelId }: { channelId: string }) {
   });
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
-  const [banner, setBanner] = useState<{ text: string; color: string } | null>(null);
+  const [banner, setBanner] = useState<{
+    text: string;
+    color: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
   useEffect(() => {
     setViewerAccess("standard");
@@ -717,6 +722,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       petitionSent: t("petitionSent"),
       sentToAdmin: t("sentToAdmin"),
       deletedMessage: t("deletedMessage"),
+      messageDeleted: t("messageDeleted"),
+      undo: t("undo"),
     },
   });
 
@@ -739,6 +746,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     handleDelete,
     setMessages,
     setDmMessages,
+    setGalleryItems,
     setBanner,
     setBlockedUsers,
     openEditDialog,
@@ -750,6 +758,8 @@ export function ChatView({ channelId }: { channelId: string }) {
       anonBlockedLabel: t("anonBlocked"),
       anonUnblockedLabel: t("anonUnblocked"),
       reportDismissedBanner: t("reportDismissedBanner"),
+      messageDeleted: t("messageDeleted"),
+      undo: t("undo"),
     },
   });
 

@@ -85,6 +85,7 @@ export const ko = {
   petitionRequired: "이의 제기 내용을 입력해 주세요",
   petitionUnavailable: "지금은 이의 제기를 제출할 수 없습니다",
   messageDeleted: "메시지가 삭제되었습니다",
+  undo: "실행 취소",
   unblocked: "차단이 해제되었습니다",
   chatFrozenEmoji: "채팅이 얼려졌습니다 🧊",
   petitionAllowed: "이의 제기가 허용됩니다",
