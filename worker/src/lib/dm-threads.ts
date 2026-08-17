@@ -19,6 +19,7 @@ interface DmReplyRow {
   channel_id: string;
   owner_uid: string;
   text: string;
+  image: string | null;
   created_at: string;
 }
 
@@ -55,7 +56,7 @@ export async function readDmThreads(
 
   const placeholders = roots.map(() => "?").join(", ");
   const replies = (await env.DB.prepare(`
-    SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at
+    SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
     FROM dm_replies
     WHERE dm_id IN (${placeholders})
       AND pending_delete_at IS NULL
@@ -85,7 +86,7 @@ export async function readDmThreads(
     nick: null,
     text: reply.text,
     is_admin: 1,
-    image: null,
+    image: reply.image,
     reactions: "{}",
     reply_to: reply.dm_id,
     channel_id: reply.channel_id,

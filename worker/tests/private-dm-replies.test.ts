@@ -22,9 +22,16 @@ function normalizeSql(sql: string): string {
   return sql.replace(/\s+/g, " ").trim();
 }
 
-function createFakeEnv(options: { dmOwner?: string; insertChanges?: number } = {}) {
+function createFakeEnv(options: {
+  dmOwner?: string;
+  insertChanges?: number;
+  uploadTicket?: { id: string; key: string };
+  replyMedia?: Array<{ id: string; image: string | null }>;
+  threadReplies?: Array<Record<string, unknown>>;
+} = {}) {
   const writes: string[] = [];
   const broadcasts: Array<Record<string, unknown>> = [];
+  const mediaDeletes: string[] = [];
   const root = {
     id: "dm-a",
     client_message_id: "client-dm-a",
@@ -59,6 +66,16 @@ function createFakeEnv(options: { dmOwner?: string; insertChanges?: number } = {
             owner_uid: options.dmOwner || OWNER_ID,
           };
         }
+        if (sql.includes("FROM upload_tickets")) {
+          return options.uploadTicket
+            ? {
+                id: options.uploadTicket.id,
+                uid: OWNER_ID,
+                auth_uid: OWNER_ID,
+                key: options.uploadTicket.key,
+              }
+            : null;
+        }
         return null;
       },
       async all() {
@@ -66,7 +83,12 @@ function createFakeEnv(options: { dmOwner?: string; insertChanges?: number } = {
           if (sql.includes("AND uid = ?") && params[1] !== SENDER_ID) return { results: [] };
           return { results: [root] };
         }
-        if (sql.includes("FROM dm_replies WHERE dm_id IN")) return { results: [] };
+        if (sql.includes("FROM dm_replies WHERE dm_id IN")) {
+          return { results: options.threadReplies || [] };
+        }
+        if (sql.includes("SELECT id, image FROM dm_replies WHERE dm_id = ?")) {
+          return { results: options.replyMedia || [] };
+        }
         return { results: [] };
       },
       async run() {
@@ -101,9 +123,14 @@ function createFakeEnv(options: { dmOwner?: string; insertChanges?: number } = {
         };
       },
     },
+    MEDIA: {
+      async delete(key: string) {
+        mediaDeletes.push(key);
+      },
+    },
   } as unknown as Env;
 
-  return { env, writes, broadcasts };
+  return { env, writes, broadcasts, mediaDeletes };
 }
 
 function ownerRequest(body: Record<string, unknown>, headers: HeadersInit = {}): Request {
@@ -178,6 +205,45 @@ test("owner replies persist and broadcast only a content-free invalidation", asy
   assert.doesNotMatch(JSON.stringify(broadcasts), /private answer|dm-a|sender-a/);
 });
 
+test("an owner can send one image-only private reply with a bound upload ticket", async () => {
+  const uploadKey = `${CHANNEL_ID}/reply.jpg`;
+  const { env, writes, broadcasts } = createFakeEnv({
+    uploadTicket: { id: "upload-a", key: uploadKey },
+  });
+  const response = await handleDm(ownerRequest({
+    dm_id: "dm-a",
+    client_reply_id: crypto.randomUUID(),
+    text: "",
+    image: `https://api.example.test/api/media/${uploadKey}`,
+    upload_id: "upload-a",
+  }), env);
+  const data = await response.json() as { reply?: Message };
+
+  assert.equal(response.status, 200);
+  assert.equal(data.reply?.image, `https://api.example.test/api/media/${uploadKey}`);
+  assert.ok(writes.some((write) => write.includes("INSERT INTO dm_replies")));
+  assert.ok(writes.some((write) =>
+    write.includes("UPDATE upload_tickets")
+    && write.includes(`["${data.reply?.id}","dm","upload-a"]`)
+  ));
+  assert.deepEqual(broadcasts, [{ type: "dm-threads-changed" }]);
+});
+
+test("an image private reply requires a valid upload ticket", async () => {
+  const { env, writes, broadcasts } = createFakeEnv();
+  const response = await handleDm(ownerRequest({
+    dm_id: "dm-a",
+    client_reply_id: crypto.randomUUID(),
+    text: "photo",
+    image: `https://api.example.test/api/media/${CHANNEL_ID}/reply.jpg`,
+  }), env);
+
+  assert.equal(response.status, 400);
+  assert.equal((await response.json() as { error?: string }).error, "invalid_upload_ticket");
+  assert.deepEqual(writes, []);
+  assert.deepEqual(broadcasts, []);
+});
+
 test("the conditional insert rejects a twenty-first owner reply", async () => {
   const { env, broadcasts } = createFakeEnv({ insertChanges: 0 });
   const response = await handleDm(ownerRequest({
@@ -211,8 +277,38 @@ test("sender thread reads are scoped to the signed anonymous identity", async ()
   assert.deepEqual((await otherResponse.json() as { dm?: Message[] }).dm, []);
 });
 
+test("sender thread reads include the owner's private reply image", async () => {
+  const image = `https://api.example.test/api/media/${CHANNEL_ID}/reply.jpg`;
+  const { env } = createFakeEnv({
+    threadReplies: [{
+      id: "reply-a",
+      client_reply_id: "client-reply-a",
+      dm_id: "dm-a",
+      channel_id: CHANNEL_ID,
+      owner_uid: OWNER_ID,
+      text: "",
+      image,
+      created_at: "2026-08-17T10:01:00.000Z",
+    }],
+  });
+  const sender = await createAnonymousIdentity(env, SENDER_ID);
+  const response = await handleDm(new Request(
+    `https://api.example.test/api/dm?channel=${CHANNEL_ID}`,
+    { headers: { "X-Anonymous-Token": sender.token } },
+  ), env);
+  const data = await response.json() as { dm?: Message[] };
+
+  assert.equal(response.status, 200);
+  assert.equal(data.dm?.find((message) => message.id === "reply-a")?.image, image);
+});
+
 test("the original sender can delete their DM root and its private replies", async () => {
-  const { env, writes, broadcasts } = createFakeEnv();
+  const { env, writes, broadcasts, mediaDeletes } = createFakeEnv({
+    replyMedia: [{
+      id: "reply-a",
+      image: `https://api.example.test/api/media/${CHANNEL_ID}/reply.jpg`,
+    }],
+  });
   const response = await handleDm(await senderDeleteRequest(env, SENDER_ID), env);
 
   assert.equal(response.status, 200);
@@ -222,6 +318,8 @@ test("the original sender can delete their DM root and its private replies", asy
     write.includes("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
   ));
   assert.ok(writes.some((write) => write.includes("DELETE FROM upload_tickets")));
+  assert.ok(writes.some((write) => write.includes('["dm","reply-a"]')));
+  assert.deepEqual(mediaDeletes, [`${CHANNEL_ID}/reply.jpg`]);
   assert.deepEqual(broadcasts, [
     { type: "dm-deleted", dm_id: "dm-a" },
     { type: "dm-threads-changed" },
@@ -302,6 +400,23 @@ test("DM replies inherit their parent bubble side", () => {
     "utf8",
   );
   assert.match(messageListSource, /const isSent = isReply\s*\?\s*parentIsSent\s*:\s*fallbackIsSent/);
+});
+
+test("the owner composer allows one DM reply image and submits its upload ticket", () => {
+  const mutationSource = readFileSync(
+    new URL("../../src/components/chat/useChatMessageMutations.ts", import.meta.url),
+    "utf8",
+  );
+  const shellSource = readFileSync(
+    new URL("../../src/components/chat/ChatViewBottomShell.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(mutationSource, /pendingPhotos\.length > 1/);
+  assert.match(mutationSource, /uploadAdminImage\(photos\[0\]\.blob, replyChannelId, "dm"\)/);
+  assert.match(mutationSource, /image: upload\?\.url/);
+  assert.match(mutationSource, /upload_id: upload\?\.uploadId/);
+  assert.match(shellSource, /multiple=\{allowMultiplePhotos\}/);
 });
 
 test("sender DM roots expose deletion without unsupported reaction controls", () => {

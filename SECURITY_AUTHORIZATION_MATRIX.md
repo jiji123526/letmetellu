@@ -74,6 +74,9 @@ Status as of 2026-08-17:
 - [x] Private DM replies reject forged or cross-owner writes, sender reads are
   scoped to the signed anonymous identity, and public socket invalidation
   contains no private thread identifier or content.
+- [x] Private DM reply images require an unexpired `dm` upload ticket bound to
+  the trusted owner, target channel and media key; replies accept at most one
+  image and deletion paths remove both managed media and ticket metadata.
 - [x] Private DM deletion accepts only a root owned by the verified anonymous
   identity; foreign roots, owner reply IDs and unsigned requests cannot delete.
 - [x] Admin deletion Undo is bound to the trusted channel owner, channel and

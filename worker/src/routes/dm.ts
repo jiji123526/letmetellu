@@ -47,6 +47,7 @@ function serializeDmReply(reply: {
   channel_id: string;
   owner_uid: string;
   text: string;
+  image: string | null;
   created_at: string;
 }) {
   return {
@@ -57,7 +58,7 @@ function serializeDmReply(reply: {
     nick: null,
     text: reply.text,
     is_admin: 1,
-    image: null,
+    image: reply.image,
     reactions: "{}",
     reply_to: reply.dm_id,
     channel_id: reply.channel_id,
@@ -130,11 +131,21 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     const dmId = typeof body.dm_id === "string" ? body.dm_id : "";
     const clientReplyId = typeof body.client_reply_id === "string" ? body.client_reply_id : "";
     const rawText = typeof body.text === "string" ? body.text : "";
-    if (!dmId || !isValidClientMessageId(clientReplyId) || !rawText.trim()) {
+    const image = typeof body.image === "string" ? body.image : "";
+    const uploadId = typeof body.upload_id === "string" ? body.upload_id : "";
+    if (
+      !dmId
+      || !isValidClientMessageId(clientReplyId)
+      || (!rawText.trim() && !image)
+      || (body.image !== undefined && typeof body.image !== "string")
+    ) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
     }
-    if (!checkMessageLength(rawText)) {
+    if (rawText && !checkMessageLength(rawText)) {
       return Response.json({ error: "message_too_long" }, { status: 400 });
+    }
+    if (image && !uploadId) {
+      return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
     }
 
     const dm = await env.DB.prepare(`
@@ -158,12 +169,12 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     if (isOwnerModerationBlocked(moderation)) {
       return Response.json({ error: "owner_suspended" }, { status: 403 });
     }
-    if (!await checkBannedWords(rawText, parentChannelId, env)) {
+    if (rawText && !await checkBannedWords(rawText, parentChannelId, env)) {
       return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
     const existing = await env.DB.prepare(`
-      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at
+      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
       FROM dm_replies
       WHERE owner_uid = ? AND client_reply_id = ?
       LIMIT 1
@@ -174,6 +185,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       channel_id: string;
       owner_uid: string;
       text: string;
+      image: string | null;
       created_at: string;
     }>();
     if (existing) {
@@ -210,8 +222,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     let result: D1Result;
     try {
       result = await env.DB.prepare(`
-        INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?
+        INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?
         WHERE (SELECT COUNT(*) FROM dm_replies WHERE dm_id = ?) < ?
       `).bind(
         id,
@@ -220,13 +232,14 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         dm.channel_id,
         trustedUserId,
         rawText,
+        image || null,
         createdAt,
         dmId,
         DM_REPLY_LIMIT,
       ).run();
     } catch (error) {
       const duplicate = await env.DB.prepare(`
-        SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, created_at
+        SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
         FROM dm_replies
         WHERE owner_uid = ? AND client_reply_id = ?
         LIMIT 1
@@ -237,6 +250,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         channel_id: string;
         owner_uid: string;
         text: string;
+        image: string | null;
         created_at: string;
       }>();
       if (duplicate?.dm_id === dmId) {
@@ -246,6 +260,22 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
     if ((result.meta.changes || 0) === 0) {
       return Response.json({ error: "dm_reply_limit" }, { status: 409 });
+    }
+    if (image) {
+      const attachment = await attachUploadTicket({
+        env,
+        ticketId: uploadId,
+        imageUrl: image,
+        channelId: dm.channel_id,
+        purpose: "dm",
+        uid: null,
+        authUid: trustedUserId,
+        attachedRecordId: id,
+      });
+      if (!attachment.ok) {
+        await env.DB.prepare("DELETE FROM dm_replies WHERE id = ?").bind(id).run();
+        return Response.json({ error: attachment.error }, { status: 400 });
+      }
     }
 
     await chatRoom.fetch(new Request("http://internal/broadcast", {
@@ -261,6 +291,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         channel_id: dm.channel_id,
         owner_uid: trustedUserId,
         text: rawText,
+        image: image || null,
         created_at: createdAt,
       }),
     });
@@ -298,6 +329,10 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     ).bind(dmId, channelId, requesterUid).first<{ id: string; image: string | null }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
 
+    const replyRows = await env.DB.prepare(
+      "SELECT id, image FROM dm_replies WHERE dm_id = ?"
+    ).bind(dmId).all<{ id: string; image: string | null }>();
+    const replies = replyRows.results || [];
     await env.DB.batch([
       env.DB.prepare(
         "DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'"
@@ -306,8 +341,12 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
         .bind(dmId, channelId, requesterUid),
     ]);
-    await deleteMediaByUrl(env, dm.image);
-    await deleteUploadTicketByAttachment(env, "dm", dmId);
+    await Promise.all([
+      deleteMediaByUrl(env, dm.image),
+      deleteUploadTicketByAttachment(env, "dm", dmId),
+      ...replies.map((reply) => deleteMediaByUrl(env, reply.image)),
+      ...replies.map((reply) => deleteUploadTicketByAttachment(env, "dm", reply.id)),
+    ]);
 
     const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(parentChannelId));
     await chatRoom.fetch(new Request("http://internal/broadcast", {

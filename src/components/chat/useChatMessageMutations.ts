@@ -57,6 +57,7 @@ interface MutationText {
   sentToAdmin: string;
   dmReplySent: string;
   dmReplyLimit: string;
+  dmReplyMediaLimit: string;
   deleteFailed: string;
   deletedMessage: string;
   messageDeleted: string;
@@ -226,6 +227,8 @@ export function useChatMessageMutations({
       setBanner({ text: text.dmDisabledMessage, color: "#d32f2f" });
     } else if (error === "dm_reply_limit") {
       setBanner({ text: text.dmReplyLimit, color: "#d32f2f" });
+    } else if (error === "dm_reply_media_limit") {
+      setBanner({ text: text.dmReplyMediaLimit, color: "#d32f2f" });
     } else if (error === "media_too_large") {
       setBanner({ text: text.mediaTooLarge, color: "#d32f2f" });
     } else {
@@ -241,6 +244,7 @@ export function useChatMessageMutations({
     text.chatFrozen,
     text.dmDisabledMessage,
     text.dmReplyLimit,
+    text.dmReplyMediaLimit,
     text.messageTooLong,
     text.mediaTooLarge,
     text.moderationFrozenBanner,
@@ -328,7 +332,16 @@ export function useChatMessageMutations({
     }
 
     if (effectiveAdmin && replyingTo?.dm) {
-      if (pendingPhotos.length > 0) {
+      if (pendingPhotos.length > 1) {
+        showMutationError("dm_reply_media_limit");
+        return;
+      }
+      const photos = [...pendingPhotos];
+      const replyChannelId = inLiveMode ? `${channelId}_live` : channelId;
+      const upload = photos.length === 1
+        ? await uploadAdminImage(photos[0].blob, replyChannelId, "dm")
+        : null;
+      if (photos.length === 1 && !upload) {
         showMutationError("upload_failed");
         return;
       }
@@ -336,16 +349,21 @@ export function useChatMessageMutations({
         client_reply_id: submissionId,
         dm_id: replyingTo.reply_to || replyingTo.id,
         text: nextText,
+        image: upload?.url,
+        upload_id: upload?.uploadId,
       });
       if (!result?.ok || !result.reply) {
         restoreInput(nextText);
+        setPendingPhotos(photos);
         showMutationError(result?.error);
         return;
       }
+      if (photos[0]) URL.revokeObjectURL(photos[0].previewUrl);
       setDmMessages((previous) =>
         upsertAcknowledgedMessages(previous, [result.reply as Message])
       );
       resetInput();
+      setPendingPhotos([]);
       setBanner({ text: text.dmReplySent, color: "#7b3fa0" });
       clearBannerSoon();
       return;

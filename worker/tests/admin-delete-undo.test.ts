@@ -64,4 +64,7 @@ test("pending deletion state is durable, hidden and finalized after expiry", () 
   assert.match(maintenanceSource, /finalizeExpiredAdminDeletions/);
   assert.match(visibleMessagesSource, /AND deleted != 2/);
   assert.match(dmThreadsSource, /pending_delete_at IS NULL/);
+  assert.match(lifecycleSource, /SELECT id, image FROM dm_replies WHERE dm_id = \?/);
+  assert.match(lifecycleSource, /deleteUploadTicketByAttachment\(env, "dm", reply\.id\)/);
+  assert.match(lifecycleSource, /deleteUploadTicketByAttachment\(env, "dm", row\.root_id\)/);
 });

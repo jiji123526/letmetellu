@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Private DM replies support one image — 2026-08-17
+
+- Migration `0047_dm_reply_media.sql` adds a nullable image to owner-authored private replies. Each reply accepts text, one image, or both; the existing 20-reply and five-per-ten-second limits remain unchanged.
+- Reply images use the existing owner-authenticated `dm` upload flow. The Worker requires an unexpired upload ticket bound to the same owner, channel and media key before accepting the reply.
+- The shared message renderer provides the existing image bubble, fullscreen viewer and parent-side reply layout without exposing private media through WebSocket payloads.
+- Sender thread deletion, petition cleanup and the server-backed admin deletion finalizer remove reply media and upload tickets. Whole-channel and live-session cleanup already collect every channel upload-ticket key before deleting D1 rows.
+- The composer disables multi-file selection while replying to a DM and rejects a draft containing more than one queued image before uploading.
+
+Trade-off: an image reply adds one R2 object and upload-ticket write. Private-thread invalidation still triggers an authorized snapshot refresh, but no image URL or private content is broadcast over the public room socket.
+
+Deployment note: apply migration `0047`, deploy the Worker, then deploy the frontend. Verify text-only, image-only and text-plus-image replies, reject a two-image draft, then exercise reply deletion, Undo expiry and sender-owned whole-thread deletion.
+
 ### Admin deletion Undo is server-backed — 2026-08-17
 
 - Migration `0046_server_backed_admin_delete_undo.sql` adds durable pending-deletion operations and pending flags for DM roots/replies. Normal messages use reserved `deleted = 2` while pending.
@@ -28,7 +40,7 @@ Deployment note: sender-owned deletion itself needs no migration. The server-bac
 
 ### Channel owners can send private replies to visitor DMs — 2026-08-17
 
-- Migration `0045_private_dm_replies.sql` adds owner-authored reply rows beneath existing DM roots. One DM can receive up to 20 text replies, owner sends retain the existing five-per-ten-second channel-local limit, and retry IDs are unique so an ambiguous network retry converges on the original reply.
+- Migration `0045_private_dm_replies.sql` adds owner-authored reply rows beneath existing DM roots. Migration `0047_dm_reply_media.sql` allows text, one image, or both in each reply. One DM can receive up to 20 replies, owner sends retain the existing five-per-ten-second channel-local limit, and retry IDs are unique so an ambiguous network retry converges on the original reply.
 - Visitors now retain the DMs they sent and can read the owner's replies in the same browser. Reads are scoped by the Worker-verified signed anonymous identity; another anonymous identity receives no thread data, and locked channels still require a room token bound to the current passcode.
 - Owners can long-press either the original DM or an existing reply and use the normal reply composer. The sender cannot reply inside that private thread; a new message to the owner remains a separate DM.
 - Private replies follow the original DM's bubble side, matching the existing threaded-message layout rather than switching sides by reply author.
@@ -37,7 +49,7 @@ Deployment note: sender-owned deletion itself needs no migration. The server-bac
 - Existing onboarding text now explains that DM history remains available only while the same signed browser identity is retained. Clearing site cookies, switching browser profiles or identity expiry can remove access to earlier visitor threads.
 - A localized product-update dialog announces the new private-thread behavior once per browser across dashboard, channel, support and account flows. Its versioned browser marker is written before display so route changes do not repeat the announcement.
 
-Trade-off: every private-thread change causes connected channel tabs to make one bounded authorized DM refresh; reply content is rare and channels are small enough that this is preferable to adding private authorization state to every public socket. Owner replies are text-only in this first version. The latest 50 DM roots are retained in the mounted snapshot, with up to 20 replies per root.
+Trade-off: every private-thread change causes connected channel tabs to make one bounded authorized DM refresh; reply content is rare and channels are small enough that this is preferable to adding private authorization state to every public socket. An image reply adds one managed R2 object and upload-ticket record. The latest 50 DM roots are retained in the mounted snapshot, with up to 20 replies per root.
 
 Deployment note: apply migration `0045`, deploy the Worker, then deploy the frontend. In two browser profiles, send DMs from both visitors, verify each profile sees only its own roots and replies, send multiple owner replies from the original and a reply row, verify locked-room behavior, then delete one DM and confirm it disappears from the matching sender without exposing content to the other profile.
 

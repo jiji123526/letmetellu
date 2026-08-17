@@ -296,6 +296,10 @@ async function finalizeDmDeletion(env: Env, row: PendingDeletionRow): Promise<vo
   const dm = await env.DB.prepare(
     "SELECT image FROM dm WHERE id = ? AND channel_id = ?"
   ).bind(row.root_id, row.channel_id).first<{ image: string | null }>();
+  const { results } = await env.DB.prepare(
+    "SELECT id, image FROM dm_replies WHERE dm_id = ? AND channel_id = ?"
+  ).bind(row.root_id, row.channel_id).all<{ id: string; image: string | null }>();
+  const replies = results || [];
   await env.DB.batch([
     env.DB.prepare(
       "DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'"
@@ -305,8 +309,12 @@ async function finalizeDmDeletion(env: Env, row: PendingDeletionRow): Promise<vo
     env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ? AND pending_delete_at IS NOT NULL")
       .bind(row.root_id, row.channel_id),
   ]);
-  await deleteMediaByUrl(env, dm?.image);
-  await deleteUploadTicketByAttachment(env, "dm", row.root_id);
+  await Promise.all([
+    deleteMediaByUrl(env, dm?.image),
+    deleteUploadTicketByAttachment(env, "dm", row.root_id),
+    ...replies.map((reply) => deleteMediaByUrl(env, reply.image)),
+    ...replies.map((reply) => deleteUploadTicketByAttachment(env, "dm", reply.id)),
+  ]);
 }
 
 export async function finalizeExpiredAdminDeletions(
@@ -331,9 +339,16 @@ export async function finalizeExpiredAdminDeletions(
     } else if (row.record_type === "dm") {
       await finalizeDmDeletion(env, row);
     } else {
+      const reply = await env.DB.prepare(
+        "SELECT image FROM dm_replies WHERE id = ? AND channel_id = ? AND owner_uid = ?"
+      ).bind(row.root_id, row.channel_id, row.owner_uid).first<{ image: string | null }>();
       await env.DB.prepare(
         "DELETE FROM dm_replies WHERE id = ? AND channel_id = ? AND owner_uid = ? AND pending_delete_at IS NOT NULL"
       ).bind(row.root_id, row.channel_id, row.owner_uid).run();
+      await Promise.all([
+        deleteMediaByUrl(env, reply?.image),
+        deleteUploadTicketByAttachment(env, "dm", row.root_id),
+      ]);
     }
     await env.DB.prepare("DELETE FROM pending_admin_deletions WHERE id = ?").bind(row.id).run();
     finalized += 1;

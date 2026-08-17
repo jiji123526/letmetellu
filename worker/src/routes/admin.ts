@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
-import { extractMediaKey, normalizeManagedMediaUrl } from "../lib/media";
+import { deleteMediaByUrl, extractMediaKey, normalizeManagedMediaUrl } from "../lib/media";
+import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
 import { getReportsChannelOwnerId } from "../lib/special-channels";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
@@ -360,6 +361,19 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       await env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
         .bind(unblockUid, channel_id).run();
       // Clean up old petition DMs from this user
+      const petitionRows = await env.DB.prepare(`
+        SELECT dm.id, dm.image
+        FROM dm
+        WHERE dm.uid = ? AND dm.channel_id = ? AND dm.text LIKE '[이의 제기]%'
+      `).bind(unblockUid, channel_id).all<{ id: string; image: string | null }>();
+      const petitionIds = (petitionRows.results || []).map((row) => row.id);
+      const petitionReplies = petitionIds.length > 0
+        ? await env.DB.prepare(`
+            SELECT id, image
+            FROM dm_replies
+            WHERE dm_id IN (${petitionIds.map(() => "?").join(", ")})
+          `).bind(...petitionIds).all<{ id: string; image: string | null }>()
+        : { results: [] as Array<{ id: string; image: string | null }> };
       await env.DB.batch([
         env.DB.prepare(`
           DELETE FROM dm_replies
@@ -370,6 +384,12 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         `).bind(unblockUid, channel_id),
         env.DB.prepare("DELETE FROM dm WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'")
           .bind(unblockUid, channel_id),
+      ]);
+      await Promise.all([
+        ...(petitionRows.results || []).map((row) => deleteMediaByUrl(env, row.image)),
+        ...(petitionRows.results || []).map((row) => deleteUploadTicketByAttachment(env, "dm", row.id)),
+        ...(petitionReplies.results || []).map((row) => deleteMediaByUrl(env, row.image)),
+        ...(petitionReplies.results || []).map((row) => deleteUploadTicketByAttachment(env, "dm", row.id)),
       ]);
       // Clean up old report messages about this user
       await env.DB.prepare("DELETE FROM messages WHERE uid = ? AND channel_id = ? AND report = 1")

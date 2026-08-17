@@ -728,6 +728,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       sentToAdmin: t("sentToAdmin"),
       dmReplySent: t("dmReplySent"),
       dmReplyLimit: t("dmReplyLimit"),
+      dmReplyMediaLimit: t("dmReplyMediaLimit"),
       deleteFailed: t("deleteFailed"),
       deletedMessage: t("deletedMessage"),
       messageDeleted: t("messageDeleted"),
@@ -1013,6 +1014,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         replyingTo={replyingTo}
         onCloseReply={clearReplyingTo}
         pendingPhotos={pendingPhotos}
+        allowMultiplePhotos={!(effectiveAdmin && !!replyingTo?.dm)}
         onRemovePendingPhoto={removePendingPhoto}
         ownerModerationBlocked={ownerModerationBlocked}
         ownerModerationBannerText={ownerModerationBannerText}

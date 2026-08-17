@@ -85,6 +85,7 @@ interface ChatViewBottomShellProps {
   replyingTo: Message | null;
   onCloseReply: () => void;
   pendingPhotos: PendingPhoto[];
+  allowMultiplePhotos: boolean;
   onRemovePendingPhoto: (index: number) => void;
   ownerModerationBlocked: boolean;
   ownerModerationBannerText: string;
@@ -132,6 +133,7 @@ export function ChatViewBottomShell({
   replyingTo,
   onCloseReply,
   pendingPhotos,
+  allowMultiplePhotos,
   onRemovePendingPhoto,
   ownerModerationBlocked,
   ownerModerationBannerText,
@@ -321,7 +323,7 @@ export function ChatViewBottomShell({
           ref={photoInputRef}
           type="file"
           accept="image/*"
-          multiple
+          multiple={allowMultiplePhotos}
           hidden
           onChange={(event) => { void onPhotoSelect(event); }}
         />

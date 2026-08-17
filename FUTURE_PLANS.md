@@ -4,7 +4,7 @@ This file tracks remaining product and platform work. Implemented behavior and d
 
 Status reviewed: 2026-08-14.
 
-- Implemented on 2026-08-17, rollout verification pending: channel owners can send up to 20 text-only private replies beneath a visitor DM. Visitors retain their own threads through the signed same-browser anonymous identity and can delete an entire thread they started, while realtime sockets carry only content-free invalidation. Apply migration `0045`, deploy Worker/frontend and complete two-profile privacy/deletion checks.
+- Implemented on 2026-08-17, rollout verification pending: channel owners can send up to 20 private replies beneath a visitor DM, with text and at most one image per reply. Visitors retain their own threads through the signed same-browser anonymous identity and can delete an entire thread they started, while realtime sockets carry only content-free invalidation. Apply migrations `0045` and `0047`, deploy Worker/frontend and complete two-profile privacy, media-cleanup and deletion checks.
 
 - Implemented on 2026-08-17, rollout verification pending: admin message and DM deletion uses a server-owned five-second Undo lifecycle. Migration `0046` keeps pending rows hidden across refresh and scheduled maintenance finalizes expired operations; apply it before deploying Worker/frontend.
 

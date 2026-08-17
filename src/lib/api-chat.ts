@@ -551,6 +551,8 @@ export async function sendDmReply(payload: {
   client_reply_id: string;
   dm_id: string;
   text: string;
+  image?: string;
+  upload_id?: string;
 }) {
   if (IS_MOCK) return { ok: true };
   const res = await fetchMessageMutation("/api/dm", {
