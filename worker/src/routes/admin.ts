@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { getChannelModeration, getReportsChannelOwner, getUserLocale, isOwnerModerationBlocked, postReportsInboxMessage, setChannelModeration, type UserLocale } from "../lib/channel-moderation";
-import { normalizeManagedMediaUrl } from "../lib/media";
+import { extractMediaKey, normalizeManagedMediaUrl } from "../lib/media";
 import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
 import { getReportsChannelOwnerId } from "../lib/special-channels";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
