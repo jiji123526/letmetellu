@@ -41,6 +41,14 @@ test("chat startup uses init metadata instead of fetching the owner list", () =>
   assert.doesNotMatch(chatViewSource, /fetchOwnerChannels/);
 });
 
+test("eligible owner profiles preload their bounded list and reuse a short client cache", () => {
+  assert.match(chatViewSource, /ownerChannelCount < 2/);
+  assert.match(chatViewSource, /requestIdleCallback/);
+  assert.match(chatViewSource, /import\("\.\/OwnerChannelsPopup"\)/);
+  assert.match(chatViewSource, /preloadOwnerChannels\(channelId\)/);
+  assert.match(popupSource, /getCachedOwnerChannels\(currentChannelId\)/);
+});
+
 test("the full owner list loads only in the popup and respects the five-channel limit", () => {
   assert.match(popupSource, /fetchOwnerChannels\(currentChannelId\)/);
   assert.match(userSource, /ORDER BY created_at ASC, id ASC\s+LIMIT 5/);

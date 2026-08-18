@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Owner profile channel lists preload during idle time — 2026-08-17
+
+- Channels whose owner has at least two public profile channels now preload both the profile popup chunk and its bounded five-channel response after the chat becomes idle.
+- A 30-second in-memory cache makes the first eligible click and repeated opens immediate, while concurrent preload and click requests share one promise instead of duplicating network and D1 work.
+- Hidden channels and owners with fewer than two public channels perform no preload. Failed requests are never cached, and the short expiry limits stale profile visibility after an owner changes channel settings.
+- Trade-off: an eligible chat can make one small profile request even when the visitor never opens the popup. This is intentionally limited to qualifying channels and a five-row response in exchange for removing the Vercel-to-Worker-to-D1 wait from the click path.
+
 ### Recent-channel pruning runs only when history can grow — 2026-08-17
 
 - D1 Insights showed the recent-channel cap delete running 711 times and reading 24.39k rows without deleting anything. The query was fast, but it ran after every visit, pin and color update even though those common operations usually changed an existing row and could not grow the list.

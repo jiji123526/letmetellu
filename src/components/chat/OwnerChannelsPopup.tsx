@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchOwnerChannels } from "@/lib/api-chat";
+import {
+  fetchOwnerChannels,
+  getCachedOwnerChannels,
+  type OwnerChannelProfile,
+} from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
-
-interface OwnerChannel {
-  id: string;
-  name: string;
-  profile_image: string | null;
-  bubble_color: string;
-  has_passcode: number;
-}
 
 interface OwnerChannelsPopupProps {
   currentChannelId: string;
@@ -20,8 +16,9 @@ interface OwnerChannelsPopupProps {
 
 export function OwnerChannelsPopup({ currentChannelId, bubbleColor, onClose }: OwnerChannelsPopupProps) {
   const { t } = useLocale();
-  const [channels, setChannels] = useState<OwnerChannel[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedChannels = getCachedOwnerChannels(currentChannelId)?.channels;
+  const [channels, setChannels] = useState<OwnerChannelProfile[]>(() => cachedChannels || []);
+  const [loading, setLoading] = useState(() => !cachedChannels);
 
   useEffect(() => {
     let active = true;

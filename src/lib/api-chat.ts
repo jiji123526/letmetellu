@@ -17,8 +17,23 @@ import {
 let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
 const initRequests = new Map<string, Promise<unknown>>();
 const messagePageRequests = new Map<string, Promise<unknown>>();
+const ownerChannelRequests = new Map<string, Promise<OwnerChannelsResponse>>();
+const ownerChannelCache = new Map<string, { data: OwnerChannelsResponse; expiresAt: number }>();
 const MESSAGE_SEND_TIMEOUT_MS = 15_000;
 const MAX_MEDIA_UPLOAD_SIZE = 10 * 1024 * 1024;
+const OWNER_CHANNEL_CACHE_TTL_MS = 30_000;
+
+export interface OwnerChannelProfile {
+  id: string;
+  name: string;
+  profile_image: string | null;
+  bubble_color: string;
+  has_passcode: number;
+}
+
+export interface OwnerChannelsResponse {
+  channels?: OwnerChannelProfile[];
+}
 
 export class MediaUploadTooLargeError extends Error {
   constructor() {
@@ -87,15 +102,17 @@ export function fetchInit(channelId: string) {
   return request;
 }
 
-export async function fetchOwnerChannels(channelId: string): Promise<{
-  channels?: Array<{
-    id: string;
-    name: string;
-    profile_image: string | null;
-    bubble_color: string;
-    has_passcode: number;
-  }>;
-}> {
+export function getCachedOwnerChannels(channelId: string): OwnerChannelsResponse | null {
+  const cached = ownerChannelCache.get(channelId);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    ownerChannelCache.delete(channelId);
+    return null;
+  }
+  return cached.data;
+}
+
+async function requestOwnerChannels(channelId: string): Promise<OwnerChannelsResponse> {
   const res = await fetch(`/api/user?channel=${encodeURIComponent(channelId)}`, {
     cache: "no-store",
   });
@@ -108,6 +125,34 @@ export async function fetchOwnerChannels(channelId: string): Promise<{
     }));
   }
   return data;
+}
+
+export function fetchOwnerChannels(channelId: string): Promise<OwnerChannelsResponse> {
+  const cached = getCachedOwnerChannels(channelId);
+  if (cached) return Promise.resolve(cached);
+
+  const existingRequest = ownerChannelRequests.get(channelId);
+  if (existingRequest) return existingRequest;
+
+  const request = requestOwnerChannels(channelId)
+    .then((data) => {
+      ownerChannelCache.set(channelId, {
+        data,
+        expiresAt: Date.now() + OWNER_CHANNEL_CACHE_TTL_MS,
+      });
+      return data;
+    })
+    .finally(() => {
+      if (ownerChannelRequests.get(channelId) === request) {
+        ownerChannelRequests.delete(channelId);
+      }
+    });
+  ownerChannelRequests.set(channelId, request);
+  return request;
+}
+
+export function preloadOwnerChannels(channelId: string): Promise<OwnerChannelsResponse> {
+  return fetchOwnerChannels(channelId);
 }
 
 export async function verifyPasscode(channelId: string, passcode: string): Promise<{ ok?: boolean; error?: string }> {

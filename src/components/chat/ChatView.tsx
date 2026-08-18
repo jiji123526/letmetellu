@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { getStoredUid } from "@/lib/api-core";
-import { adminAction, fetchInit } from "@/lib/api-chat";
+import { adminAction, fetchInit, preloadOwnerChannels } from "@/lib/api-chat";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
@@ -97,6 +97,25 @@ export function ChatView({ channelId }: { channelId: string }) {
   const ownerChannelCount = channel?.show_on_profile === 1
     ? channel.owner_channel_count || 0
     : 0;
+
+  useEffect(() => {
+    if (ownerChannelCount < 2) return;
+
+    const preload = () => {
+      void Promise.all([
+        import("./OwnerChannelsPopup"),
+        preloadOwnerChannels(channelId),
+      ]).catch(() => {});
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(preload, { timeout: 1_500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timer = setTimeout(preload, 250);
+    return () => clearTimeout(timer);
+  }, [channelId, ownerChannelCount]);
+
   const { t, locale, timeZone } = useLocale();
   const [manualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
