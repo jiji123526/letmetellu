@@ -231,6 +231,13 @@ const MessageRow = React.memo(function MessageRow({
     ? "rgba(255,255,255,0.92)"
     : "var(--meta)";
   const sentTime = chatTimeLabel(msg.created_at, locale, timeZone);
+  const swipeTransformStyle = {
+    transform: `translateX(${swipeOffset}px)`,
+    transition: isSwiping
+      ? "none"
+      : "transform 180ms cubic-bezier(0.22, 0.8, 0.3, 1)",
+    willChange: swipeOffset ? "transform" : undefined,
+  } satisfies React.CSSProperties;
 
   const finishSwipe = () => {
     swipeGestureRef.current = null;
@@ -408,36 +415,11 @@ const MessageRow = React.memo(function MessageRow({
       id={`msg-${msg.id}`}
       className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
       style={{
-        position: "relative",
         paddingTop: "calc(var(--bubble-font-size) * 0.32)",
         paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
         paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          [isSent ? "right" : "left"]: "3px",
-          bottom: "8px",
-          width: "50px",
-          color: markerColor,
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-          fontSize: "clamp(9px, calc(var(--bubble-font-size) - 6px), 11px)",
-          fontWeight: 500,
-          fontVariantNumeric: "tabular-nums",
-          letterSpacing: "-0.12px",
-          lineHeight: 1,
-          textAlign: "center",
-          whiteSpace: "nowrap",
-          opacity: Math.min(1, Math.abs(swipeOffset) / 24),
-          transform: `translateX(${isSent ? "2px" : "-2px"})`,
-          transition: isSwiping ? "none" : "opacity 160ms ease",
-          pointerEvents: "none",
-        }}
-      >
-        {sentTime}
-      </span>
       <div
         className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
         style={{
@@ -448,31 +430,59 @@ const MessageRow = React.memo(function MessageRow({
             ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
             : isReply ? "85%" : "74%",
           minWidth: 0,
-          transform: `translateX(${swipeOffset}px)`,
-          transition: isSwiping
-            ? "none"
-            : "transform 180ms cubic-bezier(0.22, 0.8, 0.3, 1)",
-          willChange: swipeOffset ? "transform" : undefined,
         }}
       >
-        {isReply ? (
-          <div
-            className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}
-            style={{ maxWidth: "100%", minWidth: 0 }}
+        <div className="relative w-full">
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              [isSent ? "right" : "left"]: "3px",
+              bottom: "8px",
+              width: "50px",
+              color: markerColor,
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+              fontSize: "clamp(9px, calc(var(--bubble-font-size) - 6px), 11px)",
+              fontWeight: 500,
+              fontVariantNumeric: "tabular-nums",
+              letterSpacing: "-0.12px",
+              lineHeight: 1,
+              textAlign: "center",
+              whiteSpace: "nowrap",
+              opacity: Math.min(1, Math.abs(swipeOffset) / 24),
+              transform: `translateX(${isSent ? "2px" : "-2px"})`,
+              transition: isSwiping ? "none" : "opacity 160ms ease",
+              pointerEvents: "none",
+            }}
           >
-            {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
+            {sentTime}
+          </span>
+          <div
+            className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
+            style={swipeTransformStyle}
+          >
+            {isReply ? (
+              <div
+                className={`flex items-start gap-1 ${parentIsSent ? "justify-end" : "justify-start"}`}
+                style={{ maxWidth: "100%", minWidth: 0 }}
+              >
+                {parentIsSent ? <>{bubble}{replyArrow}</> : <>{replyArrow}{bubble}</>}
+              </div>
+            ) : bubble}
           </div>
-        ) : bubble}
+        </div>
         {!msg.dm && (
-          <ReactionBadge
-            messageId={msg.id}
-            reactions={msg.reactions}
-            myUid={effectiveAdmin && authUserId ? authUserId : uid}
-            isSent={isSent}
-            isReply={isReply}
-            onReaction={onReaction}
-            onEmojiPicker={onEmojiPicker}
-          />
+          <div style={swipeTransformStyle}>
+            <ReactionBadge
+              messageId={msg.id}
+              reactions={msg.reactions}
+              myUid={effectiveAdmin && authUserId ? authUserId : uid}
+              isSent={isSent}
+              isReply={isReply}
+              onReaction={onReaction}
+              onEmojiPicker={onEmojiPicker}
+            />
+          </div>
         )}
       </div>
     </div>

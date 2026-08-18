@@ -54,5 +54,7 @@ test("message rows cancel long press and reveal the timestamp during horizontal 
   assert.match(source, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
   assert.match(source, /chatTimeLabel\(msg\.created_at, locale, timeZone\)/);
   assert.match(source, /color: markerColor/);
+  assert.match(source, /<div className="relative w-full">[\s\S]*\{sentTime\}[\s\S]*style=\{swipeTransformStyle\}/);
+  assert.match(source, /<div style=\{swipeTransformStyle\}>[\s\S]*<ReactionBadge/);
   assert.match(source, /touchAction: "pan-y"/);
 });

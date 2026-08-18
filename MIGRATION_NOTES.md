@@ -41,6 +41,8 @@ already-open tab and after a fresh reload.
 - Horizontal intent is required before the gesture activates. Vertical scrolling
   remains native, movement cancels the long-press timer, the reveal is capped at
   56 pixels and the bubble returns when released.
+- Reaction badges no longer affect the timestamp's vertical anchor. The marker
+  stays aligned to the bubble body even when reactions render below it.
 - Focused coverage preserves swipe direction, movement bounds, vertical-scroll
   separation, viewer-timezone formatting and the shared arrow color contract.
 
