@@ -4,6 +4,43 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message swipes reveal viewer-local sent times — 2026-08-18
+
+- Sent bubbles now reveal their timestamp when swiped left, while received bubbles
+  reveal it when swiped right. Replies follow their parent bubble's visual side.
+- The compact iOS-style marker uses the browser-resolved viewer timezone and
+  locale. A cached `Intl.DateTimeFormat` avoids constructing one formatter per
+  message.
+- Timestamp color follows the existing reply-arrow tone, including the brighter
+  treatment selected for dark colors and sufficiently overlaid image backgrounds.
+- Horizontal intent is required before the gesture activates. Vertical scrolling
+  remains native, movement cancels the long-press timer, the reveal is capped at
+  56 pixels and the bubble returns when released.
+- Focused coverage preserves swipe direction, movement bounds, vertical-scroll
+  separation, viewer-timezone formatting and the shared arrow color contract.
+
+Trade-off: each mounted message row owns two small pieces of transient swipe state
+and formats its timestamp when rendered. Formatter instances are cached, no state
+persists after release and no API, D1 or WebSocket work was added.
+
+Deployment note: frontend-only. Verify sent and received text, image, reply and DM
+bubbles on a touch device using default, dark-color and image backgrounds.
+
+### Successful private replies release the selected DM — 2026-08-18
+
+- After the channel owner successfully sends a private DM reply, the composer now
+  clears the selected DM together with its text and photo draft.
+- Upload, network and mutation failures keep the DM selected and restore the draft,
+  so the owner can retry without reopening the thread.
+- Focused source coverage preserves the success-only selection reset.
+
+Trade-off: sending another reply to the same DM now requires selecting that DM
+again. This prevents an owner from accidentally sending consecutive private
+replies to a stale selection.
+
+Deployment note: frontend-only. Verify successful text and one-photo replies clear
+the selection, while a failed reply remains selected and retryable.
+
 ### Unified chat pagination stage 8C: global activation — 2026-08-18
 
 - Added `UNIFIED_TIMELINE_GLOBAL_ENABLED=1` for small installations that want one
