@@ -12,6 +12,7 @@ import { handleUpload, handleMediaServe } from "./routes/upload";
 import { handlePreview } from "./routes/preview";
 import { handleVerifyPasscode } from "./routes/passcode";
 import { handleRecentChannels } from "./routes/recent-channels";
+import { handleUnifiedTimeline } from "./routes/unified-timeline";
 import { handleChannelReports } from "./routes/channel-reports";
 import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
@@ -188,6 +189,8 @@ export default {
     try {
       if (url.pathname.startsWith("/api/messages")) {
         response = await handleMessages(request, env, ctx);
+      } else if (url.pathname.startsWith("/api/unified-timeline")) {
+        response = await handleUnifiedTimeline(request, env);
       } else if (url.pathname.startsWith("/api/data")) {
         response = await handleData(request, env);
       } else if (url.pathname.startsWith("/api/init")) {

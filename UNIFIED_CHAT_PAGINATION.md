@@ -104,21 +104,32 @@ proxy forwards only the literal opt-in value and signed anonymous token.
 
 ### Stage 4 — production-shaped API contract
 
-- Status: next implementation stage; no client should consume it yet.
-- Add a dedicated unified-page response rather than overloading the legacy
-  `messages` payload. The response contains `items`, `has_more`, complete start/end
-  cursors and a contract version.
-- Parse every cursor field with the Stage 1 validator. Invalid or partial cursors
-  return `400`; they must never silently fall back to the latest page.
-- Apply the existing channel-existence, passcode, owner and signed-anonymous gates
-  before calling the reader. A missing visitor identity returns `401` for the
-  unified route instead of creating a new identity during a history request.
-- Keep live and reports channels disabled with an explicit unsupported response
-  until their Stage 7 adapters are ready.
-- Sign protected media inside the unified payload in the Next.js proxy exactly as
-  legacy message and DM media are signed today.
-- Add route-level fixtures for owner, matching anonymous visitor, different visitor,
-  invalid room token, changed passcode, deleted channel and malformed cursor.
+- Status: implemented on the feature branch; no client consumes it yet.
+- `GET /api/unified-timeline` is a dedicated Worker endpoint with a matching
+  Next.js proxy. It does not overload or modify the legacy `/api/data` payload.
+- The versioned response contains `contract_version: 1`, `items`, `has_more`,
+  `page_start_cursor` and `page_end_cursor`.
+- History requests send `direction=before|after` plus all six cursor fields:
+  `cursor_visual_root_created_at`, `cursor_source`, `cursor_visual_root_id`,
+  `cursor_visual_depth`, `cursor_created_at` and `cursor_id`. The latest page sends
+  neither a direction nor cursor.
+- Cursor fields are all-or-none and must describe a canonical root boundary:
+  depth is zero and the item ID/time equal the visual-root ID/time. Partial,
+  duplicate, malformed or reply-level cursors return `400` rather than falling
+  back to the latest page.
+- Existing channel-existence, current-passcode and trusted-owner checks run before
+  the reader. Non-owners require a valid signed anonymous identity; URL UIDs and
+  forged user headers are ignored, and missing or invalid identity returns `401`.
+- Live and reports timelines return `409 unified_timeline_unsupported` until their
+  Stage 7 adapters exist. A non-owner still receives `403` at the reports
+  authorization boundary.
+- The Next.js proxy forwards only trusted session identity, current room access and
+  the signed anonymous token. It applies the existing protected-media signer to
+  unified `items`.
+- Route fixtures cover owner and visitor DM visibility, owner replies, forged
+  identity, passcode rotation, channel deletion, special channels, cursor
+  validation, media signing, the 100-root cap and duplicate/gap-free latest,
+  `before` and `after` joins.
 
 Exit criteria:
 
@@ -315,7 +326,7 @@ Cleanup after stable rollout:
 - [x] Stage 1 cursor and authorization contract
 - [x] Stage 2 bounded parallel reader
 - [x] Stage 3 opt-in latest-page shadow comparison
-- [ ] Stage 4 production-shaped unified API contract and route fixtures
+- [x] Stage 4 production-shaped unified API contract and route fixtures
 - [ ] Stage 5A single-state client adapter and kill switch
 - [ ] Stage 5B unified bootstrap/reconnect
 - [ ] Stage 5C bidirectional history/context/navigation

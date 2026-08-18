@@ -4,6 +4,38 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 4: production-shaped API — 2026-08-18
+
+- Added a dedicated versioned `GET /api/unified-timeline` Worker endpoint and
+  Next.js proxy. It returns one authorization-scoped public-message/DM timeline
+  with bounded roots, `has_more` and complete start/end cursors without changing
+  the legacy `/api/data` response.
+- Latest reads omit cursor state. Older/newer reads require `direction` and all six
+  cursor fields, and accept only canonical root boundaries. Partial, duplicate,
+  malformed and reply-level cursors return `400` instead of silently loading a
+  different page.
+- Existing channel existence, current passcode and trusted owner authorization are
+  reused. Visitors require a valid signed anonymous identity; URL UIDs, forged
+  user headers and invalid tokens cannot reveal private roots or owner replies.
+- Live and reports timelines remain explicitly unsupported until their dedicated
+  adapters are implemented. The reports owner boundary is still enforced before
+  returning the unsupported response.
+- The app proxy forwards trusted authorization context and now signs protected
+  media nested in unified `items` using the same policy as legacy message, DM,
+  gallery and search payloads.
+- Route tests cover owner and visitor privacy, owner replies, forged identity,
+  passcode rotation, deleted channels, special-channel boundaries, strict cursor
+  validation, media signing, the 100-root limit and duplicate/gap-free page joins.
+
+Trade-off: this adds an unused parallel API surface that must remain compatible
+while Stage 5 is developed. In return, the client migration can be tested against a
+stable production-shaped contract without risking the current read path. No D1
+migration is required, and rollback is limited to disabling or removing the new
+route.
+
+Deployment note: do not deploy this feature branch to production yet. The endpoint
+does not change client behavior until Stage 5 enables it behind a kill switch.
+
 ### Unified chat pagination remaining rollout plan documented — 2026-08-18
 
 - Expanded `UNIFIED_CHAT_PAGINATION.md` from two broad follow-up steps into separately shippable API, client-state, bootstrap, history/navigation, mutation/realtime, query-validation, special-channel and controlled-rollout stages.

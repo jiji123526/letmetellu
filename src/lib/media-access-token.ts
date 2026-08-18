@@ -140,7 +140,7 @@ export async function signProtectedMediaInPayload<T>(
     changed ||= signedChannel !== target.channel;
   }
 
-  for (const key of ["messages", "dm", "results", "gallery"] as const) {
+  for (const key of ["messages", "dm", "results", "gallery", "items"] as const) {
     const collection = target[key];
     if (!Array.isArray(collection)) continue;
     const signedCollection = await Promise.all(collection.map(async (item) => {
