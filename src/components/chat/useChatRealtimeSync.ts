@@ -19,7 +19,7 @@ import {
   startChatPerformanceRequest,
 } from "@/lib/chat-performance";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
-import { patchChannelBackground } from "@/lib/channel-background-cache";
+import { patchChannelAppearance } from "@/lib/channel-background-cache";
 import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { spawnEmoji } from "./EmojiBar";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
@@ -501,7 +501,9 @@ export function useChatRealtimeSync({
           ...(nextProfileImage !== undefined ? { profileImage: nextProfileImage } : {}),
           ...(event.bubble_color && !localBubbleColor ? { bubbleColor: event.bubble_color as string } : {}),
         });
-        patchChannelBackground(channelId, {
+        patchChannelAppearance(channelId, {
+          bubble_color: event.bubble_color as string | undefined,
+          appearance_version: event.appearance_version as string | undefined,
           background_type: event.background_type as Channel["background_type"],
           background_color: event.background_color as string | null | undefined,
           background_image: event.background_image as string | null | undefined,
@@ -516,6 +518,7 @@ export function useChatRealtimeSync({
           if (event.name) updated.name = event.name as string;
           if (nextProfileImage !== undefined) updated.profile_image = nextProfileImage;
           if (event.bubble_color) updated.bubble_color = event.bubble_color as string;
+          if (event.appearance_version) updated.appearance_version = event.appearance_version as string;
           if (event.show_on_profile !== undefined) updated.show_on_profile = event.show_on_profile ? 1 : 0;
           if (event.background_type !== undefined) updated.background_type = event.background_type as Channel["background_type"];
           if (event.background_color !== undefined) updated.background_color = event.background_color as string | null;

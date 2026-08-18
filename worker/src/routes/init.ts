@@ -15,6 +15,7 @@ import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
 import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout";
 import { readSelectedBootstrap } from "../lib/bootstrap-read-mode";
+import { getChannelAppearanceVersion } from "../lib/channel-appearance";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
 import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
 import {
@@ -112,7 +113,20 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             return Response.json({
               hasPasscode: true,
               passcodeHint: (channel as any).passcode_hint || "",
-              channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+              channel: {
+                id: (channel as any).id,
+                name: (channel as any).name,
+                profile_image: (channel as any).profile_image,
+                bubble_color: (channel as any).bubble_color,
+                appearance_version: getChannelAppearanceVersion(channel as {
+                  bubble_color?: string | null;
+                  background_type?: "default" | "color" | "image";
+                  background_color?: string | null;
+                  background_image?: string | null;
+                  background_overlay?: number | null;
+                  background_blur?: number | boolean | null;
+                }),
+              },
               anonymousUid: anonymousIdentity.uid,
               anonymousToken: anonymousIdentity.token,
               deviceToken: deviceIdentity.token,
@@ -122,7 +136,20 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           return Response.json({
             hasPasscode: true,
             passcodeHint: (channel as any).passcode_hint || "",
-            channel: { id: (channel as any).id, name: (channel as any).name, profile_image: (channel as any).profile_image, bubble_color: (channel as any).bubble_color },
+            channel: {
+              id: (channel as any).id,
+              name: (channel as any).name,
+              profile_image: (channel as any).profile_image,
+              bubble_color: (channel as any).bubble_color,
+              appearance_version: getChannelAppearanceVersion(channel as {
+                bubble_color?: string | null;
+                background_type?: "default" | "color" | "image";
+                background_color?: string | null;
+                background_image?: string | null;
+                background_overlay?: number | null;
+                background_blur?: number | boolean | null;
+              }),
+            },
             anonymousUid: anonymousIdentity.uid,
             anonymousToken: anonymousIdentity.token,
             deviceToken: deviceIdentity.token,
@@ -318,6 +345,14 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const safeChannel = { ...(responseChannel as Record<string, unknown>) };
     delete safeChannel.passcode;
     safeChannel.owner_channel_count = ownerChannelCount;
+    safeChannel.appearance_version = getChannelAppearanceVersion(responseChannel as {
+      bubble_color?: string | null;
+      background_type?: "default" | "color" | "image";
+      background_color?: string | null;
+      background_image?: string | null;
+      background_overlay?: number | null;
+      background_blur?: number | boolean | null;
+    });
 
     const ownerRoomToken = isOwner && (channel as any).passcode
       ? await createRoomToken(parentChannelId, (channel as any).passcode, env)

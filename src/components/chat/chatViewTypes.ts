@@ -24,6 +24,7 @@ export interface Channel {
   owner_name?: string | null;
   owner_channel_count?: number;
   instance_id?: string | null;
+  appearance_version?: string | null;
   show_on_profile?: number;
   background_type?: "default" | "color" | "image";
   background_color?: string | null;

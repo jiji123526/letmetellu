@@ -1,3 +1,6 @@
+import { normalizeBubbleColor } from "./bubble-color";
+import { getChannelAppearanceVersion } from "./channel-appearance";
+
 export interface ChannelBackgroundSnapshot {
   instanceId: string | null;
   type: "default" | "color" | "image";
@@ -7,8 +10,15 @@ export interface ChannelBackgroundSnapshot {
   blur: boolean;
 }
 
-interface ChannelBackgroundSource {
+export interface ChannelAppearanceSnapshot extends ChannelBackgroundSnapshot {
+  bubbleColor: string;
+  appearanceVersion: string;
+}
+
+interface ChannelAppearanceSource {
   instance_id?: string | null;
+  bubble_color?: string | null;
+  appearance_version?: string | null;
   background_type?: "default" | "color" | "image";
   background_color?: string | null;
   background_image?: string | null;
@@ -16,7 +26,7 @@ interface ChannelBackgroundSource {
   background_blur?: number;
 }
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_PREFIX = "channelBackground_";
 
 function cacheKey(channelId: string) {
@@ -60,35 +70,80 @@ function isSnapshot(value: unknown): value is ChannelBackgroundSnapshot {
   );
 }
 
-export function readChannelBackground(channelId: string): ChannelBackgroundSnapshot | null {
+function isAppearanceSnapshot(value: unknown): value is ChannelAppearanceSnapshot {
+  if (!isSnapshot(value)) return false;
+  const appearance = value as Partial<ChannelAppearanceSnapshot>;
+  return (
+    typeof appearance.bubbleColor === "string"
+    && /^#[0-9a-fA-F]{6}$/.test(appearance.bubbleColor)
+    && typeof appearance.appearanceVersion === "string"
+    && appearance.appearanceVersion.length > 0
+  );
+}
+
+function toBackgroundSnapshot(
+  appearance: ChannelAppearanceSnapshot | null,
+): ChannelBackgroundSnapshot | null {
+  if (!appearance) return null;
+  const { instanceId, type, color, image, overlay, blur } = appearance;
+  return { instanceId, type, color, image, overlay, blur };
+}
+
+export function readChannelAppearance(channelId: string): ChannelAppearanceSnapshot | null {
   if (typeof window === "undefined") return null;
   try {
     const parsed = JSON.parse(localStorage.getItem(cacheKey(channelId)) || "null") as {
       version?: unknown;
+      appearance?: unknown;
       background?: unknown;
     } | null;
-    if (parsed?.version !== CACHE_VERSION || !isSnapshot(parsed.background)) return null;
+    const cachedAppearance = parsed?.version === CACHE_VERSION && isAppearanceSnapshot(parsed.appearance)
+      ? parsed.appearance
+      : null;
+    const cachedBackground = parsed?.version === 1 && isSnapshot(parsed.background)
+      ? parsed.background
+      : null;
+    const appearance = cachedAppearance || (cachedBackground
+      ? {
+          ...cachedBackground,
+          bubbleColor: normalizeBubbleColor(null),
+          appearanceVersion: getChannelAppearanceVersion({
+            background_type: cachedBackground.type,
+            background_color: cachedBackground.color,
+            background_image: cachedBackground.image,
+            background_overlay: cachedBackground.overlay,
+            background_blur: cachedBackground.blur ? 1 : 0,
+          }),
+        }
+      : null);
+    if (!appearance) return null;
 
     const knownInstance = localStorage.getItem(`channelInstance_${channelId}`);
     if (
       knownInstance
-      && parsed.background.instanceId
-      && knownInstance !== parsed.background.instanceId
+      && appearance.instanceId
+      && knownInstance !== appearance.instanceId
     ) {
       localStorage.removeItem(cacheKey(channelId));
       return null;
     }
-    return parsed.background;
+    return appearance;
   } catch {
     return null;
   }
 }
 
-export function storeChannelBackground(channelId: string, source: ChannelBackgroundSource) {
+export function readChannelBackground(channelId: string): ChannelBackgroundSnapshot | null {
+  return toBackgroundSnapshot(readChannelAppearance(channelId));
+}
+
+export function storeChannelAppearance(channelId: string, source: ChannelAppearanceSource) {
   if (typeof window === "undefined") return;
   try {
-    const background: ChannelBackgroundSnapshot = {
+    const appearance: ChannelAppearanceSnapshot = {
       instanceId: source.instance_id || localStorage.getItem(`channelInstance_${channelId}`),
+      bubbleColor: normalizeBubbleColor(source.bubble_color),
+      appearanceVersion: source.appearance_version || getChannelAppearanceVersion(source),
       type: source.background_type || "default",
       color: source.background_color || null,
       image: stableMediaUrl(source.background_image),
@@ -97,28 +152,45 @@ export function storeChannelBackground(channelId: string, source: ChannelBackgro
     };
     localStorage.setItem(cacheKey(channelId), JSON.stringify({
       version: CACHE_VERSION,
-      background,
+      appearance,
     }));
   } catch {
     // Background restoration is optional.
   }
 }
 
-export function patchChannelBackground(channelId: string, update: ChannelBackgroundSource) {
+export function storeChannelBackground(channelId: string, source: ChannelAppearanceSource) {
+  storeChannelAppearance(channelId, source);
+}
+
+export function patchChannelAppearance(channelId: string, update: ChannelAppearanceSource) {
   if (typeof window === "undefined") return;
-  const current = readChannelBackground(channelId);
+  const current = readChannelAppearance(channelId);
   if (!current) return;
-  const hasBackgroundUpdate = (
-    update.background_type !== undefined
+  const hasAppearanceUpdate = (
+    update.bubble_color !== undefined
+    || update.appearance_version !== undefined
+    || update.background_type !== undefined
     || update.background_color !== undefined
     || update.background_image !== undefined
     || update.background_overlay !== undefined
     || update.background_blur !== undefined
   );
-  if (!hasBackgroundUpdate) return;
+  if (!hasAppearanceUpdate) return;
 
-  storeChannelBackground(channelId, {
+  storeChannelAppearance(channelId, {
     instance_id: update.instance_id ?? current.instanceId,
+    bubble_color: update.bubble_color ?? current.bubbleColor,
+    appearance_version: update.appearance_version || getChannelAppearanceVersion({
+      bubble_color: update.bubble_color ?? current.bubbleColor,
+      background_type: update.background_type ?? current.type,
+      background_color: update.background_color !== undefined ? update.background_color : current.color,
+      background_image: update.background_image !== undefined ? update.background_image : current.image,
+      background_overlay: update.background_overlay ?? current.overlay,
+      background_blur: update.background_blur !== undefined
+        ? update.background_blur
+        : current.blur ? 1 : 0,
+    }),
     background_type: update.background_type ?? current.type,
     background_color: update.background_color !== undefined ? update.background_color : current.color,
     background_image: update.background_image !== undefined ? update.background_image : current.image,
@@ -127,6 +199,10 @@ export function patchChannelBackground(channelId: string, update: ChannelBackgro
       ? update.background_blur
       : current.blur ? 1 : 0,
   });
+}
+
+export function patchChannelBackground(channelId: string, update: ChannelAppearanceSource) {
+  patchChannelAppearance(channelId, update);
 }
 
 export function clearChannelBackground(channelId: string) {

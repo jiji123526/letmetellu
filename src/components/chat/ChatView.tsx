@@ -10,7 +10,7 @@ import { useLocale } from "@/hooks/useLocale";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
-import { readChannelBackground } from "@/lib/channel-background-cache";
+import { readChannelAppearance, readChannelBackground } from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import type { MessagePageCursor } from "./chatTypes";
@@ -102,6 +102,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
   const [viewerBlocked, setViewerBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [cachedAppearance] = useState(() => readChannelAppearance(channelId));
   const [cachedBackground] = useState(() => readChannelBackground(channelId));
   const [passcodeGate, setPasscodeGate] = useState<PasscodeGateState | null>(null);
   const [uid, setUid] = useState(getInitialUid);
@@ -488,9 +489,10 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
-  const bubbleColor = localBubbleColor || channel?.bubble_color || "#3598fe";
+  const bubbleColor = localBubbleColor || channel?.bubble_color || cachedAppearance?.bubbleColor || "#3598fe";
   const settingsActions = useChatChannelSettings({
     channelId,
+    channel,
     bubbleColor,
     inLiveMode,
     isLoggedIn,

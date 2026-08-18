@@ -5,7 +5,8 @@ import { decorateMediaUrl, decorateProtectedMediaUrl, decorateWelcomeConfig } fr
 import { adminAction } from "@/lib/api-chat";
 import { updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { setAccountChannelColor } from "@/lib/account-recent-channels";
-import { patchChannelBackground } from "@/lib/channel-background-cache";
+import { getChannelAppearanceVersion } from "@/lib/channel-appearance";
+import { patchChannelAppearance } from "@/lib/channel-background-cache";
 
 interface BannerState {
   text: string;
@@ -24,6 +25,7 @@ interface ChannelSettingsState {
   name: string;
   profile_image: string | null;
   bubble_color: string;
+  appearance_version?: string | null;
   notice: string;
   passcode_hint?: string | null;
   show_on_profile?: number;
@@ -36,6 +38,7 @@ interface ChannelSettingsState {
 
 interface UseChatChannelSettingsArgs<TChannel extends ChannelSettingsState> {
   channelId: string;
+  channel: TChannel | null;
   bubbleColor: string;
   inLiveMode: boolean;
   isLoggedIn: boolean;
@@ -86,6 +89,7 @@ export interface UseChatChannelSettingsResult {
 
 export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
   channelId,
+  channel,
   bubbleColor,
   inLiveMode,
   isLoggedIn,
@@ -144,10 +148,27 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
   }, [bubbleColor, channelId, flashBanner, setChannel, text.channelHiddenFromProfile, text.channelShownOnProfile]);
 
   const handleColorChange = useCallback((color: string) => {
+    const nextAppearance = {
+      bubble_color: color,
+      background_type: channel?.background_type,
+      background_color: channel?.background_color,
+      background_image: channel?.background_image,
+      background_overlay: channel?.background_overlay,
+      background_blur: channel?.background_blur,
+    };
+    const appearanceVersion = getChannelAppearanceVersion(nextAppearance);
     setLocalBubbleColor(color);
-    setChannel((previous) => previous ? { ...previous, bubble_color: color } : null);
+    setChannel((previous) => previous ? {
+      ...previous,
+      bubble_color: color,
+      appearance_version: appearanceVersion,
+    } : null);
     localStorage.setItem(`bubbleColor_${channelId}`, color);
     document.documentElement.style.setProperty("--bubble-sent", color);
+    patchChannelAppearance(channelId, {
+      ...nextAppearance,
+      appearance_version: appearanceVersion,
+    });
     if (isLoggedIn) {
       void setAccountChannelColor(channelId, color).catch(() => {
         // Channel color still updates even if personal sync is temporarily unavailable.
@@ -156,19 +177,37 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
       updateRecentChannelAppearance(channelId, { bubbleColor: color });
     }
     adminAction("update-profile", channelId, { bubble_color: color });
-  }, [channelId, isLoggedIn, setChannel, setLocalBubbleColor]);
+  }, [channel, channelId, isLoggedIn, setChannel, setLocalBubbleColor]);
 
   const handleBackgroundChange = useCallback((background: BackgroundUpdate) => {
     const decoratedBackgroundImage = decorateProtectedMediaUrl(background.background_image) || background.background_image;
+    const nextAppearance = {
+      bubble_color: channel?.bubble_color,
+      background_type: background.background_type ?? channel?.background_type,
+      background_color: background.background_color !== undefined
+        ? background.background_color
+        : channel?.background_color,
+      background_image: decoratedBackgroundImage !== undefined
+        ? decoratedBackgroundImage
+        : channel?.background_image,
+      background_overlay: background.background_overlay ?? channel?.background_overlay,
+      background_blur: background.background_blur ?? channel?.background_blur,
+    };
+    const appearanceVersion = getChannelAppearanceVersion(nextAppearance);
     setChannel((previous) => previous ? {
       ...previous,
       ...background,
       background_image: decoratedBackgroundImage,
+      appearance_version: appearanceVersion,
     } : null);
-    patchChannelBackground(channelId, background);
+    patchChannelAppearance(channelId, {
+      ...background,
+      background_image: decoratedBackgroundImage,
+      appearance_version: appearanceVersion,
+    });
     void adminAction("update-profile", channelId, background as Record<string, unknown>);
     flashBanner(text.backgroundChanged, bubbleColor, 2500);
-  }, [bubbleColor, channelId, flashBanner, setChannel, text.backgroundChanged]);
+  }, [bubbleColor, channel, channelId, flashBanner, setChannel, text.backgroundChanged]);
 
   const handleNameChange = useCallback((name: string) => {
     setChannel((previous) => previous ? { ...previous, name } : null);

@@ -4,6 +4,7 @@ import { deleteMediaByUrl, extractMediaKey, normalizeManagedMediaUrl } from "../
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets";
 import { createLiveSessionState, endLiveSession } from "../lib/live-sessions";
 import { getReportsChannelOwnerId } from "../lib/special-channels";
+import { getChannelAppearanceVersion } from "../lib/channel-appearance";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash } from "./passcode";
@@ -516,9 +517,32 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       } = payload || {};
       const updates: string[] = [];
       const values: unknown[] = [];
+      const hasAppearanceUpdate = (
+        bubble_color !== undefined
+        || background_type !== undefined
+        || background_color !== undefined
+        || background_image !== undefined
+        || background_overlay !== undefined
+        || background_blur !== undefined
+      );
       let previousBackgroundImage: string | null = null;
       let normalizedBackgroundImage: string | null | undefined;
       const normalizedBubbleColor = normalizeBubbleColor(bubble_color);
+      const currentAppearance = hasAppearanceUpdate
+        ? await env.DB.prepare(
+            `SELECT bubble_color, background_type, background_color, background_image,
+                    background_overlay, background_blur
+             FROM channels
+             WHERE id = ?`
+          ).bind(channel_id).first<{
+            bubble_color: string | null;
+            background_type: "default" | "color" | "image" | null;
+            background_color: string | null;
+            background_image: string | null;
+            background_overlay: number | null;
+            background_blur: number | null;
+          }>()
+        : null;
 
       if (name !== undefined) { updates.push("name = ?"); values.push(name); }
       if (profile_image !== undefined) { updates.push("profile_image = ?"); values.push(profile_image); }
@@ -545,10 +569,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         values.push(background_color);
       }
       if (background_image !== undefined) {
-        const previousBackground = await env.DB.prepare(
-          "SELECT background_image FROM channels WHERE id = ?"
-        ).bind(channel_id).first<{ background_image: string | null }>();
-        previousBackgroundImage = previousBackground?.background_image || null;
+        previousBackgroundImage = currentAppearance?.background_image || null;
         if (background_image !== null) {
           if (typeof background_image !== "string") {
             return Response.json({ error: "invalid background image" }, { status: 400 });
@@ -578,6 +599,28 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         updates.push("background_blur = ?");
         values.push(background_blur === true || background_blur === 1 ? 1 : 0);
       }
+      const appearanceVersion = hasAppearanceUpdate
+        ? getChannelAppearanceVersion({
+            bubble_color: bubble_color !== undefined
+              ? normalizedBubbleColor as string | null | undefined
+              : currentAppearance?.bubble_color,
+            background_type: background_type !== undefined
+              ? background_type as "default" | "color" | "image"
+              : currentAppearance?.background_type || undefined,
+            background_color: background_color !== undefined
+              ? background_color as string | null
+              : currentAppearance?.background_color,
+            background_image: background_image !== undefined
+              ? normalizedBackgroundImage
+              : currentAppearance?.background_image,
+            background_overlay: background_overlay !== undefined
+              ? Number(background_overlay)
+              : currentAppearance?.background_overlay,
+            background_blur: background_blur !== undefined
+              ? background_blur as number | boolean | null
+              : currentAppearance?.background_blur,
+          })
+        : undefined;
 
       if (updates.length > 0) {
         values.push(channel_id);
@@ -594,6 +637,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
             name,
             profile_image,
             bubble_color: normalizedBubbleColor,
+            appearance_version: appearanceVersion,
             show_on_profile,
             background_type,
             background_color,

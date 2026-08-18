@@ -4,6 +4,30 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Versioned channel appearance cache preserves public chat colors until admin changes them — 2026-08-18
+
+- Public chat bubble/background appearance now carries a deterministic
+  `appearance_version` derived from the canonical channel bubble and background
+  fields on the Worker.
+- The browser cache now stores one versioned appearance snapshot instead of a
+  background-only fragment. Cached public bubble/background visuals remain in
+  use across reloads until the server version changes or the channel instance is
+  recreated.
+- Realtime `profile-change` events patch the cached snapshot with the new
+  version so open tabs and the next cold load converge on the same appearance
+  state without waiting for another init overwrite.
+- The cache reader upgrades the previous background-only entry format in place,
+  preserving loading-state backgrounds for already-deployed browsers.
+
+Trade-off: init still fetches authoritative channel state on each load; this
+change removes stale appearance churn and unnecessary local rewrites, but it
+does not introduce a full init response cache.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is
+required. Verify a public channel keeps its cached bubble/background visuals
+across reloads, then confirm an owner color/background update appears in an
+already-open tab and after a fresh reload.
+
 ### Message swipes reveal viewer-local sent times — 2026-08-18
 
 - Sent bubbles now reveal their timestamp when swiped left, while received bubbles

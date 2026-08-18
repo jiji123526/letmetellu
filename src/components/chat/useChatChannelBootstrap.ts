@@ -11,7 +11,11 @@ import {
 import { recordAccountRecentChannel, updateCachedAccountRecentChannelVisit } from "@/lib/account-recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
-import { clearChannelBackground, storeChannelBackground } from "@/lib/channel-background-cache";
+import {
+  clearChannelBackground,
+  readChannelAppearance,
+  storeChannelAppearance,
+} from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import type { Message, MessagePageCursor } from "./chatTypes";
@@ -152,7 +156,14 @@ export function useChatChannelBootstrap({
     }
 
     const channelBubbleColor = normalizeBubbleColor(data.channel.bubble_color);
-    storeChannelBackground(channelId, data.channel);
+    const cachedAppearance = readChannelAppearance(channelId);
+    if (
+      !cachedAppearance
+      || cachedAppearance.instanceId !== data.channel.instance_id
+      || cachedAppearance.appearanceVersion !== data.channel.appearance_version
+    ) {
+      storeChannelAppearance(channelId, data.channel);
+    }
     setChannel({ ...data.channel, bubble_color: channelBubbleColor });
 
     const storedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
