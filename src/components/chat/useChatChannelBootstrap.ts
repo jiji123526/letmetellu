@@ -16,6 +16,10 @@ import { recordRecentChannel } from "@/lib/recent-channels";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import type { Message, MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
+import type {
+  ChatTimelineItem,
+  UnifiedTimelineCursor,
+} from "./chatTimelineState";
 
 interface BannerState {
   text: string;
@@ -24,6 +28,7 @@ interface BannerState {
 
 interface ApplyInitDataOptions {
   preserveHistory?: boolean;
+  skipTimeline?: boolean;
 }
 
 interface UseChatChannelBootstrapArgs {
@@ -49,6 +54,13 @@ interface UseChatChannelBootstrapArgs {
   setViewerModerationStatus: Dispatch<SetStateAction<InitData["viewerModerationStatus"]>>;
   setViewerAccess: Dispatch<SetStateAction<InitData["viewerAccess"]>>;
   setUnifiedTimelineEnabled: (enabled: boolean) => void;
+  applyUnifiedTimelineBootstrap: (
+    items: ChatTimelineItem[],
+    pageStartCursor: UnifiedTimelineCursor | null,
+    pageEndCursor: UnifiedTimelineCursor | null,
+    hasMoreBefore: boolean,
+    preserveHistory: boolean,
+  ) => void;
   setDmMessages: Dispatch<SetStateAction<Message[]>>;
   setActiveNotice: Dispatch<SetStateAction<string>>;
   setWelcomeConfig: Dispatch<SetStateAction<string>>;
@@ -100,6 +112,7 @@ export function useChatChannelBootstrap({
   setViewerModerationStatus,
   setViewerAccess,
   setUnifiedTimelineEnabled,
+  applyUnifiedTimelineBootstrap,
   setDmMessages,
   setActiveNotice,
   setWelcomeConfig,
@@ -115,6 +128,16 @@ export function useChatChannelBootstrap({
   text,
 }: UseChatChannelBootstrapArgs): UseChatChannelBootstrapResult {
   const applyInitData = useCallback((data: InitData, options?: ApplyInitDataOptions) => {
+    if (
+      data.unifiedTimelineEnabled === true
+      && (
+        data.unifiedTimeline?.contract_version !== 1
+        || !Array.isArray(data.unifiedTimeline.items)
+      )
+    ) {
+      throw new Error("Unsupported unified timeline bootstrap contract");
+    }
+
     if (typeof data.anonymousUid === "string" && data.anonymousUid) {
       setUid(data.anonymousUid);
     }
@@ -172,22 +195,40 @@ export function useChatChannelBootstrap({
       });
     }
 
-    setUnifiedTimelineEnabled(data.unifiedTimelineEnabled === true);
-    if (options?.preserveHistory) {
-      setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
-    } else {
-      setMessages(data.messages || []);
-      setInitialPageStartCursor(data.page_start_cursor || null);
-      setInitialPageEndCursor(data.page_end_cursor || null);
-      setHistoryMode("latest");
-      setNewerMessageCount(0);
+    const unifiedTimeline = data.unifiedTimelineEnabled === true
+      && data.unifiedTimeline?.contract_version === 1
+      ? data.unifiedTimeline
+      : null;
+    setUnifiedTimelineEnabled(Boolean(unifiedTimeline));
+    if (unifiedTimeline && !options?.skipTimeline) {
+      applyUnifiedTimelineBootstrap(
+        unifiedTimeline.items,
+        unifiedTimeline.page_start_cursor,
+        unifiedTimeline.page_end_cursor,
+        unifiedTimeline.has_more,
+        options?.preserveHistory === true,
+      );
+      if (!options?.preserveHistory) {
+        setHistoryMode("latest");
+        setNewerMessageCount(0);
+      }
+    } else if (!unifiedTimeline) {
+      if (options?.preserveHistory) {
+        setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
+      } else {
+        setMessages(data.messages || []);
+        setInitialPageStartCursor(data.page_start_cursor || null);
+        setInitialPageEndCursor(data.page_end_cursor || null);
+        setHistoryMode("latest");
+        setNewerMessageCount(0);
+      }
+      setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     }
     setBlockedUsers(data.blocked || []);
     setViewerBlocked(data.viewerBlocked ?? false);
     setViewerModerationStatus(data.viewerModerationStatus ?? null);
     setViewerAccess(data.viewerAccess ?? "standard");
     setReportsChannelView(Boolean(data.isReportsChannel));
-    setDmMessages((data.dm || []).map((dm) => ({ ...dm, dm: true })));
     setActiveNotice(data.bannerNotice || "");
     setWelcomeConfig(data.welcomeConfig || "");
     setPetitionEnabled(data.petitionEnabled ?? true);
@@ -202,6 +243,7 @@ export function useChatChannelBootstrap({
     applyLiveSnapshot(data.live);
   }, [
     applyEmojiPresetsSnapshot,
+    applyUnifiedTimelineBootstrap,
     applyLiveSnapshot,
     authUserId,
     channelId,
@@ -280,7 +322,7 @@ export function useChatChannelBootstrap({
           setUid(data.anonymousUid);
         }
 
-        if (data.hasPasscode && !data.messages) {
+        if (data.hasPasscode && !data.messages && !data.unifiedTimeline) {
           clearChannelBackground(channelId);
           setPasscodeGate({
             name: data.channel.name,
@@ -351,7 +393,7 @@ export function useChatChannelBootstrap({
 
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
     fetchInit(fetchChannel).then((data: InitData) => {
-      if (data.hasPasscode && !data.messages) {
+      if (data.hasPasscode && !data.messages && !data.unifiedTimeline) {
         setPasscodeGate({
           name: data.channel.name,
           profile_image: data.channel.profile_image,

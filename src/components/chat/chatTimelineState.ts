@@ -25,6 +25,7 @@ export type ChatTimelineState =
       timelineItems: ChatTimelineItem[];
       pageStartCursor: UnifiedTimelineCursor | null;
       pageEndCursor: UnifiedTimelineCursor | null;
+      hasMoreBefore: boolean;
     };
 
 export type MessageCollectionUpdate =
@@ -36,13 +37,20 @@ const SOURCE_RANK: Record<ChatTimelineSource, number> = {
   dm: 1,
 };
 
-function compareTimelineItems(left: ChatTimelineItem, right: ChatTimelineItem): number {
+function compareTimelinePositions(
+  left: UnifiedTimelineCursor,
+  right: UnifiedTimelineCursor,
+): number {
   return left.visual_root_created_at.localeCompare(right.visual_root_created_at)
     || SOURCE_RANK[left.source] - SOURCE_RANK[right.source]
     || left.visual_root_id.localeCompare(right.visual_root_id)
     || left.visual_depth - right.visual_depth
     || left.created_at.localeCompare(right.created_at)
     || left.id.localeCompare(right.id);
+}
+
+function compareTimelineItems(left: ChatTimelineItem, right: ChatTimelineItem): number {
+  return compareTimelinePositions(left, right);
 }
 
 function normalizeSourceItems(
@@ -127,6 +135,7 @@ export function setChatTimelineMode(
       timelineItems: createUnifiedTimelineItems(state.messages, state.dmMessages),
       pageStartCursor: null,
       pageEndCursor: null,
+      hasMoreBefore: false,
     };
   }
   if (!unifiedEnabled && state.mode === "unified") {
@@ -164,6 +173,7 @@ export function updateChatTimelineSource(
     ),
     pageStartCursor: state.pageStartCursor,
     pageEndCursor: state.pageEndCursor,
+    hasMoreBefore: state.hasMoreBefore,
   };
 }
 
@@ -172,6 +182,7 @@ export function replaceUnifiedTimelinePage(
   items: ChatTimelineItem[],
   pageStartCursor: UnifiedTimelineCursor | null,
   pageEndCursor: UnifiedTimelineCursor | null,
+  hasMoreBefore = false,
 ): ChatTimelineState {
   if (state.mode !== "unified") return state;
   return {
@@ -182,5 +193,53 @@ export function replaceUnifiedTimelinePage(
     ),
     pageStartCursor,
     pageEndCursor,
+    hasMoreBefore,
+  };
+}
+
+function rootCursor(item: ChatTimelineItem): UnifiedTimelineCursor {
+  return {
+    visual_root_created_at: item.visual_root_created_at,
+    source: item.source,
+    visual_root_id: item.visual_root_id,
+    visual_depth: 0,
+    created_at: item.visual_root_created_at,
+    id: item.visual_root_id,
+  };
+}
+
+export function mergeUnifiedTimelineLatestPage(
+  state: ChatTimelineState,
+  items: ChatTimelineItem[],
+  pageStartCursor: UnifiedTimelineCursor | null,
+  pageEndCursor: UnifiedTimelineCursor | null,
+  hasMoreBefore: boolean,
+): ChatTimelineState {
+  if (state.mode !== "unified" || !pageStartCursor) {
+    return replaceUnifiedTimelinePage(
+      state,
+      items,
+      pageStartCursor,
+      pageEndCursor,
+      hasMoreBefore,
+    );
+  }
+
+  const olderItems = state.timelineItems.filter(
+    (item) => compareTimelinePositions(rootCursor(item), pageStartCursor) < 0,
+  );
+  return {
+    mode: "unified",
+    timelineItems: createUnifiedTimelineItems(
+      [...olderItems, ...items].filter((item) => item.source === "message"),
+      [...olderItems, ...items].filter((item) => item.source === "dm"),
+    ),
+    pageStartCursor: olderItems.length > 0
+      ? state.pageStartCursor
+      : pageStartCursor,
+    pageEndCursor,
+    hasMoreBefore: olderItems.length > 0
+      ? state.hasMoreBefore
+      : hasMoreBefore,
   };
 }

@@ -4,6 +4,38 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 5B: bootstrap and reconnect — 2026-08-18
+
+- Allowlisted normal-channel `/api/init` requests now execute the unified timeline
+  reader instead of the legacy public-message and DM readers. Channel metadata and
+  the versioned latest page return in one response, so startup never downloads both
+  timeline formats.
+- The read-mode selector invokes exactly one reader. A unified read failure is
+  returned as a failure and cannot trigger an expensive or ambiguous legacy
+  fallback within the same request.
+- The client applies unified init items and opaque cursors directly to canonical
+  state. Protected media inside the nested bootstrap payload is signed by the app
+  proxy and decorated by the browser API layer.
+- Reconnect, message-sync and long-background recovery use unified init snapshots
+  when enabled. A latest snapshot replaces stale roots and replies in its covered
+  window while preserving older mounted roots.
+- Context-mode reconnects retain their current window and only mark that newer
+  messages exist. Unsupported or incomplete contract versions fail closed instead
+  of clearing the chat through absent legacy arrays.
+- Focused regression coverage verifies one-reader selection, no in-request
+  fallback, latest-window replacement, older-root retention, duplicate prevention
+  and nested bootstrap media signing.
+
+Trade-off: `/api/init` remains a combined metadata and timeline request, so metadata
+refreshes on an allowlisted channel also read a bounded unified latest page. This
+matches the existing legacy init cost shape and avoids an additional startup
+round-trip. History, context and gallery navigation are intentionally still legacy
+until Stage 5C.
+
+Deployment note: no D1 migration is required. Keep the production allowlist empty
+until Stage 5C removes the remaining mixed history/navigation behavior. Local or
+preview testing can use an explicit test channel ID.
+
 ### Unified chat pagination stage 5A: single-state client adapter — 2026-08-18
 
 - Replaced `ChatView`'s two top-level message state hooks with one discriminated

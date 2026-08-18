@@ -60,6 +60,7 @@ interface UseChatRealtimeSyncArgs {
   isOwner: boolean;
   isLoggedIn: boolean;
   localBubbleColor: string | null;
+  unifiedTimelineEnabled: boolean;
   subscribe: (handler: (event: RealtimeEvent) => void) => () => void;
   send: (data: Record<string, unknown>) => void;
   inLiveModeRef: MutableRefObject<boolean>;
@@ -69,7 +70,10 @@ interface UseChatRealtimeSyncArgs {
   messagesEndRef: RefObject<HTMLDivElement | null>;
   pendingReactionUpdatesRef: MutableRefObject<Map<string, string>>;
   reactionFrameRef: MutableRefObject<number | null>;
-  applyInitData: (data: InitData, options?: { preserveHistory?: boolean }) => void;
+  applyInitData: (
+    data: InitData,
+    options?: { preserveHistory?: boolean; skipTimeline?: boolean },
+  ) => void;
   applyLiveSnapshot: (live: InitData["live"]) => void;
   liveActive: boolean;
   liveSessionId: string;
@@ -111,6 +115,7 @@ export function useChatRealtimeSync({
   isOwner,
   isLoggedIn,
   localBubbleColor,
+  unifiedTimelineEnabled,
   subscribe,
   send,
   inLiveModeRef,
@@ -228,6 +233,15 @@ export function useChatRealtimeSync({
   ]);
 
   const applyReconnectInitData = useCallback((data: InitData) => {
+    if (data.unifiedTimelineEnabled && data.unifiedTimeline) {
+      if (historyModeRef.current === "context") {
+        hasMoreNewerMessagesRef.current = true;
+        applyInitData(data, { preserveHistory: true, skipTimeline: true });
+      } else {
+        applyInitData(data, { preserveHistory: true });
+      }
+      return;
+    }
     if (isOwner) {
       if (historyModeRef.current === "context" && (data.messages || []).length > 0) {
         hasMoreNewerMessagesRef.current = true;
@@ -242,6 +256,22 @@ export function useChatRealtimeSync({
     hasMoreNewerMessagesRef,
     historyModeRef,
     isOwner,
+  ]);
+
+  const refreshLatestTimeline = useCallback(async (traceCycleId?: string) => {
+    if (unifiedTimelineEnabled && !inLiveModeRef.current) {
+      const data = await fetchTrackedInit(channelId, traceCycleId);
+      applyReconnectInitData(data);
+      return;
+    }
+    await refreshLatestMessages(traceCycleId);
+  }, [
+    applyReconnectInitData,
+    channelId,
+    fetchTrackedInit,
+    inLiveModeRef,
+    refreshLatestMessages,
+    unifiedTimelineEnabled,
   ]);
 
   const reconcileCurrentLiveSession = useCallback(async (traceCycleId?: string) => {
@@ -380,7 +410,7 @@ export function useChatRealtimeSync({
       }
 
       if (event.type === "messages-sync" && historyModeRef.current === "latest") {
-        void refreshLatestMessages().catch(() => {});
+        void refreshLatestTimeline().catch(() => {});
       }
 
       if (event.type === "reconnected") {
@@ -645,6 +675,7 @@ export function useChatRealtimeSync({
     setShowChannelDeleted,
     getViewingChannelId,
     refreshLatestMessages,
+    refreshLatestTimeline,
     synchronizeLiveSession,
     deletedMessage,
     roomAuthExpired,
@@ -671,7 +702,7 @@ export function useChatRealtimeSync({
       });
       const refresh = shouldSynchronizeLive
         ? synchronizeLiveSession(traceCycleId)
-        : refreshLatestMessages(traceCycleId);
+        : refreshLatestTimeline(traceCycleId);
       void refresh.then(
         () => completeChatPerformanceCycle(channelId, traceCycleId, "settled"),
         () => completeChatPerformanceCycle(channelId, traceCycleId, "failed"),
@@ -685,7 +716,7 @@ export function useChatRealtimeSync({
     historyModeRef,
     inLiveModeRef,
     liveActive,
-    refreshLatestMessages,
+    refreshLatestTimeline,
     synchronizeLiveSession,
   ]);
 }

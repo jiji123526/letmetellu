@@ -175,14 +175,29 @@ the legacy client did.
 
 #### Stage 5B — bootstrap and reconnect
 
-- Add a versioned unified bootstrap mode so enabled clients receive the latest
-  unified page without also downloading legacy message and DM collections.
-- Do not implement the rollout by fetching legacy init and then an additional
-  unified page; that would double startup reads and produce a visible replacement.
-- Reconnect and visibility-resume refreshes replace only the mounted latest root
-  window, preserving older mounted pages and pending mutation state.
-- A failed unified bootstrap falls back through the kill switch on the next full
-  reload, not by merging an incomplete unified response into legacy state.
+- Status: implemented on the feature branch for allowlisted normal channels.
+- `/api/init` now selects one timeline reader after authorization. An allowlisted
+  normal channel returns a versioned `unifiedTimeline` page and does not execute
+  legacy public-message or DM reads; other channels retain the legacy response.
+- The existing init request carries channel metadata and the unified latest page
+  together. The client does not fetch `/api/init` and then issue a second unified
+  request, avoiding doubled startup reads and visible state replacement.
+- Unified items inside init receive the same protected-sender marking, app-proxy
+  media capabilities and browser media decoration as legacy message/DM arrays.
+- Reconnect, `messages-sync` and foreground recovery after a long background period
+  use an authoritative unified init when enabled. The incoming latest root window
+  replaces stale roots/replies in that window while older mounted roots remain.
+- A context-mode view does not inject an unrelated latest page. It preserves its
+  current window and marks that newer content is available.
+- Missing or unsupported unified contract data fails the request without clearing
+  mounted state or issuing a legacy fallback. Rollback occurs only after the server
+  allowlist is disabled and the client performs a later full init.
+- Live and reports channels continue to use legacy bootstrap. Bidirectional history,
+  context and gallery navigation remain on legacy routes until Stage 5C.
+
+Rollback: remove the channel from `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST`. The next
+full init returns the legacy payload and the Stage 5A adapter converts its mounted
+state back to legacy mode.
 
 #### Stage 5C — history and navigation
 
@@ -346,7 +361,7 @@ Cleanup after stable rollout:
 - [x] Stage 3 opt-in latest-page shadow comparison
 - [x] Stage 4 production-shaped unified API contract and route fixtures
 - [x] Stage 5A single-state client adapter and kill switch
-- [ ] Stage 5B unified bootstrap/reconnect
+- [x] Stage 5B unified bootstrap/reconnect
 - [ ] Stage 5C bidirectional history/context/navigation
 - [ ] Stage 5D mutation and realtime normalization
 - [ ] Stage 6 fan-out/query measurements and any required continuation design

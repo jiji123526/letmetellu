@@ -83,6 +83,9 @@ async function requestInit(channelId: string) {
   if (data?.channel) data.channel = decorateChannelMedia(data.channel);
   if (Array.isArray(data?.messages)) data.messages = data.messages.map(decorateMessageMedia);
   if (Array.isArray(data?.dm)) data.dm = data.dm.map(decorateMessageMedia);
+  if (Array.isArray(data?.unifiedTimeline?.items)) {
+    data.unifiedTimeline.items = data.unifiedTimeline.items.map(decorateMessageMedia);
+  }
   if (typeof data?.welcomeConfig === "string") data.welcomeConfig = decorateWelcomeConfig(data.welcomeConfig);
   return data;
 }

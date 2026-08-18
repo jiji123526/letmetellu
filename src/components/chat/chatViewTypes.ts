@@ -1,4 +1,16 @@
 import type { Message, MessagePageCursor } from "./chatTypes";
+import type {
+  ChatTimelineItem,
+  UnifiedTimelineCursor,
+} from "./chatTimelineState";
+
+export interface UnifiedTimelineBootstrap {
+  contract_version: 1;
+  items: ChatTimelineItem[];
+  has_more: boolean;
+  page_start_cursor: UnifiedTimelineCursor | null;
+  page_end_cursor: UnifiedTimelineCursor | null;
+}
 
 export interface Channel {
   id: string;
@@ -42,6 +54,7 @@ export interface InitData {
   viewerAccess?: "owner" | "reports_owner" | "standard";
   isReportsChannel?: boolean;
   unifiedTimelineEnabled?: boolean;
+  unifiedTimeline?: UnifiedTimelineBootstrap;
   ownerModeration?: {
     status: "active" | "warned" | "suspended" | "frozen";
     petitionStatus: "none" | "open" | "accepted" | "rejected";

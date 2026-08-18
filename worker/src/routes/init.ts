@@ -8,10 +8,16 @@ import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isRepo
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
 import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout";
+import { readSelectedBootstrap } from "../lib/bootstrap-read-mode";
+import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
+import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
-function markProtectedSenders<T extends { uid?: string | null; auth_uid?: string | null }>(rows: T[], protectedUid: string | null): Array<T & { protected_sender?: boolean }> {
+function markProtectedSenders<T extends Record<string, unknown>>(
+  rows: T[],
+  protectedUid: string | null,
+): Array<T & { protected_sender?: boolean }> {
   if (!protectedUid) {
     return rows.map((row) => (
       row.uid === "system-moderation"
@@ -179,19 +185,50 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "load_bootstrap_data";
 
-    const [messagePage, batchResults, dmMessages] = await Promise.all([
-      readVisibleMessagePage(env, channelId, { limit: 50 }),
+    const unifiedTimelineEnabled = isUnifiedTimelineClientEnabled(
+      env,
+      parentChannelId,
+      {
+        live: isLiveChannel,
+        reports: isReportsChannel(parentChannelId, env),
+      },
+    );
+    const [bootstrap, batchResults] = await Promise.all([
+      readSelectedBootstrap(unifiedTimelineEnabled, {
+        legacy: async () => {
+          const [messagePage, dmMessages] = await Promise.all([
+            readVisibleMessagePage(env, channelId, { limit: 50 }),
+            readDmThreads(
+              env,
+              channelId,
+              isOwner
+                ? { owner: true }
+                : { owner: false, anonymousUid: anonymousIdentity.uid },
+            ),
+          ]);
+          return { messagePage, dmMessages };
+        },
+        unified: () => readUnifiedTimelinePage(
+          env,
+          channelId,
+          isOwner
+            ? { owner: true }
+            : { owner: false, anonymousUid: anonymousIdentity.uid },
+        ),
+      }),
       env.DB.batch(statements),
-      readDmThreads(
-        env,
-        channelId,
-        isOwner
-          ? { owner: true }
-          : { owner: false, anonymousUid: anonymousIdentity.uid },
-      ),
     ]);
 
-    const rawMessages = messagePage.messages;
+    const messagePage = bootstrap.mode === "legacy"
+      ? bootstrap.value.messagePage
+      : null;
+    const dmMessages = bootstrap.mode === "legacy"
+      ? bootstrap.value.dmMessages
+      : [];
+    const unifiedPage = bootstrap.mode === "unified"
+      ? bootstrap.value
+      : null;
+    const rawMessages = messagePage?.messages || [];
     const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
     const config = new Map(configRows.map((row) => [row.id, row.text]));
     const liveRow = batchResults[1].results?.[0] as { is_frozen?: number } | undefined;
@@ -251,6 +288,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       : rawMessages;
     const protectedMessages = markProtectedSenders(messages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
     const protectedDmMessages = markProtectedSenders(dmMessages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
+    const protectedUnifiedTimeline = unifiedPage
+      ? serializeUnifiedTimelinePage({
+          ...unifiedPage,
+          items: markProtectedSenders(unifiedPage.items, reportsOwnerId),
+        })
+      : null;
 
     routeStage = "build_response";
 
@@ -258,24 +301,25 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       channel: safeChannel,
       hasPasscode: Boolean((channel as any).passcode),
       passcodeHint: (channel as any).passcode_hint || "",
-      messages: protectedMessages,
-      page_start_cursor: messagePage.pageStartCursor
-        ? { id: messagePage.pageStartCursor.id, created_at: messagePage.pageStartCursor.createdAt }
-        : null,
-      page_end_cursor: messagePage.pageEndCursor
-        ? { id: messagePage.pageEndCursor.id, created_at: messagePage.pageEndCursor.createdAt }
-        : null,
+      ...(protectedUnifiedTimeline
+        ? { unifiedTimeline: protectedUnifiedTimeline }
+        : {
+            messages: protectedMessages,
+            page_start_cursor: messagePage?.pageStartCursor
+              ? { id: messagePage.pageStartCursor.id, created_at: messagePage.pageStartCursor.createdAt }
+              : null,
+            page_end_cursor: messagePage?.pageEndCursor
+              ? { id: messagePage.pageEndCursor.id, created_at: messagePage.pageEndCursor.createdAt }
+              : null,
+            dm: protectedDmMessages || [],
+          }),
       blocked,
       viewerBlocked,
       viewerModerationStatus,
-      dm: protectedDmMessages || [],
       adminDataStatus,
       viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
       isReportsChannel: isReportsChannel(parentChannelId, env),
-      unifiedTimelineEnabled: isUnifiedTimelineClientEnabled(env, parentChannelId, {
-        live: isLiveChannel,
-        reports: isReportsChannel(parentChannelId, env),
-      }),
+      unifiedTimelineEnabled,
       bannerNotice: config.get(`notice_${channelId}`) || "",
       welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
       live: liveStatus,

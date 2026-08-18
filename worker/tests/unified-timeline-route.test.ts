@@ -488,3 +488,17 @@ test("protected media signing includes unified items", async () => {
   assert.match(payload.items[0].image || "", /media_token=/);
   assert.equal(payload.items[1].image, null);
 });
+
+test("protected media signing includes unified init items", async () => {
+  process.env.INTERNAL_SECRET = INTERNAL_SECRET;
+  const payload = await signProtectedMediaInPayload({
+    unifiedTimeline: {
+      contract_version: 1,
+      items: [
+        { id: "m1", image: `/api/media/${CHANNEL_ID}/bootstrap.jpg` },
+      ],
+    },
+  }, { userId: OWNER_ID });
+
+  assert.match(payload.unifiedTimeline.items[0].image || "", /media_token=/);
+});

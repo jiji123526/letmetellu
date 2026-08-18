@@ -151,5 +151,20 @@ export async function signProtectedMediaInPayload<T>(
     changed = true;
   }
 
+  const unifiedTimeline = target.unifiedTimeline;
+  if (
+    unifiedTimeline
+    && typeof unifiedTimeline === "object"
+    && Array.isArray((unifiedTimeline as Record<string, unknown>).items)
+  ) {
+    const timeline = unifiedTimeline as Record<string, unknown>;
+    const signedItems = await Promise.all((timeline.items as unknown[]).map(async (item) => {
+      if (!item || typeof item !== "object") return item;
+      return signObjectMedia(item as Record<string, unknown>, context);
+    }));
+    next.unifiedTimeline = { ...timeline, items: signedItems };
+    changed = true;
+  }
+
   return changed ? next as T : payload;
 }

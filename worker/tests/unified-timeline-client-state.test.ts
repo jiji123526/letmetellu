@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createInitialChatTimelineState,
+  mergeUnifiedTimelineLatestPage,
   replaceUnifiedTimelinePage,
   selectTimelineDmMessages,
   selectTimelineMessages,
   setChatTimelineMode,
   updateChatTimelineSource,
 } from "../../src/components/chat/chatTimelineState.ts";
+import { readSelectedBootstrap } from "../src/lib/bootstrap-read-mode.ts";
 import { isUnifiedTimelineClientEnabled } from "../src/lib/unified-timeline-rollout.ts";
 import type { Env } from "../src/types.ts";
 import type { Message } from "../../src/components/chat/chatTypes.ts";
@@ -115,6 +117,73 @@ test("unified page cursors remain opaque server-owned state", () => {
   assert.equal(state.mode, "unified");
   assert.equal(state.pageStartCursor, cursor);
   assert.equal(state.pageEndCursor, cursor);
+});
+
+test("latest unified snapshots replace their window and retain older mounted roots", () => {
+  const oldCursor = {
+    visual_root_created_at: "2026-08-18T00:00:00.000Z",
+    source: "message" as const,
+    visual_root_id: "old",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T00:00:00.000Z",
+    id: "old",
+  };
+  const latestCursor = {
+    ...oldCursor,
+    visual_root_created_at: "2026-08-18T01:00:00.000Z",
+    visual_root_id: "latest",
+    created_at: "2026-08-18T01:00:00.000Z",
+    id: "latest",
+  };
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = replaceUnifiedTimelinePage(state, [
+    { ...message("old", oldCursor.created_at), ...oldCursor },
+    { ...message("latest", latestCursor.created_at), ...latestCursor },
+    {
+      ...message("stale-reply", "2026-08-18T02:00:00.000Z", { reply_to: "latest" }),
+      ...latestCursor,
+      id: "stale-reply",
+      created_at: "2026-08-18T02:00:00.000Z",
+      visual_depth: 1,
+    },
+  ], oldCursor, latestCursor, false);
+  state = mergeUnifiedTimelineLatestPage(state, [{
+    ...message("latest", latestCursor.created_at, { text: "updated" }),
+    ...latestCursor,
+  }], latestCursor, latestCursor, true);
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(state.timelineItems.map((item) => item.id), ["old", "latest"]);
+  assert.equal(state.timelineItems[1].text, "updated");
+  assert.equal(state.pageStartCursor, oldCursor);
+  assert.equal(state.pageEndCursor, latestCursor);
+});
+
+test("bootstrap selection executes one reader and never falls back in-request", async () => {
+  const calls: string[] = [];
+  const unified = await readSelectedBootstrap(true, {
+    legacy: async () => {
+      calls.push("legacy");
+      return "legacy";
+    },
+    unified: async () => {
+      calls.push("unified");
+      return "unified";
+    },
+  });
+  assert.deepEqual(unified, { mode: "unified", value: "unified" });
+  assert.deepEqual(calls, ["unified"]);
+
+  await assert.rejects(() => readSelectedBootstrap(true, {
+    legacy: async () => {
+      calls.push("fallback");
+      return "legacy";
+    },
+    unified: async () => {
+      throw new Error("unified failed");
+    },
+  }), /unified failed/);
+  assert.equal(calls.includes("fallback"), false);
 });
 
 test("the server rollout defaults off and matches only exact channel IDs", () => {

@@ -82,6 +82,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     setMessages,
     setDmMessages,
     setUnifiedTimelineEnabled,
+    applyUnifiedTimelineBootstrap,
+    unifiedTimelineEnabled,
   } = useChatTimelineState();
   const [initialPageStartCursor, setInitialPageStartCursor] = useState<MessagePageCursor | null>(null);
   const [initialPageEndCursor, setInitialPageEndCursor] = useState<MessagePageCursor | null>(null);
@@ -168,7 +170,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const reactionFrameRef = useRef<number | null>(null);
   const applyInitDataRef = useRef<(
     data: InitData,
-    options?: { preserveHistory?: boolean },
+    options?: { preserveHistory?: boolean; skipTimeline?: boolean },
   ) => void>(() => {});
 
   const processPendingPhoto = useCallback(async (file: File): Promise<PendingPhoto> => {
@@ -455,6 +457,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setViewerModerationStatus,
     setViewerAccess,
     setUnifiedTimelineEnabled,
+    applyUnifiedTimelineBootstrap,
     setDmMessages,
     setActiveNotice,
     setWelcomeConfig,
@@ -577,6 +580,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     isOwner,
     isLoggedIn,
     localBubbleColor,
+    unifiedTimelineEnabled,
     subscribe,
     send,
     inLiveModeRef,
