@@ -10,7 +10,7 @@ import {
   createUnifiedTimelineMetricRecord,
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics.ts";
-import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout.ts";
+import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout.ts";
 import { resolveActiveLiveSession } from "../lib/live-sessions.ts";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
@@ -70,25 +70,21 @@ export async function handleUnifiedTimeline(
   }
 
   const reportsChannel = isReportsChannel(parentChannelId, env);
-  const normalTimelineEnabled = !reportsChannel && !liveChannel
-    && isUnifiedTimelineClientEnabled(env, parentChannelId);
-  const reportsTimelineEnabled = reportsChannel && isUnifiedTimelineClientEnabled(
+  const rollout = resolveUnifiedTimelineRollout(
     env,
     parentChannelId,
-    { reports: true },
+    {
+      live: liveChannel,
+      reports: reportsChannel,
+    },
   );
-  const liveTimelineEnabled = liveChannel && isUnifiedTimelineClientEnabled(
-    env,
-    parentChannelId,
-    { live: true },
-  );
-  if (!reportsChannel && !liveChannel && !normalTimelineEnabled) {
+  if (!reportsChannel && !liveChannel && !rollout.enabled) {
     return Response.json(
       { error: "unified_timeline_disabled" },
       { status: 409 },
     );
   }
-  if ((reportsChannel && !reportsTimelineEnabled) || (liveChannel && !liveTimelineEnabled)) {
+  if ((reportsChannel || liveChannel) && !rollout.enabled) {
     return Response.json(
       { error: "unified_timeline_unsupported" },
       { status: 409 },
@@ -166,14 +162,12 @@ export async function handleUnifiedTimeline(
           ),
         }
       : selectedContextPage;
-    if (isUnifiedTimelineClientEnabled(env, parentChannelId, {
-      live: liveChannel,
-      reports: reportsChannel,
-    })) {
+    if (rollout.enabled) {
       logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
         metrics: contextPage.metrics,
         owner: viewer.owner,
         readMode: "context",
+        rolloutMode: rollout.mode === "sample" ? "sample" : "allowlist",
         workerDurationMs: performance.now() - startedAt,
       }));
     }
@@ -208,14 +202,12 @@ export async function handleUnifiedTimeline(
         ),
       }
     : selectedPage;
-  if (isUnifiedTimelineClientEnabled(env, parentChannelId, {
-    live: liveChannel,
-    reports: reportsChannel,
-  })) {
+  if (rollout.enabled) {
     logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
       metrics: page.metrics,
       owner: viewer.owner,
       readMode: "page",
+      rolloutMode: rollout.mode === "sample" ? "sample" : "allowlist",
       workerDurationMs: performance.now() - startedAt,
     }));
   }

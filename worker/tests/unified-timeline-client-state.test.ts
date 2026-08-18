@@ -15,7 +15,11 @@ import {
   upsertChatTimelineItems,
 } from "../../src/components/chat/chatTimelineState.ts";
 import { readSelectedBootstrap } from "../src/lib/bootstrap-read-mode.ts";
-import { isUnifiedTimelineClientEnabled } from "../src/lib/unified-timeline-rollout.ts";
+import {
+  getUnifiedTimelineRolloutBucket,
+  isUnifiedTimelineClientEnabled,
+  resolveUnifiedTimelineRollout,
+} from "../src/lib/unified-timeline-rollout.ts";
 import type { Env } from "../src/types.ts";
 import type { Message } from "../../src/components/chat/chatTypes.ts";
 import { shareInFlightRequest } from "../../src/components/chat/chatSingleFlight.ts";
@@ -473,6 +477,85 @@ test("the server rollout defaults off and matches only exact channel IDs", () =>
     } as Env, "reports", { reports: true }),
     true,
   );
+});
+
+test("normal percentage rollout is deterministic and special channels ignore it", () => {
+  const salt = "stable-rollout-v1";
+  const channelIds = Array.from({ length: 1_000 }, (_, index) => `room-${index}`);
+  const sampled = channelIds.filter((channelId) =>
+    isUnifiedTimelineClientEnabled({
+      UNIFIED_TIMELINE_SAMPLE_PERCENT: "5",
+      UNIFIED_TIMELINE_SAMPLE_SALT: salt,
+    } as Env, channelId)
+  );
+
+  assert.ok(sampled.length >= 35 && sampled.length <= 65);
+  assert.deepEqual(
+    sampled,
+    channelIds.filter((channelId) =>
+      isUnifiedTimelineClientEnabled({
+        UNIFIED_TIMELINE_SAMPLE_PERCENT: "5.0",
+        UNIFIED_TIMELINE_SAMPLE_SALT: salt,
+      } as Env, channelId)
+    ),
+  );
+  assert.equal(
+    isUnifiedTimelineClientEnabled({
+      UNIFIED_TIMELINE_SAMPLE_PERCENT: "100",
+      UNIFIED_TIMELINE_SAMPLE_SALT: salt,
+    } as Env, "room-a"),
+    true,
+  );
+  assert.equal(
+    isUnifiedTimelineClientEnabled({
+      UNIFIED_TIMELINE_SAMPLE_PERCENT: "100",
+      UNIFIED_TIMELINE_SAMPLE_SALT: salt,
+    } as Env, "room-a", { live: true }),
+    false,
+  );
+  assert.equal(
+    isUnifiedTimelineClientEnabled({
+      UNIFIED_TIMELINE_SAMPLE_PERCENT: "100",
+      UNIFIED_TIMELINE_SAMPLE_SALT: salt,
+    } as Env, "reports", { reports: true }),
+    false,
+  );
+});
+
+test("percentage rollout fails closed without valid percent and salt", () => {
+  for (const percent of ["", "0", "-1", "101", "5%", "five"]) {
+    assert.equal(
+      isUnifiedTimelineClientEnabled({
+        UNIFIED_TIMELINE_SAMPLE_PERCENT: percent,
+        UNIFIED_TIMELINE_SAMPLE_SALT: "salt",
+      } as Env, "room-a"),
+      false,
+    );
+  }
+  assert.equal(
+    isUnifiedTimelineClientEnabled({
+      UNIFIED_TIMELINE_SAMPLE_PERCENT: "100",
+    } as Env, "room-a"),
+    false,
+  );
+});
+
+test("exact allowlists override a channel outside the sampled cohort", () => {
+  const salt = "stable-rollout-v1";
+  const outsideChannel = Array.from({ length: 1_000 }, (_, index) => `outside-${index}`)
+    .find((channelId) => getUnifiedTimelineRolloutBucket(channelId, salt) >= 500);
+  assert.ok(outsideChannel);
+
+  const decision = resolveUnifiedTimelineRollout({
+    UNIFIED_TIMELINE_CHANNEL_ALLOWLIST: outsideChannel,
+    UNIFIED_TIMELINE_SAMPLE_PERCENT: "5",
+    UNIFIED_TIMELINE_SAMPLE_SALT: salt,
+  } as Env, outsideChannel!);
+  assert.deepEqual(decision, {
+    enabled: true,
+    mode: "allowlist",
+    bucket: null,
+  });
 });
 
 test("a disabled unified endpoint reloads an open tab into legacy mode once", () => {

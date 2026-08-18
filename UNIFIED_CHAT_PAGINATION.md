@@ -418,6 +418,43 @@ IDs in these values: matching is by exact parent channel ID.
   inserted images and embeds settle, then applies a final correction. It no longer
   waits for media stabilization while the old content is visibly displaced.
 
+#### Deterministic normal-channel cohorts
+
+- **Completed 2026-08-18.** Normal channels can enter a deterministic percentage
+  cohort through `UNIFIED_TIMELINE_SAMPLE_PERCENT` plus
+  `UNIFIED_TIMELINE_SAMPLE_SALT`. Both are required; missing, malformed, zero or
+  out-of-range values fail closed.
+- The cohort hashes the secret salt and parent channel ID into 10,000 buckets.
+  Owners and visitors therefore use the same path for a channel, and repeated
+  bootstrap/page/context requests cannot alternate between legacy and unified.
+- Exact `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST` entries always win. Percentage
+  sampling never applies to live or reports channels, which retain their dedicated
+  exact allowlists.
+- Structured read records include `rollout_mode` as `allowlist`, `sample` or
+  `shadow`. They do not include channel IDs, user IDs, cursor values or content.
+- Hashing is synchronous in-memory work over one short channel ID. It adds no
+  cookie, random decision, D1 lookup, telemetry write or client request.
+
+After exact-channel calibration succeeds, set one stable salt and start at 5:
+
+```bash
+npx wrangler secret put UNIFIED_TIMELINE_SAMPLE_SALT
+npx wrangler secret put UNIFIED_TIMELINE_SAMPLE_PERCENT
+```
+
+Enter `5` for the first sampled window, then replace only the percentage with `25`
+after the observation gates pass. Keep the salt unchanged so the 5% cohort remains
+inside the 25% cohort. Use `100` only after the 25% window passes.
+
+Rollback sampled traffic by deleting the percentage:
+
+```bash
+npx wrangler secret delete UNIFIED_TIMELINE_SAMPLE_PERCENT
+```
+
+Exact allowlisted channels remain enabled during that rollback. Delete
+`UNIFIED_TIMELINE_CHANNEL_ALLOWLIST` too for a complete normal-channel rollback.
+
 Rollout order:
 
 1. local/preview Worker with deterministic fixtures;
@@ -438,6 +475,10 @@ Observe separately for owner and visitor traffic:
 - reconnect refresh count and coalescing rate;
 - duplicate-item prevention count;
 - navigation timeout and scroll-correction count.
+
+Separate `rollout_mode=allowlist`, `rollout_mode=sample` and shadow records during
+analysis. Do not advance a percentage while the current cohort lacks both owner
+and visitor observations.
 
 Immediate rollback triggers:
 

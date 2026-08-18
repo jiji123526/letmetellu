@@ -3,6 +3,7 @@ import test from "node:test";
 import { signProtectedMediaInPayload } from "../../src/lib/media-access-token.ts";
 import { createAnonymousIdentity } from "../src/lib/anonymous-identity.ts";
 import type { UnifiedTimelineCursor } from "../src/lib/unified-timeline.ts";
+import { getUnifiedTimelineRolloutBucket } from "../src/lib/unified-timeline-rollout.ts";
 import { createRoomToken } from "../src/routes/passcode.ts";
 import { handleUnifiedTimeline } from "../src/routes/unified-timeline.ts";
 import type { Env } from "../src/types.ts";
@@ -69,6 +70,8 @@ function createFixture(input: {
   passcode?: string | null;
   reportsChannelId?: string;
   normalAllowlist?: string;
+  samplePercent?: string;
+  sampleSalt?: string;
   messageRoots?: RootRow[];
   dmRoots?: RootRow[];
   dmReplies?: DmReplyRow[];
@@ -179,6 +182,8 @@ function createFixture(input: {
     REPORTS_CHANNEL_ID: input.reportsChannelId,
     UNIFIED_TIMELINE_CHANNEL_ALLOWLIST: input.normalAllowlist
       ?? (input.reportsChannelId || input.liveSession ? undefined : channelId),
+    UNIFIED_TIMELINE_SAMPLE_PERCENT: input.samplePercent,
+    UNIFIED_TIMELINE_SAMPLE_SALT: input.sampleSalt,
     UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST: input.liveAllowlist,
     UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST: input.reportsAllowlist,
     APP_ORIGIN: "https://app.example.test",
@@ -277,6 +282,46 @@ test("normal unified pages require the current server allowlist", async () => {
 
   assert.equal(response.status, 409);
   assert.deepEqual(await readJson<{ error: string }>(response), {
+    error: "unified_timeline_disabled",
+  });
+});
+
+test("normal unified pages enforce the same deterministic sample on direct reads", async () => {
+  const salt = "route-sample-v1";
+  const channelIds = Array.from({ length: 1_000 }, (_, index) => `sample-room-${index}`);
+  const included = channelIds.find((channelId) =>
+    getUnifiedTimelineRolloutBucket(channelId, salt) < 500
+  );
+  const excluded = channelIds.find((channelId) =>
+    getUnifiedTimelineRolloutBucket(channelId, salt) >= 500
+  );
+  assert.ok(included);
+  assert.ok(excluded);
+
+  const includedFixture = createFixture({
+    channelId: included,
+    normalAllowlist: "",
+    samplePercent: "5",
+    sampleSalt: salt,
+  });
+  const includedResponse = await handleUnifiedTimeline(unifiedRequest({
+    channelId: included,
+    headers: ownerHeaders(),
+  }), includedFixture.env);
+  assert.equal(includedResponse.status, 200);
+
+  const excludedFixture = createFixture({
+    channelId: excluded,
+    normalAllowlist: "",
+    samplePercent: "5",
+    sampleSalt: salt,
+  });
+  const excludedResponse = await handleUnifiedTimeline(unifiedRequest({
+    channelId: excluded,
+    headers: ownerHeaders(),
+  }), excludedFixture.env);
+  assert.equal(excludedResponse.status, 409);
+  assert.deepEqual(await readJson<{ error: string }>(excludedResponse), {
     error: "unified_timeline_disabled",
   });
 });

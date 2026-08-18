@@ -128,6 +128,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
             metrics: page.metrics,
             owner: viewer.owner,
             readMode: "page",
+            rolloutMode: "shadow",
             workerDurationMs: performance.now() - startedAt,
           }));
           return page;

@@ -24,12 +24,14 @@ test("unified timeline metrics separate owner and visitor read scopes", () => {
     metrics: metrics(110),
     owner: false,
     readMode: "page",
+    rolloutMode: "sample",
     workerDurationMs: 12.345,
   });
 
   assert.equal(record.event_type, "unified_timeline_read");
   assert.equal(record.viewer_scope, "visitor");
   assert.equal(record.read_mode, "page");
+  assert.equal(record.rollout_mode, "sample");
   assert.equal(record.worker_duration_ms, 12.35);
   assert.equal(record.rowsRead, 120);
 });
@@ -39,12 +41,14 @@ test("expanded pages above the provisional budget become fanout warnings", () =>
     metrics: metrics(300),
     owner: true,
     readMode: "context",
+    rolloutMode: "allowlist",
     workerDurationMs: 10,
   });
   const aboveBudget = createUnifiedTimelineMetricRecord({
     metrics: metrics(301),
     owner: true,
     readMode: "context",
+    rolloutMode: "allowlist",
     workerDurationMs: 10,
   });
 

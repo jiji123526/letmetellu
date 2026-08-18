@@ -13,7 +13,7 @@ import { withOperationalErrorContext } from "../lib/operational-events";
 import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
-import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout";
+import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout";
 import { readSelectedBootstrap } from "../lib/bootstrap-read-mode";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
 import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
@@ -132,7 +132,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       // Owner or valid token — continue to full data
     }
 
-    const unifiedTimelineRequested = isUnifiedTimelineClientEnabled(
+    const unifiedTimelineRollout = resolveUnifiedTimelineRollout(
       env,
       parentChannelId,
       {
@@ -140,6 +140,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         reports: isReportsChannel(parentChannelId, env),
       },
     );
+    const unifiedTimelineRequested = unifiedTimelineRollout.enabled;
     const liveTimelineSession = isLiveChannel && unifiedTimelineRequested
       ? await resolveActiveLiveSession(env, parentChannelId)
       : null;
@@ -238,6 +239,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             metrics: page.metrics,
             owner: isOwner,
             readMode: "page",
+            rolloutMode: unifiedTimelineRollout.mode === "sample" ? "sample" : "allowlist",
             workerDurationMs: performance.now() - startedAt,
           }));
           return page;

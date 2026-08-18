@@ -4,6 +4,35 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 8B: deterministic cohorts — 2026-08-18
+
+- Added default-off normal-channel percentage rollout through
+  `UNIFIED_TIMELINE_SAMPLE_PERCENT` and `UNIFIED_TIMELINE_SAMPLE_SALT`. Invalid,
+  missing, zero and above-100 percentages leave every non-allowlisted channel on
+  legacy pagination.
+- A stable 10,000-bucket hash assigns the whole parent channel, not individual
+  requests or users. Owners and visitors cannot diverge, reconnects remain on the
+  same read path and increasing 5% to 25% retains the original cohort when the
+  salt is unchanged.
+- Exact normal-channel allowlists take precedence. Live and reports channels are
+  excluded from percentage sampling and still require their dedicated exact
+  allowlists.
+- Unified read logs now identify `allowlist`, `sample` and `shadow` rollout modes
+  without recording channel IDs, identities, cursors or content.
+- Tests cover deterministic distribution, decimal parsing, invalid configuration,
+  exact-list precedence, 100% behavior and special-channel isolation.
+
+Trade-off: cohort membership is predictable while the salt remains fixed. This is
+required for comparable observation windows and consistent channel behavior; the
+salt should be treated as deployment configuration and not changed mid-rollout.
+Hashing adds negligible CPU and no storage or network work.
+
+Deployment note: Worker-only; no migration or frontend deployment is required.
+Leave both sampling bindings absent until exact test-channel calibration passes.
+Then configure one stable salt and progress `5` to `25` to `100`, reviewing
+`rollout_mode=sample` records at each step. Delete the percentage binding for
+immediate sampled-cohort rollback.
+
 ### Unified prepend preserves mounted message identity — 2026-08-18
 
 - Unified page merges previously rebuilt every mounted public-message and DM
