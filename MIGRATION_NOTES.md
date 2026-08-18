@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Joined unified pagination now reuses bootstrap anonymous identity — 2026-08-18
+
+- The Next `/api/unified-timeline` proxy now reads the anonymous identity cookie that `/api/init` already established and forwards it to the Worker when the browser did not supply an explicit `X-Anonymous-Token` header.
+- This restores follow-up unified page and context reads for non-owner viewers after the initial bootstrap page. Joined channels no longer stop after the first loaded batch because later page requests lost viewer identity at the proxy boundary.
+- Focused coverage now pins cookie-based anonymous identity forwarding on the unified timeline proxy.
+
+Trade-off: the unified proxy now mirrors the init and message/upload proxies by trusting the server-readable anonymous identity cookie as the default viewer identity source. That keeps route behavior consistent and does not widen access beyond the existing signed token contract.
+
+Deployment note: deploy the Next server with this change. Verify a non-owner viewer in a unified-enabled channel can load the second and third older batches and can still open message context around an older message.
+
 ### Mounted chat rows now reveal swipe timestamps together by bubble side — 2026-08-18
 
 - Timestamp swipe reveal state now lives once at the `MessageList` level instead of once per mounted message row.

@@ -32,6 +32,10 @@ const historyNavigationSource = readFileSync(
   new URL("../../src/components/chat/useChatHistoryNavigation.ts", import.meta.url),
   "utf8",
 );
+const unifiedTimelineRouteSource = readFileSync(
+  new URL("../../src/app/api/unified-timeline/route.ts", import.meta.url),
+  "utf8",
+);
 
 function message(
   id: string,
@@ -415,6 +419,25 @@ test("unified prepend holds its viewport anchor while inserted media settles", (
   assert.ok(
     unifiedPrepend.indexOf("holdViewportPosition(")
       < unifiedPrepend.indexOf("applyUnifiedHistoryPage("),
+  );
+});
+
+test("unified timeline proxy forwards anonymous identity cookies for joined viewers", () => {
+  assert.match(
+    unifiedTimelineRouteSource,
+    /import { readIdentityTokens } from "@\/lib\/anonymous-identity-cookie"/,
+  );
+  assert.match(
+    unifiedTimelineRouteSource,
+    /const \{ anonymousToken \} = readIdentityTokens\(request\.headers\.get\("cookie"\)\)/,
+  );
+  assert.match(
+    unifiedTimelineRouteSource,
+    /const forwardedAnonymousToken = request\.headers\.get\("X-Anonymous-Token"\) \|\| anonymousToken/,
+  );
+  assert.match(
+    unifiedTimelineRouteSource,
+    /if \(forwardedAnonymousToken\) headers\["X-Anonymous-Token"\] = forwardedAnonymousToken/,
   );
 });
 

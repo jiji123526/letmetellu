@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
@@ -34,8 +35,9 @@ export async function GET(request: Request) {
       : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
-  const anonymousToken = request.headers.get("X-Anonymous-Token");
-  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  const { anonymousToken } = readIdentityTokens(request.headers.get("cookie"));
+  const forwardedAnonymousToken = request.headers.get("X-Anonymous-Token") || anonymousToken;
+  if (forwardedAnonymousToken) headers["X-Anonymous-Token"] = forwardedAnonymousToken;
 
   const response = await fetch(targetUrl, { headers, cache: "no-store" });
   const payload = await response.json();
