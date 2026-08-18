@@ -193,9 +193,14 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         `petition_${parentChannelId}`,
         `dm_${parentChannelId}`,
       ),
-      env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
       env.DB.prepare("SELECT status FROM channel_moderation WHERE channel_id = ? LIMIT 1").bind(parentChannelId),
     ];
+    const liveChannelFrozenIndex = isLiveChannel ? statements.length : null;
+    if (isLiveChannel) {
+      statements.push(
+        env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId)
+      );
+    }
     const reportsChannelId = getReportsChannelId(env);
     const ownerChannelCountIndex = statements.length;
     statements.push(
@@ -301,8 +306,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const rawMessages = messagePage?.messages || [];
     const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
     const config = new Map(configRows.map((row) => [row.id, row.text]));
-    const liveRow = batchResults[1].results?.[0] as { is_frozen?: number } | undefined;
-    const moderationRow = batchResults[2].results?.[0] as { status?: string } | undefined;
+    const moderationRow = batchResults[1].results?.[0] as { status?: string } | undefined;
+    const liveRow = liveChannelFrozenIndex === null
+      ? undefined
+      : batchResults[liveChannelFrozenIndex].results?.[0] as { is_frozen?: number } | undefined;
     const ownerChannelCount = Math.min(
       batchResults[ownerChannelCountIndex].results?.length || 0,
       2,

@@ -51,6 +51,7 @@ interface EmojiPickerState {
 interface ChatViewOverlaysProps {
   channelId: string;
   channelName: string;
+  channelOwnerUid: string | null;
   channelProfileImage: string | null;
   channelNotice: string;
   bubbleColor: string;
@@ -193,6 +194,7 @@ function parseNoticeList(notice: string): { title: string; items: string[] }[] {
 export function ChatViewOverlays({
   channelId,
   channelName,
+  channelOwnerUid,
   channelProfileImage,
   channelNotice,
   bubbleColor,
@@ -339,6 +341,7 @@ export function ChatViewOverlays({
       {showOwnerChannels && (
         <OwnerChannelsPopup
           currentChannelId={channelId}
+          ownerUid={channelOwnerUid}
           bubbleColor={bubbleColor}
           onClose={onCloseOwnerChannels}
         />

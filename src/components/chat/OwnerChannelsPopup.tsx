@@ -10,24 +10,25 @@ import { useLocale } from "@/hooks/useLocale";
 
 interface OwnerChannelsPopupProps {
   currentChannelId: string;
+  ownerUid?: string | null;
   bubbleColor: string;
   onClose: () => void;
 }
 
-export function OwnerChannelsPopup({ currentChannelId, bubbleColor, onClose }: OwnerChannelsPopupProps) {
+export function OwnerChannelsPopup({ currentChannelId, ownerUid, bubbleColor, onClose }: OwnerChannelsPopupProps) {
   const { t } = useLocale();
-  const cachedChannels = getCachedOwnerChannels(currentChannelId)?.channels;
+  const cachedChannels = getCachedOwnerChannels(ownerUid, currentChannelId)?.channels;
   const [channels, setChannels] = useState<OwnerChannelProfile[]>(() => cachedChannels || []);
   const [loading, setLoading] = useState(() => !cachedChannels);
 
   useEffect(() => {
     let active = true;
-    fetchOwnerChannels(currentChannelId)
+    fetchOwnerChannels(ownerUid, currentChannelId)
       .then((data) => { if (active) setChannels(data.channels || []); })
       .catch(() => {})
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [currentChannelId]);
+  }, [currentChannelId, ownerUid]);
 
   return (
     <div

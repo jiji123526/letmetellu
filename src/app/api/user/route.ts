@@ -18,9 +18,13 @@ export async function GET(request: Request) {
   const workerUrl = getWorkerUrl();
   const url = new URL(request.url);
   const channelId = url.searchParams.get("channel");
+  const ownerUid = url.searchParams.get("owner");
 
-  if (channelId) {
-    const readRes = await fetch(`${workerUrl}/api/user/profile-channels?channel=${encodeURIComponent(channelId)}`, {
+  if (channelId || ownerUid) {
+    const query = ownerUid
+      ? `owner=${encodeURIComponent(ownerUid)}`
+      : `channel=${encodeURIComponent(channelId || "")}`;
+    const readRes = await fetch(`${workerUrl}/api/user/profile-channels?${query}`, {
       method: "GET",
       cache: "no-store",
     });

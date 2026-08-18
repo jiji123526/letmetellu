@@ -153,6 +153,7 @@ export function ChatViewLayerStack({
       <ChatViewOverlays
         channelId={channelId}
         channelName={channel?.name || ""}
+        channelOwnerUid={channel?.owner_uid || null}
         channelProfileImage={channel?.profile_image || null}
         channelNotice={channel?.notice || "[]"}
         bubbleColor={bubbleColor}

@@ -3,6 +3,7 @@ import { ChatRoom } from "./realtime/chat-room";
 import { handleMessages } from "./routes/messages";
 import { handleData } from "./routes/data";
 import { handleInit } from "./routes/init";
+import { handleChannelState } from "./routes/channel-state";
 import { handleAdmin } from "./routes/admin";
 import { handleUser } from "./routes/user";
 import { handleSocketAuth } from "./routes/socket-auth";
@@ -195,6 +196,8 @@ export default {
         response = await handleData(request, env);
       } else if (url.pathname.startsWith("/api/init")) {
         response = await handleInit(request, env);
+      } else if (url.pathname.startsWith("/api/channel-state")) {
+        response = await handleChannelState(request, env);
       } else if (url.pathname.startsWith("/api/admin")) {
         response = await handleAdmin(request, env);
       } else if (url.pathname.startsWith("/api/user")) {

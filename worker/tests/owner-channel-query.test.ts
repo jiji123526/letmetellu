@@ -18,6 +18,10 @@ const popupSource = readFileSync(
   new URL("../../src/components/chat/OwnerChannelsPopup.tsx", import.meta.url),
   "utf8",
 );
+const apiRouteSource = readFileSync(
+  new URL("../../src/app/api/user/route.ts", import.meta.url),
+  "utf8",
+);
 const migrationSource = readFileSync(
   new URL("../migrations/0042_owner_channel_profile_lookup.sql", import.meta.url),
   "utf8",
@@ -45,12 +49,14 @@ test("eligible owner profiles preload their bounded list and reuse a short clien
   assert.match(chatViewSource, /ownerChannelCount < 2/);
   assert.match(chatViewSource, /requestIdleCallback/);
   assert.match(chatViewSource, /import\("\.\/OwnerChannelsPopup"\)/);
-  assert.match(chatViewSource, /preloadOwnerChannels\(channelId\)/);
-  assert.match(popupSource, /getCachedOwnerChannels\(currentChannelId\)/);
+  assert.match(chatViewSource, /preloadOwnerChannels\(channel\?\.owner_uid, channelId\)/);
+  assert.match(popupSource, /getCachedOwnerChannels\(ownerUid, currentChannelId\)/);
 });
 
-test("the full owner list loads only in the popup and respects the five-channel limit", () => {
-  assert.match(popupSource, /fetchOwnerChannels\(currentChannelId\)/);
+test("the full owner list loads by owner metadata and respects the five-channel limit", () => {
+  assert.match(apiRouteSource, /owner=\$\{encodeURIComponent\(ownerUid\)\}/);
+  assert.match(popupSource, /fetchOwnerChannels\(ownerUid, currentChannelId\)/);
+  assert.match(userSource, /let profileOwnerUid = ownerUid \|\| ""/);
   assert.match(userSource, /ORDER BY created_at ASC, id ASC\s+LIMIT 5/);
   assert.doesNotMatch(userSource, /show_on_profile = 1[\s\S]*LIMIT 50/);
 });

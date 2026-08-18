@@ -84,6 +84,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
   if (request.method === "GET") {
     const url = new URL(request.url);
     const existenceQuery = url.searchParams.get("exists");
+    const ownerUid = url.searchParams.get("owner");
     if (existenceQuery !== null) {
       const ids = [...new Set(
         existenceQuery.split(",").filter((id) => /^[a-z0-9-]{3,30}$/.test(id))
@@ -114,7 +115,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     }
 
     const channelId = url.searchParams.get("channel");
-    if (!channelId) {
+    if (!channelId && !ownerUid) {
       if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) {
         return Response.json({ error: "unauthorized" }, { status: 401 });
       }
@@ -136,9 +137,13 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       });
     }
 
-    const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
-      .bind(channelId).first() as { owner_uid: string } | null;
-    if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
+    let profileOwnerUid = ownerUid || "";
+    if (!profileOwnerUid) {
+      const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+        .bind(channelId).first() as { owner_uid: string } | null;
+      if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
+      profileOwnerUid = channel.owner_uid;
+    }
 
     const { results: channels } = await env.DB.prepare(
       `SELECT id, name, profile_image, bubble_color,
@@ -150,7 +155,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
          AND show_on_profile = 1
        ORDER BY created_at ASC, id ASC
        LIMIT 5`
-    ).bind(channel.owner_uid, ...(reportsChannelId ? [reportsChannelId] : [])).all();
+    ).bind(profileOwnerUid, ...(reportsChannelId ? [reportsChannelId] : [])).all();
     return Response.json({ channels });
   }
 

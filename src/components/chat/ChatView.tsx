@@ -124,7 +124,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     const preload = () => {
       void Promise.all([
         import("./OwnerChannelsPopup"),
-        preloadOwnerChannels(channelId),
+        preloadOwnerChannels(channel?.owner_uid, channelId),
       ]).catch(() => {});
     };
 
@@ -134,7 +134,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
     const timer = setTimeout(preload, 250);
     return () => clearTimeout(timer);
-  }, [channelId, ownerChannelCount]);
+  }, [channel?.owner_uid, channelId, ownerChannelCount]);
 
   const { t, locale, timeZone } = useLocale();
   const [manualAdmin] = useState(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { fetchInit } from "@/lib/api-chat";
+import { fetchInit, fetchOwnerModerationState } from "@/lib/api-chat";
 import {
   completeChatPerformanceCycle,
   finishChatPerformanceRequest,
@@ -303,9 +303,10 @@ export function useChatChannelBootstrap({
   const refreshOwnerModeration = useCallback(() => {
     if (!isOwner) return;
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
-    fetchInit(fetchChannel).then((data: InitData) => {
-      if (data.channel) {
-        setChannel((previous) => previous ? { ...previous, is_frozen: data.channel.is_frozen } : data.channel);
+    fetchOwnerModerationState(fetchChannel).then((data) => {
+      const frozenState = data.channel?.is_frozen;
+      if (frozenState !== undefined) {
+        setChannel((previous) => previous ? { ...previous, is_frozen: frozenState } : previous);
       }
       setOwnerModeration(data.ownerModeration);
     }).catch(() => {});
