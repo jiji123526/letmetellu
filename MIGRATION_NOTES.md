@@ -4,6 +4,38 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 7B: reports-inbox adapter — 2026-08-18
+
+- Added a separate `UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST`. Empty or missing
+  configuration keeps reports on legacy pagination; normal and live allowlists
+  cannot enable the reports channel.
+- Reports-owner authorization still runs before rollout selection. Unified
+  bootstrap, page and centered-context reads now select the authorized window
+  before hydrating report and petition placeholders in the owner's locale.
+- Hydration preserves the exact `(source, id)` sequence and ignores DM-source
+  items. A reports-specific guard fails closed if metadata hydration ever changes
+  item identity or order.
+- Report and petition lookups now pass selected IDs through one JSON parameter per
+  query. This keeps two stable SQL fingerprints and avoids variable-count `IN`
+  clauses or D1 bound-parameter limits on high-fan-out pages.
+- Migration `0048_channel_petition_inbox_lookup.sql` adds the missing petition
+  `inbox_message_id` index. Report placeholders already had the equivalent index;
+  petition hydration no longer scans petition history for each selected page.
+- Tests cover default-off flag isolation, owner-only access, English localized
+  metadata, order preservation, DM exclusion and 150 selected placeholders with
+  constant-shape queries.
+
+Trade-off: each non-empty allowlisted reports page adds two metadata queries after
+root selection. This bounded cost is required to render authoritative moderation
+state and replaces the legacy page's equivalent hydration work.
+
+Deployment note: apply migration `0048`, then deploy the Worker. No frontend
+deployment is required. Keep `UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST` empty
+until a test reports owner verifies latest/older pages, search navigation,
+moderation updates, petition updates and locale changes. Removing the reports
+channel from the allowlist immediately restores legacy pagination on the next
+load.
+
 ### Unified chat pagination stage 7A: live-session adapter — 2026-08-18
 
 - Added a separate `UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST`. Empty or missing
@@ -30,7 +62,7 @@ model.
 Deployment note: no D1 migration is required. Deploy the Worker and frontend
 together. Keep `UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST` empty until a test live
 channel passes owner/visitor latest, older, reconnect, DM reply and end-session
-checks. The reports adapter remains unimplemented and separately disabled.
+checks.
 
 ### Unified chat pagination stage 6: fan-out measurement — 2026-08-18
 

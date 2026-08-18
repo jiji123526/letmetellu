@@ -387,7 +387,7 @@ export async function hydrateReportInboxMessages<T extends { id: string }>(
   const ids = messages.map((message) => message.id).filter(Boolean);
   if (ids.length === 0) return messages as Array<T & { report_meta?: ReportMeta; petition_meta?: PetitionMeta }>;
 
-  const placeholders = ids.map(() => "?").join(", ");
+  const encodedIds = JSON.stringify([...new Set(ids)]);
   const [reportRows, petitionRows] = await Promise.all([
     env.DB.prepare(`
       SELECT
@@ -410,8 +410,10 @@ export async function hydrateReportInboxMessages<T extends { id: string }>(
       FROM channel_reports cr
       INNER JOIN channels ch ON ch.id = cr.channel_id
       LEFT JOIN channel_moderation cm ON cm.channel_id = cr.channel_id
-      WHERE cr.inbox_message_id IN (${placeholders})
-    `).bind(...ids).all<ChannelReportRow>(),
+      WHERE cr.inbox_message_id IN (
+        SELECT CAST(value AS TEXT) FROM json_each(?)
+      )
+    `).bind(encodedIds).all<ChannelReportRow>(),
     env.DB.prepare(`
       SELECT
         cp.id,
@@ -429,8 +431,10 @@ export async function hydrateReportInboxMessages<T extends { id: string }>(
       FROM channel_petitions cp
       INNER JOIN channels ch ON ch.id = cp.channel_id
       LEFT JOIN users u ON u.id = cp.owner_uid
-      WHERE cp.inbox_message_id IN (${placeholders})
-    `).bind(...ids).all<ChannelPetitionInboxRow>(),
+      WHERE cp.inbox_message_id IN (
+        SELECT CAST(value AS TEXT) FROM json_each(?)
+      )
+    `).bind(encodedIds).all<ChannelPetitionInboxRow>(),
   ]);
 
   const reportByMessageId = new Map<string, ReportMeta>();

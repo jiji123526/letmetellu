@@ -14,10 +14,12 @@ import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout.
 import { resolveActiveLiveSession } from "../lib/live-sessions.ts";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
+import { getUserLocale } from "../lib/channel-moderation.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getChannelPasscodeInfo } from "../lib/validation.ts";
 import type { Env } from "../types.ts";
 import { authorizeRoomToken } from "./passcode.ts";
+import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
 
 export async function handleUnifiedTimeline(
   request: Request,
@@ -68,12 +70,17 @@ export async function handleUnifiedTimeline(
   }
 
   const reportsChannel = isReportsChannel(parentChannelId, env);
+  const reportsTimelineEnabled = reportsChannel && isUnifiedTimelineClientEnabled(
+    env,
+    parentChannelId,
+    { reports: true },
+  );
   const liveTimelineEnabled = liveChannel && isUnifiedTimelineClientEnabled(
     env,
     parentChannelId,
     { live: true },
   );
-  if (reportsChannel || (liveChannel && !liveTimelineEnabled)) {
+  if ((reportsChannel && !reportsTimelineEnabled) || (liveChannel && !liveTimelineEnabled)) {
     return Response.json(
       { error: "unified_timeline_unsupported" },
       { status: 409 },
@@ -92,7 +99,6 @@ export async function handleUnifiedTimeline(
       { status: 401 },
     );
   }
-
   const requestedLiveSessionId = liveChannel
     ? url.searchParams.get("live_session_id") || ""
     : "";
@@ -126,20 +132,36 @@ export async function handleUnifiedTimeline(
       return Response.json({ error: "invalid_target_source" }, { status: 400 });
     }
     const startedAt = performance.now();
-    const contextPage = await readUnifiedTimelineContextPage(
+    const selectedContextPage = await readUnifiedTimelineContextPage(
       env,
       channelId,
       viewer,
       targetSource,
       targetId,
     );
-    if (!contextPage) {
+    if (!selectedContextPage) {
       return Response.json({ error: "target_not_found" }, { status: 404 });
     }
     if (!await liveSessionStillCurrent()) {
       return Response.json({ error: "live_session_changed" }, { status: 409 });
     }
-    if (isUnifiedTimelineClientEnabled(env, parentChannelId, { live: liveChannel })) {
+    const reportsOwnerLocale = reportsChannel && trustedUserId
+      ? await getUserLocale(trustedUserId, env)
+      : "ko";
+    const contextPage = reportsChannel
+      ? {
+          ...selectedContextPage,
+          items: await hydrateUnifiedReportTimeline(
+            selectedContextPage.items,
+            env,
+            reportsOwnerLocale,
+          ),
+        }
+      : selectedContextPage;
+    if (isUnifiedTimelineClientEnabled(env, parentChannelId, {
+      live: liveChannel,
+      reports: reportsChannel,
+    })) {
       logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
         metrics: contextPage.metrics,
         owner: viewer.owner,
@@ -157,7 +179,7 @@ export async function handleUnifiedTimeline(
   }
 
   const startedAt = performance.now();
-  const page = await readUnifiedTimelinePage(env, channelId, viewer, {
+  const selectedPage = await readUnifiedTimelinePage(env, channelId, viewer, {
     cursor: pageRequest.cursor,
     direction: pageRequest.direction,
     limit: pageRequest.limit,
@@ -165,7 +187,23 @@ export async function handleUnifiedTimeline(
   if (!await liveSessionStillCurrent()) {
     return Response.json({ error: "live_session_changed" }, { status: 409 });
   }
-  if (isUnifiedTimelineClientEnabled(env, parentChannelId, { live: liveChannel })) {
+  const reportsOwnerLocale = reportsChannel && trustedUserId
+    ? await getUserLocale(trustedUserId, env)
+    : "ko";
+  const page = reportsChannel
+    ? {
+        ...selectedPage,
+        items: await hydrateUnifiedReportTimeline(
+          selectedPage.items,
+          env,
+          reportsOwnerLocale,
+        ),
+      }
+    : selectedPage;
+  if (isUnifiedTimelineClientEnabled(env, parentChannelId, {
+    live: liveChannel,
+    reports: reportsChannel,
+  })) {
     logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
       metrics: page.metrics,
       owner: viewer.owner,

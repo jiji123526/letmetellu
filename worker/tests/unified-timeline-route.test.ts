@@ -73,6 +73,10 @@ function createFixture(input: {
   dmReplies?: DmReplyRow[];
   liveSession?: LiveSessionState | null;
   liveAllowlist?: string;
+  reportsAllowlist?: string;
+  locale?: "en" | "ko";
+  reportRows?: Array<Record<string, unknown>>;
+  petitionRows?: Array<Record<string, unknown>>;
   endLiveDuringRead?: boolean;
 }) {
   let channelExists = input.channelExists ?? true;
@@ -101,7 +105,7 @@ function createFixture(input: {
           return channelExists ? { owner_uid: ownerId } : null;
         }
         if (sql.includes("SELECT locale FROM users")) {
-          return { locale: "en" };
+          return { locale: input.locale || "en" };
         }
         if (sql.includes("SELECT text, updated_at FROM config WHERE id = ?")) {
           return liveSession
@@ -115,6 +119,22 @@ function createFixture(input: {
       },
       async all() {
         calls.push({ sql, params });
+        if (sql.includes("FROM channel_reports cr")) {
+          const selectedIds = new Set(JSON.parse(String(params[0] || "[]")) as string[]);
+          return {
+            results: (input.reportRows || []).filter((row) => (
+              selectedIds.has(String(row.inbox_message_id))
+            )),
+          };
+        }
+        if (sql.includes("FROM channel_petitions cp")) {
+          const selectedIds = new Set(JSON.parse(String(params[0] || "[]")) as string[]);
+          return {
+            results: (input.petitionRows || []).filter((row) => (
+              selectedIds.has(String(row.inbox_message_id))
+            )),
+          };
+        }
         if (sql.includes("FROM dm_replies")) {
           const selectedRootIds = new Set(params.slice(1).map(String));
           return {
@@ -157,6 +177,8 @@ function createFixture(input: {
     INTERNAL_SECRET,
     REPORTS_CHANNEL_ID: input.reportsChannelId,
     UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST: input.liveAllowlist,
+    UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST: input.reportsAllowlist,
+    APP_ORIGIN: "https://app.example.test",
     DB: {
       prepare: statement,
       async batch(statements: Array<ReturnType<typeof statement>>) {
@@ -373,6 +395,83 @@ test("deleted, live and reports channels retain explicit route boundaries", asyn
     headers: { "X-Anonymous-Token": visitor.token },
   }), reportsFixture.env);
   assert.equal(unauthorizedReports.status, 403);
+});
+
+test("reports rollout hydrates only the selected owner page in locale order", async () => {
+  const fixture = createFixture({
+    channelId: "reports",
+    reportsChannelId: "reports",
+    reportsAllowlist: "reports",
+    locale: "en",
+    messageRoots: [
+      { id: "report-message", created_at: "2026-08-18T00:00:00.000Z" },
+      { id: "petition-message", created_at: "2026-08-18T01:00:00.000Z" },
+      { id: "plain-message", created_at: "2026-08-18T02:00:00.000Z" },
+    ],
+    reportRows: [{
+      id: "report-1",
+      channel_id: "reported-room",
+      channel_name: "Reported Room",
+      channel_owner_uid: "reported-owner",
+      reporter_uid: "visitor-123456",
+      reporter_auth_uid: null,
+      reporter_device_id: "device-123456",
+      reason: "spam",
+      details: "Repeated links",
+      created_at: "2026-08-18T00:00:00.000Z",
+      status: "open",
+      resolution_note: null,
+      resolved_at: null,
+      inbox_message_id: "report-message",
+      moderation_status: "active",
+      petition_status: "none",
+    }],
+    petitionRows: [{
+      id: "petition-1",
+      channel_id: "appealed-room",
+      channel_name: "Appealed Room",
+      owner_uid: "appealed-owner",
+      owner_name: "Appealed owner",
+      text: "Please review",
+      status: "open",
+      created_at: "2026-08-18T01:00:00.000Z",
+      resolved_at: null,
+      resolved_by: null,
+      resolution_note: null,
+      inbox_message_id: "petition-message",
+    }],
+  });
+  const response = await handleUnifiedTimeline(unifiedRequest({
+    channelId: "reports",
+    headers: ownerHeaders(),
+  }), fixture.env);
+  const body = await readJson<{
+    items: Array<{
+      id: string;
+      report_meta?: { reason_label: string };
+      petition_meta?: { owner_label: string };
+    }>;
+  }>(response);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.items.map((item) => item.id), [
+    "report-message",
+    "petition-message",
+    "plain-message",
+  ]);
+  assert.equal(body.items[0].report_meta?.reason_label, "Spam");
+  assert.equal(body.items[1].petition_meta?.owner_label, "Appealed owner Admin");
+  assert.equal(body.items[2].report_meta, undefined);
+  const hydrationCalls = fixture.calls.filter((call) => (
+    call.sql.includes("FROM channel_reports cr")
+    || call.sql.includes("FROM channel_petitions cp")
+  ));
+  assert.equal(hydrationCalls.length, 2);
+  assert.ok(hydrationCalls.every((call) => call.params.length === 1));
+  assert.deepEqual(
+    JSON.parse(String(hydrationCalls[0].params[0])),
+    ["report-message", "petition-message", "plain-message"],
+  );
 });
 
 test("live unified pages require the current active session id", async () => {

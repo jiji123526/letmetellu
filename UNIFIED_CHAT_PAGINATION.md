@@ -120,9 +120,9 @@ proxy forwards only the literal opt-in value and signed anonymous token.
 - Existing channel-existence, current-passcode and trusted-owner checks run before
   the reader. Non-owners require a valid signed anonymous identity; URL UIDs and
   forged user headers are ignored, and missing or invalid identity returns `401`.
-- Live and reports timelines return `409 unified_timeline_unsupported` until their
-  Stage 7 adapters exist. A non-owner still receives `403` at the reports
-  authorization boundary.
+- Live and reports timelines return `409 unified_timeline_unsupported` unless
+  their separate Stage 7 allowlists explicitly include the parent channel. A
+  non-owner still receives `403` at the reports authorization boundary.
 - The Next.js proxy forwards only trusted session identity, current room access and
   the signed anonymous token. It applies the existing protected-media signer to
   unified `items`.
@@ -349,15 +349,28 @@ exposure across live-session reuse.
 
 #### Reports inbox
 
-- Hydrate report placeholders only after the authorized unified root window is
-  selected.
-- Preserve reports-owner and platform-admin boundaries and current locale-specific
-  hydration.
-- Compare hydrated IDs/order separately from normal-channel shadow metrics; report
-  records are not ordinary public messages or private DMs.
+- **Adapter completed 2026-08-18.** Reports rollout uses the separate
+  `UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST`; normal and live allowlists cannot
+  enable it accidentally, and missing configuration keeps legacy reads active.
+- The existing reports-channel owner check runs before rollout selection. Unified
+  bootstrap, page and context reads select the authorized root window first, then
+  hydrate only selected public-message placeholders in the owner's current locale.
+- Hydration uses two constant-shape `json_each(?)` lookups for reports and
+  petitions. Item count no longer expands bound parameters or SQL fingerprints,
+  and no lookup runs for an empty or DM-only page. Migration `0048` adds the
+  missing petition inbox-message index so both metadata lookups are indexed.
+- A reports-specific identity/order comparison guards the adapter boundary.
+  Hydration may add `report_meta` or `petition_meta`, but cannot add, remove or
+  reorder `(source, id)` entries. Mismatches fail closed and emit only counts,
+  never IDs or report content.
+- Direct page/context access retains owner-only authorization. Report metadata
+  remains outside normal-channel shadow comparisons and private DM rows are never
+  passed to the report hydrator.
 
-Neither adapter should share a rollout flag with normal channels until its dedicated
-authorization and lifecycle fixtures pass.
+Trade-off: an allowlisted reports page performs up to two indexed metadata lookups
+after timeline selection. That is the same logical hydration work as the legacy
+inbox, but with a stable query shape and without reading metadata for placeholders
+outside the selected page.
 
 ### Stage 8 — controlled rollout and cleanup
 
@@ -435,7 +448,7 @@ Cleanup after stable rollout:
 - [x] Stage 5C bidirectional history/context/navigation
 - [x] Stage 5D mutation and realtime normalization
 - [ ] Stage 6 fan-out/query measurements and any required continuation design
-- [ ] Stage 7 live and reports adapters
+- [x] Stage 7 live and reports adapters
 - [ ] Stage 8 controlled rollout, observation and legacy cleanup
 
 Every unchecked item should land as its own documented commit. A stage is complete

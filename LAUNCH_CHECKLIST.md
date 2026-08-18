@@ -40,7 +40,7 @@ history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
 
 ## Core Tasks To Do
 
-- [ ] Apply every unapplied production migration through `0047`, then deploy
+- [ ] Apply every unapplied production migration through `0048`, then deploy
   the latest Worker and frontend.
 - [ ] Verify the latest private DM flow in two isolated browser profiles:
   sender isolation, text/image replies, the one-image and 20-reply limits,

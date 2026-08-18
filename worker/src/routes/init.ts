@@ -22,6 +22,7 @@ import {
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics";
 import { hydrateReportInboxMessages } from "./channel-reports";
+import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
 function markProtectedSenders<T extends Record<string, unknown>>(
@@ -327,10 +328,20 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       : rawMessages;
     const protectedMessages = markProtectedSenders(messages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
     const protectedDmMessages = markProtectedSenders(dmMessages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
-    const protectedUnifiedTimeline = unifiedPage
-      ? serializeUnifiedTimelinePage({
+    const hydratedUnifiedPage = unifiedPage && isReportsChannel(parentChannelId, env)
+      ? {
           ...unifiedPage,
-          items: markProtectedSenders(unifiedPage.items, reportsOwnerId),
+          items: await hydrateUnifiedReportTimeline(
+            unifiedPage.items,
+            env,
+            reportsOwnerLocale,
+          ),
+        }
+      : unifiedPage;
+    const protectedUnifiedTimeline = hydratedUnifiedPage
+      ? serializeUnifiedTimelinePage({
+          ...hydratedUnifiedPage,
+          items: markProtectedSenders(hydratedUnifiedPage.items, reportsOwnerId),
         })
       : null;
 
