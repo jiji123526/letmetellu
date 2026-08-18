@@ -1,10 +1,11 @@
 "use client";
 
 import React from "react";
-import { chatDateKey, chatDateLabel } from "@/lib/chat-date";
+import { chatDateKey, chatDateLabel, chatTimeLabel } from "@/lib/chat-date";
 import { ReactionBadge } from "./ReactionBadge";
 import { MemoizedMessageTextWithEmbeds, MessageImage } from "./ChatMessageContent";
 import { isInboxModerationMessage } from "./messageActionRules";
+import { isHorizontalMessageSwipe, messageSwipeOffset } from "./messageSwipe";
 import { stripInboxChannelLine } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
 
@@ -31,6 +32,8 @@ interface MessageRowProps {
   isActiveMatch: boolean;
   deletedMessageLabel: string;
   editedMessageLabel: string;
+  locale: "ko" | "en";
+  timeZone: string;
   onLongPress: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onTouchStart: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onTouchEnd: () => void;
@@ -154,6 +157,8 @@ const MessageRow = React.memo(function MessageRow({
   isActiveMatch,
   deletedMessageLabel,
   editedMessageLabel,
+  locale,
+  timeZone,
   onLongPress,
   onTouchStart,
   onTouchEnd,
@@ -162,6 +167,13 @@ const MessageRow = React.memo(function MessageRow({
   onReaction,
   onEmojiPicker,
 }: MessageRowProps) {
+  const [swipeOffset, setSwipeOffset] = React.useState(0);
+  const [isSwiping, setIsSwiping] = React.useState(false);
+  const swipeGestureRef = React.useRef<{
+    startX: number;
+    startY: number;
+    axis: "pending" | "horizontal" | "vertical";
+  } | null>(null);
   const isReportInboxMessage = !!msg.report_meta;
   const isPetitionInboxMessage = !!msg.petition_meta;
   const isFallbackInboxMessage = isInboxModerationMessage(msg);
@@ -215,6 +227,17 @@ const MessageRow = React.memo(function MessageRow({
     isReported,
     isReportedTarget,
   });
+  const markerColor = replyArrowTone === "bright"
+    ? "rgba(255,255,255,0.92)"
+    : "var(--meta)";
+  const sentTime = chatTimeLabel(msg.created_at, locale, timeZone);
+
+  const finishSwipe = () => {
+    swipeGestureRef.current = null;
+    setIsSwiping(false);
+    setSwipeOffset(0);
+    onTouchEnd();
+  };
 
   const bubble = (
     <div
@@ -243,6 +266,7 @@ const MessageRow = React.memo(function MessageRow({
         border: inboxBubbleStyle ? `1px solid ${inboxBubbleStyle.borderColor}` : "none",
         cursor: msg.report && msg.reported_msg_id ? "pointer" : undefined,
         opacity: isReported ? 0.6 : undefined,
+        touchAction: "pan-y",
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -261,10 +285,41 @@ const MessageRow = React.memo(function MessageRow({
         setTimeout(() => { targetBubble.style.boxShadow = ""; targetBubble.style.transition = ""; }, 1000);
       }}
       onTouchStart={(event) => {
+        const touch = event.touches[0];
+        if (touch) {
+          swipeGestureRef.current = {
+            startX: touch.clientX,
+            startY: touch.clientY,
+            axis: "pending",
+          };
+        }
         if (!msg.deleted) onTouchStart(msg, isSent, event.currentTarget);
       }}
-      onTouchEnd={onTouchEnd}
-      onTouchMove={onTouchEnd}
+      onTouchMove={(event) => {
+        const gesture = swipeGestureRef.current;
+        const touch = event.touches[0];
+        if (!gesture || !touch) return;
+        const deltaX = touch.clientX - gesture.startX;
+        const deltaY = touch.clientY - gesture.startY;
+
+        if (gesture.axis === "pending") {
+          if (isHorizontalMessageSwipe(deltaX, deltaY)) {
+            gesture.axis = "horizontal";
+            setIsSwiping(true);
+            onTouchEnd();
+          } else if (Math.abs(deltaY) >= 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+            gesture.axis = "vertical";
+            onTouchEnd();
+          }
+        }
+        if (gesture.axis !== "horizontal") return;
+
+        const nextOffset = messageSwipeOffset(deltaX, isSent);
+        if (nextOffset !== 0) event.preventDefault();
+        setSwipeOffset(nextOffset);
+      }}
+      onTouchEnd={finishSwipe}
+      onTouchCancel={finishSwipe}
     >
       {msg.deleted ? (
         <span style={{ fontStyle: "italic", opacity: 0.5 }}>{deletedMessageLabel}</span>
@@ -329,7 +384,7 @@ const MessageRow = React.memo(function MessageRow({
     <span
       className="flex flex-none items-center"
       style={{
-        color: replyArrowTone === "bright" ? "rgba(255,255,255,0.92)" : "var(--meta)",
+        color: markerColor,
         opacity: replyArrowTone === "bright" ? 0.92 : 0.7,
         marginTop: "8px",
         transform: parentIsSent ? "scaleY(-1)" : "scaleX(-1) scaleY(-1)",
@@ -353,11 +408,36 @@ const MessageRow = React.memo(function MessageRow({
       id={`msg-${msg.id}`}
       className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
       style={{
+        position: "relative",
         paddingTop: "calc(var(--bubble-font-size) * 0.32)",
         paddingLeft: isReply && !parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
         paddingRight: isReply && parentIsSent ? "calc(var(--bubble-font-size) + 8px)" : undefined,
       }}
     >
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          [isSent ? "right" : "left"]: "3px",
+          bottom: "8px",
+          width: "50px",
+          color: markerColor,
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          fontSize: "clamp(9px, calc(var(--bubble-font-size) - 6px), 11px)",
+          fontWeight: 500,
+          fontVariantNumeric: "tabular-nums",
+          letterSpacing: "-0.12px",
+          lineHeight: 1,
+          textAlign: "center",
+          whiteSpace: "nowrap",
+          opacity: Math.min(1, Math.abs(swipeOffset) / 24),
+          transform: `translateX(${isSent ? "2px" : "-2px"})`,
+          transition: isSwiping ? "none" : "opacity 160ms ease",
+          pointerEvents: "none",
+        }}
+      >
+        {sentTime}
+      </span>
       <div
         className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
         style={{
@@ -368,6 +448,11 @@ const MessageRow = React.memo(function MessageRow({
             ? `min(100%, calc(${isReply ? "85%" : "74%"} + var(--bubble-font-size) * 1.648))`
             : isReply ? "85%" : "74%",
           minWidth: 0,
+          transform: `translateX(${swipeOffset}px)`,
+          transition: isSwiping
+            ? "none"
+            : "transform 180ms cubic-bezier(0.22, 0.8, 0.3, 1)",
+          willChange: swipeOffset ? "transform" : undefined,
         }}
       >
         {isReply ? (
@@ -443,6 +528,8 @@ export const MessageList = React.memo(function MessageList({
     replyArrowTone,
     deletedMessageLabel,
     editedMessageLabel,
+    locale,
+    timeZone,
     onLongPress,
     onTouchStart,
     onTouchEnd,

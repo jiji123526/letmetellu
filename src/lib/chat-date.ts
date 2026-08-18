@@ -43,3 +43,21 @@ export function chatDateLabel(value: string, locale: "ko" | "en", timeZone: stri
     day: "numeric",
   }).format(date);
 }
+
+const chatTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+export function chatTimeLabel(value: string, locale: "ko" | "en", timeZone: string): string {
+  const date = parseServerDate(value);
+  if (!date) return "";
+  const formatterKey = `${locale}:${timeZone}`;
+  let formatter = chatTimeFormatters.get(formatterKey);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
+      timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    chatTimeFormatters.set(formatterKey, formatter);
+  }
+  return formatter.format(date);
+}
