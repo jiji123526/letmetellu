@@ -26,6 +26,9 @@ Deployment note: Worker-only; no migration or frontend deployment is required.
 Deploy, set the global secret to `1`, then delete obsolete sample and allowlist
 secrets. Roll back by deleting the global secret.
 
+This global procedure supersedes the Stage 8A/8B and Stage 7A/7B allowlist
+deployment instructions below. Those entries remain as implementation history.
+
 ### Unified chat pagination stage 8B: deterministic cohorts — 2026-08-18
 
 - Added default-off normal-channel percentage rollout through

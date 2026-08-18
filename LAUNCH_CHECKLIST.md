@@ -1,6 +1,6 @@
 # Launch Checklist
 
-Core launch status for **yap.**, reviewed 2026-08-17. Detailed implementation
+Core launch status for **yap.**, reviewed 2026-08-18. Detailed implementation
 history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
 `FUTURE_PLANS.md`.
 
@@ -17,6 +17,9 @@ history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
   owner privileges.
 - [x] Root-owned history paging keeps replies attached to their parent, and
   production reply audits found no broken, nested or cross-channel threads.
+- [x] Unified history returns public messages and authorized private threads in
+  one bounded visual timeline. Normal, live and reports adapters preserve signed
+  visitor, owner, passcode, reports-owner and current-live-session boundaries.
 - [x] In-chat search uses trigram indexing for longer queries and navigates by
   rendered root/reply order, starting at the bottom-most visual match.
 - [x] Live-session actions are session-ID guarded, stale/background tabs
@@ -37,11 +40,17 @@ history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
   and legacy SHA-256-to-PBKDF2 password upgrades.
 - [x] GitHub Actions runs Worker tests, TypeScript checks and a Wrangler dry-run
   for relevant pushes and pull requests.
+- [x] Production migrations through `0048` were applied, the unified normal
+  timeline was deployed and active-channel browser checks passed.
 
 ## Core Tasks To Do
 
-- [ ] Apply every unapplied production migration through `0048`, then deploy
-  the latest Worker and frontend.
+- [ ] Deploy commit `a8f606b`, set `UNIFIED_TIMELINE_GLOBAL_ENABLED=1`, remove
+  obsolete sample/allowlist secrets, and verify normal, live and reports reads
+  emit `rollout_mode=global`. Record the prior Worker deployment for rollback.
+- [ ] Exercise global unified history as an owner and isolated visitor: latest,
+  older, context/search, reconnect, DM isolation/replies, stable prepend,
+  live start/end/replacement and report/petition hydration.
 - [ ] Verify the latest private DM flow in two isolated browser profiles:
   sender isolation, text/image replies, the one-image and 20-reply limits,
   sender thread deletion, owner reply deletion and cross-tab refresh.

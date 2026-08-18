@@ -26,7 +26,11 @@ Production health investigation and response procedures are documented in
 - Per-user bubble color, font size, locale, and channel appearance preferences
 - Korean and English interfaces
 
-Message history uses cursor-based paging. Refreshing an open channel restores that tab's visible position, while leaving and re-entering a channel starts at the newest message.
+Message history uses one authorization-aware cursor timeline for public messages,
+visible private-message roots and their owner replies. Normal, live and reports
+views share the same bounded root paging contract. Refreshing an open channel
+restores that tab's visible position, while leaving and re-entering starts at the
+newest message.
 
 ### Channel Ownership
 
@@ -94,6 +98,11 @@ Normal chat and live-session clients connect through the parent channel's Durabl
 - Auth.js supports Google OAuth and credential accounts.
 - Owner and platform-admin actions pass through authenticated Next.js routes and are re-authorized by the Worker.
 - Anonymous visitors use server-issued signed identities stored in HttpOnly cookies.
+- Unified history resolves DM visibility on the Worker: owners can read their
+  channel threads, while visitors receive only roots belonging to their signed
+  anonymous identity and replies under those roots.
+- Live history requires the current active session ID before and after each read;
+  reports history remains restricted to the configured reports-channel owner.
 - Passcode-protected rooms issue scoped room access tokens instead of exposing passcodes to later requests.
 - Device and network abuse identifiers are HMAC-hashed before durable storage.
 - Message, upload, preview, report, and support paths apply route-appropriate validation and rate limits.
@@ -232,6 +241,17 @@ npx wrangler secret put INTERNAL_SECRET
 npx wrangler secret put RESEND_API_KEY
 npx wrangler secret put APP_ORIGIN
 ```
+
+Unified pagination has one small-installation production switch:
+
+```bash
+npx wrangler secret put UNIFIED_TIMELINE_GLOBAL_ENABLED
+```
+
+Enter the exact value `1`. This enables normal, live and reports timeline adapters
+without weakening their existing authorization checks. Roll back by deleting the
+secret. Do not leave sample or allowlist rollout secrets configured when relying on
+global deletion as the sole rollback.
 
 The Worker bindings for D1 (`DB`), R2 (`MEDIA`), Durable Objects (`CHAT_ROOM`), allowed origins, the reports channel, and scheduled maintenance are defined in `worker/wrangler.toml`.
 

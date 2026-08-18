@@ -97,6 +97,27 @@ latency telemetry is added.
 5. Escalate to critical handling when users cannot complete a core action,
    failures spread across routes, or the critical threshold is reached.
 
+### Unified Timeline Rollback
+
+Global unified pagination covers normal, live and reports history. Investigate or
+roll back when users see cross-user DMs, missing/duplicate roots, repeated viewport
+jumps, stale live-session content, unauthorized reports metadata, sustained error
+rate above 1%, or P95 more than 100 ms over the comparable legacy window.
+
+1. Confirm affected reads emit `unified_timeline_read` or
+   `unified_timeline_fanout_warning` with `rollout_mode=global`.
+2. Record the current Worker deployment and preserve relevant content-free logs.
+3. Delete `UNIFIED_TIMELINE_GLOBAL_ENABLED`.
+4. Ensure `UNIFIED_TIMELINE_SAMPLE_PERCENT` and all unified allowlist secrets are
+   absent; otherwise their matching traffic remains enabled.
+5. Open or refresh one affected channel. An already-open normal tab reloads into
+   legacy mode on its next rejected unified request.
+6. Verify room entry, older paging, DM isolation, live start/end and reports-owner
+   access on legacy reads before closing the incident.
+
+Rollback changes read selection only. It does not require a D1 rollback and should
+not revert migration `0048`, whose petition lookup index is safe for both paths.
+
 ### Recent Event Detail
 
 ```bash

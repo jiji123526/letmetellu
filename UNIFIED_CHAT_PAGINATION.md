@@ -1,8 +1,8 @@
 # Unified Chat Pagination
 
-This document tracks the isolated implementation on `codex/unified-chat-pagination`.
-Nothing in this project should replace the production message or DM read path until
-the shadow-comparison stage is complete.
+This document records the implementation merged to `main` and the remaining
+production observation/cleanup work. The intended small-installation configuration
+uses the explicit global switch; legacy reads remain available for rollback.
 
 ## Objective
 
@@ -10,15 +10,18 @@ Return public messages, visible private DM roots and their replies as one stable
 authorization-aware visual timeline. A page boundary must never cause a DM to
 appear before the root window that actually contains it.
 
-## Current production behavior
+## Current implementation
 
-- Public messages use root-aware, bidirectional pages.
-- DM roots are read separately with a latest-50 limit; replies are fetched in a
-  second query.
-- The client merges both collections and conditionally reveals DMs using the raw
-  timestamps of the currently mounted public messages.
-- A recent reply attached to an old public root can widen that timestamp range and
-  reveal DMs that belong to a different visual window.
+- Public roots and authorized DM roots are selected into one bounded visual window
+  before their children are expanded.
+- Owners receive all channel DM roots; visitors receive only roots belonging to
+  their Worker-verified anonymous identity and owner replies under those roots.
+- Normal, live and reports views use the same versioned timeline contract. Live
+  reads additionally bind to the current session, while reports hydration remains
+  owner-only and occurs after page selection.
+- The client stores one source-qualified canonical collection, holds the viewport
+  through prepend/media layout, and retains legacy state only as rollback
+  compatibility.
 
 ## Non-negotiable invariants
 
@@ -51,7 +54,7 @@ not be assumed globally unique. Page size defaults to 50 and is capped at 100.
 
 ### Stage 1 — cursor and authorization contract
 
-- Status: implemented on the feature branch.
+- Status: completed and merged.
 - Adds a pure cursor parser, comparator and page-size clamp.
 - Adds regression coverage for roots/replies, cross-source ties, malformed cursors
   and page bounds.
@@ -59,7 +62,7 @@ not be assumed globally unique. Page size defaults to 50 and is capped at 100.
 
 ### Stage 2 — parallel server reader
 
-- Status: internal reader implemented; it is not routed to an API yet.
+- Status: completed and routed through the unified API.
 - Public-message and authorized-DM parent candidates are fetched in parallel with
   `limit + 1` per source, then merged in Worker memory.
 - The final root window is selected before public replies or DM replies are read.
@@ -84,7 +87,7 @@ covered in Stage 3.
 
 ### Stage 3 — shadow comparison
 
-- Status: implemented on the feature branch; disabled unless the request carries
+- Status: completed; disabled unless the request carries
   `X-Unified-Timeline-Shadow: 1` and requests the latest normal-channel page.
 - The production response remains the legacy public-message response. In parallel,
   the Worker reads the legacy DM window and the new unified page, then compares the
@@ -104,7 +107,7 @@ proxy forwards only the literal opt-in value and signed anonymous token.
 
 ### Stage 4 — production-shaped API contract
 
-- Status: implemented on the feature branch; no client consumes it yet.
+- Status: completed and consumed by the unified client.
 - `GET /api/unified-timeline` is a dedicated Worker endpoint with a matching
   Next.js proxy. It does not overload or modify the legacy `/api/data` payload.
 - The versioned response contains `contract_version: 1`, `items`, `has_more`,
@@ -120,9 +123,10 @@ proxy forwards only the literal opt-in value and signed anonymous token.
 - Existing channel-existence, current-passcode and trusted-owner checks run before
   the reader. Non-owners require a valid signed anonymous identity; URL UIDs and
   forged user headers are ignored, and missing or invalid identity returns `401`.
-- Live and reports timelines return `409 unified_timeline_unsupported` unless
-  their separate Stage 7 allowlists explicitly include the parent channel. A
-  non-owner still receives `403` at the reports authorization boundary.
+- Live and reports timelines return `409 unified_timeline_unsupported` unless the
+  global switch or their separate Stage 7 allowlist enables them. A non-owner
+  still receives `403` at the reports authorization boundary before rollout
+  selection.
 - The Next.js proxy forwards only trusted session identity, current room access and
   the signed anonymous token. It applies the existing protected-media signer to
   unified `items`.
@@ -146,8 +150,8 @@ untouched in this stage.
 
 #### Stage 5A — state adapter
 
-- Status: implemented on the feature branch; the allowlist is empty by default and
-  no client calls the unified API yet.
+- Status: completed; rollout selection is now controlled by the global switch or
+  the retained allowlist/cohort fallbacks.
 - `ChatView` now owns one discriminated timeline state. Legacy mode stores the
   existing public-message/DM pair; unified mode stores only `timelineItems`, keyed
   canonically by `(source, id)`, so equal IDs from separate tables cannot collide.
@@ -175,7 +179,7 @@ the legacy client did.
 
 #### Stage 5B — bootstrap and reconnect
 
-- Status: implemented on the feature branch for allowlisted normal channels.
+- Status: completed for normal channels and the global deployment path.
 - `/api/init` now selects one timeline reader after authorization. An allowlisted
   normal channel returns a versioned `unifiedTimeline` page and does not execute
   legacy public-message or DM reads; other channels retain the legacy response.
@@ -201,7 +205,7 @@ state back to legacy mode.
 
 #### Stage 5C — history and navigation
 
-- Status: implemented on the feature branch for allowlisted normal channels.
+- Status: completed for normal channels and the global deployment path.
 - Older/newer loads use the opaque unified page-start/page-end cursors and one
   coalesced request. Canonical state merges by `(source, id)` once; no client cursor
   is reconstructed from timestamps or DOM order.
@@ -508,9 +512,8 @@ Observe separately for owner and visitor traffic:
 - duplicate-item prevention count;
 - navigation timeout and scroll-correction count.
 
-Separate `rollout_mode=allowlist`, `rollout_mode=sample` and shadow records during
-analysis. Do not advance a percentage while the current cohort lacks both owner
-and visitor observations.
+For the current deployment, analyze `rollout_mode=global` separately from any old
+allowlist, sample or shadow records.
 
 Immediate rollback triggers:
 

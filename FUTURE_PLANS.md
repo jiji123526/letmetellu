@@ -17,15 +17,11 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ## Operational Improvements
 
-- Continue unified public-message/DM pagination from the completed cursor, reader,
-  shadow-comparison, production-shaped API, single-state adapter and unified
-  bootstrap/reconnect, history/navigation, mutation/realtime and Stage 6
-  instrumentation plus the Stage 7 live and reports adapters into production
-  fan-out/query calibration and observation using the completed exact,
-  deterministic percentage and small-installation global rollout switches in
-  [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the production
-  read path behind a kill switch until authorization, ordering, bounded-row,
-  latency and scroll-stability exit criteria pass.
+- Complete production fan-out/query calibration and the global observation window
+  for the implemented unified normal/live/reports timeline. After the exit criteria
+  in [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) pass, remove shadow
+  double reads and legacy compatibility state while retaining the global rollback
+  until the cleanup release is stable.
 
 - Add bounded dashboard summaries for moderation actions, report volume,
   petition outcomes and support queue age.

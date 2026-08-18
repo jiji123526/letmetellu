@@ -5,7 +5,7 @@ Frontend visibility is not treated as access control. A browser-provided
 `X-User-Id` becomes trusted only when the request also carries the matching
 Worker `INTERNAL_SECRET` from the authenticated Next.js proxy.
 
-Status as of 2026-08-17:
+Status as of 2026-08-18:
 
 - **Focused/source** means a shared authorization primitive or route invariant
   has direct automated coverage, but
@@ -29,6 +29,7 @@ Status as of 2026-08-17:
 | Worker boundary | Guest | Room viewer | Channel owner | Platform admin | Current enforcement and coverage |
 | --- | --- | --- | --- | --- | --- |
 | `/api/init` | Public-room bootstrap; locked rooms receive only gate metadata | Full locked-room bootstrap with channel-bound room token | Full data and owner state | Reports channel only through configured ownership | Uncached current-passcode token binding and deleted-channel rejection have focused coverage; browser transitions pending |
+| `/api/unified-timeline` | Public roots plus only DMs for the verified anonymous identity | Same, with a current channel-bound room token | Public roots plus every owned-channel DM thread | Reports timeline only for configured owner | Forged identity, cross-visitor DM isolation, passcode rotation, deleted channels, current live-session pre/post checks and report-owner boundaries have focused coverage |
 | `/api/data` messages/gallery/links/search | Public room allowed | Locked room allowed with token | Allowed | Reports inbox only for configured owner | Uncached current-passcode boundary and explicit deleted-channel rejection have focused coverage; flat history/query tests |
 | `/api/data` dm/blocked/banned-words | Denied | Denied | Allowed for owned channel | No implicit cross-channel override | Shared trusted-identity and pre-switch owner-boundary tests |
 | `/api/messages` | Public room allowed with signed actor identity | Locked room allowed with token | Allowed | Reports mutations require configured ownership | Idempotency, reply/report target, actor identity, cross-channel mutation, room lifecycle and expired-live mutation tests |
@@ -84,6 +85,9 @@ Status as of 2026-08-17:
 - [x] Normal message deletion, Undo and expiry finalization preserve the same
   owner/channel operation boundary for 100+ reply threads while keeping every
   D1 ID set bounded below the platform parameter limit.
+- [x] Unified latest/before/after/context reads preserve source-qualified order,
+  reject forged visitor/owner identity, isolate visitor DMs, recheck current live
+  sessions and hydrate reports only after reports-owner authorization.
 
 ### Browser-visible state transitions
 
