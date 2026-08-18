@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 1: cursor contract — 2026-08-17
+
+- Work started on the isolated `codex/unified-chat-pagination` branch; production message and DM reads remain unchanged.
+- Added a deterministic six-part visual cursor covering root time, source, root ID, depth, item time and item ID. The explicit source discriminator prevents ambiguous boundaries across the `messages`, `dm` and `dm_replies` tables.
+- Added strict cursor parsing, a default page size of 50, a hard maximum of 100 and focused tests for root/reply order, source collisions, malformed cursors and bounded sizes.
+- Added `UNIFIED_CHAT_PAGINATION.md` with authorization invariants, rollout gates, expected query bottlenecks, inefficiencies and rollback requirements.
+- Trade-off: this stage adds code and documentation without immediate UI improvement. Freezing the ordering and privacy contract first avoids rebuilding the server query around an ambiguous cursor or exposing private DMs during later stages.
+
 ### Deleting an admin-closed support ticket now acknowledges it — 2026-08-17
 
 - The user-side `close_thread` action now distinguishes an open ticket from a ticket already closed by the platform administrator.

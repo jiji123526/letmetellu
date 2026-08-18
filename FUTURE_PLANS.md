@@ -17,6 +17,11 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ## Operational Improvements
 
+- Implement and validate unified public-message/DM pagination using the staged
+  contract in [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the
+  production read path unchanged until authorization tests and shadow comparison
+  show stable ordering, bounded rows and zero visibility mismatches.
+
 - Add bounded dashboard summaries for moderation actions, report volume,
   petition outcomes and support queue age.
 - Track WebSocket disconnect, reconnect-attempt and authorization-failure
