@@ -68,6 +68,9 @@ test("pending deletion state is durable, hidden and finalized after expiry", () 
   assert.match(migrationSource, /ALTER TABLE dm_replies ADD COLUMN pending_delete_at/);
   assert.match(lifecycleSource, /ADMIN_DELETE_UNDO_MS = 5_000/);
   assert.match(lifecycleSource, /UPDATE messages SET deleted = 2/);
+  assert.match(lifecycleSource, /WHERE id = \? AND channel_id = \?/);
+  assert.match(lifecycleSource, /WHERE channel_id = \? AND reply_to = \?/);
+  assert.doesNotMatch(lifecycleSource, /channel_id = \? AND \(id = \? OR reply_to = \?\)/);
   assert.match(lifecycleSource, /expires_at > \?/);
   assert.match(adminSource, /case "undo-delete"/);
   assert.match(maintenanceSource, /finalizeExpiredAdminDeletions/);
@@ -83,6 +86,8 @@ test("large message threads use bounded staging and grouped Undo statements", as
     id: index === 0 ? "root-a" : `reply-${index}`,
     deleted: index % 2,
   }));
+  const root = states[0];
+  const replies = states.slice(1);
   const batches: Array<Array<{ sql: string; params: unknown[] }>> = [];
   const boundStatements: Array<{ sql: string; params: unknown[] }> = [];
   let pendingRow: Record<string, unknown> | null = null;
@@ -137,7 +142,19 @@ test("large message threads use bounded staging and grouped Undo statements", as
     DB: {
       prepare: statement,
       async batch(items: Array<ReturnType<typeof statement>>) {
-        batches.push(items.map((item) => ({ sql: item.sql, params: item.params })));
+        const statements = items.map((item) => ({ sql: item.sql, params: item.params }));
+        batches.push(statements);
+        if (items.every((item) => item.sql.startsWith("SELECT"))) {
+          return items.map((item) => {
+            if (item.sql.includes("WHERE id = ? AND channel_id = ?")) {
+              return { results: root ? [root] : [] };
+            }
+            if (item.sql.includes("WHERE channel_id = ? AND reply_to = ?")) {
+              return { results: replies };
+            }
+            return { results: [] };
+          });
+        }
         return Promise.all(items.map((item) => item.run()));
       },
     },
@@ -151,7 +168,15 @@ test("large message threads use bounded staging and grouped Undo statements", as
   const restored = await undoPendingDeletion(env, "channel-a", "owner-a", staged.deletionId);
   assert.ok(restored);
 
-  const [stageBatch, undoBatch] = batches;
+  const [readBatch, stageBatch, undoBatch] = batches;
+  assert.deepEqual(
+    readBatch.map((item) => item.params),
+    [
+      ["root-a", "channel-a"],
+      ["channel-a", "root-a"],
+    ],
+  );
+  assert.ok(readBatch.every((item) => !item.sql.includes("id = ? OR reply_to = ?")));
   const stageUpdates = stageBatch.filter((item) => item.sql.startsWith("UPDATE messages SET deleted = 2"));
   const undoUpdates = undoBatch.filter((item) => item.sql.startsWith("UPDATE messages SET deleted = ?"));
   assert.equal(stageUpdates.length, Math.ceil(states.length / ADMIN_DELETE_ID_CHUNK_SIZE));

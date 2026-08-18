@@ -25,6 +25,10 @@ interface MessageState {
   deleted: number;
 }
 
+interface MessageDeletionStateRow extends MessageState {
+  created_at?: string;
+}
+
 export interface PendingDeletionResult {
   deletionId: string;
   expiresAt: string;
@@ -121,19 +125,42 @@ async function insertPendingDeletion(
   };
 }
 
+async function readPendingMessageDeletionStates(
+  env: Env,
+  channelId: string,
+  rootId: string,
+): Promise<MessageState[]> {
+  const [rootResult, childResult] = await env.DB.batch<MessageDeletionStateRow>([
+    env.DB.prepare(`
+      SELECT id, deleted
+      FROM messages
+      WHERE id = ? AND channel_id = ?
+      LIMIT 1
+    `).bind(rootId, channelId),
+    env.DB.prepare(`
+      SELECT id, deleted, created_at
+      FROM messages
+      WHERE channel_id = ? AND reply_to = ?
+      ORDER BY created_at ASC, id ASC
+    `).bind(channelId, rootId),
+  ]);
+  const root = rootResult.results?.[0];
+  if (!root || root.deleted === 2) return [];
+  return [
+    { id: root.id, deleted: root.deleted },
+    ...(childResult.results || [])
+      .filter((row) => row.deleted !== 2)
+      .map((row) => ({ id: row.id, deleted: row.deleted })),
+  ];
+}
+
 export async function stageMessageDeletion(
   env: Env,
   channelId: string,
   ownerUid: string,
   rootId: string,
 ): Promise<PendingDeletionResult | null> {
-  const { results } = await env.DB.prepare(`
-    SELECT id, deleted
-    FROM messages
-    WHERE channel_id = ? AND (id = ? OR reply_to = ?)
-    ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, created_at ASC, id ASC
-  `).bind(channelId, rootId, rootId, rootId).all<MessageState>();
-  const states = (results || []).filter((row) => row.deleted !== 2);
+  const states = await readPendingMessageDeletionStates(env, channelId, rootId);
   if (!states.some((row) => row.id === rootId)) return null;
   const ids = states.map((row) => row.id);
   return insertPendingDeletion(env, {

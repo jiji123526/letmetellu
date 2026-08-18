@@ -533,6 +533,7 @@ Deployment note: apply migration `0047`, deploy the Worker, then deploy the fron
 - Undo is accepted only for the matching authenticated channel owner before the server deadline. It restores the prior message deletion states or clears the DM pending flags, then broadcasts an authoritative refresh.
 - Expired operations are permanently finalized by scheduled maintenance. Replies are removed before their parent to avoid `ON DELETE SET NULL` detaching them; gallery, links, actor identities, upload tickets and managed media are then cleaned up.
 - Normal message threads are processed in bounded groups of 90 IDs. This keeps every D1 statement below the 100-bound-parameter ceiling even when a root has more than 100 direct replies.
+- The owner-thread staging read now uses two indexed lookups: one root probe by `id` and one child scan by `channel_id, reply_to`. That avoids the earlier `id OR reply_to` shape that could show up as wasted D1 read work under heavy owner moderation.
 - Undo groups rows by their previous `deleted` value and restores each group in bounded updates instead of creating one D1 statement per message. Finalization applies the same chunking to metadata and child deletion, removes upload tickets in bulk, and sends managed R2 keys in bounded delete batches.
 - The UI keeps optimistic removal and restores local rows only after the Worker confirms Undo. Failed staging restores them and reports a deletion failure.
 
