@@ -416,6 +416,10 @@ test("the owner composer allows one DM reply image and submits its upload ticket
   assert.match(mutationSource, /uploadAdminImage\(photos\[0\]\.blob, replyChannelId, "dm"\)/);
   assert.match(mutationSource, /image: upload\?\.url/);
   assert.match(mutationSource, /upload_id: upload\?\.uploadId/);
+  assert.match(
+    mutationSource,
+    /if \(!result\?\.ok \|\| !result\.reply\)[\s\S]*return;[\s\S]*clearReplyingTo\(\)/,
+  );
   assert.match(shellSource, /multiple=\{allowMultiplePhotos\}/);
 });
 

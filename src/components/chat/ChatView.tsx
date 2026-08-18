@@ -766,6 +766,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     inLiveModeRef,
     resetInput,
     restoreInput,
+    clearReplyingTo,
     consumeComposerState,
     text: {
       messageTooLong: t("messageTooLong"),

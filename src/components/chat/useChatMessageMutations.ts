@@ -106,6 +106,7 @@ interface UseChatMessageMutationsArgs {
   inLiveModeRef: MutableRefObject<boolean>;
   resetInput: () => void;
   restoreInput: (value: string) => void;
+  clearReplyingTo: () => void;
   consumeComposerState: () => ConsumedComposerState;
   text: MutationText;
 }
@@ -153,6 +154,7 @@ export function useChatMessageMutations({
   inLiveModeRef,
   resetInput,
   restoreInput,
+  clearReplyingTo,
   consumeComposerState,
   text,
 }: UseChatMessageMutationsArgs): UseChatMessageMutationsResult {
@@ -377,6 +379,7 @@ export function useChatMessageMutations({
       upsertTimelineItems("dm", [result.reply as Message]);
       resetInput();
       setPendingPhotos([]);
+      clearReplyingTo();
       setBanner({ text: text.dmReplySent, color: "#7b3fa0" });
       clearBannerSoon();
       return;
@@ -513,6 +516,7 @@ export function useChatMessageMutations({
     blockedUsers,
     channelFrozen,
     channelId,
+    clearReplyingTo,
     clearStoredSendAttempt,
     clearBannerSoon,
     consumeComposerState,
