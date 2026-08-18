@@ -2,7 +2,10 @@ import {
   parseUnifiedTimelinePageRequest,
   serializeUnifiedTimelinePage,
 } from "../lib/unified-timeline-api.ts";
-import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader.ts";
+import {
+  readUnifiedTimelineContextPage,
+  readUnifiedTimelinePage,
+} from "../lib/unified-timeline-reader.ts";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
@@ -76,6 +79,31 @@ export async function handleUnifiedTimeline(
       { error: "anonymous_identity_required" },
       { status: 401 },
     );
+  }
+
+  const targetId = url.searchParams.get("target_id");
+  if (targetId) {
+    const targetSource = url.searchParams.get("target_source") || "message";
+    if (targetSource !== "message" && targetSource !== "dm") {
+      return Response.json({ error: "invalid_target_source" }, { status: 400 });
+    }
+    const contextPage = await readUnifiedTimelineContextPage(
+      env,
+      channelId,
+      viewer,
+      targetSource,
+      targetId,
+    );
+    if (!contextPage) {
+      return Response.json({ error: "target_not_found" }, { status: 404 });
+    }
+    return Response.json({
+      ...serializeUnifiedTimelinePage(contextPage),
+      target_id: contextPage.targetId,
+      target_source: contextPage.targetSource,
+      has_older: contextPage.hasOlder,
+      has_newer: contextPage.hasNewer,
+    });
   }
 
   const page = await readUnifiedTimelinePage(env, channelId, viewer, {

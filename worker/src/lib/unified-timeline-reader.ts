@@ -53,6 +53,13 @@ export interface UnifiedTimelinePage {
   rootCount: number;
 }
 
+export interface UnifiedTimelineContextPage extends UnifiedTimelinePage {
+  hasOlder: boolean;
+  hasNewer: boolean;
+  targetId: string;
+  targetSource: UnifiedTimelineSource;
+}
+
 const SOURCE_RANK: Record<UnifiedTimelineSource, number> = {
   message: 0,
   dm: 1,
@@ -257,6 +264,34 @@ function itemCursor(item: UnifiedTimelineItem): UnifiedTimelineCursor {
   };
 }
 
+async function expandRootCandidates(
+  env: Env,
+  channelId: string,
+  roots: RootCandidate[],
+): Promise<UnifiedTimelineItem[]> {
+  const messageRoots = roots.filter((root) => root.source === "message");
+  const dmRoots = roots.filter((root) => root.source === "dm");
+  const messageRootIds = messageRoots.map((root) => root.row.id);
+  const dmRootIds = dmRoots.map((root) => root.row.id);
+  const [messageReplies, dmReplies] = await Promise.all([
+    messageRootIds.length > 0
+      ? Promise.all(chunkLookupIds(messageRootIds).map((rootChunk) =>
+          readVisibleFlatThreads(env, channelId, rootChunk, new Set(rootChunk))
+        )).then((chunks) => chunks.flat())
+      : Promise.resolve([]),
+    readDmReplies(env, channelId, dmRootIds),
+  ]);
+  const messageRootMap = new Map(messageRoots.map((root) => [root.row.id, root]));
+  const dmRootMap = new Map(dmRoots.map((root) => [root.row.id, root]));
+  return [
+    ...messageRoots.map((root) => normalizeMessageItem(root.row, messageRootMap)),
+    ...messageReplies.map((reply) => normalizeMessageItem(reply, messageRootMap)),
+    ...dmRoots.map(normalizeDmRoot),
+    ...dmReplies.map((reply) => normalizeDmReply(reply, dmRootMap)),
+  ].filter((item): item is UnifiedTimelineItem => item !== null)
+    .sort((left, right) => compareUnifiedTimelineCursor(itemCursor(left), itemCursor(right)));
+}
+
 export async function readUnifiedTimelinePage(
   env: Env,
   channelId: string,
@@ -282,33 +317,7 @@ export async function readUnifiedTimelinePage(
   const roots = direction === "after"
     ? candidates.slice(0, limit)
     : candidates.slice(Math.max(0, candidates.length - limit));
-  const messageRoots = roots.filter((root) => root.source === "message");
-  const dmRoots = roots.filter((root) => root.source === "dm");
-  const messageRootIds = messageRoots.map((root) => root.row.id);
-  const dmRootIds = dmRoots.map((root) => root.row.id);
-
-  const [messageReplies, dmReplies] = await Promise.all([
-    messageRootIds.length > 0
-      ? Promise.all(chunkLookupIds(messageRootIds).map((rootChunk) =>
-          readVisibleFlatThreads(
-            env,
-            channelId,
-            rootChunk,
-            new Set(rootChunk),
-          )
-        )).then((chunks) => chunks.flat())
-      : Promise.resolve([]),
-    readDmReplies(env, channelId, dmRootIds),
-  ]);
-  const messageRootMap = new Map(messageRoots.map((root) => [root.row.id, root]));
-  const dmRootMap = new Map(dmRoots.map((root) => [root.row.id, root]));
-  const items = [
-    ...messageRoots.map((root) => normalizeMessageItem(root.row, messageRootMap)),
-    ...messageReplies.map((reply) => normalizeMessageItem(reply, messageRootMap)),
-    ...dmRoots.map(normalizeDmRoot),
-    ...dmReplies.map((reply) => normalizeDmReply(reply, dmRootMap)),
-  ].filter((item): item is UnifiedTimelineItem => item !== null)
-    .sort((left, right) => compareUnifiedTimelineCursor(itemCursor(left), itemCursor(right)));
+  const items = await expandRootCandidates(env, channelId, roots);
 
   return {
     items,
@@ -316,5 +325,97 @@ export async function readUnifiedTimelinePage(
     pageStartCursor: roots[0]?.cursor || null,
     pageEndCursor: roots.at(-1)?.cursor || null,
     rootCount: roots.length,
+  };
+}
+
+async function resolveTargetRoot(
+  env: Env,
+  channelId: string,
+  viewer: UnifiedTimelineViewer,
+  source: UnifiedTimelineSource,
+  targetId: string,
+): Promise<RootCandidate | null> {
+  if (source === "dm") {
+    const params: unknown[] = [channelId, channelId, targetId, targetId];
+    let query = `
+      SELECT d.* FROM dm d
+      WHERE d.channel_id = ?
+        AND d.pending_delete_at IS NULL
+        AND d.id = COALESCE(
+          (SELECT dm_id FROM dm_replies
+           WHERE channel_id = ? AND id = ? AND pending_delete_at IS NULL),
+          ?
+        )`;
+    if (!viewer.owner) {
+      query += " AND d.uid = ?";
+      params.push(viewer.anonymousUid);
+    }
+    const row = await env.DB.prepare(query).bind(...params).first<RootRow>();
+    return row ? { source, row, cursor: rootCursor(source, row) } : null;
+  }
+
+  const row = await env.DB.prepare(`
+    WITH RECURSIVE ancestors(id, reply_to) AS (
+      SELECT id, reply_to FROM messages
+      WHERE channel_id = ? AND id = ?
+      UNION
+      SELECT parent.id, parent.reply_to
+      FROM messages parent
+      INNER JOIN ancestors ON ancestors.reply_to = parent.id
+      WHERE parent.channel_id = ?
+    )
+    SELECT root.*
+    FROM messages root
+    INNER JOIN ancestors ON ancestors.id = root.id
+    WHERE ancestors.reply_to IS NULL
+      AND root.channel_id = ?
+      AND (
+        root.deleted = 0
+        OR (root.deleted = 1 AND EXISTS (
+          SELECT 1 FROM messages child
+          WHERE child.channel_id = ? AND child.reply_to = root.id AND child.deleted = 0
+        ))
+      )
+    LIMIT 1
+  `).bind(channelId, targetId, channelId, channelId, channelId).first<RootRow>();
+  return row ? { source, row, cursor: rootCursor(source, row) } : null;
+}
+
+export async function readUnifiedTimelineContextPage(
+  env: Env,
+  channelId: string,
+  viewer: UnifiedTimelineViewer,
+  targetSource: UnifiedTimelineSource,
+  targetId: string,
+  radius = 25,
+): Promise<UnifiedTimelineContextPage | null> {
+  const target = await resolveTargetRoot(env, channelId, viewer, targetSource, targetId);
+  if (!target) return null;
+  const candidateLimit = radius + 1;
+  const [messageBefore, dmBefore, messageAfter, dmAfter] = await Promise.all([
+    readMessageRootCandidates(env, channelId, target.cursor, "before", candidateLimit),
+    readDmRootCandidates(env, channelId, viewer, target.cursor, "before", candidateLimit),
+    readMessageRootCandidates(env, channelId, target.cursor, "after", candidateLimit),
+    readDmRootCandidates(env, channelId, viewer, target.cursor, "after", candidateLimit),
+  ]);
+  const before = [...messageBefore, ...dmBefore]
+    .sort((a, b) => compareUnifiedTimelineCursor(a.cursor, b.cursor));
+  const after = [...messageAfter, ...dmAfter]
+    .sort((a, b) => compareUnifiedTimelineCursor(a.cursor, b.cursor));
+  const roots = [
+    ...before.slice(Math.max(0, before.length - radius)),
+    target,
+    ...after.slice(0, radius),
+  ];
+  return {
+    items: await expandRootCandidates(env, channelId, roots),
+    hasMore: before.length > radius || after.length > radius,
+    hasOlder: before.length > radius,
+    hasNewer: after.length > radius,
+    pageStartCursor: roots[0]?.cursor || null,
+    pageEndCursor: roots.at(-1)?.cursor || null,
+    rootCount: roots.length,
+    targetId,
+    targetSource,
   };
 }

@@ -11,6 +11,7 @@ import type { Message } from "./chatTypes";
 import {
   createInitialChatTimelineState,
   mergeUnifiedTimelineLatestPage,
+  mergeUnifiedTimelinePage,
   selectTimelineDmMessages,
   selectTimelineMessages,
   replaceUnifiedTimelinePage,
@@ -27,6 +28,7 @@ interface ChatTimelineStateAdapter {
   pageStartCursor: UnifiedTimelineCursor | null;
   pageEndCursor: UnifiedTimelineCursor | null;
   hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
   unifiedTimelineEnabled: boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setDmMessages: Dispatch<SetStateAction<Message[]>>;
@@ -43,6 +45,20 @@ interface ChatTimelineStateAdapter {
     pageEndCursor: UnifiedTimelineCursor | null,
     hasMoreBefore: boolean,
     preserveHistory: boolean,
+  ) => void;
+  applyUnifiedHistoryPage: (
+    direction: "before" | "after",
+    items: ChatTimelineItem[],
+    pageStartCursor: UnifiedTimelineCursor | null,
+    pageEndCursor: UnifiedTimelineCursor | null,
+    hasMore: boolean,
+  ) => void;
+  replaceUnifiedContextPage: (
+    items: ChatTimelineItem[],
+    pageStartCursor: UnifiedTimelineCursor | null,
+    pageEndCursor: UnifiedTimelineCursor | null,
+    hasOlder: boolean,
+    hasNewer: boolean,
   ) => void;
 }
 
@@ -102,6 +118,38 @@ export function useChatTimelineState(): ChatTimelineStateAdapter {
           );
     });
   }, []);
+  const applyUnifiedHistoryPage = useCallback((
+    direction: "before" | "after",
+    items: ChatTimelineItem[],
+    pageStartCursor: UnifiedTimelineCursor | null,
+    pageEndCursor: UnifiedTimelineCursor | null,
+    hasMore: boolean,
+  ) => {
+    setState((previous) => mergeUnifiedTimelinePage(
+      previous,
+      direction,
+      items,
+      pageStartCursor,
+      pageEndCursor,
+      hasMore,
+    ));
+  }, []);
+  const replaceUnifiedContextPage = useCallback((
+    items: ChatTimelineItem[],
+    pageStartCursor: UnifiedTimelineCursor | null,
+    pageEndCursor: UnifiedTimelineCursor | null,
+    hasOlder: boolean,
+    hasNewer: boolean,
+  ) => {
+    setState((previous) => replaceUnifiedTimelinePage(
+      previous,
+      items,
+      pageStartCursor,
+      pageEndCursor,
+      hasOlder,
+      hasNewer,
+    ));
+  }, []);
 
   return {
     messages,
@@ -110,11 +158,14 @@ export function useChatTimelineState(): ChatTimelineStateAdapter {
     pageStartCursor: state.mode === "unified" ? state.pageStartCursor : null,
     pageEndCursor: state.mode === "unified" ? state.pageEndCursor : null,
     hasMoreBefore: state.mode === "unified" ? state.hasMoreBefore : false,
+    hasMoreAfter: state.mode === "unified" ? state.hasMoreAfter : false,
     unifiedTimelineEnabled: state.mode === "unified",
     setMessages,
     setDmMessages,
     setUnifiedTimelineEnabled,
     replaceUnifiedTimelinePage: replaceTimelinePage,
     applyUnifiedTimelineBootstrap,
+    applyUnifiedHistoryPage,
+    replaceUnifiedContextPage,
   };
 }

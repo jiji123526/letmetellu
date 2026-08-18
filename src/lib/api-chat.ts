@@ -17,6 +17,7 @@ import {
 let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
 const initRequests = new Map<string, Promise<unknown>>();
 const messagePageRequests = new Map<string, Promise<unknown>>();
+const unifiedPageRequests = new Map<string, Promise<unknown>>();
 const ownerChannelRequests = new Map<string, Promise<OwnerChannelsResponse>>();
 const ownerChannelCache = new Map<string, { data: OwnerChannelsResponse; expiresAt: number }>();
 const MESSAGE_SEND_TIMEOUT_MS = 15_000;
@@ -231,6 +232,96 @@ export function fetchMessagePage(
     }
   };
   void request.then(clearRequest, clearRequest);
+  return request;
+}
+
+export interface UnifiedTimelineCursorPayload {
+  visual_root_created_at: string;
+  source: "message" | "dm";
+  visual_root_id: string;
+  visual_depth: 0 | 1;
+  created_at: string;
+  id: string;
+}
+
+export interface UnifiedTimelinePagePayload {
+  contract_version: 1;
+  items: Array<Record<string, unknown>>;
+  has_more: boolean;
+  page_start_cursor: UnifiedTimelineCursorPayload | null;
+  page_end_cursor: UnifiedTimelineCursorPayload | null;
+  has_older?: boolean;
+  has_newer?: boolean;
+  target_id?: string;
+  target_source?: "message" | "dm";
+}
+
+function appendUnifiedCursor(
+  params: URLSearchParams,
+  direction: "before" | "after",
+  cursor: UnifiedTimelineCursorPayload,
+) {
+  params.set("direction", direction);
+  params.set("cursor_visual_root_created_at", cursor.visual_root_created_at);
+  params.set("cursor_source", cursor.source);
+  params.set("cursor_visual_root_id", cursor.visual_root_id);
+  params.set("cursor_visual_depth", String(cursor.visual_depth));
+  params.set("cursor_created_at", cursor.created_at);
+  params.set("cursor_id", cursor.id);
+}
+
+export function fetchUnifiedTimelinePage(
+  channelId: string,
+  direction?: "before" | "after",
+  cursor?: UnifiedTimelineCursorPayload | null,
+): Promise<UnifiedTimelinePagePayload> {
+  const params = new URLSearchParams({ channel: channelId });
+  if (direction && cursor) appendUnifiedCursor(params, direction, cursor);
+  const key = params.toString();
+  const existing = unifiedPageRequests.get(key);
+  if (existing) return existing as Promise<UnifiedTimelinePagePayload>;
+  const request = fetch(`/api/unified-timeline?${params}`, {
+    headers: roomTokenHeaders(),
+    cache: "no-store",
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Unified timeline failed: ${response.status}`);
+    const data = await response.json() as UnifiedTimelinePagePayload;
+    data.items = data.items.map(decorateMessageMedia);
+    return data;
+  });
+  unifiedPageRequests.set(key, request);
+  void request.finally(() => {
+    if (unifiedPageRequests.get(key) === request) unifiedPageRequests.delete(key);
+  }).catch(() => {});
+  return request;
+}
+
+export function fetchUnifiedTimelineContext(
+  channelId: string,
+  targetId: string,
+  targetSource: "message" | "dm" = "message",
+): Promise<UnifiedTimelinePagePayload> {
+  const params = new URLSearchParams({
+    channel: channelId,
+    target_id: targetId,
+    target_source: targetSource,
+  });
+  const key = params.toString();
+  const existing = unifiedPageRequests.get(key);
+  if (existing) return existing as Promise<UnifiedTimelinePagePayload>;
+  const request = fetch(`/api/unified-timeline?${params}`, {
+    headers: roomTokenHeaders(),
+    cache: "no-store",
+  }).then(async (response) => {
+    if (!response.ok) throw new Error(`Unified context failed: ${response.status}`);
+    const data = await response.json() as UnifiedTimelinePagePayload;
+    data.items = data.items.map(decorateMessageMedia);
+    return data;
+  });
+  unifiedPageRequests.set(key, request);
+  void request.finally(() => {
+    if (unifiedPageRequests.get(key) === request) unifiedPageRequests.delete(key);
+  }).catch(() => {});
   return request;
 }
 

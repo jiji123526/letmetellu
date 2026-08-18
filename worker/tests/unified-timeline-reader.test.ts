@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readUnifiedTimelinePage } from "../src/lib/unified-timeline-reader.ts";
+import {
+  readUnifiedTimelineContextPage,
+  readUnifiedTimelinePage,
+} from "../src/lib/unified-timeline-reader.ts";
 
 interface QueryCall {
   query: string;
@@ -20,6 +23,15 @@ function createEnv(input: {
         bind(...params: unknown[]) {
           calls.push({ query, params });
           return {
+            async first() {
+              if (query.includes("SELECT d.* FROM dm d")) {
+                return input.dmRoots?.[0] || null;
+              }
+              if (query.includes("WITH RECURSIVE ancestors")) {
+                return input.messageRoots?.[0] || null;
+              }
+              return null;
+            },
             async all() {
               if (query.includes("FROM dm_replies")) return { results: input.dmReplies || [] };
               if (query.includes("FROM dm WHERE")) return { results: input.dmRoots || [] };
@@ -139,4 +151,48 @@ test("maximum pages split reply lookups below the D1 variable limit", async () =
   for (const call of replyCalls) {
     assert.ok(call.params.length <= 51);
   }
+});
+
+test("centered windows resolve one target and keep candidate reads bounded", async () => {
+  const { env, calls } = createEnv({
+    messageRoots: [
+      { id: "target", created_at: "2026-08-17T02:00:00.000Z", reply_to: null },
+    ],
+  });
+  const page = await readUnifiedTimelineContextPage(
+    env,
+    "channel-a",
+    { owner: true },
+    "message",
+    "target-reply",
+  );
+
+  assert.ok(page);
+  assert.equal(page.targetId, "target-reply");
+  const candidateCalls = calls.filter((call) =>
+    call.query.includes("FROM messages WHERE")
+    || call.query.includes("FROM dm WHERE")
+  );
+  assert.equal(candidateCalls.length, 4);
+  for (const call of candidateCalls) assert.equal(call.params.at(-1), 26);
+  assert.equal(calls.filter((call) => call.query.includes("WITH RECURSIVE ancestors")).length, 1);
+});
+
+test("centered DM target resolution applies the signed visitor UID", async () => {
+  const { env, calls } = createEnv({
+    dmRoots: [
+      { id: "dm-root", created_at: "2026-08-17T02:00:00.000Z", uid: "visitor-a" },
+    ],
+  });
+  await readUnifiedTimelineContextPage(
+    env,
+    "channel-a",
+    { owner: false, anonymousUid: "visitor-a" },
+    "dm",
+    "dm-reply",
+  );
+  const targetCall = calls.find((call) => call.query.includes("SELECT d.* FROM dm d"));
+  assert.ok(targetCall);
+  assert.match(targetCall.query, /d\.uid = \?/);
+  assert.equal(targetCall.params.at(-1), "visitor-a");
 });

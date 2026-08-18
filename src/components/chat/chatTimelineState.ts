@@ -26,6 +26,7 @@ export type ChatTimelineState =
       pageStartCursor: UnifiedTimelineCursor | null;
       pageEndCursor: UnifiedTimelineCursor | null;
       hasMoreBefore: boolean;
+      hasMoreAfter: boolean;
     };
 
 export type MessageCollectionUpdate =
@@ -36,6 +37,7 @@ const SOURCE_RANK: Record<ChatTimelineSource, number> = {
   message: 0,
   dm: 1,
 };
+const MAX_MOUNTED_TIMELINE_ITEMS = 300;
 
 function compareTimelinePositions(
   left: UnifiedTimelineCursor,
@@ -136,6 +138,7 @@ export function setChatTimelineMode(
       pageStartCursor: null,
       pageEndCursor: null,
       hasMoreBefore: false,
+      hasMoreAfter: false,
     };
   }
   if (!unifiedEnabled && state.mode === "unified") {
@@ -174,6 +177,7 @@ export function updateChatTimelineSource(
     pageStartCursor: state.pageStartCursor,
     pageEndCursor: state.pageEndCursor,
     hasMoreBefore: state.hasMoreBefore,
+    hasMoreAfter: state.hasMoreAfter,
   };
 }
 
@@ -183,6 +187,7 @@ export function replaceUnifiedTimelinePage(
   pageStartCursor: UnifiedTimelineCursor | null,
   pageEndCursor: UnifiedTimelineCursor | null,
   hasMoreBefore = false,
+  hasMoreAfter = false,
 ): ChatTimelineState {
   if (state.mode !== "unified") return state;
   return {
@@ -194,6 +199,7 @@ export function replaceUnifiedTimelinePage(
     pageStartCursor,
     pageEndCursor,
     hasMoreBefore,
+    hasMoreAfter,
   };
 }
 
@@ -222,6 +228,7 @@ export function mergeUnifiedTimelineLatestPage(
       pageStartCursor,
       pageEndCursor,
       hasMoreBefore,
+      false,
     );
   }
 
@@ -241,5 +248,59 @@ export function mergeUnifiedTimelineLatestPage(
     hasMoreBefore: olderItems.length > 0
       ? state.hasMoreBefore
       : hasMoreBefore,
+    hasMoreAfter: false,
+  };
+}
+
+export function mergeUnifiedTimelinePage(
+  state: ChatTimelineState,
+  direction: "before" | "after",
+  items: ChatTimelineItem[],
+  pageStartCursor: UnifiedTimelineCursor | null,
+  pageEndCursor: UnifiedTimelineCursor | null,
+  hasMore: boolean,
+): ChatTimelineState {
+  if (state.mode !== "unified") return state;
+  const combined = [...state.timelineItems, ...items];
+  const normalized = createUnifiedTimelineItems(
+    combined.filter((item) => item.source === "message"),
+    combined.filter((item) => item.source === "dm"),
+  );
+  const rootCounts = new Map<string, number>();
+  for (const item of normalized) {
+    const key = `${item.source}:${item.visual_root_id}`;
+    rootCounts.set(key, (rootCounts.get(key) || 0) + 1);
+  }
+  const rootKeys = [...rootCounts.keys()];
+  const orderedKeys = direction === "before" ? rootKeys : [...rootKeys].reverse();
+  const selectedKeys = new Set<string>();
+  let selectedCount = 0;
+  for (const key of orderedKeys) {
+    const groupSize = rootCounts.get(key) || 0;
+    if (selectedKeys.size > 0 && selectedCount + groupSize > MAX_MOUNTED_TIMELINE_ITEMS) break;
+    selectedKeys.add(key);
+    selectedCount += groupSize;
+  }
+  const trimmed = normalized.filter((item) =>
+    selectedKeys.has(`${item.source}:${item.visual_root_id}`)
+  );
+  const trimmedStart = trimmed[0] ? rootCursor(trimmed[0]) : pageStartCursor;
+  const trimmedEnd = trimmed.at(-1) ? rootCursor(trimmed.at(-1)!) : pageEndCursor;
+  const didTrim = trimmed.length < normalized.length;
+  return {
+    mode: "unified",
+    timelineItems: trimmed,
+    pageStartCursor: direction === "before"
+      ? pageStartCursor
+      : didTrim ? trimmedStart : state.pageStartCursor,
+    pageEndCursor: direction === "after"
+      ? pageEndCursor
+      : didTrim ? trimmedEnd : state.pageEndCursor,
+    hasMoreBefore: direction === "before"
+      ? hasMore
+      : didTrim || state.hasMoreBefore,
+    hasMoreAfter: direction === "after"
+      ? hasMore
+      : didTrim || state.hasMoreAfter,
   };
 }

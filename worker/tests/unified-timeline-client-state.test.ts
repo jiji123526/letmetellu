@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createInitialChatTimelineState,
   mergeUnifiedTimelineLatestPage,
+  mergeUnifiedTimelinePage,
   replaceUnifiedTimelinePage,
   selectTimelineDmMessages,
   selectTimelineMessages,
@@ -184,6 +185,75 @@ test("bootstrap selection executes one reader and never falls back in-request", 
     },
   }), /unified failed/);
   assert.equal(calls.includes("fallback"), false);
+});
+
+test("bidirectional unified pages merge once and retain server edge state", () => {
+  const first = {
+    visual_root_created_at: "2026-08-18T01:00:00.000Z",
+    source: "message" as const,
+    visual_root_id: "m1",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T01:00:00.000Z",
+    id: "m1",
+  };
+  const older = {
+    ...first,
+    visual_root_created_at: "2026-08-18T00:00:00.000Z",
+    visual_root_id: "d0",
+    created_at: "2026-08-18T00:00:00.000Z",
+    id: "d0",
+    source: "dm" as const,
+  };
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = replaceUnifiedTimelinePage(
+    state,
+    [{ ...message("m1", first.created_at), ...first }],
+    first,
+    first,
+    true,
+    false,
+  );
+  state = mergeUnifiedTimelinePage(
+    state,
+    "before",
+    [{ ...message("d0", older.created_at, { dm: true }), ...older }],
+    older,
+    older,
+    false,
+  );
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(state.timelineItems.map((item) => `${item.source}:${item.id}`), [
+    "dm:d0",
+    "message:m1",
+  ]);
+  assert.equal(state.pageStartCursor, older);
+  assert.equal(state.pageEndCursor, first);
+  assert.equal(state.hasMoreBefore, false);
+  assert.equal(state.hasMoreAfter, false);
+});
+
+test("unified history trimming remains bounded and keeps whole root groups", () => {
+  const items = Array.from({ length: 305 }, (_, index) => {
+    const id = `m-${String(index).padStart(3, "0")}`;
+    const createdAt = `2026-08-18T${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}:00.000Z`;
+    return {
+      ...message(id, createdAt),
+      source: "message" as const,
+      visual_root_created_at: createdAt,
+      visual_root_id: id,
+      visual_depth: 0 as const,
+    };
+  });
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = replaceUnifiedTimelinePage(state, items.slice(0, 200), null, null);
+  state = mergeUnifiedTimelinePage(state, "after", items.slice(200), null, null, false);
+
+  assert.equal(state.mode, "unified");
+  assert.equal(state.timelineItems.length, 300);
+  assert.equal(state.timelineItems[0].id, "m-005");
+  assert.equal(state.timelineItems.at(-1)?.id, "m-304");
+  assert.equal(state.hasMoreBefore, true);
 });
 
 test("the server rollout defaults off and matches only exact channel IDs", () => {

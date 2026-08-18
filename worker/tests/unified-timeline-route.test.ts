@@ -397,6 +397,21 @@ test("malformed, partial and non-root cursors return 400", async () => {
   assert.equal(missingDirection.status, 400);
 });
 
+test("centered navigation rejects invalid sources and missing targets", async () => {
+  const fixture = createFixture({});
+  const invalidSource = await handleUnifiedTimeline(unifiedRequest({
+    headers: ownerHeaders(),
+    params: { target_id: "m1", target_source: "report" },
+  }), fixture.env);
+  assert.equal(invalidSource.status, 400);
+
+  const missingTarget = await handleUnifiedTimeline(unifiedRequest({
+    headers: ownerHeaders(),
+    params: { target_id: "missing", target_source: "message" },
+  }), fixture.env);
+  assert.equal(missingTarget.status, 404);
+});
+
 test("latest, before and after root pages join without duplicates or gaps", async () => {
   const fixture = createFixture({
     messageRoots: [

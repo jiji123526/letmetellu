@@ -4,6 +4,35 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 5C: history and navigation — 2026-08-18
+
+- Allowlisted normal channels now load older and newer history through the unified
+  endpoint using opaque six-field edge cursors. Identical requests are coalesced,
+  and canonical state merges each response once by `(source, id)`.
+- Upward paging preserves one visible anchor, waits for bounded media readiness and
+  performs one final correction. Downward paging retains the existing context and
+  live-edge behavior.
+- Unified mounted history is capped near 300 items with a linear whole-root
+  selection pass. A large thread remains intact even if it exceeds the nominal
+  budget, and trimming marks the removed edge as pageable.
+- Added authorization-aware centered windows for search, message context, gallery
+  navigation and refresh restoration. Public targets resolve to their visual root;
+  private targets require owner access or the matching signed anonymous identity.
+- Session-only refresh state now records the unified source and item ID alongside
+  its short-lived viewport offset. It does not persist a channel-wide pixel
+  position or derive a cursor from layout.
+- The centered reader performs one target lookup, four parallel bounded candidate
+  reads and reply expansion only for the selected 51-root window. Focused tests
+  preserve candidate limits, visitor DM scope, whole-root trimming and edge state.
+
+Trade-off: centered unified navigation has more bounded statements than the legacy
+public-only context query. It avoids a global cross-table sort, prevents private-DM
+leakage and eliminates the former need to fetch a public context before separately
+merging DMs.
+
+Deployment note: no D1 migration is required. Keep the production allowlist empty
+until Stage 5D normalizes DM invalidations and mutation/realtime reconciliation.
+
 ### Unified chat pagination stage 5B: bootstrap and reconnect — 2026-08-18
 
 - Allowlisted normal-channel `/api/init` requests now execute the unified timeline

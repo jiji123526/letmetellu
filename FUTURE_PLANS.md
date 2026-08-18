@@ -19,8 +19,8 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 - Continue unified public-message/DM pagination from the completed cursor, reader,
   shadow-comparison, production-shaped API, single-state adapter and unified
-  bootstrap/reconnect stages into navigation, realtime mutation normalization,
-  fan-out validation, special-channel and controlled-rollout work in
+  bootstrap/reconnect and history/navigation stages into realtime mutation
+  normalization, fan-out validation, special-channel and controlled-rollout work in
   [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the production
   read path behind a kill switch until authorization, ordering, bounded-row,
   latency and scroll-stability exit criteria pass.

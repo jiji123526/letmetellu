@@ -201,17 +201,32 @@ state back to legacy mode.
 
 #### Stage 5C — history and navigation
 
-- Upward pagination uses the page-start unified cursor and one top-visible root
-  anchor. Insert the completed page once, then perform one anchor correction.
-- Downward pagination uses the page-end cursor and preserves the live-edge rule:
-  only users already near the bottom are returned to the bottom.
-- Refresh restoration is session-only and stores the unified root/item identity,
-  not a channel-persistent pixel offset.
-- Message-context/gallery navigation must return a unified window centered on the
-  target root. Link-panel behavior remains direct link opening.
-- Loading media/widgets must not repeatedly trigger scroll correction. Navigation
-  waits for the target window's bounded readiness signal and then performs at most
-  one final correction.
+- Status: implemented on the feature branch for allowlisted normal channels.
+- Older/newer loads use the opaque unified page-start/page-end cursors and one
+  coalesced request. Canonical state merges by `(source, id)` once; no client cursor
+  is reconstructed from timestamps or DOM order.
+- Upward loads lock one top-visible anchor, wait for bounded media readiness and
+  perform one final correction. Downward loads preserve the current anchor and the
+  existing live-edge behavior.
+- Mounted unified history is bounded near 300 rendered items. Trimming works in one
+  linear pass over root groups and never splits a root from its replies; the
+  opposite edge is marked pageable after trimming.
+- The unified endpoint accepts an authorized target source/ID and returns a centered
+  51-root window. Public targets resolve through their root ancestry; private roots
+  and replies additionally require owner scope or the matching signed visitor.
+- Search, message-context, gallery and refresh restoration consume that centered
+  window. Refresh state remains in `sessionStorage` and records `(source, id)`,
+  viewport offset, live mode and age; it is not channel-persistent.
+- Identical page/context requests share one in-flight promise. The server resolves
+  the target once, reads four bounded before/after source ranges in parallel and
+  expands replies only for the selected window.
+- Live and reports channels remain on their existing navigation paths pending Stage
+  7. Link-panel entries continue opening their destination directly.
+
+Trade-off: centered navigation performs one target lookup, four bounded candidate
+reads and up to two selected-root reply expansions. This is more queries than a
+public-message-only context read, but it keeps DM authorization source-specific and
+avoids a global cross-table sort or downloading two client windows.
 
 #### Stage 5D — mutations and realtime events
 
@@ -362,7 +377,7 @@ Cleanup after stable rollout:
 - [x] Stage 4 production-shaped unified API contract and route fixtures
 - [x] Stage 5A single-state client adapter and kill switch
 - [x] Stage 5B unified bootstrap/reconnect
-- [ ] Stage 5C bidirectional history/context/navigation
+- [x] Stage 5C bidirectional history/context/navigation
 - [ ] Stage 5D mutation and realtime normalization
 - [ ] Stage 6 fan-out/query measurements and any required continuation design
 - [ ] Stage 7 live and reports adapters
