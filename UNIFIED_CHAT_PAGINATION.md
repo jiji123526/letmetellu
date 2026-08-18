@@ -455,6 +455,38 @@ npx wrangler secret delete UNIFIED_TIMELINE_SAMPLE_PERCENT
 Exact allowlisted channels remain enabled during that rollback. Delete
 `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST` too for a complete normal-channel rollback.
 
+#### Small-installation global switch
+
+- **Completed 2026-08-18.** `UNIFIED_TIMELINE_GLOBAL_ENABLED=1` enables unified
+  pagination for normal, live and reports channels without cohorts or per-channel
+  allowlists.
+- The switch changes only rollout selection. Reports remain owner-only, room
+  passcodes remain current-hash bound, private DMs remain viewer scoped and live
+  requests still require the current active session ID before and after reads.
+- Any value other than the exact string `1` fails closed. Global reads emit
+  `rollout_mode=global` without identifiers or content.
+
+For a small installation that has completed active-channel checks, enable global
+mode:
+
+```bash
+npx wrangler secret put UNIFIED_TIMELINE_GLOBAL_ENABLED
+```
+
+Enter `1`. After it is active, remove obsolete cohort configuration:
+
+```bash
+npx wrangler secret delete UNIFIED_TIMELINE_SAMPLE_PERCENT
+npx wrangler secret delete UNIFIED_TIMELINE_SAMPLE_SALT
+```
+
+Delete any timeline allowlist secrets too if they are no longer used. This matters
+for rollback: remove all fallback rollout settings first, then global rollback is:
+
+```bash
+npx wrangler secret delete UNIFIED_TIMELINE_GLOBAL_ENABLED
+```
+
 Rollout order:
 
 1. local/preview Worker with deterministic fixtures;

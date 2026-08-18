@@ -70,6 +70,7 @@ function createFixture(input: {
   passcode?: string | null;
   reportsChannelId?: string;
   normalAllowlist?: string;
+  globalEnabled?: string;
   samplePercent?: string;
   sampleSalt?: string;
   messageRoots?: RootRow[];
@@ -182,6 +183,7 @@ function createFixture(input: {
     REPORTS_CHANNEL_ID: input.reportsChannelId,
     UNIFIED_TIMELINE_CHANNEL_ALLOWLIST: input.normalAllowlist
       ?? (input.reportsChannelId || input.liveSession ? undefined : channelId),
+    UNIFIED_TIMELINE_GLOBAL_ENABLED: input.globalEnabled,
     UNIFIED_TIMELINE_SAMPLE_PERCENT: input.samplePercent,
     UNIFIED_TIMELINE_SAMPLE_SALT: input.sampleSalt,
     UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST: input.liveAllowlist,
@@ -533,6 +535,47 @@ test("reports rollout hydrates only the selected owner page in locale order", as
     JSON.parse(String(hydrationCalls[0].params[0])),
     ["report-message", "petition-message", "plain-message"],
   );
+});
+
+test("global rollout activates authorized reports and current live sessions", async () => {
+  const reportsFixture = createFixture({
+    channelId: "reports",
+    reportsChannelId: "reports",
+    globalEnabled: "1",
+  });
+  const reportsResponse = await handleUnifiedTimeline(unifiedRequest({
+    channelId: "reports",
+    headers: ownerHeaders(),
+  }), reportsFixture.env);
+  assert.equal(reportsResponse.status, 200);
+
+  const liveSession: LiveSessionState = {
+    active: true,
+    title: "Global live",
+    sessionId: "global-live",
+    startedAt: "2026-08-18T00:00:00.000Z",
+    expiresAt: "2099-08-18T08:00:00.000Z",
+  };
+  const liveFixture = createFixture({
+    globalEnabled: "1",
+    liveSession,
+  });
+  const liveResponse = await handleUnifiedTimeline(unifiedRequest({
+    channelId: `${CHANNEL_ID}_live`,
+    headers: ownerHeaders(),
+    params: { live_session_id: liveSession.sessionId },
+  }), liveFixture.env);
+  assert.equal(liveResponse.status, 200);
+
+  const staleLiveResponse = await handleUnifiedTimeline(unifiedRequest({
+    channelId: `${CHANNEL_ID}_live`,
+    headers: ownerHeaders(),
+    params: { live_session_id: "stale-live" },
+  }), liveFixture.env);
+  assert.equal(staleLiveResponse.status, 409);
+  assert.deepEqual(await readJson<{ error: string }>(staleLiveResponse), {
+    error: "live_session_changed",
+  });
 });
 
 test("live unified pages require the current active session id", async () => {

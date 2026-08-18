@@ -239,7 +239,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             metrics: page.metrics,
             owner: isOwner,
             readMode: "page",
-            rolloutMode: unifiedTimelineRollout.mode === "sample" ? "sample" : "allowlist",
+            rolloutMode: unifiedTimelineRollout.mode === "global"
+              ? "global"
+              : unifiedTimelineRollout.mode === "sample"
+              ? "sample"
+              : "allowlist",
             workerDurationMs: performance.now() - startedAt,
           }));
           return page;

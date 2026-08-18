@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 8C: global activation — 2026-08-18
+
+- Added `UNIFIED_TIMELINE_GLOBAL_ENABLED=1` for small installations that want one
+  explicit switch instead of channel allowlists or percentage cohorts.
+- Global mode covers normal, live and reports timelines, but does not bypass
+  authorization, passcode, signed anonymous identity, report-owner or current
+  live-session checks.
+- Values other than the exact string `1` fail closed. Structured records identify
+  global traffic through `rollout_mode=global` without logging channel IDs,
+  identities, cursors or content.
+- Route tests verify reports-owner access, current live-session access and stale
+  live-session rejection under global mode.
+
+Trade-off: global activation increases the blast radius of a pagination regression.
+It is appropriate only when the installation has few active channels that were
+already exercised. The request-time global deletion remains an immediate rollback,
+provided old allowlist/cohort bindings are removed first.
+
+Deployment note: Worker-only; no migration or frontend deployment is required.
+Deploy, set the global secret to `1`, then delete obsolete sample and allowlist
+secrets. Roll back by deleting the global secret.
+
 ### Unified chat pagination stage 8B: deterministic cohorts — 2026-08-18
 
 - Added default-off normal-channel percentage rollout through

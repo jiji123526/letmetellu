@@ -522,6 +522,26 @@ test("normal percentage rollout is deterministic and special channels ignore it"
   );
 });
 
+test("the explicit global switch enables normal, live and reports timelines", () => {
+  const env = { UNIFIED_TIMELINE_GLOBAL_ENABLED: "1" } as Env;
+  assert.deepEqual(resolveUnifiedTimelineRollout(env, "room-a"), {
+    enabled: true,
+    mode: "global",
+    bucket: null,
+  });
+  assert.equal(isUnifiedTimelineClientEnabled(env, "room-a", { live: true }), true);
+  assert.equal(isUnifiedTimelineClientEnabled(env, "reports", { reports: true }), true);
+
+  for (const disabledValue of ["", "0", "true", "yes", "2"]) {
+    assert.equal(
+      isUnifiedTimelineClientEnabled({
+        UNIFIED_TIMELINE_GLOBAL_ENABLED: disabledValue,
+      } as Env, "room-a"),
+      false,
+    );
+  }
+});
+
 test("percentage rollout fails closed without valid percent and salt", () => {
   for (const percent of ["", "0", "-1", "101", "5%", "five"]) {
     assert.equal(

@@ -5,7 +5,7 @@ interface UnifiedTimelineRolloutContext {
   reports?: boolean;
 }
 
-export type UnifiedTimelineRolloutMode = "off" | "allowlist" | "sample";
+export type UnifiedTimelineRolloutMode = "off" | "global" | "allowlist" | "sample";
 
 export interface UnifiedTimelineRolloutDecision {
   enabled: boolean;
@@ -52,6 +52,9 @@ export function resolveUnifiedTimelineRollout(
   channelId: string,
   context: UnifiedTimelineRolloutContext = {},
 ): UnifiedTimelineRolloutDecision {
+  if (env.UNIFIED_TIMELINE_GLOBAL_ENABLED === "1") {
+    return { enabled: true, mode: "global", bucket: null };
+  }
   const specialChannel = context.live || context.reports;
   const allowlist = context.reports
     ? env.UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST

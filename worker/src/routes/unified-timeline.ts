@@ -167,7 +167,11 @@ export async function handleUnifiedTimeline(
         metrics: contextPage.metrics,
         owner: viewer.owner,
         readMode: "context",
-        rolloutMode: rollout.mode === "sample" ? "sample" : "allowlist",
+        rolloutMode: rollout.mode === "global"
+          ? "global"
+          : rollout.mode === "sample"
+          ? "sample"
+          : "allowlist",
         workerDurationMs: performance.now() - startedAt,
       }));
     }
@@ -207,7 +211,11 @@ export async function handleUnifiedTimeline(
       metrics: page.metrics,
       owner: viewer.owner,
       readMode: "page",
-      rolloutMode: rollout.mode === "sample" ? "sample" : "allowlist",
+      rolloutMode: rollout.mode === "global"
+        ? "global"
+        : rollout.mode === "sample"
+        ? "sample"
+        : "allowlist",
       workerDurationMs: performance.now() - startedAt,
     }));
   }

@@ -56,3 +56,15 @@ test("expanded pages above the provisional budget become fanout warnings", () =>
   assert.equal(aboveBudget.event_type, "unified_timeline_fanout_warning");
   assert.equal(aboveBudget.viewer_scope, "owner");
 });
+
+test("global rollout metrics remain distinguishable from cohort traffic", () => {
+  const record = createUnifiedTimelineMetricRecord({
+    metrics: metrics(10),
+    owner: true,
+    readMode: "page",
+    rolloutMode: "global",
+    workerDurationMs: 4,
+  });
+
+  assert.equal(record.rollout_mode, "global");
+});

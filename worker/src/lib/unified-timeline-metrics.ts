@@ -7,7 +7,7 @@ export interface UnifiedTimelineMetricRecord extends UnifiedTimelineReadMetrics 
   event_type: "unified_timeline_read" | "unified_timeline_fanout_warning";
   viewer_scope: "owner" | "visitor";
   read_mode: "page" | "context";
-  rollout_mode: "allowlist" | "sample" | "shadow";
+  rollout_mode: "global" | "allowlist" | "sample" | "shadow";
   worker_duration_ms: number;
 }
 
@@ -15,7 +15,7 @@ export function createUnifiedTimelineMetricRecord(input: {
   metrics: UnifiedTimelineReadMetrics;
   owner: boolean;
   readMode: "page" | "context";
-  rolloutMode: "allowlist" | "sample" | "shadow";
+  rolloutMode: "global" | "allowlist" | "sample" | "shadow";
   workerDurationMs: number;
 }): UnifiedTimelineMetricRecord {
   return {
