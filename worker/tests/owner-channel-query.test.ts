@@ -34,7 +34,10 @@ test("init uses a two-row indexed owner-channel probe", () => {
 });
 
 test("chat startup uses init metadata instead of fetching the owner list", () => {
-  assert.match(chatViewSource, /channel\?\.owner_channel_count \|\| 0/);
+  assert.match(
+    chatViewSource,
+    /channel\?\.show_on_profile === 1[\s\S]*channel\.owner_channel_count \|\| 0/,
+  );
   assert.doesNotMatch(chatViewSource, /fetchOwnerChannels/);
 });
 

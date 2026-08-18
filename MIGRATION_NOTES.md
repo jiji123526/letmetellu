@@ -90,7 +90,11 @@ Deployment note: sender-owned deletion itself needs no migration. The server-bac
 Trade-off: every private-thread change causes connected channel tabs to make one bounded authorized DM refresh; reply content is rare and channels are small enough that this is preferable to adding private authorization state to every public socket. An image reply adds one managed R2 object and upload-ticket record. The latest 50 DM roots are retained in the mounted snapshot, with up to 20 replies per root.
 
 Deployment note: apply migration `0045`, deploy the Worker, then deploy the frontend. In two browser profiles, send DMs from both visitors, verify each profile sees only its own roots and replies, send multiple owner replies from the original and a reply row, verify locked-room behavior, then delete one DM and confirm it disappears from the matching sender without exposing content to the other profile.
+### Hidden channels do not open the owner profile — 2026-08-17
 
+- The channel-header profile button now treats the owner channel count as zero when the current channel has `show_on_profile` disabled.
+- Existing behavior remains unchanged for public channels: the profile opens only when the owner has at least two public channels.
+- This prevents a hidden channel from acting as an entry point to the owner's public-channel profile while preserving the channel avatar as a non-interactive header identity.
 ### Channel social previews refresh immediately after appearance changes — 2026-08-16
 
 - Public channel preview reads keep their five-minute cache but now carry a channel-scoped cache tag.

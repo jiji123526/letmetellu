@@ -94,7 +94,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const galleryLoading = useRef(false);
   const [showChannelDeleted, setShowChannelDeleted] = useState(false);
   const { isOwner, isLoggedIn, userId: authUserId } = useAuth(channel?.owner_uid);
-  const ownerChannelCount = channel?.owner_channel_count || 0;
+  const ownerChannelCount = channel?.show_on_profile === 1
+    ? channel.owner_channel_count || 0
+    : 0;
   const { t, locale, timeZone } = useLocale();
   const [manualAdmin] = useState(() => {
     if (typeof window === "undefined") return false;
