@@ -22,6 +22,10 @@ import { recordOperationalEvent } from "../lib/operational-events";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
 import { compareUnifiedTimelineShadow } from "../lib/unified-timeline-shadow";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer";
+import {
+  createUnifiedTimelineMetricRecord,
+  logUnifiedTimelineMetric,
+} from "../lib/unified-timeline-metrics";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -117,9 +121,20 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       }
 
       try {
+        const readMeasuredUnifiedPage = async () => {
+          const startedAt = performance.now();
+          const page = await readUnifiedTimelinePage(env, channelId, viewer, { limit: 50 });
+          logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
+            metrics: page.metrics,
+            owner: viewer.owner,
+            readMode: "page",
+            workerDurationMs: performance.now() - startedAt,
+          }));
+          return page;
+        };
         const [dmMessages, unifiedPage] = await Promise.all([
           readDmThreads(env, channelId, viewer),
-          readUnifiedTimelinePage(env, channelId, viewer, { limit: 50 }),
+          readMeasuredUnifiedPage(),
         ]);
         const comparison = compareUnifiedTimelineShadow({
           publicMessages: expandedResults,

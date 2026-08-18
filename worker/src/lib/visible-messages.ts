@@ -77,6 +77,7 @@ export async function readVisibleFlatThreads(
   channelId: string,
   requestedRootIds: string[],
   loadedMessageIds: ReadonlySet<string> = new Set(),
+  onResult?: (result: D1Result<VisibleMessageRow>) => void,
 ): Promise<VisibleMessageRow[]> {
   const rootIds = [...new Set(requestedRootIds.map(String).filter(Boolean))];
   if (rootIds.length === 0) return [];
@@ -106,6 +107,7 @@ export async function readVisibleFlatThreads(
     `).bind(channelId, ...normalizedRootIds));
 
   const results = await env.DB.batch<VisibleMessageRow>(statements);
+  for (const result of results) onResult?.(result);
   return sortVisibleMessages(results.flatMap((result) => result.results || []));
 }
 

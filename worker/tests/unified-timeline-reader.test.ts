@@ -17,6 +17,13 @@ function createEnv(input: {
   dmReplies?: Array<Record<string, unknown>>;
 }) {
   const calls: QueryCall[] = [];
+  const result = (rows: Array<Record<string, unknown>>) => ({
+    results: rows,
+    meta: {
+      rows_read: rows.length,
+      duration: rows.length / 10,
+    },
+  });
   const DB = {
     prepare(query: string) {
       return {
@@ -33,10 +40,11 @@ function createEnv(input: {
               return null;
             },
             async all() {
-              if (query.includes("FROM dm_replies")) return { results: input.dmReplies || [] };
-              if (query.includes("FROM dm WHERE")) return { results: input.dmRoots || [] };
-              if (query.includes("reply_to IN")) return { results: input.messageReplies || [] };
-              return { results: input.messageRoots || [] };
+              if (query.includes("SELECT d.* FROM dm d")) return result(input.dmRoots || []);
+              if (query.includes("FROM dm_replies")) return result(input.dmReplies || []);
+              if (query.includes("FROM dm WHERE")) return result(input.dmRoots || []);
+              if (query.includes("reply_to IN")) return result(input.messageReplies || []);
+              return result(input.messageRoots || []);
             },
           };
         },
@@ -44,7 +52,7 @@ function createEnv(input: {
     },
     async batch(statements: Array<{ all?: () => unknown }>) {
       void statements;
-      return [{ results: input.messageReplies || [] }];
+      return [result(input.messageReplies || [])];
     },
   };
   return { env: { DB } as never, calls };
@@ -80,6 +88,18 @@ test("unified reader selects roots before expanding only selected replies", asyn
   assert.deepEqual(page.items.map((item) => item.id), ["m1", "m1-r", "d2", "d2-r", "m3"]);
   assert.equal(page.pageStartCursor?.id, "m1");
   assert.equal(page.pageEndCursor?.id, "m3");
+  assert.deepEqual(page.metrics, {
+    queryCount: 4,
+    rowsRead: 5,
+    d1DurationMs: 0.5,
+    rootCount: 3,
+    itemCount: 5,
+    maxChildrenPerRoot: 1,
+    messageRootCount: 2,
+    dmRootCount: 1,
+    messageReplyCount: 1,
+    dmReplyCount: 1,
+  });
   assert.ok(calls.some((call) => call.query.includes("FROM dm_replies") && call.params.includes("d2")));
 });
 

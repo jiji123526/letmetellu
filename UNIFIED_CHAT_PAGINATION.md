@@ -271,6 +271,26 @@ the full rollout has remained stable for the agreed observation window.
 The page limit counts roots, not rendered rows. Fifty roots can still expand into a
 large number of public replies or DM replies. Before broad rollout:
 
+- **Instrumentation completed 2026-08-18.** Every allowlisted page, context and
+  bootstrap read emits one structured `unified_timeline_read` record containing
+  owner/visitor scope, root/item counts, maximum children under one root, source
+  counts, query count, D1 rows read, D1 SQL duration and Worker reader duration.
+  Explicit shadow comparisons emit the same record.
+- Pages above the provisional 300-item mounted budget emit
+  `unified_timeline_fanout_warning` instead. This is a log warning, not a D1
+  operational-event write, so measurement does not add database work.
+- `worker/scripts/audit-unified-timeline-fanout.sql` reports public and DM fan-out
+  distributions without selecting content and verifies owner DM, visitor DM,
+  public-root and public-child query plans. Run it against production before
+  enabling non-test accounts.
+- After deploying to an allowlisted test channel, run
+  `npx wrangler tail --format json` while exercising latest, older, context and
+  reconnect reads once as the owner and once as a signed visitor. Review the two
+  scopes separately in both tail output and D1 Insights.
+- Reader tests preserve exact query/row metadata aggregation, lookup chunking and
+  the warning boundary. No replies are truncated, and no intra-root cursor has
+  been added without evidence that it is needed.
+
 - measure selected root count, expanded item count, maximum children under one root,
   Worker duration and D1 rows read for owner and visitor requests;
 - inspect owner and visitor query fingerprints separately in D1 Insights;
@@ -294,6 +314,11 @@ Trade-off: an intra-root continuation cursor makes the contract more complicated
 but is safer than allowing one extremely popular root to produce an unbounded page.
 It should be added only if measurements show that the current bounded-root model is
 insufficient.
+
+Current trade-off: allowlisted and explicit-shadow reads produce one small
+structured log each. This is acceptable for test-channel calibration and cheaper
+than writing telemetry to D1, but logging must be sampled or removed before a broad
+rollout if volume becomes material.
 
 ### Stage 7 — special-channel adapters
 

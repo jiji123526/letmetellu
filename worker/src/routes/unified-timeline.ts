@@ -6,6 +6,11 @@ import {
   readUnifiedTimelineContextPage,
   readUnifiedTimelinePage,
 } from "../lib/unified-timeline-reader.ts";
+import {
+  createUnifiedTimelineMetricRecord,
+  logUnifiedTimelineMetric,
+} from "../lib/unified-timeline-metrics.ts";
+import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout.ts";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
@@ -87,6 +92,7 @@ export async function handleUnifiedTimeline(
     if (targetSource !== "message" && targetSource !== "dm") {
       return Response.json({ error: "invalid_target_source" }, { status: 400 });
     }
+    const startedAt = performance.now();
     const contextPage = await readUnifiedTimelineContextPage(
       env,
       channelId,
@@ -97,6 +103,14 @@ export async function handleUnifiedTimeline(
     if (!contextPage) {
       return Response.json({ error: "target_not_found" }, { status: 404 });
     }
+    if (isUnifiedTimelineClientEnabled(env, channelId)) {
+      logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
+        metrics: contextPage.metrics,
+        owner: viewer.owner,
+        readMode: "context",
+        workerDurationMs: performance.now() - startedAt,
+      }));
+    }
     return Response.json({
       ...serializeUnifiedTimelinePage(contextPage),
       target_id: contextPage.targetId,
@@ -106,10 +120,19 @@ export async function handleUnifiedTimeline(
     });
   }
 
+  const startedAt = performance.now();
   const page = await readUnifiedTimelinePage(env, channelId, viewer, {
     cursor: pageRequest.cursor,
     direction: pageRequest.direction,
     limit: pageRequest.limit,
   });
+  if (isUnifiedTimelineClientEnabled(env, channelId)) {
+    logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
+      metrics: page.metrics,
+      owner: viewer.owner,
+      readMode: "page",
+      workerDurationMs: performance.now() - startedAt,
+    }));
+  }
   return Response.json(serializeUnifiedTimelinePage(page));
 }

@@ -11,6 +11,10 @@ import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout"
 import { readSelectedBootstrap } from "../lib/bootstrap-read-mode";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
 import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
+import {
+  createUnifiedTimelineMetricRecord,
+  logUnifiedTimelineMetric,
+} from "../lib/unified-timeline-metrics";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
@@ -208,13 +212,23 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           ]);
           return { messagePage, dmMessages };
         },
-        unified: () => readUnifiedTimelinePage(
-          env,
-          channelId,
-          isOwner
-            ? { owner: true }
-            : { owner: false, anonymousUid: anonymousIdentity.uid },
-        ),
+        unified: async () => {
+          const startedAt = performance.now();
+          const page = await readUnifiedTimelinePage(
+            env,
+            channelId,
+            isOwner
+              ? { owner: true }
+              : { owner: false, anonymousUid: anonymousIdentity.uid },
+          );
+          logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
+            metrics: page.metrics,
+            owner: isOwner,
+            readMode: "page",
+            workerDurationMs: performance.now() - startedAt,
+          }));
+          return page;
+        },
       }),
       env.DB.batch(statements),
     ]);

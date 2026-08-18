@@ -51,6 +51,7 @@ export interface UnifiedTimelinePage {
   pageStartCursor: UnifiedTimelineCursor | null;
   pageEndCursor: UnifiedTimelineCursor | null;
   rootCount: number;
+  metrics: UnifiedTimelineReadMetrics;
 }
 
 export interface UnifiedTimelineContextPage extends UnifiedTimelinePage {
@@ -65,6 +66,79 @@ const SOURCE_RANK: Record<UnifiedTimelineSource, number> = {
   dm: 1,
 };
 const REPLY_LOOKUP_BUCKETS = [1, 2, 4, 8, 16, 32, 50] as const;
+export const UNIFIED_TIMELINE_FANOUT_WARNING_ITEMS = 300;
+
+export interface UnifiedTimelineReadMetrics {
+  queryCount: number;
+  rowsRead: number;
+  d1DurationMs: number;
+  rootCount: number;
+  itemCount: number;
+  maxChildrenPerRoot: number;
+  messageRootCount: number;
+  dmRootCount: number;
+  messageReplyCount: number;
+  dmReplyCount: number;
+}
+
+function createReadMetrics(): UnifiedTimelineReadMetrics {
+  return {
+    queryCount: 0,
+    rowsRead: 0,
+    d1DurationMs: 0,
+    rootCount: 0,
+    itemCount: 0,
+    maxChildrenPerRoot: 0,
+    messageRootCount: 0,
+    dmRootCount: 0,
+    messageReplyCount: 0,
+    dmReplyCount: 0,
+  };
+}
+
+function recordQueryResult(
+  metrics: UnifiedTimelineReadMetrics,
+  result: { meta?: Partial<D1Meta> },
+): void {
+  metrics.queryCount += 1;
+  metrics.rowsRead += Number(result.meta?.rows_read || 0);
+  metrics.d1DurationMs += Number(
+    result.meta?.timings?.sql_duration_ms
+    ?? result.meta?.duration
+    ?? 0,
+  );
+}
+
+function finalizeReadMetrics(
+  metrics: UnifiedTimelineReadMetrics,
+  roots: RootCandidate[],
+  items: UnifiedTimelineItem[],
+): UnifiedTimelineReadMetrics {
+  const childCounts = new Map<string, number>();
+  let maxChildrenPerRoot = 0;
+  let messageRootCount = 0;
+  for (const root of roots) {
+    if (root.source === "message") messageRootCount += 1;
+  }
+  for (const item of items) {
+    if (item.visual_depth === 0) continue;
+    const key = `${item.source}:${item.visual_root_id}`;
+    const childCount = (childCounts.get(key) || 0) + 1;
+    childCounts.set(key, childCount);
+    maxChildrenPerRoot = Math.max(maxChildrenPerRoot, childCount);
+    if (item.source === "message") {
+      metrics.messageReplyCount += 1;
+    } else {
+      metrics.dmReplyCount += 1;
+    }
+  }
+  metrics.rootCount = roots.length;
+  metrics.itemCount = items.length;
+  metrics.maxChildrenPerRoot = maxChildrenPerRoot;
+  metrics.messageRootCount = messageRootCount;
+  metrics.dmRootCount = roots.length - metrics.messageRootCount;
+  return metrics;
+}
 
 function rootCursor(source: UnifiedTimelineSource, row: RootRow): UnifiedTimelineCursor {
   return {
@@ -129,6 +203,7 @@ async function readMessageRootCandidates(
   cursor: UnifiedTimelineCursor | null,
   direction: TimelineDirection,
   candidateLimit: number,
+  metrics: UnifiedTimelineReadMetrics,
 ): Promise<RootCandidate[]> {
   let innerQuery = `SELECT * FROM messages WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}`;
   const params: unknown[] = [channelId, channelId];
@@ -139,6 +214,7 @@ async function readMessageRootCandidates(
   params.push(candidateLimit);
   const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
   const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
+  recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({
     source: "message",
     row,
@@ -153,6 +229,7 @@ async function readDmRootCandidates(
   cursor: UnifiedTimelineCursor | null,
   direction: TimelineDirection,
   candidateLimit: number,
+  metrics: UnifiedTimelineReadMetrics,
 ): Promise<RootCandidate[]> {
   let innerQuery = "SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL";
   const params: unknown[] = [channelId];
@@ -167,6 +244,7 @@ async function readDmRootCandidates(
   params.push(candidateLimit);
   const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
   const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
+  recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({
     source: "dm",
     row,
@@ -178,11 +256,12 @@ async function readDmReplies(
   env: Env,
   channelId: string,
   rootIds: string[],
+  metrics: UnifiedTimelineReadMetrics,
 ): Promise<DmReplyRow[]> {
   const results = await Promise.all(chunkLookupIds(rootIds).map(async (rootChunk) => {
     const lookupIds = normalizeLookupIds(rootChunk);
     const placeholders = lookupIds.map(() => "?").join(", ");
-    return env.DB.prepare(`
+    const result = await env.DB.prepare(`
       SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
       FROM dm_replies
       WHERE channel_id = ?
@@ -190,6 +269,8 @@ async function readDmReplies(
         AND pending_delete_at IS NULL
       ORDER BY created_at ASC, id ASC
     `).bind(channelId, ...lookupIds).all<DmReplyRow>();
+    recordQueryResult(metrics, result);
+    return result;
   }));
   return results.flatMap((result) => result.results || []);
 }
@@ -268,6 +349,7 @@ async function expandRootCandidates(
   env: Env,
   channelId: string,
   roots: RootCandidate[],
+  metrics: UnifiedTimelineReadMetrics,
 ): Promise<UnifiedTimelineItem[]> {
   const messageRoots = roots.filter((root) => root.source === "message");
   const dmRoots = roots.filter((root) => root.source === "dm");
@@ -276,10 +358,16 @@ async function expandRootCandidates(
   const [messageReplies, dmReplies] = await Promise.all([
     messageRootIds.length > 0
       ? Promise.all(chunkLookupIds(messageRootIds).map((rootChunk) =>
-          readVisibleFlatThreads(env, channelId, rootChunk, new Set(rootChunk))
+          readVisibleFlatThreads(
+            env,
+            channelId,
+            rootChunk,
+            new Set(rootChunk),
+            (result) => recordQueryResult(metrics, result),
+          )
         )).then((chunks) => chunks.flat())
       : Promise.resolve([]),
-    readDmReplies(env, channelId, dmRootIds),
+    readDmReplies(env, channelId, dmRootIds, metrics),
   ]);
   const messageRootMap = new Map(messageRoots.map((root) => [root.row.id, root]));
   const dmRootMap = new Map(dmRoots.map((root) => [root.row.id, root]));
@@ -306,10 +394,11 @@ export async function readUnifiedTimelinePage(
   const limit = clampUnifiedTimelinePageSize(input?.limit || UNIFIED_TIMELINE_PAGE_SIZE);
   const candidateLimit = limit + 1;
   const cursor = input?.cursor || null;
+  const metrics = createReadMetrics();
 
   const [messageCandidates, dmCandidates] = await Promise.all([
-    readMessageRootCandidates(env, channelId, cursor, direction, candidateLimit),
-    readDmRootCandidates(env, channelId, viewer, cursor, direction, candidateLimit),
+    readMessageRootCandidates(env, channelId, cursor, direction, candidateLimit, metrics),
+    readDmRootCandidates(env, channelId, viewer, cursor, direction, candidateLimit, metrics),
   ]);
   const candidates = [...messageCandidates, ...dmCandidates]
     .sort((left, right) => compareUnifiedTimelineCursor(left.cursor, right.cursor));
@@ -317,7 +406,7 @@ export async function readUnifiedTimelinePage(
   const roots = direction === "after"
     ? candidates.slice(0, limit)
     : candidates.slice(Math.max(0, candidates.length - limit));
-  const items = await expandRootCandidates(env, channelId, roots);
+  const items = await expandRootCandidates(env, channelId, roots, metrics);
 
   return {
     items,
@@ -325,6 +414,7 @@ export async function readUnifiedTimelinePage(
     pageStartCursor: roots[0]?.cursor || null,
     pageEndCursor: roots.at(-1)?.cursor || null,
     rootCount: roots.length,
+    metrics: finalizeReadMetrics(metrics, roots, items),
   };
 }
 
@@ -334,6 +424,7 @@ async function resolveTargetRoot(
   viewer: UnifiedTimelineViewer,
   source: UnifiedTimelineSource,
   targetId: string,
+  metrics: UnifiedTimelineReadMetrics,
 ): Promise<RootCandidate | null> {
   if (source === "dm") {
     const params: unknown[] = [channelId, channelId, targetId, targetId];
@@ -350,11 +441,13 @@ async function resolveTargetRoot(
       query += " AND d.uid = ?";
       params.push(viewer.anonymousUid);
     }
-    const row = await env.DB.prepare(query).bind(...params).first<RootRow>();
+    const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
+    recordQueryResult(metrics, result);
+    const row = result.results?.[0] || null;
     return row ? { source, row, cursor: rootCursor(source, row) } : null;
   }
 
-  const row = await env.DB.prepare(`
+  const result = await env.DB.prepare(`
     WITH RECURSIVE ancestors(id, reply_to) AS (
       SELECT id, reply_to FROM messages
       WHERE channel_id = ? AND id = ?
@@ -377,7 +470,9 @@ async function resolveTargetRoot(
         ))
       )
     LIMIT 1
-  `).bind(channelId, targetId, channelId, channelId, channelId).first<RootRow>();
+  `).bind(channelId, targetId, channelId, channelId, channelId).all<RootRow>();
+  recordQueryResult(metrics, result);
+  const row = result.results?.[0] || null;
   return row ? { source, row, cursor: rootCursor(source, row) } : null;
 }
 
@@ -389,14 +484,22 @@ export async function readUnifiedTimelineContextPage(
   targetId: string,
   radius = 25,
 ): Promise<UnifiedTimelineContextPage | null> {
-  const target = await resolveTargetRoot(env, channelId, viewer, targetSource, targetId);
+  const metrics = createReadMetrics();
+  const target = await resolveTargetRoot(
+    env,
+    channelId,
+    viewer,
+    targetSource,
+    targetId,
+    metrics,
+  );
   if (!target) return null;
   const candidateLimit = radius + 1;
   const [messageBefore, dmBefore, messageAfter, dmAfter] = await Promise.all([
-    readMessageRootCandidates(env, channelId, target.cursor, "before", candidateLimit),
-    readDmRootCandidates(env, channelId, viewer, target.cursor, "before", candidateLimit),
-    readMessageRootCandidates(env, channelId, target.cursor, "after", candidateLimit),
-    readDmRootCandidates(env, channelId, viewer, target.cursor, "after", candidateLimit),
+    readMessageRootCandidates(env, channelId, target.cursor, "before", candidateLimit, metrics),
+    readDmRootCandidates(env, channelId, viewer, target.cursor, "before", candidateLimit, metrics),
+    readMessageRootCandidates(env, channelId, target.cursor, "after", candidateLimit, metrics),
+    readDmRootCandidates(env, channelId, viewer, target.cursor, "after", candidateLimit, metrics),
   ]);
   const before = [...messageBefore, ...dmBefore]
     .sort((a, b) => compareUnifiedTimelineCursor(a.cursor, b.cursor));
@@ -407,14 +510,16 @@ export async function readUnifiedTimelineContextPage(
     target,
     ...after.slice(0, radius),
   ];
+  const items = await expandRootCandidates(env, channelId, roots, metrics);
   return {
-    items: await expandRootCandidates(env, channelId, roots),
+    items,
     hasMore: before.length > radius || after.length > radius,
     hasOlder: before.length > radius,
     hasNewer: after.length > radius,
     pageStartCursor: roots[0]?.cursor || null,
     pageEndCursor: roots.at(-1)?.cursor || null,
     rootCount: roots.length,
+    metrics: finalizeReadMetrics(metrics, roots, items),
     targetId,
     targetSource,
   };

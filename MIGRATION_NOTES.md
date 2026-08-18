@@ -4,6 +4,36 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 6: fan-out measurement — 2026-08-18
+
+- Unified page, context and bootstrap readers now aggregate metadata already
+  returned by D1: query count, rows read and SQL duration. They also calculate
+  selected roots, expanded items, maximum children under one root and public/DM
+  root/reply counts.
+- Allowlisted client reads and explicit shadow comparisons emit one structured
+  owner/visitor-scoped measurement with isolated Worker reader duration. Pages
+  above 300 expanded items become `unified_timeline_fanout_warning` records.
+- Measurement adds no D1 query or telemetry write. Legacy traffic and dormant
+  direct endpoint calls outside the allowlist do not log; no message content,
+  anonymous UID, token or root ID is included.
+- Added `worker/scripts/audit-unified-timeline-fanout.sql` for content-free public
+  and DM fan-out distributions plus owner, visitor, public-root and child
+  `EXPLAIN QUERY PLAN` checks.
+- Focused tests preserve metadata aggregation, owner/visitor labels and the
+  provisional warning boundary. Existing query-limit coverage continues to keep
+  each reply expansion below D1’s variable limit.
+
+Trade-off: test-channel reads now produce one structured log each. This gives
+enough evidence to decide whether an intra-root continuation cursor is justified
+without imposing permanent D1 writes or prematurely complicating the cursor.
+
+Deployment note: no D1 migration is required. Deploy the Worker, keep the
+production allowlist limited to explicit test channels, run
+`npx wrangler d1 execute letsplay-db --remote --file scripts/audit-unified-timeline-fanout.sql`,
+then compare owner and visitor records in Worker logs and query fingerprints in
+D1 Insights. Stage 6 remains open until those production measurements are
+reviewed.
+
 ### Unified chat pagination stage 5D: mutations and realtime — 2026-08-18
 
 - Public messages, DM roots and DM replies now use source-qualified canonical
