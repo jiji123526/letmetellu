@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 2: bounded parallel reader — 2026-08-17
+
+- Added an internal, unrouted Worker reader that fetches public-message roots and authorization-scoped DM roots in parallel, capped at `limit + 1` per source.
+- The Worker merges at most 102 normal-page candidates, selects the final 50-root window, and only then expands replies for selected roots. Reply lookup shapes use fixed buckets, and page sizes above 50 split IDs into 50-root chunks so no query crosses the D1 variable ceiling.
+- Visitor DM reads require the server-resolved anonymous identity; owner reads omit the visitor predicate. Existing API routes and frontend state remain unchanged, so this commit cannot alter production message visibility or scrolling.
+- Focused tests cover root-first expansion, late replies remaining under their roots, owner/visitor query separation, per-source limits and composite cursor predicates.
+- Expected bottleneck: a page now needs up to four D1 reads instead of the existing public-message-only reads. The two candidate reads and two reply reads are parallelized in pairs and remain bounded; Stage 3 must measure rows read for owner and visitor fixtures before exposing the reader.
+- Trade-off: merging candidate roots in Worker memory adds a tiny fixed CPU sort, while avoiding a database-wide cross-table `UNION ... ORDER BY` whose cost would grow with channel history.
+
 ### Unified chat pagination stage 1: cursor contract — 2026-08-17
 
 - Work started on the isolated `codex/unified-chat-pagination` branch; production message and DM reads remain unchanged.

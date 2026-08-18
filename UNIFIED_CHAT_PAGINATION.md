@@ -59,10 +59,28 @@ not be assumed globally unique. Page size defaults to 50 and is capped at 100.
 
 ### Stage 2 — parallel server reader
 
-- Build normalized public-message and authorized-DM root candidates.
-- Select a bounded root window before expanding replies.
-- Expose it behind an opt-in query flag or separate internal endpoint.
-- Keep the current `/api/init` and message-page response unchanged.
+- Status: internal reader implemented; it is not routed to an API yet.
+- Public-message and authorized-DM parent candidates are fetched in parallel with
+  `limit + 1` per source, then merged in Worker memory.
+- The final root window is selected before public replies or DM replies are read.
+  Reply queries receive only selected root IDs and use bounded placeholder buckets.
+- Owner reads use the channel DM index; visitor reads additionally require the
+  server-resolved anonymous UID and use the channel/UID/time index.
+- Existing `/api/init`, `/api/data?type=messages` and client rendering remain
+  unchanged. API exposure belongs to Stage 3 after authorization fixtures expand.
+
+Stage 2 query budget per page:
+
+- two parallel root-candidate reads, each capped at 51 for the normal page size;
+- normally zero or one public-reply lookup and zero or one DM-reply lookup;
+- page sizes above 50 split root IDs into 50-ID chunks, keeping every reply query
+  below the D1 variable limit (at most two chunks per source at the hard maximum);
+- at most 102 root candidates sorted in Worker memory;
+- exactly 50 or fewer roots expanded into the returned internal page.
+
+Stage 2 intentionally does not hydrate the reports inbox or expose a live route.
+Those adapters must be added only after the base owner/visitor visibility matrix is
+covered in Stage 3.
 
 ### Stage 3 — shadow comparison
 
