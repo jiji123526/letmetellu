@@ -374,6 +374,38 @@ outside the selected page.
 
 ### Stage 8 — controlled rollout and cleanup
 
+#### Authoritative kill switch
+
+- **Completed 2026-08-18.** The normal-channel allowlist is now enforced by both
+  bootstrap and every direct unified page/context request. Live and reports
+  requests retain their separate allowlists.
+- Removing a channel returns `409 unified_timeline_disabled` to an already-open
+  normal-channel tab. The browser performs one guarded reload and bootstraps the
+  legacy reader; it does not retry the failed unified request or issue both read
+  formats.
+- A session-scoped 30-second guard prevents reload loops during edge propagation.
+  This path runs only after an explicit server rejection and adds no normal-path
+  request, polling, storage write or D1 query.
+
+From `worker/`, configure one comma-separated channel allowlist at a time:
+
+```bash
+npx wrangler secret put UNIFIED_TIMELINE_CHANNEL_ALLOWLIST
+npx wrangler secret put UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST
+npx wrangler secret put UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST
+```
+
+Rollback the corresponding path immediately by deleting its binding:
+
+```bash
+npx wrangler secret delete UNIFIED_TIMELINE_CHANNEL_ALLOWLIST
+npx wrangler secret delete UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST
+npx wrangler secret delete UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST
+```
+
+Only configure the flag currently under test. Do not put `*`, percentages or user
+IDs in these values: matching is by exact parent channel ID.
+
 Rollout order:
 
 1. local/preview Worker with deterministic fixtures;

@@ -70,6 +70,8 @@ export async function handleUnifiedTimeline(
   }
 
   const reportsChannel = isReportsChannel(parentChannelId, env);
+  const normalTimelineEnabled = !reportsChannel && !liveChannel
+    && isUnifiedTimelineClientEnabled(env, parentChannelId);
   const reportsTimelineEnabled = reportsChannel && isUnifiedTimelineClientEnabled(
     env,
     parentChannelId,
@@ -80,6 +82,12 @@ export async function handleUnifiedTimeline(
     parentChannelId,
     { live: true },
   );
+  if (!reportsChannel && !liveChannel && !normalTimelineEnabled) {
+    return Response.json(
+      { error: "unified_timeline_disabled" },
+      { status: 409 },
+    );
+  }
   if ((reportsChannel && !reportsTimelineEnabled) || (liveChannel && !liveTimelineEnabled)) {
     return Response.json(
       { error: "unified_timeline_unsupported" },

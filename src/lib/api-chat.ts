@@ -256,6 +256,36 @@ export interface UnifiedTimelinePagePayload {
   target_source?: "message" | "dm";
 }
 
+const UNIFIED_ROLLBACK_RELOAD_PREFIX = "unifiedTimelineRollbackReload:";
+const UNIFIED_ROLLBACK_RELOAD_GUARD_MS = 30_000;
+let unifiedRollbackReloadRequested = false;
+
+function requestLegacyTimelineReload(channelId: string): void {
+  if (typeof window === "undefined" || unifiedRollbackReloadRequested) return;
+  const storageKey = `${UNIFIED_ROLLBACK_RELOAD_PREFIX}${channelId}`;
+  try {
+    const previousRequest = Number(window.sessionStorage.getItem(storageKey) || 0);
+    if (Date.now() - previousRequest < UNIFIED_ROLLBACK_RELOAD_GUARD_MS) return;
+    window.sessionStorage.setItem(storageKey, String(Date.now()));
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
+  unifiedRollbackReloadRequested = true;
+  window.setTimeout(() => window.location.reload(), 0);
+}
+
+async function throwUnifiedTimelineError(
+  response: Response,
+  channelId: string,
+  label: string,
+): Promise<never> {
+  const payload = await response.json().catch(() => null) as { error?: unknown } | null;
+  if (response.status === 409 && payload?.error === "unified_timeline_disabled") {
+    requestLegacyTimelineReload(channelId);
+  }
+  throw new Error(`${label}: ${response.status}`);
+}
+
 function appendUnifiedCursor(
   params: URLSearchParams,
   direction: "before" | "after",
@@ -286,7 +316,9 @@ export function fetchUnifiedTimelinePage(
     headers: roomTokenHeaders(),
     cache: "no-store",
   }).then(async (response) => {
-    if (!response.ok) throw new Error(`Unified timeline failed: ${response.status}`);
+    if (!response.ok) {
+      return throwUnifiedTimelineError(response, channelId, "Unified timeline failed");
+    }
     const data = await response.json() as UnifiedTimelinePagePayload;
     data.items = data.items.map(decorateMessageMedia);
     return data;
@@ -317,7 +349,9 @@ export function fetchUnifiedTimelineContext(
     headers: roomTokenHeaders(),
     cache: "no-store",
   }).then(async (response) => {
-    if (!response.ok) throw new Error(`Unified context failed: ${response.status}`);
+    if (!response.ok) {
+      return throwUnifiedTimelineError(response, channelId, "Unified context failed");
+    }
     const data = await response.json() as UnifiedTimelinePagePayload;
     data.items = data.items.map(decorateMessageMedia);
     return data;

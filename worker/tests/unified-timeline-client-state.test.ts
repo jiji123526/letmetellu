@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createInitialChatTimelineState,
@@ -18,6 +19,11 @@ import { isUnifiedTimelineClientEnabled } from "../src/lib/unified-timeline-roll
 import type { Env } from "../src/types.ts";
 import type { Message } from "../../src/components/chat/chatTypes.ts";
 import { shareInFlightRequest } from "../../src/components/chat/chatSingleFlight.ts";
+
+const apiChatSource = readFileSync(
+  new URL("../../src/lib/api-chat.ts", import.meta.url),
+  "utf8",
+);
 
 function message(
   id: string,
@@ -396,5 +402,20 @@ test("the server rollout defaults off and matches only exact channel IDs", () =>
       UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST: "reports",
     } as Env, "reports", { reports: true }),
     true,
+  );
+});
+
+test("a disabled unified endpoint reloads an open tab into legacy mode once", () => {
+  assert.match(
+    apiChatSource,
+    /response\.status === 409 && payload\?\.error === "unified_timeline_disabled"/,
+  );
+  assert.match(
+    apiChatSource,
+    /UNIFIED_ROLLBACK_RELOAD_GUARD_MS = 30_000/,
+  );
+  assert.match(
+    apiChatSource,
+    /window\.setTimeout\(\(\) => window\.location\.reload\(\), 0\)/,
   );
 });

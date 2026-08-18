@@ -68,6 +68,7 @@ function createFixture(input: {
   ownerId?: string;
   passcode?: string | null;
   reportsChannelId?: string;
+  normalAllowlist?: string;
   messageRoots?: RootRow[];
   dmRoots?: RootRow[];
   dmReplies?: DmReplyRow[];
@@ -176,6 +177,8 @@ function createFixture(input: {
   const env = {
     INTERNAL_SECRET,
     REPORTS_CHANNEL_ID: input.reportsChannelId,
+    UNIFIED_TIMELINE_CHANNEL_ALLOWLIST: input.normalAllowlist
+      ?? (input.reportsChannelId || input.liveSession ? undefined : channelId),
     UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST: input.liveAllowlist,
     UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST: input.reportsAllowlist,
     APP_ORIGIN: "https://app.example.test",
@@ -263,6 +266,19 @@ test("unified route returns a versioned owner page containing every DM root", as
   assert.equal(body.has_more, false);
   assert.equal(body.page_start_cursor?.id, "m1");
   assert.equal(body.page_end_cursor?.id, "d2");
+});
+
+test("normal unified pages require the current server allowlist", async () => {
+  const fixture = createFixture({ normalAllowlist: "" });
+  const response = await handleUnifiedTimeline(
+    unifiedRequest({ headers: ownerHeaders() }),
+    fixture.env,
+  );
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await readJson<{ error: string }>(response), {
+    error: "unified_timeline_disabled",
+  });
 });
 
 test("visitor route ignores URL UIDs and returns only signed-identity DMs", async () => {

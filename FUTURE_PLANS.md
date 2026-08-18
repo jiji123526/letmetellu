@@ -21,7 +21,8 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
   shadow-comparison, production-shaped API, single-state adapter and unified
   bootstrap/reconnect, history/navigation, mutation/realtime and Stage 6
   instrumentation plus the Stage 7 live and reports adapters into production
-  fan-out/query calibration and controlled-rollout work in
+  fan-out/query calibration and staged observation using the completed
+  request-time rollback switch in
   [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the production
   read path behind a kill switch until authorization, ordering, bounded-row,
   latency and scroll-stability exit criteria pass.

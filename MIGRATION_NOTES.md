@@ -4,6 +4,32 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 8A: authoritative rollback — 2026-08-18
+
+- Normal unified page and context requests now recheck
+  `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST`; previously only bootstrap used that flag,
+  so an already-open tab could continue direct unified reads after removal.
+- Live and reports retain independent request-time allowlists. Missing or removed
+  configuration returns a bounded `409` response before viewer resolution or
+  timeline D1 reads.
+- An open normal-channel tab receiving `unified_timeline_disabled` reloads once
+  and bootstraps legacy mode. A 30-second session guard avoids reload loops during
+  edge propagation; the rollback path does not attempt a second successful-path
+  read or merge legacy and unified state.
+- Regression coverage preserves default-off direct-route behavior and the
+  one-time browser reload contract.
+
+Trade-off: emergency flag removal can cause one visible page reload when an open
+tab next pages, navigates or refreshes its unified timeline. That interruption is
+preferable to leaving disabled code active or maintaining two timeline states in
+memory.
+
+Deployment note: no migration is required for this tranche. Deploy the Worker and
+frontend before setting an allowlist. Configure exact channel IDs through the
+corresponding Wrangler secret; deleting that secret is the rollback action.
+Stage 8 remains open until production calibration, staged observation and legacy
+cleanup are complete.
+
 ### Unified chat pagination stage 7B: reports-inbox adapter — 2026-08-18
 
 - Added a separate `UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST`. Empty or missing
