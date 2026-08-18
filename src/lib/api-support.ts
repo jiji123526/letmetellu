@@ -218,6 +218,7 @@ export async function closeSupportThread(threadId: string) {
     error?: string;
   }>("/api/support", {
     method: "POST",
+    keepalive: true,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "close_thread",

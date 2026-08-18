@@ -374,6 +374,8 @@ function DashboardPageContent() {
   const loadOperationalHealthInFlightRef = useRef<Promise<void> | null>(null);
   const operationalHealthLoadedAtRef = useRef(0);
   const loadSupportPreviewInFlightRef = useRef<Promise<void> | null>(null);
+  const supportPreviewRequestGenerationRef = useRef(0);
+  const supportPreviewDeletingRef = useRef(false);
   const supportPreviewLoadedAtRef = useRef(0);
   const recentChannelsLoadedAtRef = useRef(0);
   const [swipe, setSwipe] = useState<{ id: string | null; offset: number }>({ id: null, offset: 0 });
@@ -813,14 +815,17 @@ function DashboardPageContent() {
       status === "loading"
       || effectivePlatformAdmin
       || (status === "authenticated" && !effectiveHasResolvedRole)
+      || supportPreviewDeletingRef.current
     ) {
       return Promise.resolve();
     }
     if (loadSupportPreviewInFlightRef.current) return loadSupportPreviewInFlightRef.current;
+    const requestGeneration = supportPreviewRequestGenerationRef.current;
     const request = (async () => {
       startDashboardRequest("support-preview");
       try {
         const result = await fetchSupportPreview();
+        if (requestGeneration !== supportPreviewRequestGenerationRef.current) return;
         if (result._status >= 400 || !result.thread) {
           clearStoredSupportTicketPreview();
           setSupportPreview(null);
@@ -839,11 +844,14 @@ function DashboardPageContent() {
         setSupportPreview(preview);
         markDashboardMilestone("support-preview-ready");
       } catch {
+        if (requestGeneration !== supportPreviewRequestGenerationRef.current) return;
         setSupportPreview(status === "unauthenticated" ? readStoredSupportTicketPreview() : null);
       }
     })().finally(() => {
       finishDashboardRequest("support-preview");
-      supportPreviewLoadedAtRef.current = Date.now();
+      if (requestGeneration === supportPreviewRequestGenerationRef.current) {
+        supportPreviewLoadedAtRef.current = Date.now();
+      }
       if (loadSupportPreviewInFlightRef.current === request) {
         loadSupportPreviewInFlightRef.current = null;
       }
@@ -1575,23 +1583,36 @@ function DashboardPageContent() {
 
   const performDeleteSupportThread = async (threadId: string) => {
     setDeleting(true);
+    supportPreviewDeletingRef.current = true;
+    supportPreviewRequestGenerationRef.current += 1;
+    loadSupportPreviewInFlightRef.current = null;
+    clearStoredSupportTicketPreview();
+    setSupportPreview(null);
+    setSwipe({ id: null, offset: 0 });
     try {
       const result = await closeSupportThread(threadId);
       if (result._status >= 400 && result.error !== "thread_not_found") {
         throw new Error("close support thread failed");
       }
-      clearStoredSupportTicketPreview();
-      setSupportPreview(null);
-      setSwipe({ id: null, offset: 0 });
+      supportPreviewDeletingRef.current = false;
+      supportPreviewRequestGenerationRef.current += 1;
+      loadSupportPreviewInFlightRef.current = null;
+      const refreshRequest = loadSupportPreview();
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("support-ticket-changed"));
       }
+      await refreshRequest;
     } catch {
+      supportPreviewDeletingRef.current = false;
+      supportPreviewRequestGenerationRef.current += 1;
+      loadSupportPreviewInFlightRef.current = null;
+      await loadSupportPreview();
       setDeleteError({
         title: t("supportDeleteTicket"),
         message: t("supportDeleteFailed"),
       });
     } finally {
+      supportPreviewDeletingRef.current = false;
       setDeleting(false);
     }
   };

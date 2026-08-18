@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Deleted support tickets no longer return from stale dashboard reads — 2026-08-17
+
+- User-side support deletion now invalidates every preview request that started before the close operation, clears the local preview immediately, and pauses new preview polling until the server mutation finishes.
+- After a successful close, the dashboard performs a fresh server read before considering the preview settled. A failed close reloads the authoritative server state so optimistic removal does not leave the dashboard inconsistent.
+- Support close requests use `keepalive` so an immediate refresh or navigation is less likely to cancel the server-side state transition.
+- Trade-off: deletion can keep its loading state through one additional bounded preview read. This makes completion slightly less optimistic but prevents an older response or browser cache preview from resurrecting the removed ticket.
+
 ### Owner profile channel lists preload during idle time — 2026-08-17
 
 - Channels whose owner has at least two public profile channels now preload both the profile popup chunk and its bounded five-channel response after the chat becomes idle.
