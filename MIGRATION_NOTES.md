@@ -33,8 +33,9 @@ already-open tab and after a fresh reload.
 - Sent bubbles now reveal their timestamp when swiped left, while received bubbles
   reveal it when swiped right. Replies follow their parent bubble's visual side.
 - The compact iOS-style marker uses the browser-resolved viewer timezone and
-  locale. A cached `Intl.DateTimeFormat` avoids constructing one formatter per
-  message.
+  locale. Cached `Intl.DateTimeFormat` instances and cached final labels avoid
+  reconstructing one formatter or reformatting one timestamp per message
+  render.
 - Timestamp color follows the existing reply-arrow tone, including the brighter
   treatment selected for dark colors and sufficiently overlaid image backgrounds.
 - Horizontal intent is required before the gesture activates. Vertical scrolling

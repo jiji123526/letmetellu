@@ -35,6 +35,17 @@ test("message times use the viewer timezone", () => {
   assert.notEqual(utc, losAngeles);
 });
 
+test("message time labels cache formatted results by timestamp and viewer locale", () => {
+  const source = readFileSync(
+    new URL("../../src/lib/chat-date.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /const chatTimeLabelCache = new Map<string, string>\(\)/);
+  assert.match(source, /const labelKey = `\$\{value\}:\$\{locale\}:\$\{timeZone\}`/);
+  assert.match(source, /chatTimeLabelCache\.get\(labelKey\)/);
+  assert.match(source, /chatTimeLabelCache\.set\(labelKey, label\)/);
+});
+
 test("message rows cancel long press and reveal the timestamp during horizontal swipe", () => {
   const source = readFileSync(
     new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),

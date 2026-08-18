@@ -45,8 +45,13 @@ export function chatDateLabel(value: string, locale: "ko" | "en", timeZone: stri
 }
 
 const chatTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+const chatTimeLabelCache = new Map<string, string>();
+const MAX_CHAT_TIME_LABEL_CACHE_SIZE = 4_096;
 
 export function chatTimeLabel(value: string, locale: "ko" | "en", timeZone: string): string {
+  const labelKey = `${value}:${locale}:${timeZone}`;
+  const cachedLabel = chatTimeLabelCache.get(labelKey);
+  if (cachedLabel) return cachedLabel;
   const date = parseServerDate(value);
   if (!date) return "";
   const formatterKey = `${locale}:${timeZone}`;
@@ -59,5 +64,10 @@ export function chatTimeLabel(value: string, locale: "ko" | "en", timeZone: stri
     });
     chatTimeFormatters.set(formatterKey, formatter);
   }
-  return formatter.format(date);
+  const label = formatter.format(date);
+  if (chatTimeLabelCache.size >= MAX_CHAT_TIME_LABEL_CACHE_SIZE) {
+    chatTimeLabelCache.clear();
+  }
+  chatTimeLabelCache.set(labelKey, label);
+  return label;
 }
