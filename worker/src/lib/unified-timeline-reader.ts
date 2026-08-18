@@ -11,9 +11,9 @@ import {
   type UnifiedTimelineCursor,
   type UnifiedTimelineSource,
 } from "./unified-timeline.ts";
+import type { UnifiedTimelineViewer } from "./unified-timeline-viewer.ts";
 
 type TimelineDirection = "before" | "after";
-type TimelineViewer = { owner: true } | { owner: false; anonymousUid: string };
 
 type RootRow = Record<string, unknown> & {
   id: string;
@@ -142,7 +142,7 @@ async function readMessageRootCandidates(
 async function readDmRootCandidates(
   env: Env,
   channelId: string,
-  viewer: TimelineViewer,
+  viewer: UnifiedTimelineViewer,
   cursor: UnifiedTimelineCursor | null,
   direction: TimelineDirection,
   candidateLimit: number,
@@ -260,7 +260,7 @@ function itemCursor(item: UnifiedTimelineItem): UnifiedTimelineCursor {
 export async function readUnifiedTimelinePage(
   env: Env,
   channelId: string,
-  viewer: TimelineViewer,
+  viewer: UnifiedTimelineViewer,
   input?: {
     cursor?: UnifiedTimelineCursor | null;
     direction?: TimelineDirection;

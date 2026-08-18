@@ -17,6 +17,11 @@ import {
   toFts5Phrase,
 } from "../lib/message-search";
 import { getTrustedUserId } from "../lib/trusted-identity";
+import { readDmThreads } from "../lib/dm-threads";
+import { recordOperationalEvent } from "../lib/operational-events";
+import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
+import { compareUnifiedTimelineShadow } from "../lib/unified-timeline-shadow";
+import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer";
 
 export async function handleData(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -81,7 +86,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const messages = isReportsChannel(parentChannelId, env) && isOwner
         ? await hydrateReportInboxMessages(expandedResults as Array<{ id: string }>, env, reportsOwnerLocale)
         : expandedResults;
-      return Response.json({
+      const responsePayload = {
         messages,
         has_more: hasMore,
         page_start_cursor: pageStartCursor
@@ -90,7 +95,78 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         page_end_cursor: pageEndCursor
           ? { id: pageEndCursor.id, created_at: pageEndCursor.createdAt }
           : null,
-      });
+      };
+      const shadowRequested = request.headers.get("X-Unified-Timeline-Shadow") === "1";
+      const shadowEligible = shadowRequested
+        && !cursor
+        && !cursorId
+        && !direction
+        && !channelId.endsWith("_live")
+        && !isReportsChannel(parentChannelId, env);
+      if (!shadowEligible) {
+        return Response.json(responsePayload, shadowRequested
+          ? { headers: { "X-Unified-Timeline-Shadow": "skipped" } }
+          : undefined);
+      }
+
+      const viewer = await resolveUnifiedTimelineViewer(request, env, isOwner);
+      if (!viewer) {
+        return Response.json(responsePayload, {
+          headers: { "X-Unified-Timeline-Shadow": "identity-required" },
+        });
+      }
+
+      try {
+        const [dmMessages, unifiedPage] = await Promise.all([
+          readDmThreads(env, channelId, viewer),
+          readUnifiedTimelinePage(env, channelId, viewer, { limit: 50 }),
+        ]);
+        const comparison = compareUnifiedTimelineShadow({
+          publicMessages: expandedResults,
+          dmMessages,
+          unifiedPage,
+          limit: 50,
+        });
+        if (!comparison.matches) {
+          await recordOperationalEvent({
+            env,
+            severity: "warn",
+            route: "GET /api/data",
+            eventType: "unified_timeline_shadow_mismatch",
+            statusCode: 200,
+            actorUserId: isOwner ? trustedUserId : null,
+            targetId: parentChannelId,
+            detail: {
+              legacy_root_count: comparison.legacyRootCount,
+              unified_root_count: comparison.unifiedRootCount,
+              first_mismatch_index: comparison.firstMismatchIndex,
+              legacy_source_at_mismatch: comparison.legacySourceAtMismatch,
+              unified_source_at_mismatch: comparison.unifiedSourceAtMismatch,
+            },
+          });
+        }
+        return Response.json(responsePayload, {
+          headers: {
+            "X-Unified-Timeline-Shadow": comparison.matches ? "match" : "mismatch",
+          },
+        });
+      } catch (error) {
+        await recordOperationalEvent({
+          env,
+          severity: "warn",
+          route: "GET /api/data",
+          eventType: "unified_timeline_shadow_failed",
+          statusCode: 200,
+          actorUserId: isOwner ? trustedUserId : null,
+          targetId: parentChannelId,
+          detail: {
+            error_name: error instanceof Error ? error.name : "unknown",
+          },
+        });
+        return Response.json(responsePayload, {
+          headers: { "X-Unified-Timeline-Shadow": "failed" },
+        });
+      }
     }
 
     case "message-context": {

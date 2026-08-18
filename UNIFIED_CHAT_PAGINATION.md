@@ -84,9 +84,23 @@ covered in Stage 3.
 
 ### Stage 3 — shadow comparison
 
-- For opted-in development requests, compare root IDs, source, ordering and cursor
-  boundaries against the legacy collections without returning the new result.
-- Log only aggregate mismatch metadata; never log DM text or identity tokens.
+- Status: implemented on the feature branch; disabled unless the request carries
+  `X-Unified-Timeline-Shadow: 1` and requests the latest normal-channel page.
+- The production response remains the legacy public-message response. In parallel,
+  the Worker reads the legacy DM window and the new unified page, then compares the
+  same bounded 50-root merged window.
+- Non-owner comparison runs only when `X-Anonymous-Token` verifies successfully;
+  URL parameters and other client-provided UID values are ignored. Owner scope still
+  comes only from the trusted app-proxy identity.
+- Mismatches record counts, the first mismatch position and source types. Message
+  text, DM text, anonymous UIDs and identity tokens are never included.
+- Live and reports channels, paginated history requests and unsigned visitors are
+  deliberately skipped until their adapters have dedicated coverage.
+
+To exercise this stage from a development client, issue the normal latest-message
+request with the shadow header and inspect `X-Unified-Timeline-Shadow` on the
+response (`match`, `mismatch`, `identity-required`, `skipped` or `failed`). The app
+proxy forwards only the literal opt-in value and signed anonymous token.
 
 ### Stage 4 — client integration
 
@@ -122,3 +136,6 @@ covered in Stage 3.
 - The staged rollout takes longer than a direct query replacement but materially
   reduces the risk of private DM exposure, missing messages and unrecoverable scroll
   jumps.
+- An opted-in latest-page read temporarily performs both legacy and unified reads.
+  This is intentionally too expensive for default traffic and must remain off until
+  a later sampled rollout.

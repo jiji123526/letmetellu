@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 3: opt-in shadow comparison — 2026-08-17
+
+- Added an explicit `X-Unified-Timeline-Shadow: 1` development path for the latest normal-channel message page. It preserves and returns the legacy payload while comparing the legacy public/DM root window with the new unified reader.
+- Owner scope still requires the trusted server session. Visitor DM scope is derived only from a valid signed anonymous token; forged tokens, URL UIDs and missing identities cannot start a private-DM comparison.
+- Shadow logs contain only root counts, first mismatch position and source types. They never contain message bodies, DM bodies, anonymous UIDs or identity tokens.
+- The app data proxy now forwards the signed anonymous token and the exact shadow opt-in header and exposes only the aggregate comparison status in `X-Unified-Timeline-Shadow`.
+- Added regression coverage for signed-versus-forged visitor identity, owner resolution, aggregate-only mismatch metadata and strict before/after cursor partitions without gaps or duplicates.
+- Expected bottleneck: an opted-in request temporarily executes both legacy and unified reads, including two DM paths. The feature is disabled by default, excludes live/reports/paginated requests and must not be enabled broadly. A later sampled rollout should measure D1 rows read and Worker duration before client integration.
+- Trade-off: the comparison can prove ordering and authorization compatibility without changing the UI, but it deliberately spends extra reads on explicit test traffic and does not yet validate live-session or reports-inbox adapters.
+
+Deployment note: do not deploy this feature branch to the production Worker. No D1 migration is required. Use a branch Worker or local Worker and send the opt-in header on a latest-page request; the response body must remain the legacy shape.
+
 ### Unified chat pagination stage 2: bounded parallel reader — 2026-08-17
 
 - Added an internal, unrouted Worker reader that fetches public-message roots and authorization-scoped DM roots in parallel, capped at `limit + 1` per source.

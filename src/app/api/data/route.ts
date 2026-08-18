@@ -30,6 +30,11 @@ export async function GET(request: Request) {
   const roomToken = request.headers.get("X-Room-Token")
     || (parentChannelId ? readRoomTokenCookie(request.headers.get("cookie"), parentChannelId) : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
+  const anonymousToken = request.headers.get("X-Anonymous-Token");
+  if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  if (request.headers.get("X-Unified-Timeline-Shadow") === "1") {
+    headers["X-Unified-Timeline-Shadow"] = "1";
+  }
 
   const response = await fetch(targetUrl, { headers, cache: "no-store" });
   const data = await response.json();
@@ -37,5 +42,8 @@ export async function GET(request: Request) {
     roomToken,
     userId: session?.user?.id,
   });
-  return NextResponse.json(signedData, { status: response.status });
+  const nextResponse = NextResponse.json(signedData, { status: response.status });
+  const shadowStatus = response.headers.get("X-Unified-Timeline-Shadow");
+  if (shadowStatus) nextResponse.headers.set("X-Unified-Timeline-Shadow", shadowStatus);
+  return nextResponse;
 }

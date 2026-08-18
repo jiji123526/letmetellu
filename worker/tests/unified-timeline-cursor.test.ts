@@ -55,3 +55,20 @@ test("unified timeline page sizes remain bounded", () => {
   assert.equal(clampUnifiedTimelinePageSize(25), 25);
   assert.equal(clampUnifiedTimelinePageSize(10_000), UNIFIED_TIMELINE_MAX_PAGE_SIZE);
 });
+
+test("before and after cursor windows partition roots without duplicates or gaps", () => {
+  const roots = [
+    cursor({ visual_root_created_at: "2026-08-17T00:00:00.000Z", visual_root_id: "m-a", id: "m-a" }),
+    cursor({ visual_root_created_at: "2026-08-17T00:00:00.000Z", source: "dm", visual_root_id: "d-a", id: "d-a" }),
+    cursor({ visual_root_created_at: "2026-08-17T01:00:00.000Z", source: "dm", visual_root_id: "d-b", id: "d-b" }),
+    cursor({ visual_root_created_at: "2026-08-17T02:00:00.000Z", visual_root_id: "m-b", id: "m-b" }),
+    cursor({ visual_root_created_at: "2026-08-17T03:00:00.000Z", visual_root_id: "m-c", id: "m-c" }),
+  ].sort(compareUnifiedTimelineCursor);
+  const boundary = roots[2];
+  const before = roots.filter((item) => compareUnifiedTimelineCursor(item, boundary) < 0);
+  const after = roots.filter((item) => compareUnifiedTimelineCursor(item, boundary) > 0);
+  const restored = [...before, boundary, ...after];
+
+  assert.deepEqual(restored.map((item) => item.id), roots.map((item) => item.id));
+  assert.equal(new Set(restored.map((item) => item.id)).size, roots.length);
+});
