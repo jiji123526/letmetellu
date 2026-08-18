@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Deleting an admin-closed support ticket now acknowledges it — 2026-08-17
+
+- The user-side `close_thread` action now distinguishes an open ticket from a ticket already closed by the platform administrator.
+- Open tickets retain the existing close behavior. An admin-closed, unacknowledged ticket now records the user's acknowledgement and disappears from subsequent dashboard reads instead of returning `404` and reappearing after refresh.
+- Repeating deletion for an already user-closed or acknowledged ticket returns success, making the action idempotent. Missing tickets and cross-user ticket IDs remain `404` so authorization boundaries are unchanged.
+- No data migration is required; the next user deletion correctly handles existing admin-closed rows whose acknowledgement is still pending.
+
 ### Deleted support tickets no longer return from stale dashboard reads — 2026-08-17
 
 - User-side support deletion now invalidates every preview request that started before the close operation, clears the local preview immediately, and pauses new preview polling until the server mutation finishes.

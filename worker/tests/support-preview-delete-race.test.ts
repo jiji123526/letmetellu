@@ -10,6 +10,10 @@ const supportApiSource = readFileSync(
   new URL("../../src/lib/api-support.ts", import.meta.url),
   "utf8",
 );
+const supportRouteSource = readFileSync(
+  new URL("../src/routes/support.ts", import.meta.url),
+  "utf8",
+);
 
 test("support deletion invalidates stale previews and confirms server state", () => {
   assert.match(dashboardSource, /supportPreviewRequestGenerationRef/);
@@ -28,5 +32,16 @@ test("support close survives immediate navigation when the browser permits it", 
   assert.match(
     supportApiSource,
     /export async function closeSupportThread[\s\S]*keepalive: true[\s\S]*action: "close_thread"/,
+  );
+});
+
+test("deleting an admin-closed ticket acknowledges it instead of returning 404", () => {
+  assert.match(
+    supportRouteSource,
+    /if \(thread\.status === "closed"\)[\s\S]*thread\.closed_by !== thread\.user_id[\s\S]*handleUserSupportAcknowledgeClosure\(body, subjectId, env\)/,
+  );
+  assert.match(
+    supportRouteSource,
+    /if \(thread\.status === "closed"\)[\s\S]*return Response\.json\(\{ ok: true \}\)/,
   );
 });

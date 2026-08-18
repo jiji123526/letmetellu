@@ -1167,7 +1167,22 @@ async function handleUserSupportCloseThread(body: JsonObject, subjectId: string,
   }
 
   const thread = await fetchSupportThreadById(threadId, env);
-  if (!thread || thread.user_id !== subjectId || thread.status !== "open") {
+  if (!thread || thread.user_id !== subjectId) {
+    return Response.json({ error: "thread_not_found" }, { status: 404 });
+  }
+
+  if (thread.status === "closed") {
+    if (
+      thread.closed_by
+      && thread.closed_by !== thread.user_id
+      && !thread.user_acknowledged_at
+    ) {
+      return handleUserSupportAcknowledgeClosure(body, subjectId, env);
+    }
+    return Response.json({ ok: true });
+  }
+
+  if (thread.status !== "open") {
     return Response.json({ error: "thread_not_found" }, { status: 404 });
   }
 
