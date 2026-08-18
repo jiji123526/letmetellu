@@ -224,7 +224,13 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       result = await env.DB.prepare(`
         INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE (SELECT COUNT(*) FROM dm_replies WHERE dm_id = ?) < ?
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM dm_replies
+          WHERE dm_id = ?
+          ORDER BY created_at ASC, id ASC
+          LIMIT 1 OFFSET ?
+        )
       `).bind(
         id,
         clientReplyId,
@@ -235,7 +241,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         image || null,
         createdAt,
         dmId,
-        DM_REPLY_LIMIT,
+        DM_REPLY_LIMIT - 1,
       ).run();
     } catch (error) {
       const duplicate = await env.DB.prepare(`

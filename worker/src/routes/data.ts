@@ -38,17 +38,20 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
   // Passcode gate for data endpoints
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
+  const reportsChannel = isReportsChannel(parentChannelId, env);
   const { exists, passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
   if (!exists) {
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
   const trustedUserId = getTrustedUserId(request, env) || "";
   const isOwner = trustedUserId === owner_uid;
-  const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
-  const reportsOwnerLocale = isOwner && trustedUserId
+  const isReportsOwnerViewer = reportsChannel && !isOwner
+    ? await isReportsChannelOwner(trustedUserId, env)
+    : false;
+  const reportsOwnerLocale = reportsChannel && isOwner && trustedUserId
     ? await getUserLocale(trustedUserId, env)
     : "ko";
-  if (isReportsChannel(parentChannelId, env) && !isOwner) {
+  if (reportsChannel && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
 
@@ -87,7 +90,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         direction,
         limit: 50,
       });
-      const messages = isReportsChannel(parentChannelId, env) && isOwner
+      const messages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(expandedResults as Array<{ id: string }>, env, reportsOwnerLocale)
         : expandedResults;
       const responsePayload = {
@@ -106,7 +109,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         && !cursorId
         && !direction
         && !channelId.endsWith("_live")
-        && !isReportsChannel(parentChannelId, env);
+        && !reportsChannel;
       if (!shadowEligible) {
         return Response.json(responsePayload, shadowRequested
           ? { headers: { "X-Unified-Timeline-Shadow": "skipped" } }
@@ -266,7 +269,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const pageStart = contextPageRows[0] as { id?: string; created_at?: string } | undefined;
       const pageEnd = contextPageRows.at(-1) as { id?: string; created_at?: string } | undefined;
       const messages = await expandVisibleRootThreads(env, channelId, contextPageRows);
-      const responseMessages = isReportsChannel(parentChannelId, env) && isOwner
+      const responseMessages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, env, reportsOwnerLocale)
         : messages;
       return Response.json({
@@ -304,7 +307,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
       const foundMessages = parentResult.results || [];
       const foundIds = new Set(foundMessages.map((message) => String(message.id)));
-      const responseMessages = isReportsChannel(parentChannelId, env) && isOwner
+      const responseMessages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(foundMessages as Array<{ id: string }>, env, reportsOwnerLocale)
         : foundMessages;
 
@@ -377,8 +380,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     }
 
     case "search": {
-      const query = normalizeMessageSearchQuery(url.searchParams.get("q") || "");
-      if (!query) {
+      const searchTerm = normalizeMessageSearchQuery(url.searchParams.get("q") || "");
+      if (!searchTerm) {
         return Response.json({ results: [], has_more: false, next_cursor: null });
       }
 
@@ -388,7 +391,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       let cursorRootId = url.searchParams.get("cursor_root_id");
       let cursorDepth = Number.parseInt(url.searchParams.get("cursor_depth") || "", 10);
       const limit = 30;
-      const useTrigram = shouldUseTrigramMessageSearch(query);
+      const useTrigram = shouldUseTrigramMessageSearch(searchTerm);
+      const loweredSearchTerm = searchTerm.toLowerCase();
       if (
         cursorCreatedAt
         && cursorId
@@ -452,15 +456,15 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
               ON root.id = m.reply_to AND root.channel_id = m.channel_id
             WHERE m.channel_id = ?
               AND m.deleted = 0
-              AND instr(lower(COALESCE(m.text, '')), lower(?)) > 0
+              AND instr(lower(COALESCE(m.text, '')), ?) > 0
           )
           SELECT *
           FROM search_matches
           WHERE 1 = 1
         `;
       const params: unknown[] = useTrigram
-        ? [toFts5Phrase(query), channelId]
-        : [channelId, query];
+        ? [toFts5Phrase(searchTerm), channelId]
+        : [channelId, loweredSearchTerm];
       if (
         cursorCreatedAt
         && cursorId

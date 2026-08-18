@@ -54,6 +54,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   const isLiveChannel = channelId.endsWith("_live");
   const parentChannelId = isLiveChannel ? channelId.replace(/_live$/, "") : channelId;
+  const reportsChannel = isReportsChannel(parentChannelId, env);
   let routeStage = "load_channel";
 
   try {
@@ -79,11 +80,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const userId = request.headers.get("X-User-Id");
     const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
     const isOwner = trustedUserId === (channel as any).owner_uid;
-    const isReportsOwnerViewer = !isOwner && await isReportsChannelOwner(trustedUserId, env);
+    const isReportsOwnerViewer = reportsChannel && !isOwner
+      ? await isReportsChannelOwner(trustedUserId, env)
+      : false;
     const adminDataStatus = userId === (channel as any).owner_uid
       ? (isOwner ? "authorized" : "unauthorized")
       : undefined;
-    if (isReportsChannel(parentChannelId, env) && !isOwner) {
+    if (reportsChannel && !isOwner) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
     const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
@@ -164,7 +167,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       parentChannelId,
       {
         live: isLiveChannel,
-        reports: isReportsChannel(parentChannelId, env),
+        reports: reportsChannel,
       },
     );
     const unifiedTimelineRequested = unifiedTimelineRollout.enabled;
@@ -368,15 +371,15 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       ? await getChannelModeration(parentChannelId, env)
       : null;
     const reportsOwnerId = await getReportsChannelOwnerId(env);
-    const reportsOwnerLocale = isOwner
+    const reportsOwnerLocale = reportsChannel && isOwner
       ? await getUserLocale(trustedUserId, env)
       : "ko";
-    const messages = isReportsChannel(parentChannelId, env) && isOwner
+    const messages = reportsChannel && isOwner
       ? await hydrateReportInboxMessages(rawMessages as Array<{ id: string }>, env, reportsOwnerLocale)
       : rawMessages;
     const protectedMessages = markProtectedSenders(messages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
     const protectedDmMessages = markProtectedSenders(dmMessages as Array<{ uid?: string | null; auth_uid?: string | null }>, reportsOwnerId);
-    const hydratedUnifiedPage = unifiedPage && isReportsChannel(parentChannelId, env)
+    const hydratedUnifiedPage = unifiedPage && reportsChannel
       ? {
           ...unifiedPage,
           items: await hydrateUnifiedReportTimeline(
@@ -416,7 +419,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       viewerModerationStatus,
       adminDataStatus,
       viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
-      isReportsChannel: isReportsChannel(parentChannelId, env),
+      isReportsChannel: reportsChannel,
       unifiedTimelineEnabled: responseUnifiedTimelineEnabled,
       bannerNotice: config.get(`notice_${channelId}`) || "",
       welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",

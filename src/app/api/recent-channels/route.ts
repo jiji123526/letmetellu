@@ -16,6 +16,7 @@ async function forward(request: Request, method: "GET" | "POST" | "DELETE") {
       "X-Internal-Token": process.env.INTERNAL_SECRET || "",
       "X-User-Id": session.user.id,
       "X-User-Email": session.user.email || "",
+      "X-Canonical-User-Id": "1",
     },
     body: method === "POST" ? await request.text() : undefined,
     cache: "no-store",

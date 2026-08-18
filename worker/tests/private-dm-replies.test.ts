@@ -79,7 +79,7 @@ function createFakeEnv(options: {
         return null;
       },
       async all() {
-        if (sql.includes("SELECT * FROM (SELECT * FROM dm")) {
+        if (sql.includes("SELECT id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at FROM (SELECT id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at FROM dm")) {
           if (sql.includes("AND uid = ?") && params[1] !== SENDER_ID) return { results: [] };
           return { results: [root] };
         }

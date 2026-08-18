@@ -43,7 +43,8 @@ test("message search quotes literal FTS5 phrases", () => {
 test("message search routes long queries through trigram FTS and preserves the short fallback", () => {
   assert.match(dataSource, /FROM messages_fts/);
   assert.match(dataSource, /WHERE messages_fts MATCH \?/);
-  assert.match(dataSource, /instr\(lower\(COALESCE\(m\.text, ''\)\), lower\(\?\)\) > 0/);
+  assert.match(dataSource, /const loweredSearchTerm = searchTerm\.toLowerCase\(\)/);
+  assert.match(dataSource, /instr\(lower\(COALESCE\(m\.text, ''\)\), \?\) > 0/);
 });
 
 test("message search follows rendered root and reply order instead of reply creation time", () => {

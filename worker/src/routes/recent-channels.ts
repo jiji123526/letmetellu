@@ -13,13 +13,21 @@ function authorize(request: Request, env: Env) {
   const userId = request.headers.get("X-User-Id");
   const userEmail = normalizeEmail(request.headers.get("X-User-Email") || "");
   if (internalToken !== env.INTERNAL_SECRET || (!userId && !userEmail)) return null;
-  return { userId: userId || "", userEmail };
+  return {
+    userId: userId || "",
+    userEmail,
+    canonicalUserId: request.headers.get("X-Canonical-User-Id") === "1",
+  };
 }
 
 async function resolveRecentChannelUser(
   env: Env,
-  identity: { userId: string; userEmail: string },
+  identity: { userId: string; userEmail: string; canonicalUserId: boolean },
 ) {
+  if (identity.canonicalUserId && identity.userId) {
+    return identity.userId;
+  }
+
   const userById = identity.userId
     ? await env.DB.prepare("SELECT id, email FROM users WHERE id = ?")
       .bind(identity.userId).first<{ id: string; email: string }>()

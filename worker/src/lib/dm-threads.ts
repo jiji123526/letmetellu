@@ -45,9 +45,10 @@ export async function readDmThreads(
   channelId: string,
   viewer: { owner: true } | { owner: false; anonymousUid: string },
 ): Promise<PrivateDmMessage[]> {
+  const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at";
   const rootQuery = viewer.owner
-    ? "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC"
-    : "SELECT * FROM (SELECT * FROM dm WHERE channel_id = ? AND uid = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC";
+    ? `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC`
+    : `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ? AND uid = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC`;
   const rootStatement = viewer.owner
     ? env.DB.prepare(rootQuery).bind(channelId)
     : env.DB.prepare(rootQuery).bind(channelId, viewer.anonymousUid);

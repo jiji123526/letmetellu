@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Hot read paths avoid repeated reports-owner, identity and DM-limit work — 2026-08-18
+
+- `init` and `/api/data` now resolve reports-owner access only when the requested channel is actually the configured reports channel. Normal public and locked-channel reads no longer pay an extra reports-owner lookup before ordinary authorization continues.
+- Joined-channel dashboard reads now trust the authenticated proxy's canonical app user ID. The recent-channel Worker route skips the previous user-by-id and user-by-email reconciliation queries on the hot GET/POST/DELETE path when the trusted proxy marks the session ID as canonical.
+- Private DM thread reads now select only the root columns the client actually renders instead of using `SELECT *` for the latest 50 DM roots.
+- Owner DM replies no longer count every existing reply row to enforce the 20-reply cap. The insert path now probes for the twentieth row with the existing `(dm_id, created_at, id)` index and rejects only when that row already exists.
+- Short-query message search still uses the substring fallback, but now lowercases the search term once in application code instead of asking SQLite to lowercase the same bound parameter for every candidate row.
+- Focused source tests pin the reports-channel gating, canonical recent-channel identity shortcut, narrowed DM root selects and indexed DM reply limit probe.
+
+Trade-off: the recent-channel route now trusts one more internal header from the authenticated Next proxy, so that boundary must remain internal-secret-protected. The short search fallback still scans channel messages for sub-trigram queries; this change trims per-row expression work but does not replace the fallback with a new index.
+
+Deployment note: no migration is required. Deploy the Worker and frontend together. Verify normal channel init/data reads still work for visitors and owners, confirm recent-channel load/mutation still works after login, and send owner DM replies up to the cap to confirm the twentieth existing reply blocks the next send without changing behavior.
+
 ### Chat bootstrap reads are narrower on owner refresh paths — 2026-08-18
 
 - Owner moderation refresh no longer reuses the full `/api/init` bootstrap. A dedicated owner-authenticated `channel-state` route now returns only the current `is_frozen` value plus owner moderation status for the current normal or live channel.
