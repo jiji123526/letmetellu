@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat bootstrap reads are narrower on owner refresh paths — 2026-08-18
+
+- Owner moderation refresh no longer reuses the full `/api/init` bootstrap. A dedicated owner-authenticated `channel-state` route now returns only the current `is_frozen` value plus owner moderation status for the current normal or live channel.
+- Normal `init` bootstraps no longer issue an extra `SELECT is_frozen FROM channels WHERE id = ?` read. That lookup is now batched only for `_live` channels, where the live row can differ from the parent channel row.
+- Owner-profile popup preloads and cache keys now use the known `owner_uid` from init metadata when available. That avoids an extra channel-to-owner lookup before reading the owner's public profile channels and lets the same popup cache be reused across that owner's channels.
+- Focused tests pin the narrower init batch shape, the new owner moderation refresh route and the owner-UID profile lookup path.
+
+Trade-off: the new owner moderation refresh path adds a small route surface instead of reusing the larger bootstrap contract, but it materially reduces repeated message, DM and config reads on owner-only refreshes. The owner-channel popup still falls back to channel-based lookup when owner metadata is not yet available.
+
+Deployment note: no migration is required. Deploy the Worker and frontend together. Verify owner freeze/unfreeze state changes still update in normal and live chat, then open the owner-channel popup from two channels owned by the same profile and confirm the second open reuses the cached list.
+
 ### Versioned channel appearance cache preserves public chat colors until admin changes them — 2026-08-18
 
 - Public chat bubble/background appearance now carries a deterministic
@@ -525,17 +536,6 @@ Deployment note: deploy the Worker and frontend together. No D1 migration is req
 Trade-off: an image reply adds one R2 object and upload-ticket write. Private-thread invalidation still triggers an authorized snapshot refresh, but no image URL or private content is broadcast over the public room socket.
 
 Deployment note: apply migration `0047`, deploy the Worker, then deploy the frontend. Verify text-only, image-only and text-plus-image replies, reject a two-image draft, then exercise reply deletion, Undo expiry and sender-owned whole-thread deletion.
-
-### Chat bootstrap reads are narrower on owner refresh paths — 2026-08-18
-
-- Owner moderation refresh no longer reuses the full `/api/init` bootstrap. A dedicated owner-authenticated `channel-state` route now returns only the current `is_frozen` value plus owner moderation status for the current normal or live channel.
-- Normal `init` bootstraps no longer issue an extra `SELECT is_frozen FROM channels WHERE id = ?` read. That lookup is now batched only for `_live` channels, where the live row can differ from the parent channel row.
-- Owner-profile popup preloads and cache keys now use the known `owner_uid` from init metadata when available. That avoids an extra channel-to-owner lookup before reading the owner's public profile channels and lets the same popup cache be reused across that owner's channels.
-- Focused tests pin the narrower init batch shape, the new owner moderation refresh route and the owner-UID profile lookup path.
-
-Trade-off: the new owner moderation refresh path adds a small route surface instead of reusing the larger bootstrap contract, but it materially reduces repeated message, DM and config reads on owner-only refreshes. The owner-channel popup still falls back to channel-based lookup when owner metadata is not yet available.
-
-Deployment note: no migration is required. Deploy the Worker and frontend together. Verify owner freeze/unfreeze state changes still update in normal and live chat, then open the owner-channel popup from two channels owned by the same profile and confirm the second open reuses the cached list.
 
 ### Admin deletion Undo is server-backed — 2026-08-17
 
