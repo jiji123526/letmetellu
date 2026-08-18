@@ -344,6 +344,56 @@ test("bidirectional unified pages merge once and retain server edge state", () =
   assert.equal(state.hasMoreAfter, false);
 });
 
+test("prepending a unified page preserves mounted DM object references", () => {
+  const dmCursor = {
+    visual_root_created_at: "2026-08-18T01:00:00.000Z",
+    source: "dm" as const,
+    visual_root_id: "dm-current",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T01:00:00.000Z",
+    id: "dm-current",
+  };
+  const existingDm = {
+    ...message("dm-current", dmCursor.created_at, {
+      dm: true,
+      image: "/api/media/room/dm.jpg",
+    }),
+    ...dmCursor,
+  };
+  const olderCursor = {
+    ...dmCursor,
+    source: "message" as const,
+    visual_root_created_at: "2026-08-18T00:00:00.000Z",
+    visual_root_id: "message-older",
+    created_at: "2026-08-18T00:00:00.000Z",
+    id: "message-older",
+  };
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = replaceUnifiedTimelinePage(
+    state,
+    [existingDm],
+    dmCursor,
+    dmCursor,
+    true,
+    false,
+  );
+  assert.equal(state.mode, "unified");
+  const mountedDm = state.timelineItems[0];
+
+  state = mergeUnifiedTimelinePage(
+    state,
+    "before",
+    [{ ...message("message-older", olderCursor.created_at), ...olderCursor }],
+    olderCursor,
+    olderCursor,
+    false,
+  );
+
+  assert.equal(state.mode, "unified");
+  assert.equal(state.timelineItems[1], mountedDm);
+  assert.equal(state.timelineItems[1], existingDm);
+});
+
 test("unified history trimming remains bounded and keeps whole root groups", () => {
   const items = Array.from({ length: 305 }, (_, index) => {
     const id = `m-${String(index).padStart(3, "0")}`;

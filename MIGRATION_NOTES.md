@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified prepend preserves mounted message identity — 2026-08-18
+
+- Unified page merges previously rebuilt every mounted public-message and DM
+  object while normalizing visual positions, even though server-returned items
+  already carried canonical source/root/depth fields.
+- Normalization now reuses canonical timeline objects unchanged. Loading older
+  roots still performs one deduplication and ordering pass, but existing bubble
+  props remain referentially stable so `React.memo` can skip their render work.
+- DM images, loading state and embeds therefore remain mounted while older content
+  is prepended instead of briefly rerendering with the page merge.
+- Non-canonical legacy/realtime items still receive full parent resolution and
+  normalization. Ordering, source-qualified deduplication and the 300-item mounted
+  history bound are unchanged.
+
+Trade-off: reference reuse assumes canonical visual fields are immutable. That is
+already the unified API contract; message edits replace the item through the
+existing source-qualified upsert path when content actually changes.
+
+Deployment note: frontend-only. Verify a channel containing text and image DMs by
+repeatedly loading older pages at the top; mounted DM bubbles should not flash and
+the viewport anchor must remain stable.
+
 ### Unified chat pagination stage 8A: authoritative rollback — 2026-08-18
 
 - Normal unified page and context requests now recheck

@@ -406,6 +406,15 @@ npx wrangler secret delete UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST
 Only configure the flag currently under test. Do not put `*`, percentages or user
 IDs in these values: matching is by exact parent channel ID.
 
+#### Stable prepend rendering
+
+- **Completed 2026-08-18.** Canonical unified items retain object identity across
+  older-page merges. Existing public and DM bubbles no longer rerender merely
+  because a new root window was prepended.
+- Parent traversal and object creation remain only for non-canonical
+  legacy/realtime inputs. Unified merges still deduplicate and sort once, without
+  adding a second state collection or DOM measurement pass.
+
 Rollout order:
 
 1. local/preview Worker with deterministic fixtures;

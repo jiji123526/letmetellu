@@ -69,9 +69,24 @@ function normalizeSourceItems(
   source: ChatTimelineSource,
   messages: Message[],
 ): ChatTimelineItem[] {
-  const byId = new Map(messages.map((message) => [message.id, message]));
+  let byId: Map<string, Message> | null = null;
 
   return messages.map((message) => {
+    const existing = message as Partial<ChatTimelineItem>;
+    const hasCanonicalPosition = existing.source === source
+      && typeof existing.visual_root_created_at === "string"
+      && existing.visual_root_created_at.length > 0
+      && typeof existing.visual_root_id === "string"
+      && existing.visual_root_id.length > 0
+      && (existing.visual_depth === 0 || existing.visual_depth === 1);
+    if (
+      hasCanonicalPosition
+      && (source !== "dm" || message.dm === true)
+    ) {
+      return message as ChatTimelineItem;
+    }
+
+    byId ||= new Map(messages.map((candidate) => [candidate.id, candidate]));
     let root = message;
     const visited = new Set([message.id]);
     while (root.reply_to) {
@@ -80,14 +95,6 @@ function normalizeSourceItems(
       visited.add(parent.id);
       root = parent;
     }
-
-    const existing = message as Partial<ChatTimelineItem>;
-    const hasCanonicalPosition = existing.source === source
-      && typeof existing.visual_root_created_at === "string"
-      && existing.visual_root_created_at.length > 0
-      && typeof existing.visual_root_id === "string"
-      && existing.visual_root_id.length > 0
-      && (existing.visual_depth === 0 || existing.visual_depth === 1);
 
     return {
       ...message,
