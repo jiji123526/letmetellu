@@ -12,11 +12,27 @@ export interface CurrentUserStateResult<TChannel = unknown> {
   data: CurrentUserState<TChannel>;
 }
 
+const FAILED_USER_STATE_TTL_MS = 5_000;
+
+interface CachedCurrentUserStateResult {
+  result: CurrentUserStateResult;
+  expiresAt: number;
+}
+
 const inFlightRequests = new Map<string, Promise<CurrentUserStateResult>>();
+const cachedFailedResults = new Map<string, CachedCurrentUserStateResult>();
 
 export function fetchCurrentUserState<TChannel = unknown>(
   userId: string,
 ): Promise<CurrentUserStateResult<TChannel>> {
+  const cachedFailure = cachedFailedResults.get(userId);
+  if (cachedFailure && cachedFailure.expiresAt > Date.now()) {
+    return Promise.resolve(cachedFailure.result as CurrentUserStateResult<TChannel>);
+  }
+  if (cachedFailure) {
+    cachedFailedResults.delete(userId);
+  }
+
   const existingRequest = inFlightRequests.get(userId);
   if (existingRequest) {
     return existingRequest as Promise<CurrentUserStateResult<TChannel>>;
@@ -32,11 +48,22 @@ export function fetchCurrentUserState<TChannel = unknown>(
     };
   })();
   inFlightRequests.set(userId, request as Promise<CurrentUserStateResult>);
-  const clearRequest = () => {
+  const clearRequest = (result?: CurrentUserStateResult) => {
     if (inFlightRequests.get(userId) === request) {
       inFlightRequests.delete(userId);
     }
+    if (!result?.ok && (result.status === 401 || result.status === 404)) {
+      cachedFailedResults.set(userId, {
+        result,
+        expiresAt: Date.now() + FAILED_USER_STATE_TTL_MS,
+      });
+      return;
+    }
+    cachedFailedResults.delete(userId);
   };
-  void request.then(clearRequest, clearRequest);
+  void request.then(
+    (result) => clearRequest(result),
+    () => clearRequest(),
+  );
   return request;
 }

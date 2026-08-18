@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `/api/user` bootstrap now backs off repeated missing-user retries — 2026-08-18
+
+- The authenticated browser bootstrap now keeps recent failed `/api/user` self-state reads in a short client cache instead of immediately refetching the same `401` or `404` result on every remount or startup retry.
+- The Next `/api/user` proxy now remembers a recent Worker `user_not_found` sync failure for the same authenticated identity and skips repeating the extra sync `POST` during that brief backoff window.
+- Successful reads are unchanged. This only trims duplicate failure-path traffic and duplicate Worker user-lookup work when a session is stale or a user record is temporarily unavailable.
+- Focused coverage now pins the brief client failure cache behavior and the proxy's missing-user sync backoff guard.
+
+Trade-off: a stale missing-user or unauthorized result can now be reused for up to five seconds before the next retry. That slightly delays recovery from an immediately repaired identity mismatch, but avoids producing a burst of identical failing reads and sync attempts during bootstrap churn.
+
+Deployment note: no migration is required. Deploy the frontend and Next server together. Verify normal authenticated dashboard bootstrap still loads immediately, then confirm a deleted or stale session no longer hammers `/api/user` with repeated retries during refreshes or remounts.
+
 ### Hot read paths avoid repeated reports-owner, identity and DM-limit work — 2026-08-18
 
 - `init` and `/api/data` now resolve reports-owner access only when the requested channel is actually the configured reports channel. Normal public and locked-channel reads no longer pay an extra reports-owner lookup before ordinary authorization continues.

@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
+const MISSING_USER_SYNC_BACKOFF_MS = 5_000;
+const recentMissingUserSyncs = new Map<string, number>();
+
 function getWorkerUrl() {
   return process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 }
@@ -12,6 +15,10 @@ function getInternalHeaders(session: { user: { id: string; email?: string | null
     "X-User-Id": session.user.id,
     "X-User-Email": session.user.email || "",
   };
+}
+
+function missingUserSyncCacheKey(user: { id: string; email?: string | null }) {
+  return `${user.id}\n${user.email || ""}`;
 }
 
 export async function GET(request: Request) {
@@ -55,6 +62,15 @@ export async function GET(request: Request) {
     return NextResponse.json(readData, { status: readRes.status });
   }
 
+  const syncCacheKey = missingUserSyncCacheKey(user);
+  const nextSyncAttemptAt = recentMissingUserSyncs.get(syncCacheKey) || 0;
+  if (nextSyncAttemptAt > Date.now()) {
+    return NextResponse.json(readData, { status: readRes.status });
+  }
+  if (nextSyncAttemptAt) {
+    recentMissingUserSyncs.delete(syncCacheKey);
+  }
+
   const syncRes = await fetch(`${workerUrl}/api/user`, {
     method: "POST",
     headers: {
@@ -72,6 +88,11 @@ export async function GET(request: Request) {
   });
 
   const syncData = await syncRes.json();
+  if (syncRes.status === 404 && syncData?.error === "user_not_found") {
+    recentMissingUserSyncs.set(syncCacheKey, Date.now() + MISSING_USER_SYNC_BACKOFF_MS);
+  } else {
+    recentMissingUserSyncs.delete(syncCacheKey);
+  }
   return NextResponse.json(syncData, { status: syncRes.status });
 }
 
