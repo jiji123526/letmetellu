@@ -14,6 +14,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
   props remain referentially stable so `React.memo` can skip their render work.
 - DM images, loading state and embeds therefore remain mounted while older content
   is prepended instead of briefly rerendering with the page merge.
+- Browser tracing found a second source of visible movement: unified prepend
+  waited for inserted images/embeds to settle before restoring the old viewport
+  anchor. A production-shaped page displaced the anchor by roughly 9,600 px while
+  `scrollTop` remained near the top.
+- Unified prepend now holds the existing anchor every animation frame while the
+  inserted window settles, then performs a final correction. Newly inserted media
+  can change height without exposing an intermediate DM position.
 - Non-canonical legacy/realtime items still receive full parent resolution and
   normalization. Ordering, source-qualified deduplication and the 300-item mounted
   history bound are unchanged.
@@ -24,7 +31,7 @@ existing source-qualified upsert path when content actually changes.
 
 Deployment note: frontend-only. Verify a channel containing text and image DMs by
 repeatedly loading older pages at the top; mounted DM bubbles should not flash and
-the viewport anchor must remain stable.
+the viewport anchor must remain stable before, during and after media loading.
 
 ### Unified chat pagination stage 8A: authoritative rollback — 2026-08-18
 

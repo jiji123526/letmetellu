@@ -630,27 +630,41 @@ export function useChatHistoryNavigation({
           live ? liveSessionId : undefined,
         )
           .then(async (data) => {
-            applyUnifiedHistoryPage(
-              "before",
-              data.items as unknown as ChatTimelineItem[],
-              data.page_start_cursor,
-              data.page_end_cursor,
-              data.has_more,
-            );
-            hasMoreMessagesRef.current = data.has_more;
-            await nextAnimationFrame();
             const anchor = lockedScrollAnchorRef.current;
-            const anchorElement = anchor
-              ? document.getElementById(anchor.id) as HTMLElement | null
+            const releaseHeldViewport = anchor
+              ? holdViewportPosition(
+                  element,
+                  {
+                    scrollTop: element.scrollTop,
+                    anchorMessageId: anchor.id,
+                  },
+                  () => historyLoadAnchorRequestRef.current === prependRequestId,
+                )
               : null;
-            if (anchorElement) {
-              window.dispatchEvent(new Event("chat-history-preload"));
-              await waitForCompleteHistoryWindow(
-                element,
-                () => historyLoadAnchorRequestRef.current === prependRequestId,
-                45_000,
-                anchorElement,
+            try {
+              applyUnifiedHistoryPage(
+                "before",
+                data.items as unknown as ChatTimelineItem[],
+                data.page_start_cursor,
+                data.page_end_cursor,
+                data.has_more,
               );
+              hasMoreMessagesRef.current = data.has_more;
+              await nextAnimationFrame();
+              const anchorElement = anchor
+                ? document.getElementById(anchor.id) as HTMLElement | null
+                : null;
+              if (anchorElement) {
+                window.dispatchEvent(new Event("chat-history-preload"));
+                await waitForCompleteHistoryWindow(
+                  element,
+                  () => historyLoadAnchorRequestRef.current === prependRequestId,
+                  45_000,
+                  anchorElement,
+                );
+              }
+            } finally {
+              releaseHeldViewport?.();
             }
             const nextTop = anchor ? getAnchorTop(element, anchor.id) : null;
             if (anchor && nextTop !== null) element.scrollTop += nextTop - anchor.top;

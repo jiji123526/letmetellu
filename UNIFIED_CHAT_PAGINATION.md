@@ -414,6 +414,9 @@ IDs in these values: matching is by exact parent channel ID.
 - Parent traversal and object creation remain only for non-canonical
   legacy/realtime inputs. Unified merges still deduplicate and sort once, without
   adding a second state collection or DOM measurement pass.
+- The prepend path continuously holds the pre-request viewport anchor while newly
+  inserted images and embeds settle, then applies a final correction. It no longer
+  waits for media stabilization while the old content is visibly displaced.
 
 Rollout order:
 

@@ -24,6 +24,10 @@ const apiChatSource = readFileSync(
   new URL("../../src/lib/api-chat.ts", import.meta.url),
   "utf8",
 );
+const historyNavigationSource = readFileSync(
+  new URL("../../src/components/chat/useChatHistoryNavigation.ts", import.meta.url),
+  "utf8",
+);
 
 function message(
   id: string,
@@ -392,6 +396,22 @@ test("prepending a unified page preserves mounted DM object references", () => {
   assert.equal(state.mode, "unified");
   assert.equal(state.timelineItems[1], mountedDm);
   assert.equal(state.timelineItems[1], existingDm);
+});
+
+test("unified prepend holds its viewport anchor while inserted media settles", () => {
+  const unifiedPrepend = historyNavigationSource.match(
+    /if \(unifiedTimelineEnabled && unifiedStartCursorRef\.current\) \{([\s\S]*?)setIsOlderHistoryLoading\(true\);/,
+  )?.[1] || "";
+
+  assert.match(unifiedPrepend, /holdViewportPosition\(/);
+  assert.match(unifiedPrepend, /anchorMessageId: anchor\.id/);
+  assert.match(unifiedPrepend, /applyUnifiedHistoryPage\(/);
+  assert.match(unifiedPrepend, /waitForCompleteHistoryWindow\(/);
+  assert.match(unifiedPrepend, /releaseHeldViewport\?\.\(\)/);
+  assert.ok(
+    unifiedPrepend.indexOf("holdViewportPosition(")
+      < unifiedPrepend.indexOf("applyUnifiedHistoryPage("),
+  );
 });
 
 test("unified history trimming remains bounded and keeps whole root groups", () => {
