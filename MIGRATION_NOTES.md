@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination remaining rollout plan documented — 2026-08-18
+
+- Expanded `UNIFIED_CHAT_PAGINATION.md` from two broad follow-up steps into separately shippable API, client-state, bootstrap, history/navigation, mutation/realtime, query-validation, special-channel and controlled-rollout stages.
+- Each stage now has explicit authorization requirements, exit criteria, rollback behavior and regression targets. The plan keeps one canonical `(source, id)` client state and uses temporary derived selectors instead of independently mutating public, DM and unified arrays.
+- Added a required fan-out review because a 50-root page can still expand into many replies. Production measurements must cover expanded items, maximum children per root, D1 rows read and owner/visitor latency before broad enablement; incomplete replies must never be silently truncated.
+- Added provisional rollout and rollback thresholds, including immediate rollback for any private-DM exposure, cursor duplication/loss, passcode or live-session regression, repeated scroll oscillation, D1 variable-limit errors or a sustained material latency/error regression.
+- Normal channels, live sessions and the reports inbox now have separate rollout gates. Legacy reads and state remain available behind a server-controlled kill switch until normal traffic has completed an observation window.
+
+Documentation-only note: this update changes no API, Worker, database or client behavior and requires no deployment.
+
 ### Unified chat pagination stage 3: opt-in shadow comparison — 2026-08-17
 
 - Added an explicit `X-Unified-Timeline-Shadow: 1` development path for the latest normal-channel message page. It preserves and returns the legacy payload while comparing the legacy public/DM root window with the new unified reader.

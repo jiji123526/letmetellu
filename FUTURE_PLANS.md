@@ -17,10 +17,12 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ## Operational Improvements
 
-- Implement and validate unified public-message/DM pagination using the staged
-  contract in [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the
-  production read path unchanged until authorization tests and shadow comparison
-  show stable ordering, bounded rows and zero visibility mismatches.
+- Continue unified public-message/DM pagination from completed contract, bounded
+  reader and opt-in shadow stages into the API, single-client-state, navigation,
+  realtime, fan-out validation, special-channel and controlled-rollout stages in
+  [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the production
+  read path behind a kill switch until authorization, ordering, bounded-row,
+  latency and scroll-stability exit criteria pass.
 
 - Add bounded dashboard summaries for moderation actions, report volume,
   petition outcomes and support queue age.
