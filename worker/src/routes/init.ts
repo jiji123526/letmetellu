@@ -7,6 +7,7 @@ import { withOperationalErrorContext } from "../lib/operational-events";
 import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
+import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
@@ -271,6 +272,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       adminDataStatus,
       viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
       isReportsChannel: isReportsChannel(parentChannelId, env),
+      unifiedTimelineEnabled: isUnifiedTimelineClientEnabled(env, parentChannelId, {
+        live: isLiveChannel,
+        reports: isReportsChannel(parentChannelId, env),
+      }),
       bannerNotice: config.get(`notice_${channelId}`) || "",
       welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
       live: liveStatus,

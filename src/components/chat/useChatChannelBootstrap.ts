@@ -48,6 +48,7 @@ interface UseChatChannelBootstrapArgs {
   setViewerBlocked: Dispatch<SetStateAction<boolean>>;
   setViewerModerationStatus: Dispatch<SetStateAction<InitData["viewerModerationStatus"]>>;
   setViewerAccess: Dispatch<SetStateAction<InitData["viewerAccess"]>>;
+  setUnifiedTimelineEnabled: (enabled: boolean) => void;
   setDmMessages: Dispatch<SetStateAction<Message[]>>;
   setActiveNotice: Dispatch<SetStateAction<string>>;
   setWelcomeConfig: Dispatch<SetStateAction<string>>;
@@ -98,6 +99,7 @@ export function useChatChannelBootstrap({
   setViewerBlocked,
   setViewerModerationStatus,
   setViewerAccess,
+  setUnifiedTimelineEnabled,
   setDmMessages,
   setActiveNotice,
   setWelcomeConfig,
@@ -170,6 +172,7 @@ export function useChatChannelBootstrap({
       });
     }
 
+    setUnifiedTimelineEnabled(data.unifiedTimelineEnabled === true);
     if (options?.preserveHistory) {
       setMessages((previous) => mergeServerMessageSnapshot(previous, data.messages || []));
     } else {
@@ -222,6 +225,7 @@ export function useChatChannelBootstrap({
     setViewerAccess,
     setViewerBlocked,
     setViewerModerationStatus,
+    setUnifiedTimelineEnabled,
     setWelcomeConfig,
     text.adminDataAuthFailed,
   ]);

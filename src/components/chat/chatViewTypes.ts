@@ -41,6 +41,7 @@ export interface InitData {
   anonymousUid?: string;
   viewerAccess?: "owner" | "reports_owner" | "standard";
   isReportsChannel?: boolean;
+  unifiedTimelineEnabled?: boolean;
   ownerModeration?: {
     status: "active" | "warned" | "suspended" | "frozen";
     petitionStatus: "none" | "open" | "accepted" | "rejected";

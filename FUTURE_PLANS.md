@@ -18,8 +18,8 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 ## Operational Improvements
 
 - Continue unified public-message/DM pagination from the completed cursor, reader,
-  shadow-comparison and production-shaped API stages into single-client-state,
-  bootstrap, navigation, realtime, fan-out validation, special-channel and
+  shadow-comparison, production-shaped API and single-state client-adapter stages
+  into bootstrap, navigation, realtime, fan-out validation, special-channel and
   controlled-rollout work in
   [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the production
   read path behind a kill switch until authorization, ordering, bounded-row,

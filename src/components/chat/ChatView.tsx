@@ -13,7 +13,7 @@ import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { readChannelBackground } from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
-import type { Message, MessagePageCursor } from "./chatTypes";
+import type { MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReplyParents } from "./useChatReplyParents";
@@ -39,6 +39,7 @@ import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
 import { shouldShowReconnectNotice } from "./chatConnectionNotice";
 import { getAnonymousViewerDmMessages } from "./chatMessageSelectors";
+import { useChatTimelineState } from "./useChatTimelineState";
 
 function getInitialUid(): string {
   if (typeof window === "undefined") return "ssr";
@@ -75,13 +76,18 @@ function getImageDimensions(file: File): Promise<{ width: number; height: number
 }
 
 export function ChatView({ channelId }: { channelId: string }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const {
+    messages,
+    dmMessages,
+    setMessages,
+    setDmMessages,
+    setUnifiedTimelineEnabled,
+  } = useChatTimelineState();
   const [initialPageStartCursor, setInitialPageStartCursor] = useState<MessagePageCursor | null>(null);
   const [initialPageEndCursor, setInitialPageEndCursor] = useState<MessagePageCursor | null>(null);
   const [channel, setChannel] = useState<Channel | null>(null);
   const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
   const [viewerBlocked, setViewerBlocked] = useState(false);
-  const [dmMessages, setDmMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [cachedBackground] = useState(() => readChannelBackground(channelId));
   const [passcodeGate, setPasscodeGate] = useState<PasscodeGateState | null>(null);
@@ -448,6 +454,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setViewerBlocked,
     setViewerModerationStatus,
     setViewerAccess,
+    setUnifiedTimelineEnabled,
     setDmMessages,
     setActiveNotice,
     setWelcomeConfig,

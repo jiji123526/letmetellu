@@ -146,14 +146,32 @@ untouched in this stage.
 
 #### Stage 5A — state adapter
 
-- Add one `timelineItems` state whose canonical identity is `(source, id)`.
-- While existing hooks are migrated, derive public-message and DM views from that
-  state with memoized selectors. Do not keep three independently mutable arrays;
-  duplicated state would reintroduce reconciliation races.
-- Preserve the legacy `messages` and `dmMessages` path behind a server-controlled
-  kill switch. The default remains legacy.
-- Treat the six-field server cursor as opaque client state. UI code must not derive
-  a replacement cursor from DOM order or raw reply timestamps.
+- Status: implemented on the feature branch; the allowlist is empty by default and
+  no client calls the unified API yet.
+- `ChatView` now owns one discriminated timeline state. Legacy mode stores the
+  existing public-message/DM pair; unified mode stores only `timelineItems`, keyed
+  canonically by `(source, id)`, so equal IDs from separate tables cannot collide.
+- Existing hooks temporarily receive memoized public-message and DM projections plus
+  compatibility setters. In unified mode those setters transact against the single
+  timeline collection and preserve the other source rather than mutating separate
+  arrays.
+- The Worker exposes `unifiedTimelineEnabled` in normal-channel init responses only
+  when the exact channel ID appears in the comma-separated
+  `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST`. Missing or empty configuration keeps legacy
+  mode; live and reports channels remain legacy regardless of the allowlist.
+- Enabling a channel converts its current legacy snapshot into canonical unified
+  items. Removing it from the allowlist converts mounted unified state back into
+  the compatibility pair on the next authoritative init response.
+- Unified start/end cursors are stored unchanged as opaque six-field server values.
+  The adapter has no code that reconstructs them from DOM order, item timestamps or
+  the old two-field message cursor.
+- Stage 5A intentionally continues consuming the existing init payload. Replacing
+  that read with the versioned unified bootstrap, without double-fetching both
+  formats, belongs to Stage 5B.
+
+Rollback: remove the channel ID from `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST` and refresh
+or trigger an authoritative init. With the variable absent, this commit behaves as
+the legacy client did.
 
 #### Stage 5B — bootstrap and reconnect
 
@@ -327,7 +345,7 @@ Cleanup after stable rollout:
 - [x] Stage 2 bounded parallel reader
 - [x] Stage 3 opt-in latest-page shadow comparison
 - [x] Stage 4 production-shaped unified API contract and route fixtures
-- [ ] Stage 5A single-state client adapter and kill switch
+- [x] Stage 5A single-state client adapter and kill switch
 - [ ] Stage 5B unified bootstrap/reconnect
 - [ ] Stage 5C bidirectional history/context/navigation
 - [ ] Stage 5D mutation and realtime normalization

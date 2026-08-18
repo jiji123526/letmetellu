@@ -4,6 +4,37 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 5A: single-state client adapter — 2026-08-18
+
+- Replaced `ChatView`'s two top-level message state hooks with one discriminated
+  timeline state. Legacy mode retains the existing public-message/DM pair, while
+  unified mode owns only one canonical `timelineItems` collection identified by
+  `(source, id)`.
+- Existing chat hooks continue using memoized public-message and DM projections
+  during migration. Their compatibility setters update the unified collection
+  atomically and preserve the other source, avoiding a third independently mutable
+  array and cross-table ID collisions.
+- Added an exact-channel server rollout gate through the comma-separated
+  `UNIFIED_TIMELINE_CHANNEL_ALLOWLIST`. Missing or empty configuration defaults to
+  legacy behavior; live and reports init responses never enable unified state.
+- Removing a channel from the allowlist converts mounted unified state back to the
+  legacy pair on the next init response. This makes rollback server-controlled
+  without discarding the current snapshot.
+- The adapter stores complete unified start/end cursors as opaque server values.
+  Client code does not derive cursors from rendered order or timestamps.
+- Focused tests preserve default-off behavior, exact allowlist matching,
+  source-qualified identity, compatibility mutation isolation, opaque cursor
+  storage and unified-to-legacy rollback.
+
+Trade-off: while an allowlisted client is on Stage 5A, it still receives the legacy
+init payload and normalizes that payload into unified state. This proves the state
+boundary without improving read cost yet. Stage 5B must switch bootstrap to either
+legacy or unified reads, never both, before production rollout.
+
+Deployment note: no D1 migration is required. Do not configure the production
+allowlist yet; Stage 5B is required before the unified API becomes the client read
+path.
+
 ### Unified chat pagination stage 4: production-shaped API — 2026-08-18
 
 - Added a dedicated versioned `GET /api/unified-timeline` Worker endpoint and
