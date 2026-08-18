@@ -46,7 +46,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const headers = getInternalHeaders({ user: { id: user.id, email: user.email } });
+  const authenticatedUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    image: user.image,
+  };
+  const headers = getInternalHeaders({ user: authenticatedUser });
 
   const readRes = await fetch(`${workerUrl}/api/user`, {
     method: "GET",
@@ -62,7 +68,7 @@ export async function GET(request: Request) {
     return NextResponse.json(readData, { status: readRes.status });
   }
 
-  const syncCacheKey = missingUserSyncCacheKey(user);
+  const syncCacheKey = missingUserSyncCacheKey(authenticatedUser);
   const nextSyncAttemptAt = recentMissingUserSyncs.get(syncCacheKey) || 0;
   if (nextSyncAttemptAt > Date.now()) {
     return NextResponse.json(readData, { status: readRes.status });
@@ -78,10 +84,10 @@ export async function GET(request: Request) {
       "X-Internal-Token": process.env.INTERNAL_SECRET || "",
     },
     body: JSON.stringify({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
+      id: authenticatedUser.id,
+      email: authenticatedUser.email,
+      name: authenticatedUser.name,
+      image: authenticatedUser.image,
       flow: "sync",
     }),
     cache: "no-store",

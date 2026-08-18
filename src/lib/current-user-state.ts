@@ -52,7 +52,7 @@ export function fetchCurrentUserState<TChannel = unknown>(
     if (inFlightRequests.get(userId) === request) {
       inFlightRequests.delete(userId);
     }
-    if (!result?.ok && (result.status === 401 || result.status === 404)) {
+    if (result && !result.ok && (result.status === 401 || result.status === 404)) {
       cachedFailedResults.set(userId, {
         result,
         expiresAt: Date.now() + FAILED_USER_STATE_TTL_MS,
