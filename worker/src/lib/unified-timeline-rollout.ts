@@ -5,8 +5,10 @@ export function isUnifiedTimelineClientEnabled(
   channelId: string,
   context: { live?: boolean; reports?: boolean } = {},
 ): boolean {
-  if (context.live || context.reports) return false;
-  const allowlist = env.UNIFIED_TIMELINE_CHANNEL_ALLOWLIST;
+  if (context.reports) return false;
+  const allowlist = context.live
+    ? env.UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST
+    : env.UNIFIED_TIMELINE_CHANNEL_ALLOWLIST;
   if (!allowlist) return false;
   return allowlist
     .split(",")

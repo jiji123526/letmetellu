@@ -6,6 +6,7 @@ import type { UnifiedTimelineCursor } from "../src/lib/unified-timeline.ts";
 import { createRoomToken } from "../src/routes/passcode.ts";
 import { handleUnifiedTimeline } from "../src/routes/unified-timeline.ts";
 import type { Env } from "../src/types.ts";
+import type { LiveSessionState } from "../src/lib/live-sessions.ts";
 
 const INTERNAL_SECRET = "unified-route-test-secret";
 const CHANNEL_ID = "room-a";
@@ -70,6 +71,9 @@ function createFixture(input: {
   messageRoots?: RootRow[];
   dmRoots?: RootRow[];
   dmReplies?: DmReplyRow[];
+  liveSession?: LiveSessionState | null;
+  liveAllowlist?: string;
+  endLiveDuringRead?: boolean;
 }) {
   let channelExists = input.channelExists ?? true;
   let passcode = input.passcode ?? null;
@@ -78,6 +82,8 @@ function createFixture(input: {
   const messageRoots = input.messageRoots || [];
   const dmRoots = input.dmRoots || [];
   const dmReplies = input.dmReplies || [];
+  let liveSession = input.liveSession || null;
+  let endedDuringRead = false;
   const calls: Array<{ sql: string; params: unknown[] }> = [];
 
   function statement(sqlText: string, params: unknown[] = []) {
@@ -96,6 +102,14 @@ function createFixture(input: {
         }
         if (sql.includes("SELECT locale FROM users")) {
           return { locale: "en" };
+        }
+        if (sql.includes("SELECT text, updated_at FROM config WHERE id = ?")) {
+          return liveSession
+            ? {
+                text: JSON.stringify(liveSession),
+                updated_at: liveSession.startedAt,
+              }
+            : null;
         }
         return null;
       },
@@ -123,7 +137,12 @@ function createFixture(input: {
         }
         if (sql.includes("reply_to IN")) return { results: [] };
         if (sql.includes("FROM messages WHERE")) {
-          return { results: selectRootWindow(messageRoots, sql, params, 2) };
+          const result = { results: selectRootWindow(messageRoots, sql, params, 2) };
+          if (input.endLiveDuringRead && !endedDuringRead) {
+            endedDuringRead = true;
+            liveSession = null;
+          }
+          return result;
         }
         return { results: [] };
       },
@@ -137,6 +156,7 @@ function createFixture(input: {
   const env = {
     INTERNAL_SECRET,
     REPORTS_CHANNEL_ID: input.reportsChannelId,
+    UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST: input.liveAllowlist,
     DB: {
       prepare: statement,
       async batch(statements: Array<ReturnType<typeof statement>>) {
@@ -353,6 +373,89 @@ test("deleted, live and reports channels retain explicit route boundaries", asyn
     headers: { "X-Anonymous-Token": visitor.token },
   }), reportsFixture.env);
   assert.equal(unauthorizedReports.status, 403);
+});
+
+test("live unified pages require the current active session id", async () => {
+  const liveSession: LiveSessionState = {
+    active: true,
+    title: "Current",
+    sessionId: "live-current",
+    startedAt: "2026-08-18T00:00:00.000Z",
+    expiresAt: "2099-08-18T08:00:00.000Z",
+  };
+  const fixture = createFixture({
+    liveSession,
+    liveAllowlist: CHANNEL_ID,
+    messageRoots: [{
+      id: "live-message",
+      created_at: "2026-08-18T01:00:00.000Z",
+    }],
+    dmRoots: [{
+      id: "live-dm",
+      created_at: "2026-08-18T02:00:00.000Z",
+      uid: "visitor-a",
+    }],
+  });
+  const missing = await handleUnifiedTimeline(unifiedRequest({
+    channelId: `${CHANNEL_ID}_live`,
+    headers: ownerHeaders(),
+  }), fixture.env);
+  assert.equal(missing.status, 400);
+  assert.equal(
+    (await readJson<{ error: string }>(missing)).error,
+    "missing_live_session_id",
+  );
+
+  const stale = await handleUnifiedTimeline(unifiedRequest({
+    channelId: `${CHANNEL_ID}_live`,
+    headers: ownerHeaders(),
+    params: { live_session_id: "live-old" },
+  }), fixture.env);
+  assert.equal(stale.status, 409);
+  assert.equal(
+    (await readJson<{ error: string }>(stale)).error,
+    "live_session_changed",
+  );
+
+  const current = await handleUnifiedTimeline(unifiedRequest({
+    channelId: `${CHANNEL_ID}_live`,
+    headers: ownerHeaders(),
+    params: { live_session_id: liveSession.sessionId },
+  }), fixture.env);
+  assert.equal(current.status, 200);
+  assert.deepEqual(
+    (await readJson<{ items: Array<{ id: string }> }>(current)).items.map((item) => item.id),
+    ["live-message", "live-dm"],
+  );
+});
+
+test("a live session ending during a unified read returns no timeline", async () => {
+  const fixture = createFixture({
+    liveAllowlist: CHANNEL_ID,
+    endLiveDuringRead: true,
+    liveSession: {
+      active: true,
+      title: "Ending",
+      sessionId: "live-ending",
+      startedAt: "2026-08-18T00:00:00.000Z",
+      expiresAt: "2099-08-18T08:00:00.000Z",
+    },
+    dmRoots: [{
+      id: "private-live-dm",
+      created_at: "2026-08-18T02:00:00.000Z",
+      uid: "visitor-a",
+    }],
+  });
+  const response = await handleUnifiedTimeline(unifiedRequest({
+    channelId: `${CHANNEL_ID}_live`,
+    headers: ownerHeaders(),
+    params: { live_session_id: "live-ending" },
+  }), fixture.env);
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await readJson<{ error: string }>(response), {
+    error: "live_session_changed",
+  });
 });
 
 test("malformed, partial and non-root cursors return 400", async () => {

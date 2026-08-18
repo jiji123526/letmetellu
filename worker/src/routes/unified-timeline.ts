@@ -11,6 +11,7 @@ import {
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics.ts";
 import { isUnifiedTimelineClientEnabled } from "../lib/unified-timeline-rollout.ts";
+import { resolveActiveLiveSession } from "../lib/live-sessions.ts";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
@@ -66,7 +67,13 @@ export async function handleUnifiedTimeline(
     }
   }
 
-  if (liveChannel || isReportsChannel(parentChannelId, env)) {
+  const reportsChannel = isReportsChannel(parentChannelId, env);
+  const liveTimelineEnabled = liveChannel && isUnifiedTimelineClientEnabled(
+    env,
+    parentChannelId,
+    { live: true },
+  );
+  if (reportsChannel || (liveChannel && !liveTimelineEnabled)) {
     return Response.json(
       { error: "unified_timeline_unsupported" },
       { status: 409 },
@@ -86,6 +93,32 @@ export async function handleUnifiedTimeline(
     );
   }
 
+  const requestedLiveSessionId = liveChannel
+    ? url.searchParams.get("live_session_id") || ""
+    : "";
+  let liveSessionId = "";
+  if (liveChannel) {
+    if (!requestedLiveSessionId) {
+      return Response.json(
+        { error: "missing_live_session_id" },
+        { status: 400 },
+      );
+    }
+    const liveSession = await resolveActiveLiveSession(env, parentChannelId);
+    if (!liveSession) {
+      return Response.json({ error: "live_session_ended" }, { status: 409 });
+    }
+    if (liveSession.sessionId !== requestedLiveSessionId) {
+      return Response.json({ error: "live_session_changed" }, { status: 409 });
+    }
+    liveSessionId = liveSession.sessionId;
+  }
+  const liveSessionStillCurrent = async () => {
+    if (!liveChannel) return true;
+    const current = await resolveActiveLiveSession(env, parentChannelId);
+    return current?.sessionId === liveSessionId;
+  };
+
   const targetId = url.searchParams.get("target_id");
   if (targetId) {
     const targetSource = url.searchParams.get("target_source") || "message";
@@ -103,7 +136,10 @@ export async function handleUnifiedTimeline(
     if (!contextPage) {
       return Response.json({ error: "target_not_found" }, { status: 404 });
     }
-    if (isUnifiedTimelineClientEnabled(env, channelId)) {
+    if (!await liveSessionStillCurrent()) {
+      return Response.json({ error: "live_session_changed" }, { status: 409 });
+    }
+    if (isUnifiedTimelineClientEnabled(env, parentChannelId, { live: liveChannel })) {
       logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
         metrics: contextPage.metrics,
         owner: viewer.owner,
@@ -126,7 +162,10 @@ export async function handleUnifiedTimeline(
     direction: pageRequest.direction,
     limit: pageRequest.limit,
   });
-  if (isUnifiedTimelineClientEnabled(env, channelId)) {
+  if (!await liveSessionStillCurrent()) {
+    return Response.json({ error: "live_session_changed" }, { status: 409 });
+  }
+  if (isUnifiedTimelineClientEnabled(env, parentChannelId, { live: liveChannel })) {
     logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
       metrics: page.metrics,
       owner: viewer.owner,

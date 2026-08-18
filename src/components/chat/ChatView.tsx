@@ -570,6 +570,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     messagesContainerRef,
     messagesEndRef,
     inLiveModeRef,
+    liveSessionId,
     setMessages,
     applyUnifiedHistoryPage,
     replaceUnifiedContextPage,

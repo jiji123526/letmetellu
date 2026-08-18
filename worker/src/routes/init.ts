@@ -2,7 +2,13 @@ import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
-import { endLiveSession, isLiveSessionExpired, parseLiveSessionState, type LiveSessionState } from "../lib/live-sessions";
+import {
+  endLiveSession,
+  isLiveSessionExpired,
+  parseLiveSessionState,
+  resolveActiveLiveSession,
+  type LiveSessionState,
+} from "../lib/live-sessions";
 import { withOperationalErrorContext } from "../lib/operational-events";
 import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
@@ -125,6 +131,20 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       // Owner or valid token — continue to full data
     }
 
+    const unifiedTimelineRequested = isUnifiedTimelineClientEnabled(
+      env,
+      parentChannelId,
+      {
+        live: isLiveChannel,
+        reports: isReportsChannel(parentChannelId, env),
+      },
+    );
+    const liveTimelineSession = isLiveChannel && unifiedTimelineRequested
+      ? await resolveActiveLiveSession(env, parentChannelId)
+      : null;
+    const unifiedTimelineEnabled = unifiedTimelineRequested
+      && (!isLiveChannel || liveTimelineSession !== null);
+
     routeStage = "prepare_bootstrap_batch";
 
     // Collect independent reads into one D1 batch. This removes the accumulated
@@ -189,14 +209,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "load_bootstrap_data";
 
-    const unifiedTimelineEnabled = isUnifiedTimelineClientEnabled(
-      env,
-      parentChannelId,
-      {
-        live: isLiveChannel,
-        reports: isReportsChannel(parentChannelId, env),
-      },
-    );
     const [bootstrap, batchResults] = await Promise.all([
       readSelectedBootstrap(unifiedTimelineEnabled, {
         legacy: async () => {
@@ -239,9 +251,19 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const dmMessages = bootstrap.mode === "legacy"
       ? bootstrap.value.dmMessages
       : [];
-    const unifiedPage = bootstrap.mode === "unified"
+    let unifiedPage = bootstrap.mode === "unified"
       ? bootstrap.value
       : null;
+    let responseUnifiedTimelineEnabled = unifiedTimelineEnabled;
+    let liveTimelineSessionAfterRead: LiveSessionState | null | undefined;
+    if (unifiedPage && liveTimelineSession) {
+      const currentLiveSession = await resolveActiveLiveSession(env, parentChannelId);
+      liveTimelineSessionAfterRead = currentLiveSession;
+      if (currentLiveSession?.sessionId !== liveTimelineSession.sessionId) {
+        unifiedPage = null;
+        responseUnifiedTimelineEnabled = false;
+      }
+    }
     const rawMessages = messagePage?.messages || [];
     const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
     const config = new Map(configRows.map((row) => [row.id, row.text]));
@@ -266,6 +288,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       routeStage = "expire_live_state";
       await endLiveSession(env, parentChannelId, "expired", liveStatus!.sessionId);
       liveStatus = null;
+    }
+    if (liveTimelineSessionAfterRead !== undefined) {
+      liveStatus = liveTimelineSessionAfterRead;
     }
 
     routeStage = "finalize_channel_state";
@@ -333,7 +358,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       adminDataStatus,
       viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
       isReportsChannel: isReportsChannel(parentChannelId, env),
-      unifiedTimelineEnabled,
+      unifiedTimelineEnabled: responseUnifiedTimelineEnabled,
       bannerNotice: config.get(`notice_${channelId}`) || "",
       welcomeConfig: config.get(`welcome_${parentChannelId}`) || "",
       live: liveStatus,

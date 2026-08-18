@@ -273,27 +273,19 @@ export function useChatRealtimeSync({
   ]);
 
   const refreshLatestTimeline = useCallback(async (traceCycleId?: string) => {
-    if (unifiedTimelineEnabled && !inLiveModeRef.current) {
-      const data = await fetchTrackedInit(channelId, traceCycleId);
+    if (unifiedTimelineEnabled) {
+      const data = await fetchTrackedInit(getViewingChannelId(), traceCycleId);
       applyReconnectInitData(data);
       return;
     }
     await refreshLatestMessages(traceCycleId);
   }, [
     applyReconnectInitData,
-    channelId,
     fetchTrackedInit,
-    inLiveModeRef,
+    getViewingChannelId,
     refreshLatestMessages,
     unifiedTimelineEnabled,
   ]);
-  const refreshUnifiedTimelineOnce = useCallback(() => {
-    return shareInFlightRequest(
-      unifiedRefreshPromiseRef,
-      refreshLatestTimeline,
-    );
-  }, [refreshLatestTimeline]);
-
   const reconcileCurrentLiveSession = useCallback(async (traceCycleId?: string) => {
     const wasInLiveMode = inLiveModeRef.current;
     const fetchChannel = wasInLiveMode ? `${channelId}_live` : channelId;
@@ -344,6 +336,14 @@ export function useChatRealtimeSync({
       send({ type: "join-live", sessionId: result.sessionId });
     }
   }, [reconcileCurrentLiveSession, send]);
+  const refreshUnifiedTimelineOnce = useCallback(() => {
+    return shareInFlightRequest(
+      unifiedRefreshPromiseRef,
+      () => inLiveModeRef.current
+        ? synchronizeLiveSession()
+        : refreshLatestTimeline(),
+    );
+  }, [inLiveModeRef, refreshLatestTimeline, synchronizeLiveSession]);
 
   useEffect(() => {
     return subscribe((event) => {
@@ -423,7 +423,10 @@ export function useChatRealtimeSync({
       }
 
       if (event.type === "messages-sync" && historyModeRef.current === "latest") {
-        void refreshLatestTimeline().catch(() => {});
+        void (unifiedTimelineEnabled
+          ? refreshUnifiedTimelineOnce()
+          : refreshLatestTimeline()
+        ).catch(() => {});
       }
 
       if (event.type === "reconnected") {
@@ -448,7 +451,7 @@ export function useChatRealtimeSync({
       }
 
       if (event.type === "dm-threads-changed") {
-        if (unifiedTimelineEnabled && !inLiveModeRef.current) {
+        if (unifiedTimelineEnabled) {
           void refreshUnifiedTimelineOnce().catch(() => {});
           return;
         }

@@ -376,6 +376,12 @@ test("the server rollout defaults off and matches only exact channel IDs", () =>
     false,
   );
   assert.equal(
+    isUnifiedTimelineClientEnabled({
+      UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST: "room-a",
+    } as Env, "room-a", { live: true }),
+    true,
+  );
+  assert.equal(
     isUnifiedTimelineClientEnabled(enabled, "room-a", { reports: true }),
     false,
   );

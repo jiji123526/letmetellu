@@ -92,12 +92,19 @@ export async function readLiveSessionState(env: Env, channelId: string): Promise
 }
 
 export async function ensureActiveLiveSession(env: Env, channelId: string): Promise<boolean> {
+  return Boolean(await resolveActiveLiveSession(env, channelId));
+}
+
+export async function resolveActiveLiveSession(
+  env: Env,
+  channelId: string,
+): Promise<LiveSessionState | null> {
   const liveSession = await readLiveSessionState(env, channelId);
-  if (liveSession && !isLiveSessionExpired(liveSession)) return true;
+  if (liveSession && !isLiveSessionExpired(liveSession)) return liveSession;
   if (liveSession) {
     await endLiveSession(env, channelId, "expired", liveSession.sessionId);
   }
-  return false;
+  return null;
 }
 
 export async function endLiveSession(

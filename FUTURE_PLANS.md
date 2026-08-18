@@ -20,8 +20,8 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 - Continue unified public-message/DM pagination from the completed cursor, reader,
   shadow-comparison, production-shaped API, single-state adapter and unified
   bootstrap/reconnect, history/navigation, mutation/realtime and Stage 6
-  instrumentation into production fan-out/query calibration, special-channel and
-  controlled-rollout work in
+  instrumentation plus the Stage 7 live adapter into production fan-out/query
+  calibration, the reports adapter and controlled-rollout work in
   [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md). Keep the production
   read path behind a kill switch until authorization, ordering, bounded-row,
   latency and scroll-stability exit criteria pass.

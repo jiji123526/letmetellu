@@ -324,11 +324,28 @@ rollout if volume becomes material.
 
 #### Live channels
 
-- Resolve the current unexpired live session before reading its timeline.
-- Always enter at the latest unified page and preserve live-session deletion rules.
-- Keep presence counts outside timeline pagination.
-- Verify that session end/expiry cannot expose deleted live DMs through a parent
-  channel cursor.
+- **Adapter completed 2026-08-18.** Live rollout uses the separate
+  `UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST`; the normal-channel allowlist cannot
+  enable it accidentally.
+- Live bootstrap resolves an active, unexpired session before selecting the
+  unified reader and revalidates the same session after the read. An ended or
+  replaced session discards the page instead of returning rows from the stale
+  `_live` channel lifecycle.
+- Older/newer and centered requests carry `live_session_id`. The Worker checks it
+  before and after every read, so a cursor from an ended session cannot read a new
+  session that later reuses the same `_live` channel ID.
+- Reconnect, message/DM invalidation, search/context and refresh restoration stay
+  on unified reads while live. Invalidation refreshes remain single-flight and
+  reconcile the returned session before applying items.
+- Live bootstrap still enters at the latest page. Presence joins/counts continue
+  through the Durable Object and are not part of timeline pages or D1 fan-out.
+- Lifecycle tests cover missing/stale session IDs, session replacement, a session
+  ending during a database read and the default-off separate rollout boundary.
+
+Trade-off: allowlisted live reads add one indexed config lookup before and after
+timeline access. The second lookup is deliberate revocation validation; it costs
+less than session-specific storage tables while preventing stale private-DM
+exposure across live-session reuse.
 
 #### Reports inbox
 

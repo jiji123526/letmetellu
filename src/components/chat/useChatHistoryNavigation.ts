@@ -35,6 +35,7 @@ interface UseChatHistoryNavigationArgs {
   messagesContainerRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   inLiveModeRef: MutableRefObject<boolean>;
+  liveSessionId: string;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   applyUnifiedHistoryPage: (
     direction: "before" | "after",
@@ -331,6 +332,7 @@ export function useChatHistoryNavigation({
   messagesContainerRef,
   messagesEndRef,
   inLiveModeRef,
+  liveSessionId,
   setMessages,
   applyUnifiedHistoryPage,
   replaceUnifiedContextPage,
@@ -535,8 +537,14 @@ export function useChatHistoryNavigation({
   const returnToLatest = useCallback(async () => {
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
     try {
-      if (unifiedTimelineEnabled && !inLiveModeRef.current) {
-        const data = await fetchUnifiedTimelinePage(channelId);
+      if (unifiedTimelineEnabled) {
+        const live = inLiveModeRef.current;
+        const data = await fetchUnifiedTimelinePage(
+          live ? `${channelId}_live` : channelId,
+          undefined,
+          undefined,
+          live ? liveSessionId : undefined,
+        );
         replaceUnifiedContextPage(
           data.items as unknown as ChatTimelineItem[],
           data.page_start_cursor,
@@ -576,7 +584,7 @@ export function useChatHistoryNavigation({
       setBanner({ text: "Failed to load latest messages", color: "#d32f2f" });
       setTimeout(() => setBanner(null), 2000);
     }
-  }, [channelId, inLiveModeRef, messagesEndRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, updateNearBottom]);
+  }, [channelId, inLiveModeRef, liveSessionId, messagesEndRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, updateNearBottom]);
 
   const handleScroll = useCallback(() => {
     const element = messagesContainerRef.current;
@@ -613,8 +621,14 @@ export function useChatHistoryNavigation({
         releaseLockedScrollAnchor(prependRequestId);
         return;
       }
-      if (unifiedTimelineEnabled && !inLiveModeRef.current && unifiedStartCursorRef.current) {
-        fetchUnifiedTimelinePage(channelId, "before", unifiedStartCursorRef.current)
+      if (unifiedTimelineEnabled && unifiedStartCursorRef.current) {
+        const live = inLiveModeRef.current;
+        fetchUnifiedTimelinePage(
+          live ? `${channelId}_live` : channelId,
+          "before",
+          unifiedStartCursorRef.current,
+          live ? liveSessionId : undefined,
+        )
           .then(async (data) => {
             applyUnifiedHistoryPage(
               "before",
@@ -746,8 +760,14 @@ export function useChatHistoryNavigation({
         releaseLockedScrollAnchor(appendRequestId);
         return;
       }
-      if (unifiedTimelineEnabled && !inLiveModeRef.current && unifiedEndCursorRef.current) {
-        fetchUnifiedTimelinePage(channelId, "after", unifiedEndCursorRef.current)
+      if (unifiedTimelineEnabled && unifiedEndCursorRef.current) {
+        const live = inLiveModeRef.current;
+        fetchUnifiedTimelinePage(
+          live ? `${channelId}_live` : channelId,
+          "after",
+          unifiedEndCursorRef.current,
+          live ? liveSessionId : undefined,
+        )
           .then(async (data) => {
             applyUnifiedHistoryPage(
               "after",
@@ -832,6 +852,7 @@ export function useChatHistoryNavigation({
     channelId,
     applyUnifiedHistoryPage,
     inLiveModeRef,
+    liveSessionId,
     messages,
     messagesContainerRef,
     releaseLockedScrollAnchor,
@@ -910,9 +931,15 @@ export function useChatHistoryNavigation({
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
       if (!useMountedFastPath) {
         try {
-          if (unifiedTimelineEnabled && !inLiveModeRef.current) {
+          if (unifiedTimelineEnabled) {
+            const live = inLiveModeRef.current;
             const source = unifiedTimelineItems?.find((item) => item.id === msgId)?.source || "message";
-            const data = await fetchUnifiedTimelineContext(channelId, msgId, source);
+            const data = await fetchUnifiedTimelineContext(
+              live ? `${channelId}_live` : channelId,
+              msgId,
+              source,
+              live ? liveSessionId : undefined,
+            );
             if (navigationRequest !== navigationRequestRef.current) return;
             if (!data.items.some((item) => item.id === msgId)) throw new Error("message not found");
             replaceUnifiedContextPage(
@@ -983,7 +1010,7 @@ export function useChatHistoryNavigation({
     } finally {
       finishPendingIndicator();
     }
-  }, [channelId, inLiveModeRef, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems]);
+  }, [channelId, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems]);
 
   const restoreRefreshPosition = useCallback(async () => {
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
@@ -1010,11 +1037,13 @@ export function useChatHistoryNavigation({
     if (!element) {
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
       try {
-        if (unifiedTimelineEnabled && !inLiveModeRef.current) {
+        if (unifiedTimelineEnabled) {
+          const live = inLiveModeRef.current;
           const data = await fetchUnifiedTimelineContext(
-            channelId,
+            live ? `${channelId}_live` : channelId,
             position.messageId,
             position.source || "message",
+            live ? liveSessionId : undefined,
           );
           if (!data.items.some((item) => item.id === position.messageId)) return false;
           replaceUnifiedContextPage(
@@ -1060,7 +1089,7 @@ export function useChatHistoryNavigation({
     scrollAnchorRef.current = isNearBottomRef.current ? null : findScrollAnchor(container);
     setShowScrollBtn(distanceFromBottom > 200);
     return true;
-  }, [channelId, inLiveModeRef, messagesContainerRef, replaceUnifiedContextPage, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn, unifiedTimelineEnabled, updateNearBottom]);
+  }, [channelId, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn, unifiedTimelineEnabled, updateNearBottom]);
 
   return {
     historyModeRef,

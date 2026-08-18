@@ -274,8 +274,10 @@ export function fetchUnifiedTimelinePage(
   channelId: string,
   direction?: "before" | "after",
   cursor?: UnifiedTimelineCursorPayload | null,
+  liveSessionId?: string,
 ): Promise<UnifiedTimelinePagePayload> {
   const params = new URLSearchParams({ channel: channelId });
+  if (liveSessionId) params.set("live_session_id", liveSessionId);
   if (direction && cursor) appendUnifiedCursor(params, direction, cursor);
   const key = params.toString();
   const existing = unifiedPageRequests.get(key);
@@ -300,12 +302,14 @@ export function fetchUnifiedTimelineContext(
   channelId: string,
   targetId: string,
   targetSource: "message" | "dm" = "message",
+  liveSessionId?: string,
 ): Promise<UnifiedTimelinePagePayload> {
   const params = new URLSearchParams({
     channel: channelId,
     target_id: targetId,
     target_source: targetSource,
   });
+  if (liveSessionId) params.set("live_session_id", liveSessionId);
   const key = params.toString();
   const existing = unifiedPageRequests.get(key);
   if (existing) return existing as Promise<UnifiedTimelinePagePayload>;

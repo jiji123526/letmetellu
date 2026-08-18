@@ -9,4 +9,5 @@ export interface Env {
   APP_ORIGIN: string;
   REPORTS_CHANNEL_ID?: string;
   UNIFIED_TIMELINE_CHANNEL_ALLOWLIST?: string;
+  UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST?: string;
 }

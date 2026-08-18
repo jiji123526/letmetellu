@@ -4,6 +4,34 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 7A: live-session adapter — 2026-08-18
+
+- Added a separate `UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST`. Empty or missing
+  configuration keeps every live channel on the legacy path, and the normal
+  allowlist cannot opt live traffic in.
+- Live bootstrap now resolves an active, unexpired session before reading and
+  revalidates the same session afterward. If the session ends or changes during
+  the read, the page is discarded.
+- Unified live page/context requests require `live_session_id` and compare it
+  before and after D1 access. Stale cursors cannot cross into a later session that
+  reuses the same `_live` channel row.
+- Client reconnect, message/DM invalidation, older/newer paging, centered
+  navigation and refresh restoration remain unified while live. Single-flight
+  invalidations reconcile the current session before applying results.
+- Presence remains Durable-Object state and is not included in timeline reads.
+  Focused tests cover missing/stale IDs, replacement, end-during-read behavior and
+  separate default-off rollout.
+
+Trade-off: an allowlisted live timeline read performs two indexed config lookups
+for session validation. This is intentional immediate revocation work and avoids
+adding session IDs to every message/DM row or introducing a second live-storage
+model.
+
+Deployment note: no D1 migration is required. Deploy the Worker and frontend
+together. Keep `UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST` empty until a test live
+channel passes owner/visitor latest, older, reconnect, DM reply and end-session
+checks. The reports adapter remains unimplemented and separately disabled.
+
 ### Unified chat pagination stage 6: fan-out measurement — 2026-08-18
 
 - Unified page, context and bootstrap readers now aggregate metadata already

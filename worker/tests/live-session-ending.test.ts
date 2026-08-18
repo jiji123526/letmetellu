@@ -38,6 +38,18 @@ test("live reconnect and websocket presence remain session-aware", () => {
     new URL("../src/lib/live-sessions.ts", import.meta.url),
     "utf8",
   );
+  const unifiedRouteSource = readFileSync(
+    new URL("../src/routes/unified-timeline.ts", import.meta.url),
+    "utf8",
+  );
+  const initSource = readFileSync(
+    new URL("../src/routes/init.ts", import.meta.url),
+    "utf8",
+  );
+  const historySource = readFileSync(
+    new URL("../../src/components/chat/useChatHistoryNavigation.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(realtimeSource, /await reconcileCurrentLiveSession\(traceCycleId\)/);
   assert.match(realtimeSource, /send\(\{ type: "join-live", sessionId: result\.sessionId \}\)/);
@@ -46,4 +58,8 @@ test("live reconnect and websocket presence remain session-aware", () => {
   assert.match(adminSource, /error: "missing_live_session_id"/);
   assert.match(adminSource, /error: "live_session_changed"/);
   assert.match(liveSessionSource, /WHERE id = \? AND text = \?/);
+  assert.match(unifiedRouteSource, /requestedLiveSessionId/);
+  assert.match(unifiedRouteSource, /await liveSessionStillCurrent\(\)/);
+  assert.match(initSource, /liveTimelineSessionAfterRead/);
+  assert.match(historySource, /live \? liveSessionId : undefined/);
 });
