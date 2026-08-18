@@ -52,9 +52,13 @@ test("message rows cancel long press and reveal the timestamp during horizontal 
     "utf8",
   );
   assert.match(source, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
-  assert.match(source, /chatTimeLabel\(msg\.created_at, locale, timeZone\)/);
+  assert.match(source, /const \[sharedSwipe, setSharedSwipe\] = React\.useState<SwipeRevealState>/);
+  assert.match(source, /const swipeOffset = sharedSwipe\.side === messageSide \? sharedSwipe\.offset : 0/);
+  assert.match(source, /const sentTime = swipeActive \? chatTimeLabel\(msg\.created_at, locale, timeZone\) : ""/);
+  assert.match(source, /onSwipeMove\(nextOffset, messageSide\)/);
   assert.match(source, /color: markerColor/);
   assert.match(source, /<div className="relative w-full">[\s\S]*\{sentTime\}[\s\S]*style=\{swipeTransformStyle\}/);
   assert.match(source, /<div style=\{swipeTransformStyle\}>[\s\S]*<ReactionBadge/);
   assert.match(source, /touchAction: "pan-y"/);
+  assert.doesNotMatch(source, /const \[swipeOffset, setSwipeOffset\]/);
 });

@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Mounted chat rows now reveal swipe timestamps together by bubble side — 2026-08-18
+
+- Timestamp swipe reveal state now lives once at the `MessageList` level instead of once per mounted message row.
+- Swiping a sent or received bubble now shifts all currently mounted rows on that same side together, so timestamp reveal behaves like a shared lane instead of isolated row gestures.
+- Hidden rows no longer eagerly format swipe timestamps. Each row now resolves its label only while its side is actively being revealed.
+- Focused coverage now pins the shared swipe state, same-side offset application and retained reaction-badge alignment.
+
+Trade-off: this changes the gesture from a strictly local row interaction to a side-wide mounted-window reveal. That is lighter on per-row bookkeeping and makes the animation more consistent, but nearby rows on the same side now move together during the reveal.
+
+Deployment note: frontend-only. Verify sent and received bubbles each reveal timestamps for their own mounted side only, and confirm replies and reaction badges stay visually aligned during the shared swipe.
+
 ### `/api/user` bootstrap now backs off repeated missing-user retries — 2026-08-18
 
 - The authenticated browser bootstrap now keeps recent failed `/api/user` self-state reads in a short client cache instead of immediately refetching the same `401` or `404` result on every remount or startup retry.
