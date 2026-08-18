@@ -23,8 +23,13 @@ import {
   parseStoredMessageSendAttempt,
   type StoredMessageSendAttempt,
 } from "@/lib/message-send-attempt";
-import { mergeServerMessageSnapshot, parseReactions, upsertAcknowledgedMessages } from "./chatMessageUtils";
+import { mergeServerMessageSnapshot, parseReactions } from "./chatMessageUtils";
 import type { Message } from "./chatTypes";
+import type {
+  ChatTimelineIdentity,
+  ChatTimelineMutationItem,
+  ChatTimelineSource,
+} from "./chatTimelineState";
 import type { PendingPhoto } from "./useChatComposerState";
 
 interface BannerState {
@@ -86,7 +91,14 @@ interface UseChatMessageMutationsArgs {
   setPendingPhotos: Dispatch<SetStateAction<PendingPhoto[]>>;
   setPetitionSentUidExternal?: Dispatch<SetStateAction<string>>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
-  setDmMessages: Dispatch<SetStateAction<Message[]>>;
+  upsertTimelineItems: (
+    source: ChatTimelineSource,
+    messages: Message[],
+    requiredRootId?: string,
+  ) => void;
+  removeTimelineItems: (identities: ReadonlyArray<ChatTimelineIdentity>) => void;
+  removeTimelineThread: (source: ChatTimelineSource, rootId: string) => void;
+  restoreTimelineItems: (items: ReadonlyArray<ChatTimelineMutationItem>) => void;
   setGalleryItems: Dispatch<SetStateAction<{ id: string; image: string; created_at: string }[]>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   refreshOwnerModeration: () => void;
@@ -104,7 +116,7 @@ interface UseChatMessageMutationsResult {
   handleSend: () => Promise<void>;
   handleKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   handleReaction: (messageId: string, emoji: string) => Promise<void>;
-  handleDelete: (messageId: string) => void;
+  handleDelete: (messageId: string, source?: ChatTimelineSource) => void;
   handleEditSave: (messageId: string, newText: string) => Promise<void>;
 }
 
@@ -130,7 +142,10 @@ export function useChatMessageMutations({
   setPendingPhotos,
   setPetitionSentUidExternal,
   setMessages,
-  setDmMessages,
+  upsertTimelineItems,
+  removeTimelineItems,
+  removeTimelineThread,
+  restoreTimelineItems,
   setGalleryItems,
   setBanner,
   refreshOwnerModeration,
@@ -359,9 +374,7 @@ export function useChatMessageMutations({
         return;
       }
       if (photos[0]) URL.revokeObjectURL(photos[0].previewUrl);
-      setDmMessages((previous) =>
-        upsertAcknowledgedMessages(previous, [result.reply as Message])
-      );
+      upsertTimelineItems("dm", [result.reply as Message]);
       resetInput();
       setPendingPhotos([]);
       setBanner({ text: text.dmReplySent, color: "#7b3fa0" });
@@ -401,9 +414,7 @@ export function useChatMessageMutations({
       }
 
       if (result.dm) {
-        setDmMessages((previous) =>
-          upsertAcknowledgedMessages(previous, [result.dm as Message])
-        );
+        upsertTimelineItems("dm", [result.dm as Message]);
       }
       clearStoredSendAttempt(submissionId);
       setBanner({ text: text.sentToAdmin, color: "#7b3fa0" });
@@ -482,7 +493,7 @@ export function useChatMessageMutations({
     }
 
     if (acknowledgedMessages.length > 0) {
-      setMessages((previous) => upsertAcknowledgedMessages(previous, acknowledgedMessages));
+      upsertTimelineItems("message", acknowledgedMessages);
     }
     resetInput();
     } catch (error) {
@@ -512,7 +523,6 @@ export function useChatMessageMutations({
     input,
     isUserBlocked,
     ownerModerationBlocked,
-    pendingPhotos.length,
     pendingPhotos,
     petitionEnabled,
     replyingTo,
@@ -520,9 +530,8 @@ export function useChatMessageMutations({
     restoreInput,
     setBanner,
     setDmMode,
-    setDmMessages,
+    upsertTimelineItems,
     setPendingPhotos,
-    setMessages,
     sendAttemptStorageKey,
     showMutationError,
     text.blockReason,
@@ -619,8 +628,15 @@ export function useChatMessageMutations({
     uid,
   ]);
 
-  const handleDelete = useCallback((messageId: string) => {
-    const targetDm = dmMessages.find((message) => message.id === messageId);
+  const handleDelete = useCallback((
+    messageId: string,
+    requestedSource?: ChatTimelineSource,
+  ) => {
+    const source = requestedSource
+      || (dmMessages.some((message) => message.id === messageId) ? "dm" : "message");
+    const targetDm = source === "dm"
+      ? dmMessages.find((message) => message.id === messageId)
+      : undefined;
     const isSenderDmDelete = Boolean(
       !effectiveAdmin
       && targetDm?.dm
@@ -638,19 +654,14 @@ export function useChatMessageMutations({
         (message) => message.id === messageId || message.reply_to === messageId,
       );
       const targetImage = targetDm.image;
-      setDmMessages((previous) =>
-        previous.filter((message) => message.id !== messageId && message.reply_to !== messageId)
-      );
+      removeTimelineThread("dm", messageId);
       setGalleryItems((previous) => previous.filter((item) => item.id !== messageId));
 
       const restoreDeletedDmMessages = () => {
-        setDmMessages((current) => {
-          const existingIds = new Set(current.map((message) => message.id));
-          return [...current, ...deletedDmMessages.filter((message) => !existingIds.has(message.id))]
-            .sort((left, right) =>
-              left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id)
-            );
-        });
+        restoreTimelineItems(deletedDmMessages.map((message) => ({
+          source: "dm",
+          message,
+        })));
         if (targetImage) {
           setGalleryItems((current) => {
             if (current.some((item) => item.id === targetDm.id)) return current;
@@ -676,16 +687,27 @@ export function useChatMessageMutations({
       return;
     }
 
-    const replyIds = messages.filter((message) => message.reply_to === messageId).map((message) => message.id);
+    const sourceMessages = source === "message" ? messages : dmMessages;
+    const replyIds = sourceMessages
+      .filter((message) => message.reply_to === messageId)
+      .map((message) => message.id);
     const hasReplies = replyIds.length > 0;
     if (effectiveAdmin) {
-      const deletedMessages = messages.filter((message) => message.id === messageId || message.reply_to === messageId);
-      const deletedDmMessages = dmMessages.filter((message) => message.id === messageId || message.reply_to === messageId);
-      setMessages((previous) => previous.filter((message) => message.id !== messageId && message.reply_to !== messageId));
+      const deletedMessages = source === "message"
+        ? messages.filter((message) => message.id === messageId || message.reply_to === messageId)
+        : [];
+      const deletedDmMessages = source === "dm"
+        ? dmMessages.filter((message) => message.id === messageId || message.reply_to === messageId)
+        : [];
+      removeTimelineItems([
+        ...deletedMessages.map((message) => ({ source: "message" as const, id: message.id })),
+        ...deletedDmMessages.map((message) => ({ source: "dm" as const, id: message.id })),
+      ]);
       const deletedIds = new Set([messageId, ...replyIds]);
       setGalleryItems((previous) => previous.filter((item) => !deletedIds.has(item.id)));
-      const targetMessage = messages.find((message) => message.id === messageId) || dmMessages.find((message) => message.id === messageId);
-      setDmMessages((previous) => previous.filter((message) => message.id !== messageId && message.reply_to !== messageId));
+      const targetMessage = source === "message"
+        ? messages.find((message) => message.id === messageId)
+        : dmMessages.find((message) => message.id === messageId);
 
       const channelKey = inLiveMode ? `${channelId}_live` : channelId;
       const request = () => {
@@ -697,14 +719,11 @@ export function useChatMessageMutations({
         }
         return adminAction("delete-message", channelKey, { message_id: messageId }, { keepalive: true });
       };
-      const restoreMessages = (current: Message[], deleted: Message[]) => {
-        const existingIds = new Set(current.map((message) => message.id));
-        return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
-          .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
-      };
       const restoreDeletedMessages = (showFailure = true) => {
-        setMessages((current) => restoreMessages(current, deletedMessages));
-        setDmMessages((current) => restoreMessages(current, deletedDmMessages));
+        restoreTimelineItems([
+          ...deletedMessages.map((message) => ({ source: "message" as const, message })),
+          ...deletedDmMessages.map((message) => ({ source: "dm" as const, message })),
+        ]);
         const restoredGallery = deletedMessages
           .filter((message): message is Message & { image: string } => typeof message.image === "string" && message.image.length > 0)
           .map((message) => ({ id: message.id, image: message.image, created_at: message.created_at }));
@@ -766,7 +785,7 @@ export function useChatMessageMutations({
       return;
     }
 
-    if (hasReplies) {
+    if (source === "message" && hasReplies) {
       setMessages((previous) =>
         previous.map((message) => (
           message.id === messageId
@@ -779,6 +798,7 @@ export function useChatMessageMutations({
       return;
     }
 
+    if (source !== "message") return;
     setMessages((previous) => previous.filter((message) => message.id !== messageId));
     setGalleryItems((previous) => previous.filter((item) => item.id !== messageId));
     void deleteMessage({ uid, message_id: messageId, channel_id: inLiveMode ? `${channelId}_live` : channelId, soft: false });
@@ -791,9 +811,11 @@ export function useChatMessageMutations({
     messages,
     ownerModerationBlocked,
     setBanner,
-    setDmMessages,
     setGalleryItems,
     setMessages,
+    removeTimelineItems,
+    removeTimelineThread,
+    restoreTimelineItems,
     text.deletedMessage,
     text.deleteFailed,
     text.messageDeleted,

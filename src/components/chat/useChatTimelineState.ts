@@ -12,12 +12,19 @@ import {
   createInitialChatTimelineState,
   mergeUnifiedTimelineLatestPage,
   mergeUnifiedTimelinePage,
+  removeChatTimelineItems,
+  removeChatTimelineThread,
+  restoreChatTimelineItems,
   selectTimelineDmMessages,
   selectTimelineMessages,
   replaceUnifiedTimelinePage,
   setChatTimelineMode,
   updateChatTimelineSource,
+  upsertChatTimelineItems,
+  type ChatTimelineIdentity,
   type ChatTimelineItem,
+  type ChatTimelineMutationItem,
+  type ChatTimelineSource,
   type UnifiedTimelineCursor,
 } from "./chatTimelineState";
 
@@ -32,6 +39,14 @@ interface ChatTimelineStateAdapter {
   unifiedTimelineEnabled: boolean;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setDmMessages: Dispatch<SetStateAction<Message[]>>;
+  upsertTimelineItems: (
+    source: ChatTimelineSource,
+    messages: Message[],
+    requiredRootId?: string,
+  ) => void;
+  removeTimelineItems: (identities: ReadonlyArray<ChatTimelineIdentity>) => void;
+  removeTimelineThread: (source: ChatTimelineSource, rootId: string) => void;
+  restoreTimelineItems: (items: ReadonlyArray<ChatTimelineMutationItem>) => void;
   setUnifiedTimelineEnabled: (enabled: boolean) => void;
   replaceUnifiedTimelinePage: (
     items: ChatTimelineItem[],
@@ -75,6 +90,40 @@ export function useChatTimelineState(): ChatTimelineStateAdapter {
   }, []);
   const setUnifiedTimelineEnabled = useCallback((enabled: boolean) => {
     setState((previous) => setChatTimelineMode(previous, enabled));
+  }, []);
+  const upsertTimelineItems = useCallback((
+    source: ChatTimelineSource,
+    messages: Message[],
+    requiredRootId?: string,
+  ) => {
+    setState((previous) => {
+      const sourceItems = source === "message"
+        ? selectTimelineMessages(previous)
+        : selectTimelineDmMessages(previous);
+      if (
+        requiredRootId
+        && !sourceItems.some((message) => message.id === requiredRootId)
+      ) {
+        return previous;
+      }
+      return upsertChatTimelineItems(previous, source, messages);
+    });
+  }, []);
+  const removeTimelineItems = useCallback((
+    identities: ReadonlyArray<ChatTimelineIdentity>,
+  ) => {
+    setState((previous) => removeChatTimelineItems(previous, identities));
+  }, []);
+  const removeTimelineThread = useCallback((
+    source: ChatTimelineSource,
+    rootId: string,
+  ) => {
+    setState((previous) => removeChatTimelineThread(previous, source, rootId));
+  }, []);
+  const restoreTimelineItems = useCallback((
+    items: ReadonlyArray<ChatTimelineMutationItem>,
+  ) => {
+    setState((previous) => restoreChatTimelineItems(previous, items));
   }, []);
   const replaceTimelinePage = useCallback((
     items: ChatTimelineItem[],
@@ -162,6 +211,10 @@ export function useChatTimelineState(): ChatTimelineStateAdapter {
     unifiedTimelineEnabled: state.mode === "unified",
     setMessages,
     setDmMessages,
+    upsertTimelineItems,
+    removeTimelineItems,
+    removeTimelineThread,
+    restoreTimelineItems,
     setUnifiedTimelineEnabled,
     replaceUnifiedTimelinePage: replaceTimelinePage,
     applyUnifiedTimelineBootstrap,

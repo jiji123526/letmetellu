@@ -9,6 +9,16 @@ export interface ChatTimelineItem extends Message {
   visual_depth: 0 | 1;
 }
 
+export interface ChatTimelineIdentity {
+  source: ChatTimelineSource;
+  id: string;
+}
+
+export interface ChatTimelineMutationItem {
+  source: ChatTimelineSource;
+  message: Message;
+}
+
 export interface UnifiedTimelineCursor {
   visual_root_created_at: string;
   source: ChatTimelineSource;
@@ -96,6 +106,10 @@ function normalizeSourceItems(
   });
 }
 
+function timelineIdentity(source: ChatTimelineSource, id: string): string {
+  return `${source}:${id}`;
+}
+
 export function createUnifiedTimelineItems(
   messages: Message[],
   dmMessages: Message[],
@@ -179,6 +193,126 @@ export function updateChatTimelineSource(
     hasMoreBefore: state.hasMoreBefore,
     hasMoreAfter: state.hasMoreAfter,
   };
+}
+
+export function upsertChatTimelineItems(
+  state: ChatTimelineState,
+  source: ChatTimelineSource,
+  messages: Message[],
+): ChatTimelineState {
+  if (messages.length === 0) return state;
+  const incomingIds = new Set(messages.map((message) => message.id));
+  const incomingClientIds = new Set(
+    messages
+      .map((message) => message.client_message_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+  if (state.mode === "legacy") {
+    const previous = source === "message" ? state.messages : state.dmMessages;
+    const byId = new Map(
+      previous
+        .filter((message) =>
+          !message.client_message_id
+          || !incomingClientIds.has(message.client_message_id)
+          || incomingIds.has(message.id)
+        )
+        .map((message) => [message.id, message]),
+    );
+    for (const message of messages) byId.set(message.id, message);
+    const next = [...byId.values()];
+    return source === "message"
+      ? { ...state, messages: next }
+      : { ...state, dmMessages: next };
+  }
+
+  const existingSource = state.timelineItems.filter((item) =>
+    item.source === source
+    && (
+      !item.client_message_id
+      || !incomingClientIds.has(item.client_message_id)
+      || incomingIds.has(item.id)
+    )
+  );
+  const nextSourceById = new Map<string, Message>(
+    existingSource.map((item) => [item.id, item]),
+  );
+  for (const message of messages) nextSourceById.set(message.id, message);
+  const nextSource = [...nextSourceById.values()];
+  const otherSource = state.timelineItems.filter((item) => item.source !== source);
+  return {
+    ...state,
+    timelineItems: createUnifiedTimelineItems(
+      source === "message" ? nextSource : otherSource,
+      source === "dm" ? nextSource : otherSource,
+    ),
+  };
+}
+
+export function removeChatTimelineItems(
+  state: ChatTimelineState,
+  identities: ReadonlyArray<ChatTimelineIdentity>,
+): ChatTimelineState {
+  if (identities.length === 0) return state;
+  const identitySet = new Set(
+    identities.map((identity) => timelineIdentity(identity.source, identity.id)),
+  );
+  if (state.mode === "legacy") {
+    return {
+      mode: "legacy",
+      messages: state.messages.filter((message) =>
+        !identitySet.has(timelineIdentity("message", message.id))
+      ),
+      dmMessages: state.dmMessages.filter((message) =>
+        !identitySet.has(timelineIdentity("dm", message.id))
+      ),
+    };
+  }
+
+  const timelineItems = state.timelineItems.filter((item) =>
+    !identitySet.has(timelineIdentity(item.source, item.id))
+  );
+  return timelineItems.length === state.timelineItems.length
+    ? state
+    : { ...state, timelineItems };
+}
+
+export function removeChatTimelineThread(
+  state: ChatTimelineState,
+  source: ChatTimelineSource,
+  rootId: string,
+): ChatTimelineState {
+  if (state.mode === "legacy") {
+    const removeThread = (message: Message) =>
+      message.id !== rootId && message.reply_to !== rootId;
+    return source === "message"
+      ? { ...state, messages: state.messages.filter(removeThread) }
+      : { ...state, dmMessages: state.dmMessages.filter(removeThread) };
+  }
+
+  const timelineItems = state.timelineItems.filter((item) =>
+    item.source !== source || item.visual_root_id !== rootId
+  );
+  return timelineItems.length === state.timelineItems.length
+    ? state
+    : { ...state, timelineItems };
+}
+
+export function restoreChatTimelineItems(
+  state: ChatTimelineState,
+  items: ReadonlyArray<ChatTimelineMutationItem>,
+): ChatTimelineState {
+  if (items.length === 0) return state;
+  const messageItems = items
+    .filter((item) => item.source === "message")
+    .map((item) => item.message);
+  const dmItems = items
+    .filter((item) => item.source === "dm")
+    .map((item) => item.message);
+  return upsertChatTimelineItems(
+    upsertChatTimelineItems(state, "message", messageItems),
+    "dm",
+    dmItems,
+  );
 }
 
 export function replaceUnifiedTimelinePage(

@@ -4,16 +4,20 @@ import {
   createInitialChatTimelineState,
   mergeUnifiedTimelineLatestPage,
   mergeUnifiedTimelinePage,
+  removeChatTimelineThread,
   replaceUnifiedTimelinePage,
+  restoreChatTimelineItems,
   selectTimelineDmMessages,
   selectTimelineMessages,
   setChatTimelineMode,
   updateChatTimelineSource,
+  upsertChatTimelineItems,
 } from "../../src/components/chat/chatTimelineState.ts";
 import { readSelectedBootstrap } from "../src/lib/bootstrap-read-mode.ts";
 import { isUnifiedTimelineClientEnabled } from "../src/lib/unified-timeline-rollout.ts";
 import type { Env } from "../src/types.ts";
 import type { Message } from "../../src/components/chat/chatTypes.ts";
+import { shareInFlightRequest } from "../../src/components/chat/chatSingleFlight.ts";
 
 function message(
   id: string,
@@ -63,6 +67,107 @@ test("unified mode uses source and id as canonical identity", () => {
     state.timelineItems.map((item) => `${item.source}:${item.id}`),
     ["message:shared", "dm:shared"],
   );
+});
+
+test("acknowledgement and realtime replay converge on one source-qualified item", () => {
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = upsertChatTimelineItems(state, "message", [
+    message("optimistic", "2026-08-18T00:00:00.000Z", {
+      client_message_id: "send-1",
+    }),
+  ]);
+  state = upsertChatTimelineItems(state, "message", [
+    message("server", "2026-08-18T00:00:01.000Z", {
+      client_message_id: "send-1",
+    }),
+  ]);
+  state = upsertChatTimelineItems(state, "message", [
+    message("server", "2026-08-18T00:00:01.000Z", {
+      client_message_id: "send-1",
+    }),
+  ]);
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(state.timelineItems.map((item) => item.id), ["server"]);
+});
+
+test("source-qualified thread deletion removes its children but not a colliding DM", () => {
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = upsertChatTimelineItems(state, "message", [
+    message("shared", "2026-08-18T00:00:00.000Z"),
+    message("public-reply", "2026-08-18T00:00:01.000Z", { reply_to: "shared" }),
+  ]);
+  state = upsertChatTimelineItems(state, "dm", [
+    message("shared", "2026-08-18T00:00:00.000Z", { dm: true }),
+    message("dm-reply", "2026-08-18T00:00:02.000Z", {
+      dm: true,
+      dm_reply: true,
+      reply_to: "shared",
+    }),
+  ]);
+  state = removeChatTimelineThread(state, "message", "shared");
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(
+    state.timelineItems.map((item) => `${item.source}:${item.id}`),
+    ["dm:shared", "dm:dm-reply"],
+  );
+});
+
+test("undo restoration is ordered and idempotent", () => {
+  const root = message("root", "2026-08-18T00:00:00.000Z");
+  const reply = message("reply", "2026-08-18T00:00:01.000Z", {
+    reply_to: "root",
+  });
+  const restored = [
+    { source: "message" as const, message: root },
+    { source: "message" as const, message: reply },
+  ];
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = restoreChatTimelineItems(state, restored);
+  state = restoreChatTimelineItems(state, restored);
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(state.timelineItems.map((item) => item.id), ["root", "reply"]);
+});
+
+test("public edits cannot mutate a DM with the same database id", () => {
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = upsertChatTimelineItems(state, "message", [
+    message("shared", "2026-08-18T00:00:00.000Z", { text: "public" }),
+  ]);
+  state = upsertChatTimelineItems(state, "dm", [
+    message("shared", "2026-08-18T00:00:00.000Z", { dm: true, text: "private" }),
+  ]);
+  state = updateChatTimelineSource(state, "message", (previous) =>
+    previous.map((item) => item.id === "shared" ? { ...item, text: "edited" } : item)
+  );
+
+  assert.equal(selectTimelineMessages(state)[0].text, "edited");
+  assert.equal(selectTimelineDmMessages(state)[0].text, "private");
+});
+
+test("concurrent content-free invalidations share one refresh and application", async () => {
+  const holder = { current: null as Promise<number> | null };
+  let starts = 0;
+  let applications = 0;
+  const refresh = () => shareInFlightRequest(holder, async () => {
+    starts += 1;
+    await Promise.resolve();
+    applications += 1;
+    return applications;
+  });
+
+  const first = refresh();
+  const second = refresh();
+  assert.equal(first, second);
+  assert.deepEqual(await Promise.all([first, second]), [1, 1]);
+  assert.equal(starts, 1);
+  assert.equal(applications, 1);
+
+  await refresh();
+  assert.equal(starts, 2);
+  assert.equal(applications, 2);
 });
 
 test("compatibility setters transact against one unified collection", () => {

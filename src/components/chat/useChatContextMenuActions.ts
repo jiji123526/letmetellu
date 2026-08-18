@@ -4,6 +4,11 @@ import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { adminAction } from "@/lib/api-chat";
 import { canBlockMessage, canReplyToMessage } from "./messageActionRules";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
+import type {
+  ChatTimelineIdentity,
+  ChatTimelineMutationItem,
+  ChatTimelineSource,
+} from "./chatTimelineState";
 
 interface BannerState {
   text: string;
@@ -52,9 +57,10 @@ interface UseChatContextMenuActionsArgs {
   reportMessage: (message: Message) => void;
   unreportMessage: (message: Message) => void;
   isMessageReported: (messageId: string) => boolean;
-  handleDelete: (messageId: string) => void;
+  handleDelete: (messageId: string, source?: ChatTimelineSource) => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
-  setDmMessages: Dispatch<SetStateAction<Message[]>>;
+  removeTimelineItems: (identities: ReadonlyArray<ChatTimelineIdentity>) => void;
+  restoreTimelineItems: (items: ReadonlyArray<ChatTimelineMutationItem>) => void;
   setGalleryItems: Dispatch<SetStateAction<{ id: string; image: string; created_at: string }[]>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   setBlockedUsers: Dispatch<SetStateAction<BlockedUser[]>>;
@@ -104,7 +110,8 @@ export function useChatContextMenuActions({
   isMessageReported,
   handleDelete,
   setMessages,
-  setDmMessages,
+  removeTimelineItems,
+  restoreTimelineItems,
   setGalleryItems,
   setBanner,
   setBlockedUsers,
@@ -134,10 +141,12 @@ export function useChatContextMenuActions({
   }, [dmMessages, focusTextarea, messages, setReplyingTo]);
 
   const onDeleteWithReplies = useCallback((msgId: string) => {
-    const targetMessage = messages.find((message) => message.id === msgId);
+    const source = contextMenu?.msg.dm ? "dm" : "message";
+    const sourceMessages = source === "dm" ? dmMessages : messages;
+    const targetMessage = sourceMessages.find((message) => message.id === msgId);
     const idsToDelete = new Set([msgId]);
 
-    if (targetMessage?.report && targetMessage.reported_msg_id) {
+    if (source === "message" && targetMessage?.report && targetMessage.reported_msg_id) {
       idsToDelete.add(targetMessage.reported_msg_id);
       messages.forEach((message) => {
         if (message.reply_to === targetMessage.reported_msg_id) {
@@ -146,28 +155,30 @@ export function useChatContextMenuActions({
       });
     }
 
-    messages.forEach((message) => {
+    sourceMessages.forEach((message) => {
       if (message.reply_to === msgId) {
         idsToDelete.add(message.id);
       }
     });
 
     const channelKey = inLiveMode ? `${channelId}_live` : channelId;
-    const allMessages = new Map([...messages, ...dmMessages].map((message) => [message.id, message]));
-    const deletedMessages = messages.filter((message) => idsToDelete.has(message.id));
-    const deletedDmMessages = dmMessages.filter((message) => idsToDelete.has(message.id));
-    setMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
-    setDmMessages((previous) => previous.filter((message) => !idsToDelete.has(message.id)));
+    const deletedMessages = source === "message"
+      ? messages.filter((message) => idsToDelete.has(message.id))
+      : [];
+    const deletedDmMessages = source === "dm"
+      ? dmMessages.filter((message) => idsToDelete.has(message.id))
+      : [];
+    removeTimelineItems([
+      ...deletedMessages.map((message) => ({ source: "message" as const, id: message.id })),
+      ...deletedDmMessages.map((message) => ({ source: "dm" as const, id: message.id })),
+    ]);
     setGalleryItems((previous) => previous.filter((item) => !idsToDelete.has(item.id)));
 
-    const restoreMessages = (current: Message[], deleted: Message[]) => {
-      const existingIds = new Set(current.map((message) => message.id));
-      return [...current, ...deleted.filter((message) => !existingIds.has(message.id))]
-        .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id));
-    };
     const restoreDeletedMessages = (showFailure = true) => {
-      setMessages((current) => restoreMessages(current, deletedMessages));
-      setDmMessages((current) => restoreMessages(current, deletedDmMessages));
+      restoreTimelineItems([
+        ...deletedMessages.map((message) => ({ source: "message" as const, message })),
+        ...deletedDmMessages.map((message) => ({ source: "dm" as const, message })),
+      ]);
       const restoredGallery = [...deletedMessages, ...deletedDmMessages]
         .filter((message): message is Message & { image: string } => typeof message.image === "string" && message.image.length > 0)
         .map((message) => ({ id: message.id, image: message.image, created_at: message.created_at }));
@@ -182,8 +193,7 @@ export function useChatContextMenuActions({
       ? [msgId, targetMessage.reported_msg_id]
       : [msgId];
     const requests = requestIds.map((id) => {
-      const message = allMessages.get(id);
-      if (message?.dm) {
+      if (source === "dm") {
         return adminAction("delete-dm", channelKey, { dm_id: id }, { keepalive: true });
       }
       return adminAction("delete-message", channelKey, { message_id: id }, { keepalive: true });
@@ -233,7 +243,7 @@ export function useChatContextMenuActions({
       }
       restoreDeletedMessages();
     }).catch(restoreDeletedMessages);
-  }, [channelId, dmMessages, flashBanner, inLiveMode, messages, setBanner, setDmMessages, setGalleryItems, setMessages, text.deleteFailed, text.messageDeleted, text.undo]);
+  }, [channelId, contextMenu, dmMessages, flashBanner, inLiveMode, messages, removeTimelineItems, restoreTimelineItems, setBanner, setGalleryItems, text.deleteFailed, text.messageDeleted, text.undo]);
 
   const onEdit = useCallback((msgId: string) => {
     const message = messages.find((item) => item.id === msgId);
@@ -342,7 +352,9 @@ export function useChatContextMenuActions({
     onReport: canReport && contextMenu ? () => reportMessage(contextMenu.msg) : undefined,
     onUnreport: canReport && contextMenu ? () => unreportMessage(contextMenu.msg) : undefined,
     isReported,
-    onDelete: canDelete ? handleDelete : undefined,
+    onDelete: canDelete && contextMenu
+      ? (messageId) => handleDelete(messageId, contextMenu.msg.dm ? "dm" : "message")
+      : undefined,
     onDeleteWithReplies: canDeleteWithReplies ? onDeleteWithReplies : undefined,
     onEdit: canEdit ? onEdit : undefined,
     onBlock: canBlock ? onBlock : undefined,

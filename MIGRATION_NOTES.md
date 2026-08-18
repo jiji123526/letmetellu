@@ -4,6 +4,32 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified chat pagination stage 5D: mutations and realtime — 2026-08-18
+
+- Public messages, DM roots and DM replies now use source-qualified canonical
+  upserts for realtime delivery and successful send acknowledgements. Duplicate
+  acknowledgements/reconnect events converge by `(source, id)` and
+  `client_message_id`.
+- Hard deletion removes one canonical root group and its children. Failed
+  deletion and successful Undo restore captured items once in visual order;
+  public and private rows with colliding IDs remain isolated.
+- Public edits and reactions remain public-message-only. A DM with the same ID
+  cannot inherit unsupported edit or reaction behavior.
+- Unified `dm-threads-changed` invalidations now share one in-flight bounded init
+  refresh and one response application. Legacy and live paths retain their
+  existing DM read, and ordinary realtime events add no database request.
+- Focused tests cover acknowledgement replay, source collisions, root deletion,
+  idempotent Undo and concurrent invalidation coalescing.
+
+Trade-off: canonical inserts normalize and sort the bounded mounted window rather
+than appending blindly. This costs bounded client CPU for at most the mounted
+history budget, while avoiding duplicate mutable state, duplicate rows and one
+network refresh per realtime event.
+
+Deployment note: no D1 migration is required. Deploy the frontend and Worker
+together for an allowlisted test channel. Keep the production allowlist empty
+until Stage 6 fan-out and query validation is complete.
+
 ### Unified chat pagination stage 5C: history and navigation — 2026-08-18
 
 - Allowlisted normal channels now load older and newer history through the unified
@@ -30,8 +56,9 @@ public-only context query. It avoids a global cross-table sort, prevents private
 leakage and eliminates the former need to fetch a public context before separately
 merging DMs.
 
-Deployment note: no D1 migration is required. Keep the production allowlist empty
-until Stage 5D normalizes DM invalidations and mutation/realtime reconciliation.
+Deployment note: no D1 migration is required. Stage 5D has since completed the
+remaining mutation/realtime normalization; keep production disabled pending Stage
+6 validation.
 
 ### Unified chat pagination stage 5B: bootstrap and reconnect — 2026-08-18
 

@@ -23,7 +23,11 @@ import { patchChannelBackground } from "@/lib/channel-background-cache";
 import { removeRecentChannel, updateRecentChannelAppearance } from "@/lib/recent-channels";
 import { spawnEmoji } from "./EmojiBar";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
+import { shareInFlightRequest } from "./chatSingleFlight";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
+import type {
+  ChatTimelineSource,
+} from "./chatTimelineState";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 
 interface BannerState {
@@ -85,6 +89,12 @@ interface UseChatRealtimeSyncArgs {
   handleLiveStartedEvent: (options: SyncLiveSessionOptions) => void;
   applyEmojiPresetsSnapshot: (rawPresets: string | null | undefined) => void;
   setMessages: Dispatch<SetStateAction<Message[]>>;
+  upsertTimelineItems: (
+    source: ChatTimelineSource,
+    messages: Message[],
+    requiredRootId?: string,
+  ) => void;
+  removeTimelineThread: (source: ChatTimelineSource, rootId: string) => void;
   setNewerMessageCount: Dispatch<SetStateAction<number>>;
   setGalleryItems: Dispatch<SetStateAction<GalleryItem[]>>;
   setChannel: Dispatch<SetStateAction<Channel | null>>;
@@ -137,6 +147,8 @@ export function useChatRealtimeSync({
   handleLiveStartedEvent,
   applyEmojiPresetsSnapshot,
   setMessages,
+  upsertTimelineItems,
+  removeTimelineThread,
   setNewerMessageCount,
   setGalleryItems,
   setChannel,
@@ -162,8 +174,10 @@ export function useChatRealtimeSync({
   } = text;
   const pendingContextMessageIdsRef = useRef(new Set<string>());
   const dmRefreshRequestIdRef = useRef(0);
+  const unifiedRefreshPromiseRef = useRef<Promise<void> | null>(null);
   useEffect(() => {
     dmRefreshRequestIdRef.current += 1;
+    unifiedRefreshPromiseRef.current = null;
   }, [channelId]);
 
   const getViewingChannelId = useCallback(() => {
@@ -273,6 +287,12 @@ export function useChatRealtimeSync({
     refreshLatestMessages,
     unifiedTimelineEnabled,
   ]);
+  const refreshUnifiedTimelineOnce = useCallback(() => {
+    return shareInFlightRequest(
+      unifiedRefreshPromiseRef,
+      refreshLatestTimeline,
+    );
+  }, [refreshLatestTimeline]);
 
   const reconcileCurrentLiveSession = useCallback(async (traceCycleId?: string) => {
     const wasInLiveMode = inLiveModeRef.current;
@@ -340,11 +360,7 @@ export function useChatRealtimeSync({
         const viewingChannel = getViewingChannelId();
         if (msg.channel_id === viewingChannel) {
           if (msg.reply_to) {
-            setMessages((previous) => {
-              if (previous.some((message) => message.id === msg.id)) return previous;
-              if (!previous.some((message) => message.id === msg.reply_to)) return previous;
-              return [...previous, msg];
-            });
+            upsertTimelineItems("message", [msg], msg.reply_to);
             return;
           }
           if (historyModeRef.current === "context") {
@@ -359,10 +375,7 @@ export function useChatRealtimeSync({
             return;
           }
           const shouldFollowNewMessage = isNearBottomRef.current;
-          setMessages((previous) => {
-            if (previous.some((message) => message.id === msg.id)) return previous;
-            return [...previous, msg];
-          });
+          upsertTimelineItems("message", [msg]);
           if (shouldFollowNewMessage) {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
@@ -405,7 +418,7 @@ export function useChatRealtimeSync({
             return previous.filter((message) => message.id !== id);
           });
         } else {
-          setMessages((previous) => previous.filter((message) => message.id !== id && message.reply_to !== id));
+          removeTimelineThread("message", id);
         }
       }
 
@@ -425,19 +438,20 @@ export function useChatRealtimeSync({
         const dm = decorateMessageMedia(event.dm as Message);
         const viewingChannel = getViewingChannelId();
         if (dm.channel_id === viewingChannel) {
-          setDmMessages((previous) => {
-            if (previous.some((message) => message.id === dm.id)) return previous;
-            return [...previous, { ...dm, dm: true }];
-          });
+          upsertTimelineItems("dm", [{ ...dm, dm: true }]);
         }
       }
 
       if (event.type === "dm-deleted") {
         const dmId = event.dm_id as string;
-        setDmMessages((previous) => previous.filter((message) => message.id !== dmId));
+        removeTimelineThread("dm", dmId);
       }
 
       if (event.type === "dm-threads-changed") {
+        if (unifiedTimelineEnabled && !inLiveModeRef.current) {
+          void refreshUnifiedTimelineOnce().catch(() => {});
+          return;
+        }
         const viewingChannel = getViewingChannelId();
         const requestId = ++dmRefreshRequestIdRef.current;
         void fetchDmThreads(viewingChannel)
@@ -658,6 +672,8 @@ export function useChatRealtimeSync({
     handleLiveStartedEvent,
     applyEmojiPresetsSnapshot,
     setMessages,
+    upsertTimelineItems,
+    removeTimelineThread,
     setNewerMessageCount,
     setGalleryItems,
     setChannel,
@@ -676,6 +692,8 @@ export function useChatRealtimeSync({
     getViewingChannelId,
     refreshLatestMessages,
     refreshLatestTimeline,
+    refreshUnifiedTimelineOnce,
+    unifiedTimelineEnabled,
     synchronizeLiveSession,
     deletedMessage,
     roomAuthExpired,

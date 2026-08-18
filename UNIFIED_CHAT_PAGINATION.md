@@ -230,16 +230,29 @@ avoids a global cross-table sort or downloading two client windows.
 
 #### Stage 5D — mutations and realtime events
 
-- Normalize public-message, DM-root and DM-reply events into the same item shape.
-- Deduplicate by `(source, id)` and retain `client_message_id` acknowledgement rules.
-- Message/DM deletion removes the root and its children from the single state;
-  undo restores the original ordered items once.
-- Reactions and public-message edits continue to target only supported public
-  sources. DM roots/replies must not accidentally acquire unsupported controls.
-- A content-free DM invalidation triggers one bounded unified refresh. Concurrent
-  invalidations share the in-flight request rather than starting parallel refreshes.
-- Reconnection must never replay an acknowledged local send or append a server row
+- **Completed 2026-08-18.** Public-message, DM-root and DM-reply inserts now enter
+  canonical state through source-qualified upserts. Send acknowledgements and
+  subsequent realtime delivery converge by `(source, id)` and
+  `client_message_id`, so reconnect delivery cannot append the committed row
   twice.
+- Hard deletion removes one source-qualified root group, including mounted
+  children. Failed deletion and successful Undo restore the captured items
+  idempotently in canonical visual order. A public row and DM with the same ID
+  remain independent.
+- Public edits and reactions continue through the public-message projection and
+  cannot mutate a colliding DM identity. The legacy adapter remains available
+  for rollback without adding another mutable collection in unified mode.
+- Content-free `dm-threads-changed` events use one bounded unified latest
+  refresh when the flag is enabled. Concurrent events share one in-flight
+  promise and apply its response once; legacy and live modes retain the
+  dedicated DM reader.
+- Canonical event work is linear over the bounded mounted window. This stage
+  adds no polling, D1 migration or additional read on ordinary message events.
+
+Trade-off: each small canonical insert normalizes and sorts the mounted window
+to preserve visual-root ordering. The window is capped near 300 items, making
+this bounded client work preferable to maintaining mutable public/DM arrays or
+performing a server refresh for every event.
 
 Stage 5 exit criteria:
 
@@ -378,7 +391,7 @@ Cleanup after stable rollout:
 - [x] Stage 5A single-state client adapter and kill switch
 - [x] Stage 5B unified bootstrap/reconnect
 - [x] Stage 5C bidirectional history/context/navigation
-- [ ] Stage 5D mutation and realtime normalization
+- [x] Stage 5D mutation and realtime normalization
 - [ ] Stage 6 fan-out/query measurements and any required continuation design
 - [ ] Stage 7 live and reports adapters
 - [ ] Stage 8 controlled rollout, observation and legacy cleanup
