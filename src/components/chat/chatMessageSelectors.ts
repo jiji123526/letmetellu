@@ -52,6 +52,37 @@ export function getAnonymousViewerDmMessages(dmMessages: Message[], uid: string)
   );
 }
 
+function compareMessageChronology(left: Message, right: Message): number {
+  return (left.created_at || "").localeCompare(right.created_at || "");
+}
+
+function isChronologicallySorted(messages: Message[]): boolean {
+  for (let index = 1; index < messages.length; index += 1) {
+    if (compareMessageChronology(messages[index - 1], messages[index]) > 0) return false;
+  }
+  return true;
+}
+
+function mergeChronologicalMessages(left: Message[], right: Message[]): Message[] {
+  if (!isChronologicallySorted(left) || !isChronologicallySorted(right)) {
+    return [...left, ...right].sort(compareMessageChronology);
+  }
+
+  const merged: Message[] = [];
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    if (compareMessageChronology(left[leftIndex], right[rightIndex]) <= 0) {
+      merged.push(left[leftIndex++]);
+    } else {
+      merged.push(right[rightIndex++]);
+    }
+  }
+  if (leftIndex < left.length) merged.push(...left.slice(leftIndex));
+  if (rightIndex < right.length) merged.push(...right.slice(rightIndex));
+  return merged;
+}
+
 export function getDisplayMessages(
   messages: Message[],
   dmMessages: Message[],
@@ -61,8 +92,10 @@ export function getDisplayMessages(
   historyMode: "latest" | "context" = "latest",
 ): Message[] {
   if (!effectiveAdmin) {
-    return [...messages.filter((message) => !message.report), ...dmMessages]
-      .sort((left, right) => (left.created_at || "").localeCompare(right.created_at || ""));
+    return mergeChronologicalMessages(
+      messages.filter((message) => !message.report),
+      dmMessages,
+    );
   }
   const loadedMessageRange = messages.reduce<{
     oldest: string | null;
@@ -94,7 +127,7 @@ export function getDisplayMessages(
     : dmMessages;
   const adminMessages = [...messages, ...visibleDmMessages];
   if (!isReportsOwnerView) {
-    return adminMessages.sort((left, right) => (left.created_at || "").localeCompare(right.created_at || ""));
+    return mergeChronologicalMessages(messages, visibleDmMessages);
   }
 
   const orderedMessages = adminMessages
@@ -202,7 +235,6 @@ export function getThreadedMessages(
 ): ThreadedMessages {
   const topLevel: Message[] = [];
   const repliesMap: Record<string, Message[]> = {};
-  const messageIds = new Set(displayMessages.map((message) => message.id));
   const messagesById = new Map(displayMessages.map((message) => [message.id, message]));
 
   function resolveRenderableParentId(message: Message): string | null | undefined {
@@ -248,7 +280,7 @@ export function getThreadedMessages(
       continue;
     }
 
-    if (!messageIds.has(renderParentId)) {
+    if (!messagesById.has(renderParentId)) {
       topLevel.push(message);
       continue;
     }
@@ -280,8 +312,9 @@ export function deriveChatMessageCollections({
     historyMode,
   );
   const knownMessageIds = new Set(
-    [...messages, ...dmMessages].map((message) => message.id),
+    messages.map((message) => message.id),
   );
+  for (const message of dmMessages) knownMessageIds.add(message.id);
 
   return {
     hasReportsInboxContent: reportsInboxContent,

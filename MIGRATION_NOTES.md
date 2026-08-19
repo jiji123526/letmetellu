@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Ordinary chat derivation avoids sorting the mounted window again — 2026-08-19
+
+- Normal viewer and owner rendering now linearly merges the already chronological public-message and DM collections instead of concatenating and sorting the full mounted window after every send or realtime insert.
+- The merge preserves the previous stable tie behavior by keeping public messages before DMs when timestamps match.
+- An order check protects legacy or unexpected inputs: if either source is not chronological, derivation falls back to the existing stable full sort.
+- Thread grouping now reuses its message lookup map for parent-presence checks instead of building a duplicate message-ID set, and known IDs are collected without another combined temporary array.
+- Reports-owner inbox ordering remains unchanged because its open-report and moderation grouping requires a specialized sort.
+
+Trade-off: the common path performs a linear order validation before its linear merge. That adds a small bounded scan but removes repeated `O(n log n)` sorting for the normal mounted chat window while retaining a correctness fallback.
+
+Deployment note: frontend-only. Verify public messages and DMs remain chronologically interleaved, equal-timestamp ordering remains stable, nested replies stay under their visible root and reports inbox filters retain their existing order.
+
 ### Unified message inserts no longer rebuild the mounted timeline — 2026-08-19
 
 - A successful send, realtime message, DM or private reply now normalizes only the incoming timeline items instead of reconstructing both mounted message sources.
