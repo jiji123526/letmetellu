@@ -54,9 +54,11 @@ test("message rows cancel long press and reveal the timestamp during horizontal 
   assert.match(source, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
   assert.match(source, /const \[sharedSwipe, setSharedSwipe\] = React\.useState<SwipeRevealState>/);
   assert.match(source, /const swipeActive = sharedSwipe\.revealOffset > 0/);
-  assert.match(source, /const swipeOffset = swipeActive[\s\S]*messageSide === "sent" \? -sharedSwipe\.revealOffset : sharedSwipe\.revealOffset/);
-  assert.match(source, /const sentTime = swipeActive \? chatTimeLabel\(msg\.created_at, locale, timeZone\) : ""/);
-  assert.match(source, /onSwipeMove\(Math\.abs\(nextOffset\)\)/);
+  assert.match(source, /const swipeOffset = swipeActive[\s\S]*sharedSwipe\.side === "sent" \? -sharedSwipe\.revealOffset : sharedSwipe\.revealOffset/);
+  assert.match(source, /const showTimestamp = swipeActive && sharedSwipe\.side === messageSide/);
+  assert.match(source, /const sentTime = showTimestamp \? chatTimeLabel\(msg\.created_at, locale, timeZone\) : ""/);
+  assert.match(source, /onSwipeStart\(messageSide\)/);
+  assert.match(source, /onSwipeMove\(Math\.abs\(nextOffset\), messageSide\)/);
   assert.match(source, /color: markerColor/);
   assert.match(source, /<div className="relative w-full">[\s\S]*\{sentTime\}[\s\S]*style=\{swipeTransformStyle\}/);
   assert.match(source, /<div style=\{swipeTransformStyle\}>[\s\S]*<ReactionBadge/);
