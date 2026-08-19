@@ -122,6 +122,7 @@ export async function handleMessages(
   request: Request,
   env: Env,
   ctx?: ExecutionContext,
+  warmPreviewCache?: (request: Request, text: string | null | undefined) => Promise<void>,
 ): Promise<Response> {
   const routeAction = request.method === "POST"
     ? "send"
@@ -402,6 +403,9 @@ export async function handleMessages(
       });
       if (ctx) {
         ctx.waitUntil(postCommitDelivery);
+        if (warmPreviewCache && !image && !report) {
+          ctx.waitUntil(warmPreviewCache(request, text as string | undefined));
+        }
       } else {
         await postCommitDelivery;
       }

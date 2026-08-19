@@ -4,6 +4,7 @@ import { withOperationalEventOverride } from "../lib/operational-events";
 import { assertAllowedPreviewUrl, PreviewError } from "../lib/preview-policy";
 import { parsePreviewMetadata } from "../lib/preview-metadata";
 import { extractYouTubeVideoId } from "../lib/youtube-preview";
+import { extractMessagePreviewUrls } from "../lib/preview-urls.ts";
 import {
   getPreviewFailureCacheTtl,
   PREVIEW_EMPTY_CACHE_TTL_SECONDS,
@@ -138,6 +139,28 @@ async function createPreviewFailureResponse(
     : createCacheablePreviewResponse({ error: message }, status, ttlSeconds);
   await cachePreview(cacheKey, response);
   return response;
+}
+
+export async function warmMessagePreviewCache(
+  sourceRequest: Request,
+  env: Env,
+  text: string | null | undefined,
+): Promise<void> {
+  const urls = extractMessagePreviewUrls(text);
+  if (urls.length === 0) return;
+
+  const sourceUrl = new URL(sourceRequest.url);
+  const headers = new Headers();
+  for (const name of ["CF-Connecting-IP", "X-Client-IP"]) {
+    const value = sourceRequest.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+
+  await Promise.allSettled(urls.map((url) => {
+    const previewUrl = new URL("/api/preview", sourceUrl.origin);
+    previewUrl.searchParams.set("url", url);
+    return handlePreview(new Request(previewUrl, { headers }), env);
+  }));
 }
 
 export async function handlePreview(request: Request, env: Env): Promise<Response> {

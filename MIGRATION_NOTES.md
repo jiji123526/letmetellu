@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Link previews warm before readers reach them — 2026-08-19
+
+- Successful text-only message sends now schedule preview warming after authoritative persistence. The sender response does not wait for metadata retrieval, and preview failures do not turn a successful message send into an error.
+- Worker warming extracts, normalizes and deduplicates at most two HTTP(S) URLs per message, then reuses the existing SSRF policy, five-second timeout, response-size limit, per-IP rate limit and edge cache.
+- On chat entry, the browser idly primes at most six unique uncached URLs from the nearest mounted message cards instead of fetching every URL in the 50-root timeline window.
+- Message preview requests now share a two-request queue. Visible cards take priority, while background priming uses at most one active slot so it cannot occupy all preview capacity.
+- Background priming is disabled when the browser reports data-saver mode or a 2G-class connection. Existing memory caching, 24-hour persistent freshness, seven-day stale display and Worker cache behavior remain unchanged.
+
+Trade-off: each linked message can add up to two background Worker preview operations, and an entering viewer can initiate up to six bounded cache fills. This spends a small amount of controlled network work to reduce multi-second first-view metadata waits. Fetching every mounted link remains intentionally prohibited because replies and multiple URLs can make the mounted row count much larger than the 50-root page size.
+
+Deployment note: deploy the Worker and frontend together. Send messages with zero, one, repeated and three distinct links; confirm sending remains immediate, only the first two distinct links warm, visible previews outrank background work, and data-saver/2G clients perform no mounted background prefetch.
+
 ### Signed-in dashboard recent channels load alongside role resolution — 2026-08-19
 
 - The signed-in dashboard now starts its account recent-channel request at the same time as `/api/user` instead of waiting for user and platform-admin role resolution to finish first.

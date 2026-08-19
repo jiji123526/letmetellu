@@ -22,11 +22,23 @@ const PREVIEW_CACHE_LIMIT = 200;
 const PREVIEW_CACHED_AT_HEADER = "X-Letmetellu-Preview-Cached-At";
 const PREVIEW_FRESH_TTL_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_CONCURRENT_PREVIEW_REQUESTS = 2;
+const MOUNTED_PREVIEW_PREFETCH_LIMIT = 6;
 const previewCache = new Map<string, PreviewData | null>();
 const previewCacheMetadata = new Map<string, { cachedAt: number }>();
 const previewRequests = new Map<string, Promise<PreviewData | null>>();
+const previewRequestQueue: Array<{
+  url: string;
+  forceRefresh: boolean;
+  priority: "visible" | "background";
+  resolve: (value: PreviewData | null) => void;
+}> = [];
 let persistentPreviewCachePromise: Promise<Cache | null> | null = null;
 let legacyPreviewStorageCleaned = false;
+let activePreviewRequests = 0;
+let mountedPrefetchPath = "";
+let mountedPrefetchBudget = MOUNTED_PREVIEW_PREFETCH_LIMIT;
+let mountedPrefetchScheduled = false;
 
 function isYouTubeUrl(rawUrl: string): boolean {
   try {
@@ -155,11 +167,8 @@ async function readCachedPreview(url: string): Promise<{ data: PreviewData; isSt
   }
 }
 
-function requestPreview(url: string, forceRefresh = false): Promise<PreviewData | null> {
-  const pending = previewRequests.get(url);
-  if (pending) return pending;
-
-  const request = fetch(`/api/preview?url=${encodeURIComponent(url)}`)
+function fetchPreviewNow(url: string, forceRefresh: boolean): Promise<PreviewData | null> {
+  return fetch(`/api/preview?url=${encodeURIComponent(url)}`)
     .then((response) => response.ok ? response.json() as Promise<PreviewData | null> : null)
     .then((result) => {
       const normalized = result && (result.title || result.image) ? result : null;
@@ -176,13 +185,107 @@ function requestPreview(url: string, forceRefresh = false): Promise<PreviewData 
     .catch(() => {
       if (!forceRefresh) previewCache.set(url, null);
       return null;
-    })
-    .finally(() => {
-      previewRequests.delete(url);
     });
+}
 
+function drainPreviewRequestQueue() {
+  while (activePreviewRequests < MAX_CONCURRENT_PREVIEW_REQUESTS) {
+    const visibleIndex = previewRequestQueue.findIndex((entry) => entry.priority === "visible");
+    const nextIndex = visibleIndex >= 0
+      ? visibleIndex
+      : activePreviewRequests === 0 ? 0 : -1;
+    if (nextIndex < 0 || nextIndex >= previewRequestQueue.length) return;
+
+    const [next] = previewRequestQueue.splice(nextIndex, 1);
+    activePreviewRequests += 1;
+    void fetchPreviewNow(next.url, next.forceRefresh)
+      .then(next.resolve)
+      .finally(() => {
+        activePreviewRequests -= 1;
+        previewRequests.delete(next.url);
+        drainPreviewRequestQueue();
+      });
+  }
+}
+
+function requestPreview(
+  url: string,
+  forceRefresh = false,
+  priority: "visible" | "background" = "visible",
+): Promise<PreviewData | null> {
+  const pending = previewRequests.get(url);
+  if (pending) {
+    const queued = previewRequestQueue.find((entry) => entry.url === url);
+    if (queued && priority === "visible") queued.priority = "visible";
+    drainPreviewRequestQueue();
+    return pending;
+  }
+
+  const request = new Promise<PreviewData | null>((resolve) => {
+    previewRequestQueue.push({ url, forceRefresh, priority, resolve });
+    drainPreviewRequestQueue();
+  });
   previewRequests.set(url, request);
   return request;
+}
+
+async function primePreview(url: string) {
+  const cached = await readCachedPreview(url);
+  if (cached && !cached.isStale) return;
+  if (!cached && previewCache.has(url)) return;
+  await requestPreview(url, !!cached, "background");
+}
+
+function mountedPreviewDistance(element: HTMLElement): number {
+  const rect = element.getBoundingClientRect();
+  if (rect.bottom < 0) return -rect.bottom;
+  if (rect.top > window.innerHeight) return rect.top - window.innerHeight;
+  return 0;
+}
+
+function shouldSkipMountedPreviewPrefetch(): boolean {
+  const connection = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+  return connection?.saveData === true || connection?.effectiveType?.includes("2g") === true;
+}
+
+function scheduleMountedPreviewPrefetch() {
+  const path = window.location.pathname;
+  if (mountedPrefetchPath !== path) {
+    mountedPrefetchPath = path;
+    mountedPrefetchBudget = MOUNTED_PREVIEW_PREFETCH_LIMIT;
+  }
+  if (mountedPrefetchScheduled || mountedPrefetchBudget <= 0) return;
+  mountedPrefetchScheduled = true;
+
+  const run = () => {
+    mountedPrefetchScheduled = false;
+    if (shouldSkipMountedPreviewPrefetch()) {
+      mountedPrefetchBudget = 0;
+      return;
+    }
+
+    const nearestUrls = [...document.querySelectorAll<HTMLElement>("[data-message-preview-url]")]
+      .sort((left, right) => mountedPreviewDistance(left) - mountedPreviewDistance(right))
+      .map((element) => element.dataset.messagePreviewUrl || "")
+      .filter((url, index, urls) =>
+        Boolean(url)
+        && urls.indexOf(url) === index
+        && !previewCache.has(url)
+        && !previewRequests.has(url))
+      .slice(0, mountedPrefetchBudget);
+    mountedPrefetchBudget -= nearestUrls.length;
+    nearestUrls.forEach((url) => {
+      void primePreview(url);
+    });
+  };
+
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(run, { timeout: 1_500 });
+  } else {
+    globalThis.setTimeout(run, 250);
+  }
 }
 
 function useDeferredEmbedVisibility(rootMargin: string) {
@@ -233,6 +336,10 @@ function LinkPreviewCard({
   const { targetRef, isVisible } = useDeferredEmbedVisibility(EMBED_PREVIEW_ROOT_MARGIN);
 
   useEffect(() => {
+    scheduleMountedPreviewPrefetch();
+  }, [url]);
+
+  useEffect(() => {
     if (!isVisible) return;
 
     let cancelled = false;
@@ -273,6 +380,7 @@ function LinkPreviewCard({
     return (
       <a
         ref={targetRef}
+        data-message-preview-url={url}
         style={{ position: "relative", width: "100%", height: 0, overflow: "visible" }}
         aria-hidden="true"
         tabIndex={-1}
@@ -291,6 +399,7 @@ function LinkPreviewCard({
   return (
     <a
       ref={targetRef}
+      data-message-preview-url={url}
       className="link-preview-card"
       href={data.url}
       target="_blank"

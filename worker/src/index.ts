@@ -10,7 +10,7 @@ import { handleSocketAuth } from "./routes/socket-auth";
 import { handleAuth } from "./routes/auth";
 import { handleDm } from "./routes/dm";
 import { handleUpload, handleMediaServe } from "./routes/upload";
-import { handlePreview } from "./routes/preview";
+import { handlePreview, warmMessagePreviewCache } from "./routes/preview";
 import { handleVerifyPasscode } from "./routes/passcode";
 import { handleRecentChannels } from "./routes/recent-channels";
 import { handleUnifiedTimeline } from "./routes/unified-timeline";
@@ -236,7 +236,12 @@ export default {
 
     try {
       if (url.pathname.startsWith("/api/messages")) {
-        response = await handleMessages(request, env, ctx);
+        response = await handleMessages(
+          request,
+          env,
+          ctx,
+          (sourceRequest, text) => warmMessagePreviewCache(sourceRequest, env, text),
+        );
       } else if (url.pathname.startsWith("/api/unified-timeline")) {
         response = await handleUnifiedTimeline(request, env);
       } else if (url.pathname.startsWith("/api/data")) {
