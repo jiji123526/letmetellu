@@ -16,21 +16,12 @@ export async function resolveReplyRootId(
   targetMessageId: string,
 ): Promise<string | null> {
   const root = await env.DB.prepare(`
-    WITH RECURSIVE ancestors(id, reply_to) AS (
-      SELECT id, reply_to
-      FROM messages
-      WHERE id = ? AND channel_id = ? AND deleted = 0
-      UNION
-      SELECT parent.id, parent.reply_to
-      FROM messages parent
-      INNER JOIN ancestors ON ancestors.reply_to = parent.id
-      WHERE parent.channel_id = ?
-    )
-    SELECT id
-    FROM ancestors
-    WHERE reply_to IS NULL
+    SELECT root_id AS id
+    FROM messages
+    WHERE id = ? AND channel_id = ? AND deleted = 0
+      AND root_id IS NOT NULL
     LIMIT 1
-  `).bind(targetMessageId, channelId, channelId).first<{ id: string }>();
+  `).bind(targetMessageId, channelId).first<{ id: string }>();
 
   return root?.id || null;
 }

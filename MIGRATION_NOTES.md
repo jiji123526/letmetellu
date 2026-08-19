@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Reply sends use a persisted canonical message root — 2026-08-19
+
+- Production D1 Insights showed the reply-validation recursive CTE reading `41.75k` rows across 12 executions, or about `3.48k` rows read per returned root, despite low absolute latency.
+- Migration `0049_message_canonical_root.sql` adds `messages.root_id` and performs the recursive tree walk once to backfill every valid historical root and descendant. Broken or cyclic chains remain `NULL` and continue to be rejected.
+- Normal roots and report-inbox system messages now persist their own ID as `root_id`; replies persist the already authorized canonical root selected before insert.
+- Reply validation now reads `root_id` with one existing message-primary-key lookup instead of executing `WITH RECURSIVE ancestors` for every reply send.
+- No `root_id` index is added. This path already selects by the message primary key, so another index would increase every message write without improving the lookup.
+- `worker/scripts/audit-message-root-id.sql` reports unresolved roots, invalid roots and invalid cross-row references, then confirms the lookup uses the message primary-key index.
+
+Trade-off: each message stores one additional root ID, and migration `0049` performs one recursive backfill over historical messages. The Worker deliberately has no recursive compatibility fallback, so the migration must complete before deploying this code.
+
+Deployment note: apply migration `0049`, run `npx wrangler d1 execute letsplay-db --remote --file scripts/audit-message-root-id.sql` from `worker/`, then deploy the Worker. Production should report zero unresolved and invalid roots because the existing reply audit found no broken or cross-channel threads.
+
 ### Ordinary chat derivation avoids sorting the mounted window again — 2026-08-19
 
 - Normal viewer and owner rendering now linearly merges the already chronological public-message and DM collections instead of concatenating and sorting the full mounted window after every send or realtime insert.

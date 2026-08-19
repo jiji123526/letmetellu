@@ -1,6 +1,6 @@
 # Launch Checklist
 
-Core launch status for **yap.**, reviewed 2026-08-18. Detailed implementation
+Core launch status for **yap.**, reviewed 2026-08-19. Detailed implementation
 history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
 `FUTURE_PLANS.md`.
 
@@ -45,6 +45,9 @@ history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
 
 ## Core Tasks To Do
 
+- [ ] Apply migration `0049_message_canonical_root.sql`, run
+  `worker/scripts/audit-message-root-id.sql`, confirm zero unresolved/invalid
+  roots, then deploy the Worker that replaces recursive reply-root validation.
 - [ ] Deploy commit `a8f606b`, set `UNIFIED_TIMELINE_GLOBAL_ENABLED=1`, remove
   obsolete sample/allowlist secrets, and verify normal, live and reports reads
   emit `rollout_mode=global`. Record the prior Worker deployment for rollback.
