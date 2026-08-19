@@ -36,6 +36,10 @@ const unifiedTimelineRouteSource = readFileSync(
   new URL("../../src/app/api/unified-timeline/route.ts", import.meta.url),
   "utf8",
 );
+const timelineStateSource = readFileSync(
+  new URL("../../src/components/chat/chatTimelineState.ts", import.meta.url),
+  "utf8",
+);
 
 function message(
   id: string,
@@ -107,6 +111,49 @@ test("acknowledgement and realtime replay converge on one source-qualified item"
 
   assert.equal(state.mode, "unified");
   assert.deepEqual(state.timelineItems.map((item) => item.id), ["server"]);
+});
+
+test("single unified inserts use an incremental ordered merge", () => {
+  const rootCursor = {
+    visual_root_created_at: "2026-08-18T00:00:00.000Z",
+    source: "message" as const,
+    visual_root_id: "root",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T00:00:00.000Z",
+    id: "root",
+  };
+  const dmCursor = {
+    visual_root_created_at: "2026-08-18T01:00:00.000Z",
+    source: "dm" as const,
+    visual_root_id: "dm-root",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T01:00:00.000Z",
+    id: "dm-root",
+  };
+  const root = { ...message("root", rootCursor.created_at), ...rootCursor };
+  const dmRoot = { ...message("dm-root", dmCursor.created_at, { dm: true }), ...dmCursor };
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = replaceUnifiedTimelinePage(state, [root, dmRoot], rootCursor, dmCursor);
+  assert.equal(state.mode, "unified");
+  const mountedRoot = state.timelineItems[0];
+  const mountedDm = state.timelineItems[1];
+
+  state = upsertChatTimelineItems(state, "message", [
+    message("reply", "2026-08-18T02:00:00.000Z", { reply_to: "root" }),
+  ]);
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(state.timelineItems.map((item) => item.id), ["root", "reply", "dm-root"]);
+  assert.equal(state.timelineItems[0], mountedRoot);
+  assert.equal(state.timelineItems[2], mountedDm);
+  assert.equal(state.timelineItems[1].visual_root_id, "root");
+
+  const upsertSource = timelineStateSource.slice(
+    timelineStateSource.indexOf("export function upsertChatTimelineItems"),
+    timelineStateSource.indexOf("export function removeChatTimelineItems"),
+  );
+  assert.match(upsertSource, /mergeSortedTimelineItems\(existing, incoming\)/);
+  assert.doesNotMatch(upsertSource, /createUnifiedTimelineItems\(/);
 });
 
 test("source-qualified thread deletion removes its children but not a colliding DM", () => {

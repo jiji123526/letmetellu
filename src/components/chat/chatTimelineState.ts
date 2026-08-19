@@ -65,6 +65,20 @@ function compareTimelineItems(left: ChatTimelineItem, right: ChatTimelineItem): 
   return compareTimelinePositions(left, right);
 }
 
+function isCanonicalTimelineItem(
+  message: Message,
+  source: ChatTimelineSource,
+): message is ChatTimelineItem {
+  const existing = message as Partial<ChatTimelineItem>;
+  return existing.source === source
+    && typeof existing.visual_root_created_at === "string"
+    && existing.visual_root_created_at.length > 0
+    && typeof existing.visual_root_id === "string"
+    && existing.visual_root_id.length > 0
+    && (existing.visual_depth === 0 || existing.visual_depth === 1)
+    && (source !== "dm" || message.dm === true);
+}
+
 function normalizeSourceItems(
   source: ChatTimelineSource,
   messages: Message[],
@@ -72,17 +86,7 @@ function normalizeSourceItems(
   let byId: Map<string, Message> | null = null;
 
   return messages.map((message) => {
-    const existing = message as Partial<ChatTimelineItem>;
-    const hasCanonicalPosition = existing.source === source
-      && typeof existing.visual_root_created_at === "string"
-      && existing.visual_root_created_at.length > 0
-      && typeof existing.visual_root_id === "string"
-      && existing.visual_root_id.length > 0
-      && (existing.visual_depth === 0 || existing.visual_depth === 1);
-    if (
-      hasCanonicalPosition
-      && (source !== "dm" || message.dm === true)
-    ) {
+    if (isCanonicalTimelineItem(message, source)) {
       return message as ChatTimelineItem;
     }
 
@@ -99,18 +103,104 @@ function normalizeSourceItems(
     return {
       ...message,
       source,
-      visual_root_created_at: hasCanonicalPosition
-        ? existing.visual_root_created_at!
-        : root.created_at,
-      visual_root_id: hasCanonicalPosition
-        ? existing.visual_root_id!
-        : root.id,
-      visual_depth: hasCanonicalPosition
-        ? existing.visual_depth!
-        : message.reply_to ? 1 : 0,
+      visual_root_created_at: root.created_at,
+      visual_root_id: root.id,
+      visual_depth: message.reply_to ? 1 : 0,
       dm: source === "dm" ? true : message.dm,
     };
   });
+}
+
+function normalizeIncomingTimelineItems(
+  source: ChatTimelineSource,
+  messages: Message[],
+  existingItems: ChatTimelineItem[],
+): ChatTimelineItem[] {
+  const knownById = new Map<string, Message>();
+  const existingById = new Map<string, ChatTimelineItem>();
+  for (const item of existingItems) {
+    if (item.source !== source) continue;
+    knownById.set(item.id, item);
+    existingById.set(item.id, item);
+  }
+  for (const message of messages) knownById.set(message.id, message);
+
+  const normalizedById = new Map<string, ChatTimelineItem>();
+  for (const message of messages) {
+    if (isCanonicalTimelineItem(message, source)) {
+      normalizedById.set(message.id, message);
+      continue;
+    }
+
+    const existing = existingById.get(message.id);
+    if (existing) {
+      normalizedById.set(message.id, {
+        ...message,
+        source,
+        visual_root_created_at: existing.visual_root_created_at,
+        visual_root_id: existing.visual_root_id,
+        visual_depth: existing.visual_depth,
+        dm: source === "dm" ? true : message.dm,
+      });
+      continue;
+    }
+
+    let root: Message = message;
+    let parentId = message.reply_to;
+    const visitedIds = new Set<string>([message.id]);
+    while (parentId) {
+      if (visitedIds.has(parentId)) break;
+      visitedIds.add(parentId);
+      const parent = knownById.get(parentId);
+      if (!parent) break;
+      if (isCanonicalTimelineItem(parent, source)) {
+        normalizedById.set(message.id, {
+          ...message,
+          source,
+          visual_root_created_at: parent.visual_root_created_at,
+          visual_root_id: parent.visual_root_id,
+          visual_depth: message.reply_to ? 1 : 0,
+          dm: source === "dm" ? true : message.dm,
+        });
+        root = parent;
+        break;
+      }
+      root = parent;
+      parentId = parent.reply_to;
+    }
+    if (normalizedById.has(message.id)) continue;
+
+    normalizedById.set(message.id, {
+      ...message,
+      source,
+      visual_root_created_at: root.created_at,
+      visual_root_id: root.id,
+      visual_depth: message.reply_to ? 1 : 0,
+      dm: source === "dm" ? true : message.dm,
+    });
+  }
+
+  return [...normalizedById.values()].sort(compareTimelineItems);
+}
+
+function mergeSortedTimelineItems(
+  existing: ChatTimelineItem[],
+  incoming: ChatTimelineItem[],
+): ChatTimelineItem[] {
+  const merged: ChatTimelineItem[] = [];
+  let existingIndex = 0;
+  let incomingIndex = 0;
+
+  while (existingIndex < existing.length && incomingIndex < incoming.length) {
+    if (compareTimelineItems(existing[existingIndex], incoming[incomingIndex]) <= 0) {
+      merged.push(existing[existingIndex++]);
+    } else {
+      merged.push(incoming[incomingIndex++]);
+    }
+  }
+  if (existingIndex < existing.length) merged.push(...existing.slice(existingIndex));
+  if (incomingIndex < incoming.length) merged.push(...incoming.slice(incomingIndex));
+  return merged;
 }
 
 function timelineIdentity(source: ChatTimelineSource, id: string): string {
@@ -232,26 +322,20 @@ export function upsertChatTimelineItems(
       : { ...state, dmMessages: next };
   }
 
-  const existingSource = state.timelineItems.filter((item) =>
-    item.source === source
-    && (
-      !item.client_message_id
-      || !incomingClientIds.has(item.client_message_id)
-      || incomingIds.has(item.id)
+  const incoming = normalizeIncomingTimelineItems(source, messages, state.timelineItems);
+  const existing = state.timelineItems.filter((item) =>
+    item.source !== source
+    || (
+      !incomingIds.has(item.id)
+      && (
+        !item.client_message_id
+        || !incomingClientIds.has(item.client_message_id)
+      )
     )
   );
-  const nextSourceById = new Map<string, Message>(
-    existingSource.map((item) => [item.id, item]),
-  );
-  for (const message of messages) nextSourceById.set(message.id, message);
-  const nextSource = [...nextSourceById.values()];
-  const otherSource = state.timelineItems.filter((item) => item.source !== source);
   return {
     ...state,
-    timelineItems: createUnifiedTimelineItems(
-      source === "message" ? nextSource : otherSource,
-      source === "dm" ? nextSource : otherSource,
-    ),
+    timelineItems: mergeSortedTimelineItems(existing, incoming),
   };
 }
 

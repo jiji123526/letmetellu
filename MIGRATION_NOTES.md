@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Unified message inserts no longer rebuild the mounted timeline — 2026-08-19
+
+- A successful send, realtime message, DM or private reply now normalizes only the incoming timeline items instead of reconstructing both mounted message sources.
+- Existing canonical timeline rows retain their object identity. Incoming rows are deduplicated by source-qualified ID and client submission ID, sorted as a small batch, then merged into the already ordered mounted timeline in one linear pass.
+- Reply inserts still inherit the visible root's canonical position, so late replies remain beside their parent instead of moving to their own creation time.
+- Focused coverage pins acknowledgement/realtime convergence, canonical reply placement, unaffected-row identity preservation and the incremental merge path.
+
+Trade-off: the incremental path relies on the mounted unified timeline remaining canonically ordered, which is already enforced by bootstrap and pagination replacement. Full page loads still use the broader normalization path because they can contain arbitrary mixed-source windows.
+
+Deployment note: frontend-only. Verify normal sends, replies, DMs and owner DM replies appear once, remain in visual thread order and do not cause a noticeable whole-list hitch in a channel with a large mounted history.
+
 ### `/api/init` now folds moderation and owner-profile probes into the channel read — 2026-08-19
 
 - The main channel bootstrap query now joins `channel_moderation` directly and derives `owner_channel_count` inline with a bounded `EXISTS` probe against the same owner's visible non-live channels.
