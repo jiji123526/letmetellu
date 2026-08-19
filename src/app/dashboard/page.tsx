@@ -566,12 +566,16 @@ function DashboardPageContent() {
 
   const loadAccountRecentChannels = useCallback(async (
     userId: string,
-    options?: { skipListAnimation?: boolean },
+    options?: {
+      skipListAnimation?: boolean;
+      prefetchedRequest?: Promise<RecentChannel[]>;
+    },
   ) => {
     const migrationKey = `letmetellu_recent_channels_migrated_${userId}`;
-    startDashboardRequest("recent-channels");
+    const ownsRequestTiming = !options?.prefetchedRequest;
+    if (ownsRequestTiming) startDashboardRequest("recent-channels");
     try {
-      const accountChannels = await fetchAccountRecentChannels();
+      const accountChannels = await (options?.prefetchedRequest ?? fetchAccountRecentChannels());
       if (options?.skipListAnimation) {
         skipNextListAnimationRef.current = true;
       }
@@ -599,7 +603,7 @@ function DashboardPageContent() {
       setRecentChannels([]);
     } finally {
       recentChannelsLoadedAtRef.current = Date.now();
-      finishDashboardRequest("recent-channels");
+      if (ownsRequestTiming) finishDashboardRequest("recent-channels");
     }
   }, []);
 
@@ -904,6 +908,12 @@ function DashboardPageContent() {
           setRecentChannels(cachedRecentChannels);
           markDashboardMilestone("cached-channels-ready");
         }
+        startDashboardRequest("recent-channels");
+        const prefetchedRecentChannels = fetchAccountRecentChannels();
+        void prefetchedRecentChannels.then(
+          () => finishDashboardRequest("recent-channels"),
+          () => finishDashboardRequest("recent-channels"),
+        );
         const roleResult = await Promise.allSettled([loadChannels()]);
         const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
         if (isAdmin) {
@@ -912,7 +922,10 @@ function DashboardPageContent() {
           setLoading(false);
           return;
         }
-        const recentChannelsRequest = loadAccountRecentChannels(userId, { skipListAnimation: true });
+        const recentChannelsRequest = loadAccountRecentChannels(userId, {
+          skipListAnimation: true,
+          prefetchedRequest: prefetchedRecentChannels,
+        });
         const supportPreviewRequest = loadSupportPreview({ isPlatformAdmin: false });
         if (cachedRecentChannels.length > 0) {
           setLoading(false);

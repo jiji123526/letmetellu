@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Signed-in dashboard recent channels load alongside role resolution — 2026-08-19
+
+- The signed-in dashboard now starts its account recent-channel request at the same time as `/api/user` instead of waiting for user and platform-admin role resolution to finish first.
+- The prefetched result is applied only after the role response confirms the regular-user path, so the dashboard does not temporarily render the wrong role-specific view.
+- Existing request deduplication, local snapshot display, recent-channel migration checks and dashboard performance milestones remain unchanged. Request timing now covers the actual prefetch from its network start.
+- Support preview still starts after role resolution. It does not block dashboard usability, and moving it earlier would add another unnecessary request for every platform-admin load without improving the visible channel list.
+
+Trade-off: platform admins also start one lightweight recent-channel request that is not applied. This is intentional: ordinary users are the dominant path, the query is indexed and currently below `1 ms` p99 in production Insights, and parallel prefetch removes a full network round trip from uncached regular-user dashboard loading.
+
+Deployment note: frontend-only. On a fresh signed-in dashboard load, confirm `window.__letmetelluDashboardPerf` records `user-bootstrap` and `recent-channels` as overlapping requests, the regular channel list remains correct, and platform admins still see only the platform dashboard.
+
 ### Reply sends use a persisted canonical message root — 2026-08-19
 
 - Production D1 Insights showed the reply-validation recursive CTE reading `41.75k` rows across 12 executions, or about `3.48k` rows read per returned root, despite low absolute latency.
