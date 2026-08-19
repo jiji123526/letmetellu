@@ -35,12 +35,11 @@ interface MessageRowProps {
   locale: "ko" | "en";
   timeZone: string;
   sharedSwipe: {
-    side: "sent" | "received" | null;
-    offset: number;
+    revealOffset: number;
     isSwiping: boolean;
   };
-  onSwipeStart: (side: "sent" | "received") => void;
-  onSwipeMove: (offset: number, side: "sent" | "received") => void;
+  onSwipeStart: () => void;
+  onSwipeMove: (revealOffset: number) => void;
   onSwipeFinish: () => void;
   onLongPress: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onTouchStart: (msg: Message, isSent: boolean, el: HTMLElement) => void;
@@ -81,8 +80,7 @@ interface MessageListProps {
 type SwipeRevealSide = "sent" | "received";
 
 interface SwipeRevealState {
-  side: SwipeRevealSide | null;
-  offset: number;
+  revealOffset: number;
   isSwiping: boolean;
 }
 
@@ -249,8 +247,10 @@ const MessageRow = React.memo(function MessageRow({
   const markerColor = replyArrowTone === "bright"
     ? "rgba(255,255,255,0.92)"
     : "var(--meta)";
-  const swipeOffset = sharedSwipe.side === messageSide ? sharedSwipe.offset : 0;
-  const swipeActive = sharedSwipe.side === messageSide;
+  const swipeActive = sharedSwipe.revealOffset > 0;
+  const swipeOffset = swipeActive
+    ? (messageSide === "sent" ? -sharedSwipe.revealOffset : sharedSwipe.revealOffset)
+    : 0;
   const sentTime = swipeActive ? chatTimeLabel(msg.created_at, locale, timeZone) : "";
   const swipeTransformStyle = {
     transform: `translateX(${swipeOffset}px)`,
@@ -332,7 +332,7 @@ const MessageRow = React.memo(function MessageRow({
         if (gesture.axis === "pending") {
           if (isHorizontalMessageSwipe(deltaX, deltaY)) {
             gesture.axis = "horizontal";
-            onSwipeStart(messageSide);
+            onSwipeStart();
             onTouchEnd();
           } else if (Math.abs(deltaY) >= 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
             gesture.axis = "vertical";
@@ -343,7 +343,7 @@ const MessageRow = React.memo(function MessageRow({
 
         const nextOffset = messageSwipeOffset(deltaX, isSent);
         if (nextOffset !== 0) event.preventDefault();
-        onSwipeMove(nextOffset, messageSide);
+        onSwipeMove(Math.abs(nextOffset));
       }}
       onTouchEnd={finishSwipe}
       onTouchCancel={finishSwipe}
@@ -469,7 +469,7 @@ const MessageRow = React.memo(function MessageRow({
               lineHeight: 1,
               textAlign: "center",
               whiteSpace: "nowrap",
-              opacity: swipeActive ? Math.min(1, Math.abs(swipeOffset) / 24) : 0,
+              opacity: swipeActive ? Math.min(1, sharedSwipe.revealOffset / 24) : 0,
               transform: `translateX(${isSent ? "2px" : "-2px"})`,
               transition: swipeActive && sharedSwipe.isSwiping ? "none" : "opacity 160ms ease",
               pointerEvents: "none",
@@ -536,8 +536,7 @@ export const MessageList = React.memo(function MessageList({
   onEmojiPicker,
 }: MessageListProps) {
   const [sharedSwipe, setSharedSwipe] = React.useState<SwipeRevealState>({
-    side: null,
-    offset: 0,
+    revealOffset: 0,
     isSwiping: false,
   });
   const messagesById = new Map<string, Message>();
@@ -575,25 +574,23 @@ export const MessageList = React.memo(function MessageList({
     onEmojiPicker,
   };
 
-  const handleSwipeStart = React.useCallback((side: SwipeRevealSide) => {
+  const handleSwipeStart = React.useCallback(() => {
     setSharedSwipe((current) => {
-      if (current.side === side && current.isSwiping) return current;
+      if (current.isSwiping) return current;
       return {
-        side,
-        offset: current.side === side ? current.offset : 0,
+        revealOffset: current.revealOffset,
         isSwiping: true,
       };
     });
   }, []);
 
-  const handleSwipeMove = React.useCallback((offset: number, side: SwipeRevealSide) => {
+  const handleSwipeMove = React.useCallback((revealOffset: number) => {
     setSharedSwipe((current) => {
-      if (current.side === side && current.offset === offset && current.isSwiping) {
+      if (current.revealOffset === revealOffset && current.isSwiping) {
         return current;
       }
       return {
-        side,
-        offset,
+        revealOffset,
         isSwiping: true,
       };
     });
@@ -601,10 +598,9 @@ export const MessageList = React.memo(function MessageList({
 
   const handleSwipeFinish = React.useCallback(() => {
     setSharedSwipe((current) => {
-      if (current.side === null && current.offset === 0 && !current.isSwiping) return current;
+      if (current.revealOffset === 0 && !current.isSwiping) return current;
       return {
-        side: null,
-        offset: 0,
+        revealOffset: 0,
         isSwiping: false,
       };
     });
