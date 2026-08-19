@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Timestamp swipes move one compositor layer — 2026-08-19
+
+- The mounted chat window remains capped at 300 message/DM items while preserving complete visual-root threads. A single exceptionally large thread can still exceed that soft cap so replies are never split from their root.
+- Horizontal timestamp gestures no longer put the current touch offset into React state. The previous path changed a prop received by every mounted `MessageRow`, forcing up to 300 row renders on each touch event.
+- Touch movement is now coalesced through `requestAnimationFrame` and writes CSS variables directly to one shared message-list layer. Messages, replies and reaction badges move together with a single parent `translate3d`.
+- Timestamp text is formatted during the normal row render and remains stationary during the gesture through an inverse CSS transform. Separate inherited opacity variables reveal only sent or received timestamps for the active direction.
+- The compositor hint is enabled only while swiping and during the 180ms reset, then removed. This avoids retaining hundreds of per-row transform layers or permanently promoting the full history.
+- Focused coverage now rejects the old `sharedSwipe` React-state path and pins the single-layer transform, animation-frame batching and side-filtered timestamp variables.
+
+Trade-off: all mounted timestamp strings now exist in the DOM while hidden instead of being inserted only during a swipe. Formatting remains cached and the text nodes are small; this bounded memory cost is preferable to reconstructing and rerendering every row during each gesture frame. The shared history layer may be internally tiled by the browser when it is very tall, but only one layer is animated instead of message and reaction wrappers for every mounted item.
+
+Deployment note: frontend-only. Load history to the 300-item cap on a mobile device, swipe in both directions, verify every bubble moves together, only the matching side's timestamps appear stationary, vertical scrolling remains responsive, and the list returns without a horizontal offset.
+
 ### Link previews warm before readers reach them — 2026-08-19
 
 - Successful text-only message sends now schedule preview warming after authoritative persistence. The sender response does not wait for metadata retrieval, and preview failures do not turn a successful message send into an error.

@@ -451,6 +451,6 @@ test("sender DM roots expose deletion without unsupported reaction controls", ()
   assert.match(mutationSource, /deleteDm\(\{[\s\S]*dm_id: messageId/);
   assert.match(mutationSource, /targetMessage\?\.dm_reply[\s\S]*adminAction\("delete-dm-reply"/);
   assert.match(contextMenuSource, /\{!msg\.dm && !isReportInboxMessage/);
-  assert.match(messageListSource, /\{!msg\.dm && \(\s*<div style=\{swipeTransformStyle\}>\s*<ReactionBadge/);
+  assert.match(messageListSource, /\{!msg\.dm && \(\s*<div>\s*<ReactionBadge/);
   assert.match(pendingDeletionSource, /stageDmReplyDeletion[\s\S]*WHERE id = \? AND channel_id = \? AND owner_uid = \?/);
 });

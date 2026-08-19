@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState, type RefObject, type TouchEvent } from "react";
+import { useCallback, useEffect, useRef, type CSSProperties, type RefObject, type TouchEvent } from "react";
 import { NoticeBanner } from "./NoticeBanner";
-import { MessageList, type SwipeRevealSide, type SwipeRevealState } from "./ChatMessageList";
+import { MessageList } from "./ChatMessageList";
 import type { RestrictedChannelSummaryItem, ThreadedMessages } from "./chatMessageSelectors";
 import type { Message } from "./chatTypes";
 import { isHorizontalMessageSwipe, messageSwipeOffset } from "./messageSwipe";
+
+type SwipeRevealSide = "sent" | "received";
 
 interface ChatViewMessagePaneProps {
   channelId: string;
@@ -96,11 +98,13 @@ export function ChatViewMessagePane({
   onReaction,
   onEmojiPicker,
 }: ChatViewMessagePaneProps) {
-  const [sharedSwipe, setSharedSwipe] = useState<SwipeRevealState>({
-    side: null,
-    revealOffset: 0,
-    isSwiping: false,
-  });
+  const swipeLayerRef = useRef<HTMLDivElement>(null);
+  const swipeFrameRef = useRef<number | null>(null);
+  const swipeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSwipeRef = useRef<{
+    side: SwipeRevealSide;
+    offset: number;
+  } | null>(null);
   const swipeGestureRef = useRef<{
     startX: number;
     startY: number;
@@ -108,18 +112,42 @@ export function ChatViewMessagePane({
     axis: "pending" | "horizontal" | "vertical";
   } | null>(null);
 
+  const applySwipeVisual = useCallback((
+    side: SwipeRevealSide | null,
+    offset: number,
+    isSwiping: boolean,
+  ) => {
+    const layer = swipeLayerRef.current;
+    if (!layer) return;
+    const revealOffset = Math.abs(offset);
+    const opacity = String(Math.min(1, revealOffset / 24));
+    layer.style.setProperty("--message-swipe-x", `${offset}px`);
+    layer.style.setProperty("--message-swipe-inverse-x", `${-offset}px`);
+    layer.style.setProperty("--message-swipe-sent-opacity", side === "sent" ? opacity : "0");
+    layer.style.setProperty("--message-swipe-received-opacity", side === "received" ? opacity : "0");
+    layer.style.setProperty("--message-swipe-transform-duration", isSwiping ? "0ms" : "180ms");
+    layer.style.setProperty("--message-swipe-opacity-duration", isSwiping ? "0ms" : "160ms");
+    layer.style.willChange = "transform";
+  }, []);
+
   const finishSwipe = useCallback(() => {
+    const side = swipeGestureRef.current?.side || null;
     swipeGestureRef.current = null;
-    setSharedSwipe((current) => {
-      if (current.revealOffset === 0 && !current.isSwiping) return current;
-      return {
-        side: current.side,
-        revealOffset: 0,
-        isSwiping: false,
-      };
-    });
+    pendingSwipeRef.current = null;
+    if (swipeFrameRef.current !== null) {
+      cancelAnimationFrame(swipeFrameRef.current);
+      swipeFrameRef.current = null;
+    }
+    if (side) {
+      if (swipeResetTimerRef.current) clearTimeout(swipeResetTimerRef.current);
+      applySwipeVisual(side, 0, false);
+      swipeResetTimerRef.current = setTimeout(() => {
+        swipeLayerRef.current?.style.removeProperty("will-change");
+        swipeResetTimerRef.current = null;
+      }, 200);
+    }
     onTouchEnd();
-  }, [onTouchEnd]);
+  }, [applySwipeVisual, onTouchEnd]);
 
   const handleContainerTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
     const touch = event.touches[0];
@@ -130,6 +158,10 @@ export function ChatViewMessagePane({
       side: null,
       axis: "pending",
     };
+    if (swipeResetTimerRef.current) {
+      clearTimeout(swipeResetTimerRef.current);
+      swipeResetTimerRef.current = null;
+    }
   }, []);
 
   const handleContainerTouchMove = useCallback((event: TouchEvent<HTMLElement>) => {
@@ -154,22 +186,21 @@ export function ChatViewMessagePane({
 
     const nextOffset = messageSwipeOffset(deltaX, gesture.side === "sent");
     if (nextOffset !== 0) event.preventDefault();
-    setSharedSwipe((current) => {
-      const revealOffset = Math.abs(nextOffset);
-      if (
-        current.side === gesture.side
-        && current.revealOffset === revealOffset
-        && current.isSwiping
-      ) {
-        return current;
-      }
-      return {
-        side: gesture.side,
-        revealOffset,
-        isSwiping: true,
-      };
-    });
-  }, [onTouchEnd]);
+    pendingSwipeRef.current = { side: gesture.side, offset: nextOffset };
+    if (swipeFrameRef.current === null) {
+      swipeFrameRef.current = requestAnimationFrame(() => {
+        swipeFrameRef.current = null;
+        const pending = pendingSwipeRef.current;
+        if (!pending) return;
+        applySwipeVisual(pending.side, pending.offset, true);
+      });
+    }
+  }, [applySwipeVisual, onTouchEnd]);
+
+  useEffect(() => () => {
+    if (swipeFrameRef.current !== null) cancelAnimationFrame(swipeFrameRef.current);
+    if (swipeResetTimerRef.current) clearTimeout(swipeResetTimerRef.current);
+  }, []);
 
   return (
     <div
@@ -350,32 +381,41 @@ export function ChatViewMessagePane({
           </section>
         )}
 
-        <MessageList
-          threadedMessages={threadedMessages}
-          backgroundType={backgroundType}
-          backgroundColor={backgroundColor}
-          backgroundOverlay={backgroundOverlay}
-          effectiveAdmin={effectiveAdmin}
-          uid={uid}
-          authUserId={authUserId}
-          bubbleColor={bubbleColor}
-          reportedMsgIds={reportedMsgIds}
-          reportedTargetIds={reportedTargetIds}
-          searchQuery={searchQuery}
-          searchResultIdSet={searchResultIdSet}
-          activeSearchId={activeSearchId}
-          deletedMessageLabel={deletedMessageLabel}
-          editedMessageLabel={editedMessageLabel}
-          locale={locale}
-          timeZone={timeZone}
-          sharedSwipe={sharedSwipe}
-          onLongPress={onLongPress}
-          onTouchStart={onTouchStart}
-          onOpenImage={onOpenImage}
-          onExpand={onExpand}
-          onReaction={onReaction}
-          onEmojiPicker={onEmojiPicker}
-        />
+        <div
+          ref={swipeLayerRef}
+          data-message-swipe-layer
+          className="flex w-full flex-col"
+          style={{
+            transform: "translate3d(var(--message-swipe-x, 0px), 0, 0)",
+            transition: "transform var(--message-swipe-transform-duration, 180ms) cubic-bezier(0.22, 0.8, 0.3, 1)",
+          } as CSSProperties}
+        >
+          <MessageList
+            threadedMessages={threadedMessages}
+            backgroundType={backgroundType}
+            backgroundColor={backgroundColor}
+            backgroundOverlay={backgroundOverlay}
+            effectiveAdmin={effectiveAdmin}
+            uid={uid}
+            authUserId={authUserId}
+            bubbleColor={bubbleColor}
+            reportedMsgIds={reportedMsgIds}
+            reportedTargetIds={reportedTargetIds}
+            searchQuery={searchQuery}
+            searchResultIdSet={searchResultIdSet}
+            activeSearchId={activeSearchId}
+            deletedMessageLabel={deletedMessageLabel}
+            editedMessageLabel={editedMessageLabel}
+            locale={locale}
+            timeZone={timeZone}
+            onLongPress={onLongPress}
+            onTouchStart={onTouchStart}
+            onOpenImage={onOpenImage}
+            onExpand={onExpand}
+            onReaction={onReaction}
+            onEmojiPicker={onEmojiPicker}
+          />
+        </div>
         <div ref={messagesEndRef} />
       </main>
     </div>

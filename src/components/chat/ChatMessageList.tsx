@@ -33,11 +33,6 @@ interface MessageRowProps {
   editedMessageLabel: string;
   locale: "ko" | "en";
   timeZone: string;
-  sharedSwipe: {
-    side: "sent" | "received" | null;
-    revealOffset: number;
-    isSwiping: boolean;
-  };
   onLongPress: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onTouchStart: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onOpenImage: (msg: Message) => void;
@@ -64,7 +59,6 @@ interface MessageListProps {
   editedMessageLabel: string;
   locale: "ko" | "en";
   timeZone: string;
-  sharedSwipe: SwipeRevealState;
   onLongPress: MessageRowProps["onLongPress"];
   onTouchStart: MessageRowProps["onTouchStart"];
   onOpenImage: MessageRowProps["onOpenImage"];
@@ -74,14 +68,6 @@ interface MessageListProps {
 }
 
 type SwipeRevealSide = "sent" | "received";
-
-interface SwipeRevealState {
-  side: SwipeRevealSide | null;
-  revealOffset: number;
-  isSwiping: boolean;
-}
-
-export type { SwipeRevealSide, SwipeRevealState };
 
 function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
   const normalized = hex.trim();
@@ -172,7 +158,6 @@ const MessageRow = React.memo(function MessageRow({
   editedMessageLabel,
   locale,
   timeZone,
-  sharedSwipe,
   onLongPress,
   onTouchStart,
   onOpenImage,
@@ -237,19 +222,7 @@ const MessageRow = React.memo(function MessageRow({
   const markerColor = replyArrowTone === "bright"
     ? "rgba(255,255,255,0.92)"
     : "var(--meta)";
-  const swipeActive = sharedSwipe.revealOffset > 0;
-  const swipeOffset = swipeActive
-    ? (sharedSwipe.side === "sent" ? -sharedSwipe.revealOffset : sharedSwipe.revealOffset)
-    : 0;
-  const showTimestamp = swipeActive && sharedSwipe.side === messageSide;
-  const sentTime = showTimestamp ? chatTimeLabel(msg.created_at, locale, timeZone) : "";
-  const swipeTransformStyle = {
-    transform: `translateX(${swipeOffset}px)`,
-    transition: swipeActive && sharedSwipe.isSwiping
-      ? "none"
-      : "transform 180ms cubic-bezier(0.22, 0.8, 0.3, 1)",
-    willChange: swipeOffset ? "transform" : undefined,
-  } satisfies React.CSSProperties;
+  const sentTime = chatTimeLabel(msg.created_at, locale, timeZone);
 
   const bubble = (
     <div
@@ -407,6 +380,7 @@ const MessageRow = React.memo(function MessageRow({
         <div className="relative w-full">
           <span
             aria-hidden="true"
+            data-message-timestamp={messageSide}
             style={{
               position: "absolute",
               [isSent ? "right" : "left"]: "3px",
@@ -421,9 +395,9 @@ const MessageRow = React.memo(function MessageRow({
               lineHeight: 1,
               textAlign: "center",
               whiteSpace: "nowrap",
-              opacity: showTimestamp ? Math.min(1, sharedSwipe.revealOffset / 24) : 0,
-              transform: `translateX(${isSent ? "2px" : "-2px"})`,
-              transition: showTimestamp && sharedSwipe.isSwiping ? "none" : "opacity 160ms ease",
+              opacity: `var(--message-swipe-${messageSide}-opacity, 0)`,
+              transform: `translate3d(calc(var(--message-swipe-inverse-x, 0px) ${isSent ? "+ 2px" : "- 2px"}), 0, 0)`,
+              transition: "opacity var(--message-swipe-opacity-duration, 160ms) ease, transform var(--message-swipe-transform-duration, 180ms) cubic-bezier(0.22, 0.8, 0.3, 1)",
               pointerEvents: "none",
             }}
           >
@@ -431,7 +405,6 @@ const MessageRow = React.memo(function MessageRow({
           </span>
           <div
             className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
-            style={swipeTransformStyle}
           >
             {isReply ? (
               <div
@@ -444,7 +417,7 @@ const MessageRow = React.memo(function MessageRow({
           </div>
         </div>
         {!msg.dm && (
-          <div style={swipeTransformStyle}>
+          <div>
             <ReactionBadge
               messageId={msg.id}
               reactions={msg.reactions}
@@ -479,7 +452,6 @@ export const MessageList = React.memo(function MessageList({
   editedMessageLabel,
   locale,
   timeZone,
-  sharedSwipe,
   onLongPress,
   onTouchStart,
   onOpenImage,
@@ -512,7 +484,6 @@ export const MessageList = React.memo(function MessageList({
     editedMessageLabel,
     locale,
     timeZone,
-    sharedSwipe,
     onLongPress,
     onTouchStart,
     onOpenImage,
