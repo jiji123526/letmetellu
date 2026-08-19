@@ -10,7 +10,15 @@ const TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS = [
   "durable object storage operation exceeded timeout which caused object to be reset",
 ] as const;
 
-export function isTransientDurableObjectError(error: unknown): boolean {
+const TRANSIENT_D1_ERROR_FRAGMENTS = [
+  "d1_error: d1 db storage operation exceeded timeout which caused object to be reset",
+  "d1 db storage operation exceeded timeout which caused object to be reset",
+] as const;
+
+function matchesErrorChain(
+  error: unknown,
+  fragments: readonly string[],
+): boolean {
   let current: unknown = error;
   const visited = new Set<unknown>();
 
@@ -22,7 +30,7 @@ export function isTransientDurableObjectError(error: unknown): boolean {
         ? String((current as { message?: unknown }).message ?? "")
         : String(current);
     const normalizedMessage = message.toLowerCase();
-    if (TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS.some((fragment) => normalizedMessage.includes(fragment))) {
+    if (fragments.some((fragment) => normalizedMessage.includes(fragment))) {
       return true;
     }
     current = current instanceof Error
@@ -33,6 +41,14 @@ export function isTransientDurableObjectError(error: unknown): boolean {
   }
 
   return false;
+}
+
+export function isTransientDurableObjectError(error: unknown): boolean {
+  return matchesErrorChain(error, TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS);
+}
+
+export function isTransientD1Error(error: unknown): boolean {
+  return matchesErrorChain(error, TRANSIENT_D1_ERROR_FRAGMENTS);
 }
 
 export async function recordOperationalEvent(input: {

@@ -3,6 +3,7 @@ export interface OperationalHealthWindowRow {
   request_5xx_count?: number | string | null;
   preview_upstream_failure_count?: number | string | null;
   unhandled_exception_count?: number | string | null;
+  d1_unavailable_count?: number | string | null;
   maintenance_failure_count?: number | string | null;
   cleanup_failure_count?: number | string | null;
   realtime_failure_count?: number | string | null;
@@ -16,6 +17,7 @@ export interface OperationalHealthWindow {
   request_5xx_count: number;
   preview_upstream_failure_count: number;
   unhandled_exception_count: number;
+  d1_unavailable_count: number;
   maintenance_failure_count: number;
   cleanup_failure_count: number;
   realtime_failure_count: number;
@@ -37,6 +39,7 @@ export function serializeOperationalHealthWindow(
     request_5xx_count: count(row?.request_5xx_count),
     preview_upstream_failure_count: count(row?.preview_upstream_failure_count),
     unhandled_exception_count: count(row?.unhandled_exception_count),
+    d1_unavailable_count: count(row?.d1_unavailable_count),
     maintenance_failure_count: count(row?.maintenance_failure_count),
     cleanup_failure_count: count(row?.cleanup_failure_count),
     realtime_failure_count: count(row?.realtime_failure_count),
@@ -52,11 +55,13 @@ export const OPERATIONAL_HEALTH_THRESHOLDS = {
   critical_15m: {
     request_5xx_count: 5,
     unhandled_exception_count: 3,
+    d1_unavailable_count: 5,
     maintenance_failure_count: 1,
   },
   degraded_15m: {
     request_5xx_count: 1,
     unhandled_exception_count: 1,
+    d1_unavailable_count: 1,
     cleanup_failure_count: 1,
     realtime_failure_count: 1,
     rate_limited_count: 25,
@@ -69,12 +74,14 @@ export function deriveOperationalHealthStatus(window: OperationalHealthWindow): 
     window.maintenance_failure_count >= critical.maintenance_failure_count
     || window.request_5xx_count >= critical.request_5xx_count
     || window.unhandled_exception_count >= critical.unhandled_exception_count
+    || window.d1_unavailable_count >= critical.d1_unavailable_count
   ) {
     return "critical";
   }
   if (
     window.request_5xx_count >= degraded.request_5xx_count
     || window.unhandled_exception_count >= degraded.unhandled_exception_count
+    || window.d1_unavailable_count >= degraded.d1_unavailable_count
     || window.cleanup_failure_count >= degraded.cleanup_failure_count
     || window.realtime_failure_count >= degraded.realtime_failure_count
     || window.rate_limited_count >= degraded.rate_limited_count

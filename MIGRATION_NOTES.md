@@ -4,6 +4,40 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Transient D1 resets retry `/api/init` once and alert separately — 2026-08-19
+
+- Production health investigation found a brief burst where `GET /api/init`
+  failed twelve times at `route_stage=load_channel` and one reaction write
+  failed at `persist_reactions`, all with the same D1 storage-timeout reset
+  message.
+- The Worker boundary now recognizes that known transient D1 timeout/reset
+  signature and records it as `d1_unavailable` with `503`, `dependency=d1` and
+  the existing bounded route-stage context instead of as a generic
+  `unhandled_exception`.
+- `GET /api/init` retries once when the first failure matches that transient D1
+  signature. If the retry succeeds, the user receives the normal bootstrap
+  response and no operational event is emitted. If the retry also fails, the
+  final response is `503 d1_unavailable`.
+- The operational health card, alert evaluator, weekly baseline audit and route
+  summaries now expose D1 unavailability as its own signal. A single
+  unrecovered D1 failure degrades health; five such failures in one 15-minute
+  window are critical.
+- Write paths are not retried. Reaction, send, edit and delete requests still
+  fail fast on transient D1 resets so the Worker does not risk duplicating or
+  ambiguously replaying mutations.
+
+Trade-off: a bootstrap request that still fails after the retry can take one
+extra read attempt before returning `503`, and sustained D1 incidents now add a
+distinct dashboard and alert bucket to review. This is intentional: it improves
+room-entry resilience and operator diagnosis without hiding a real provider
+outage or risking duplicate writes.
+
+Deployment note: deploy both the Worker and frontend. No D1 migration is
+required. After deployment, confirm the health card shows a D1 bucket, weekly
+baseline audits include `d1_unavailable`, and a genuine transient D1 reset
+either recovers within one `/api/init` request or records `d1_unavailable`
+instead of `unhandled_exception`.
+
 ### Joined unified pagination now reuses bootstrap anonymous identity — 2026-08-18
 
 - The Next `/api/unified-timeline` proxy now reads the anonymous identity cookie that `/api/init` already established and forwards it to the Worker when the browser did not supply an explicit `X-Anonymous-Token` header.

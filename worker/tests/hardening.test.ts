@@ -12,6 +12,7 @@ import {
   normalizeOperationalRoute,
   OPERATIONAL_EVENT_OVERRIDE_HEADER,
   getOperationalEventOverride,
+  isTransientD1Error,
   isTransientDurableObjectError,
   stripOperationalEventHeaders,
   withOperationalErrorContext,
@@ -244,6 +245,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
     request_5xx_count: 2,
     preview_upstream_failure_count: "4",
     unhandled_exception_count: null,
+    d1_unavailable_count: "3",
     maintenance_failure_count: undefined,
     cleanup_failure_count: "2",
     realtime_failure_count: "3",
@@ -255,6 +257,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
     request_5xx_count: 2,
     preview_upstream_failure_count: 4,
     unhandled_exception_count: 0,
+    d1_unavailable_count: 3,
     maintenance_failure_count: 0,
     cleanup_failure_count: 2,
     realtime_failure_count: 3,
@@ -269,11 +272,13 @@ test("operational health status applies conservative 15-minute thresholds", () =
     critical_15m: {
       request_5xx_count: 5,
       unhandled_exception_count: 3,
+      d1_unavailable_count: 5,
       maintenance_failure_count: 1,
     },
     degraded_15m: {
       request_5xx_count: 1,
       unhandled_exception_count: 1,
+      d1_unavailable_count: 1,
       cleanup_failure_count: 1,
       realtime_failure_count: 1,
       rate_limited_count: 25,
@@ -283,11 +288,13 @@ test("operational health status applies conservative 15-minute thresholds", () =
   assert.equal(deriveOperationalHealthStatus(base), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, preview_upstream_failure_count: 4 }), "healthy");
+  assert.equal(deriveOperationalHealthStatus({ ...base, d1_unavailable_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, cleanup_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, realtime_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, rate_limited_count: 25 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 5 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, unhandled_exception_count: 3 }), "critical");
+  assert.equal(deriveOperationalHealthStatus({ ...base, d1_unavailable_count: 5 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, maintenance_failure_count: 1 }), "critical");
 });
 
@@ -363,9 +370,28 @@ test("known Durable Object storage resets are classified as transient", () => {
   );
 });
 
+test("known D1 storage resets are classified as transient", () => {
+  assert.equal(
+    isTransientD1Error(
+      new Error("D1_ERROR: D1 DB storage operation exceeded timeout which caused object to be reset."),
+    ),
+    true,
+  );
+  assert.equal(
+    isTransientD1Error(
+      new Error("request failed", {
+        cause: new Error("D1 DB storage operation exceeded timeout which caused object to be reset."),
+      }),
+    ),
+    true,
+  );
+});
+
 test("unknown failures remain unhandled exceptions", () => {
   assert.equal(isTransientDurableObjectError(new Error("D1 query failed")), false);
   assert.equal(isTransientDurableObjectError(new Error("Durable Object returned 500")), false);
+  assert.equal(isTransientD1Error(new Error("Durable Object storage operation exceeded timeout which caused object to be reset.")), false);
+  assert.equal(isTransientD1Error(new Error("SQLite syntax error")), false);
   assert.equal(isTransientDurableObjectError("validation failed"), false);
 });
 
@@ -382,9 +408,17 @@ test("init and messages routes keep operational error context instrumentation", 
 
 test("worker returns retryable responses for transient Durable Object failures", () => {
   const workerSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
-  assert.match(workerSource, /isTransientDurableObjectError\(err\)/);
-  assert.match(workerSource, /eventType: realtimeUnavailable \? "realtime_unavailable" : "unhandled_exception"/);
-  assert.match(workerSource, /statusCode: realtimeUnavailable \? 503 : 500/);
-  assert.match(workerSource, /error: realtimeUnavailable \? "realtime_unavailable" : "internal_error"/);
+  assert.match(workerSource, /classifyTransientInfrastructureFailure/);
+  assert.match(workerSource, /eventType: transientFailure\?\.eventType \|\| "unhandled_exception"/);
+  assert.match(workerSource, /statusCode: transientFailure \? 503 : 500/);
+  assert.match(workerSource, /error: transientFailure\?\.clientError \|\| "internal_error"/);
   assert.match(workerSource, /!capturedException/);
+});
+
+test("init retries one transient D1 failure before surfacing d1_unavailable", () => {
+  const workerSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.match(workerSource, /async function handleInitWithRetry/);
+  assert.match(workerSource, /if \(!isTransientD1Error\(error\)\) throw error/);
+  assert.match(workerSource, /transient_retry_attempted: true/);
+  assert.match(workerSource, /url\.pathname\.startsWith\("\/api\/init"\)[\s\S]*handleInitWithRetry\(request, env\)/);
 });

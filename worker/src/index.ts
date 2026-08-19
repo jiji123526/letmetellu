@@ -21,10 +21,12 @@ import {
   getOperationalRouteDetail,
   getOperationalErrorDetail,
   getOperationalEventOverride,
+  isTransientD1Error,
   isTransientDurableObjectError,
   normalizeOperationalRoute,
   recordOperationalEvent,
   stripOperationalEventHeaders,
+  withOperationalErrorContext,
 } from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
 import { runOperationalHealthAlerts } from "./lib/operational-alerts";
@@ -85,6 +87,51 @@ function buildResponse(request: Request, response: Response, origin: string, all
   });
 }
 
+interface TransientInfrastructureFailure {
+  clientError: "d1_unavailable" | "realtime_unavailable";
+  dependency: "d1" | "durable_object";
+  eventType: "d1_unavailable" | "realtime_unavailable";
+  logLabel: string;
+}
+
+function classifyTransientInfrastructureFailure(error: unknown): TransientInfrastructureFailure | null {
+  if (isTransientDurableObjectError(error)) {
+    return {
+      clientError: "realtime_unavailable",
+      dependency: "durable_object",
+      eventType: "realtime_unavailable",
+      logLabel: "transient Durable Object failure",
+    };
+  }
+  if (isTransientD1Error(error)) {
+    return {
+      clientError: "d1_unavailable",
+      dependency: "d1",
+      eventType: "d1_unavailable",
+      logLabel: "transient D1 failure",
+    };
+  }
+  return null;
+}
+
+async function handleInitWithRetry(request: Request, env: Env): Promise<Response> {
+  try {
+    return await handleInit(request, env);
+  } catch (error) {
+    if (!isTransientD1Error(error)) throw error;
+  }
+
+  try {
+    return await handleInit(request, env);
+  } catch (retryError) {
+    throw withOperationalErrorContext(retryError, {
+      transient_retry_attempted: true,
+      transient_retry_count: 1,
+      transient_retry_route: "GET /api/init",
+    });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -121,24 +168,24 @@ export default {
           }
         }
       } catch (err) {
-        const realtimeUnavailable = isTransientDurableObjectError(err);
-        if (realtimeUnavailable) console.warn("transient Durable Object failure", err);
+        const transientFailure = classifyTransientInfrastructureFailure(err);
+        if (transientFailure) console.warn(transientFailure.logLabel, err);
         else console.error(err);
         capturedException = true;
         const operationalDetail = getOperationalErrorDetail(err);
         ctx.waitUntil(recordOperationalEvent({
           env,
-          severity: realtimeUnavailable ? "warn" : "error",
+          severity: transientFailure ? "warn" : "error",
           route,
-          eventType: realtimeUnavailable ? "realtime_unavailable" : "unhandled_exception",
-          statusCode: realtimeUnavailable ? 503 : 500,
+          eventType: transientFailure?.eventType || "unhandled_exception",
+          statusCode: transientFailure ? 503 : 500,
           actorUserId: request.headers.get("X-User-Id"),
           detail: {
             path: url.pathname,
             method: request.method,
             error: err instanceof Error ? err.message : String(err),
             websocket_phase: "upgrade",
-            ...(realtimeUnavailable ? { dependency: "durable_object" } : {}),
+            ...(transientFailure ? { dependency: transientFailure.dependency } : {}),
             ...(routeDetail || {}),
             ...(operationalDetail || {}),
           },
@@ -146,8 +193,8 @@ export default {
         return buildResponse(
           request,
           Response.json(
-            { error: realtimeUnavailable ? "realtime_unavailable" : "internal_error" },
-            { status: realtimeUnavailable ? 503 : 500 },
+            { error: transientFailure?.clientError || "internal_error" },
+            { status: transientFailure ? 503 : 500 },
           ),
           origin,
           env.ALLOWED_ORIGIN,
@@ -195,7 +242,7 @@ export default {
       } else if (url.pathname.startsWith("/api/data")) {
         response = await handleData(request, env);
       } else if (url.pathname.startsWith("/api/init")) {
-        response = await handleInit(request, env);
+        response = await handleInitWithRetry(request, env);
       } else if (url.pathname.startsWith("/api/channel-state")) {
         response = await handleChannelState(request, env);
       } else if (url.pathname.startsWith("/api/admin")) {
@@ -231,30 +278,30 @@ export default {
         response = new Response("not found", { status: 404 });
       }
     } catch (err) {
-      const realtimeUnavailable = isTransientDurableObjectError(err);
-      if (realtimeUnavailable) console.warn("transient Durable Object failure", err);
+      const transientFailure = classifyTransientInfrastructureFailure(err);
+      if (transientFailure) console.warn(transientFailure.logLabel, err);
       else console.error(err);
       capturedException = true;
       const operationalDetail = getOperationalErrorDetail(err);
       ctx.waitUntil(recordOperationalEvent({
         env,
-        severity: realtimeUnavailable ? "warn" : "error",
+        severity: transientFailure ? "warn" : "error",
         route,
-        eventType: realtimeUnavailable ? "realtime_unavailable" : "unhandled_exception",
-        statusCode: realtimeUnavailable ? 503 : 500,
+        eventType: transientFailure?.eventType || "unhandled_exception",
+        statusCode: transientFailure ? 503 : 500,
         actorUserId: request.headers.get("X-User-Id"),
         detail: {
           path: url.pathname,
           method: request.method,
           error: err instanceof Error ? err.message : String(err),
-          ...(realtimeUnavailable ? { dependency: "durable_object" } : {}),
+          ...(transientFailure ? { dependency: transientFailure.dependency } : {}),
           ...(routeDetail || {}),
           ...(operationalDetail || {}),
         },
       }));
       response = Response.json(
-        { error: realtimeUnavailable ? "realtime_unavailable" : "internal_error" },
-        { status: realtimeUnavailable ? 503 : 500 },
+        { error: transientFailure?.clientError || "internal_error" },
+        { status: transientFailure ? 503 : 500 },
       );
     }
 

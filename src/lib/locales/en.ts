@@ -467,6 +467,7 @@ export const en: Record<LocaleKeys, string> = {
   operationalHealth5xx: "5xx errors",
   operationalHealthPreviewFailures: "Preview upstream",
   operationalHealthExceptions: "Exceptions",
+  operationalHealthD1Failures: "D1 unavailable",
   operationalHealthCleanupFailures: "Cleanup retries",
   operationalHealthRealtimeFailures: "Realtime fallback",
   operationalHealthMediaMisses: "Media 404",

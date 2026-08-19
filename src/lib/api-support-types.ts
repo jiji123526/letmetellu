@@ -151,6 +151,7 @@ export interface PlatformOperationalHealthWindow {
   request_5xx_count: number;
   preview_upstream_failure_count: number;
   unhandled_exception_count: number;
+  d1_unavailable_count: number;
   maintenance_failure_count: number;
   cleanup_failure_count: number;
   realtime_failure_count: number;
@@ -176,11 +177,13 @@ export interface PlatformOperationalHealthResponse {
     critical_15m: {
       request_5xx_count: number;
       unhandled_exception_count: number;
+      d1_unavailable_count: number;
       maintenance_failure_count: number;
     };
     degraded_15m: {
       request_5xx_count: number;
       unhandled_exception_count: number;
+      d1_unavailable_count: number;
       cleanup_failure_count: number;
       realtime_failure_count: number;
       rate_limited_count: number;

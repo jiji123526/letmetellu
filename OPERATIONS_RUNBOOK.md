@@ -10,8 +10,8 @@ The super-admin dashboard summarizes the last 15 minutes and 24 hours. Current
 
 | Status | Trigger |
 | --- | --- |
-| Critical | `request_failed` 5xx >= 5, unhandled exceptions >= 3, or any scheduled-maintenance failure |
-| Degraded | Any request 5xx, exception, cleanup failure or realtime fallback, or rate limits >= 25 |
+| Critical | `request_failed` 5xx >= 5, unhandled exceptions >= 3, `d1_unavailable` >= 5, or any scheduled-maintenance failure |
+| Degraded | Any request 5xx, exception, unrecovered `d1_unavailable`, cleanup failure or realtime fallback, or rate limits >= 25 |
 | Context only | Preview upstream failures, forbidden requests and media 404s do not independently change core health |
 
 These are conservative beta thresholds. Do not raise them merely to make a
@@ -22,14 +22,17 @@ recurring application failure appear healthy.
 The first production review on 2026-08-13 covered 672 fifteen-minute windows.
 Core 5xx and unhandled-exception counts were nonzero in only five windows, with
 p50, p95 and p99 all at zero. The maximum was four events in one window.
-Maintenance, cleanup, realtime, rate-limit and media-miss signals were all zero,
-and there were no pending cleanup jobs.
+Maintenance, cleanup, realtime, D1-unavailable, rate-limit and media-miss
+signals were all zero, and there were no pending cleanup jobs.
 
 The existing thresholds were retained:
 
 - one core failure remains degraded because normal windows are quiet;
 - three exceptions remain critical because the observed exception bursts were
   real Durable Object incidents, not normal traffic;
+- one unrecovered D1 failure remains degraded because room entry can be
+  affected, while five in one window is critical because that indicates a
+  sustained storage outage rather than a momentary reset;
 - five request failures remain critical, just above the observed maximum burst;
 - preview upstream failures and expected forbidden requests remain context-only
   signals because they did not indicate a core service outage.
@@ -144,10 +147,26 @@ LIMIT 100;
 - Group by `route_stage` and error text.
 - `/api/init` no longer contacts the Durable Object. Treat any new init error
   mentioning Durable Object presence as evidence of an outdated deployment.
+- If the event type is `d1_unavailable`, remember that `/api/init` already
+  retried once before surfacing `503`. A recorded init event therefore means the
+  retry also failed.
+- Tight clusters of `d1_unavailable` rows across `/api/init` and an occasional
+  mutation route point to D1 availability, not route logic.
 - If failures began after deployment, compare the current and previous Worker
   versions and roll back only the Worker when the frontend contract permits it.
 - Recovery means room entry and refresh succeed and the 15-minute count stops
   increasing.
+
+### D1 Unavailable
+
+- Treat an isolated `d1_unavailable` event as degraded unless user reports or
+  the health threshold indicate a broader incident.
+- `GET /api/init` already retries once before surfacing `503 d1_unavailable`.
+  If the event is still recorded, the transient window outlasted that retry.
+- Write routes are intentionally not retried. Failed mutations remain unapplied
+  and require a user retry after D1 recovers.
+- Escalate when the signal spans more than one evaluation window, reaches the
+  critical threshold, or continues after a Worker rollback.
 
 ### Realtime Unavailable
 

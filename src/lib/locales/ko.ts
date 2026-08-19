@@ -465,6 +465,7 @@ export const ko = {
   operationalHealth5xx: "5xx 오류",
   operationalHealthPreviewFailures: "프리뷰 외부 오류",
   operationalHealthExceptions: "예외",
+  operationalHealthD1Failures: "D1 일시 장애",
   operationalHealthCleanupFailures: "정리 재시도",
   operationalHealthRealtimeFailures: "실시간 대체 처리",
   operationalHealthMediaMisses: "미디어 404",

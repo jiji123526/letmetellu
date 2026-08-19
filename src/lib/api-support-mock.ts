@@ -506,6 +506,7 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
     request_5xx_count: 0,
     preview_upstream_failure_count: 0,
     unhandled_exception_count: 0,
+    d1_unavailable_count: 0,
     maintenance_failure_count: 0,
     cleanup_failure_count: 0,
     realtime_failure_count: 0,
@@ -521,11 +522,13 @@ export function fetchMockPlatformOperationalHealth(): SupportApiResult<PlatformO
       critical_15m: {
         request_5xx_count: 5,
         unhandled_exception_count: 3,
+        d1_unavailable_count: 5,
         maintenance_failure_count: 1,
       },
       degraded_15m: {
         request_5xx_count: 1,
         unhandled_exception_count: 1,
+        d1_unavailable_count: 1,
         cleanup_failure_count: 1,
         realtime_failure_count: 1,
         rate_limited_count: 25,

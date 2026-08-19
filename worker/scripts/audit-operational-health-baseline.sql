@@ -11,6 +11,7 @@ WITH RECURSIVE
       buckets.bucket_start,
       SUM(CASE WHEN e.event_type = 'request_failed' AND e.status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
       SUM(CASE WHEN e.event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
+      SUM(CASE WHEN e.event_type = 'd1_unavailable' THEN 1 ELSE 0 END) AS d1_unavailable_count,
       SUM(CASE WHEN e.event_type = 'maintenance_failed' THEN 1 ELSE 0 END) AS maintenance_failure_count,
       SUM(CASE WHEN e.event_type = 'cleanup_failed' THEN 1 ELSE 0 END) AS cleanup_failure_count,
       SUM(CASE WHEN e.event_type = 'realtime_unavailable' THEN 1 ELSE 0 END) AS realtime_failure_count,
@@ -29,6 +30,7 @@ WITH RECURSIVE
       *,
       CUME_DIST() OVER (ORDER BY request_5xx_count) AS request_5xx_cume,
       CUME_DIST() OVER (ORDER BY unhandled_exception_count) AS exception_cume,
+      CUME_DIST() OVER (ORDER BY d1_unavailable_count) AS d1_cume,
       CUME_DIST() OVER (ORDER BY maintenance_failure_count) AS maintenance_cume,
       CUME_DIST() OVER (ORDER BY cleanup_failure_count) AS cleanup_cume,
       CUME_DIST() OVER (ORDER BY realtime_failure_count) AS realtime_cume,
@@ -56,6 +58,14 @@ SELECT
     'p99', MIN(CASE WHEN exception_cume >= 0.99 THEN unhandled_exception_count END),
     'max', MAX(unhandled_exception_count)
   ) AS unhandled_exception,
+  json_object(
+    'nonzero', SUM(d1_unavailable_count > 0),
+    'average', ROUND(AVG(d1_unavailable_count), 3),
+    'p50', MIN(CASE WHEN d1_cume >= 0.50 THEN d1_unavailable_count END),
+    'p95', MIN(CASE WHEN d1_cume >= 0.95 THEN d1_unavailable_count END),
+    'p99', MIN(CASE WHEN d1_cume >= 0.99 THEN d1_unavailable_count END),
+    'max', MAX(d1_unavailable_count)
+  ) AS d1_unavailable,
   json_object(
     'nonzero', SUM(maintenance_failure_count > 0),
     'average', ROUND(AVG(maintenance_failure_count), 3),

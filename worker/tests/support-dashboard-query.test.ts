@@ -131,6 +131,10 @@ test("operational health groups websocket routes by normalized channel path", ()
   );
   assert.match(
     supportRouteSource,
+    /SUM\(CASE WHEN event_type = 'd1_unavailable' THEN 1 ELSE 0 END\) AS d1_unavailable_count/,
+  );
+  assert.match(
+    supportRouteSource,
     /SUM\(CASE WHEN event_type = 'realtime_unavailable' THEN 1 ELSE 0 END\) AS realtime_failure_count/,
   );
 });
