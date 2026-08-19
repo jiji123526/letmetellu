@@ -46,22 +46,35 @@ test("message time labels cache formatted results by timestamp and viewer locale
   assert.match(source, /chatTimeLabelCache\.set\(labelKey, label\)/);
 });
 
-test("message rows cancel long press and reveal the timestamp during horizontal swipe", () => {
-  const source = readFileSync(
+test("message pane owns swipe detection and rows only render side-filtered timestamps", () => {
+  const paneSource = readFileSync(
+    new URL("../../src/components/chat/ChatViewMessagePane.tsx", import.meta.url),
+    "utf8",
+  );
+  const listSource = readFileSync(
     new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
-  assert.match(source, /const \[sharedSwipe, setSharedSwipe\] = React\.useState<SwipeRevealState>/);
-  assert.match(source, /const swipeActive = sharedSwipe\.revealOffset > 0/);
-  assert.match(source, /const swipeOffset = swipeActive[\s\S]*sharedSwipe\.side === "sent" \? -sharedSwipe\.revealOffset : sharedSwipe\.revealOffset/);
-  assert.match(source, /const showTimestamp = swipeActive && sharedSwipe\.side === messageSide/);
-  assert.match(source, /const sentTime = showTimestamp \? chatTimeLabel\(msg\.created_at, locale, timeZone\) : ""/);
-  assert.match(source, /onSwipeStart\(messageSide\)/);
-  assert.match(source, /onSwipeMove\(Math\.abs\(nextOffset\), messageSide\)/);
-  assert.match(source, /color: markerColor/);
-  assert.match(source, /<div className="relative w-full">[\s\S]*\{sentTime\}[\s\S]*style=\{swipeTransformStyle\}/);
-  assert.match(source, /<div style=\{swipeTransformStyle\}>[\s\S]*<ReactionBadge/);
-  assert.match(source, /touchAction: "pan-y"/);
-  assert.doesNotMatch(source, /const \[swipeOffset, setSwipeOffset\]/);
+
+  assert.match(paneSource, /const \[sharedSwipe, setSharedSwipe\] = useState<SwipeRevealState>/);
+  assert.match(paneSource, /event\.target instanceof HTMLElement[\s\S]*closest<HTMLElement>\("\[data-message-row\]"\)/);
+  assert.match(paneSource, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
+  assert.match(paneSource, /const nextOffset = messageSwipeOffset\(deltaX, gesture\.side === "sent"\)/);
+  assert.match(paneSource, /onTouchStart=\{handleContainerTouchStart\}/);
+  assert.match(paneSource, /onTouchMove=\{handleContainerTouchMove\}/);
+  assert.match(paneSource, /onTouchEnd=\{finishSwipe\}/);
+  assert.match(paneSource, /sharedSwipe=\{sharedSwipe\}/);
+
+  assert.match(listSource, /data-message-row/);
+  assert.match(listSource, /data-message-side=\{messageSide\}/);
+  assert.match(listSource, /const swipeActive = sharedSwipe\.revealOffset > 0/);
+  assert.match(listSource, /const swipeOffset = swipeActive[\s\S]*sharedSwipe\.side === "sent" \? -sharedSwipe\.revealOffset : sharedSwipe\.revealOffset/);
+  assert.match(listSource, /const showTimestamp = swipeActive && sharedSwipe\.side === messageSide/);
+  assert.match(listSource, /const sentTime = showTimestamp \? chatTimeLabel\(msg\.created_at, locale, timeZone\) : ""/);
+  assert.match(listSource, /color: markerColor/);
+  assert.match(listSource, /<div className="relative w-full">[\s\S]*\{sentTime\}[\s\S]*style=\{swipeTransformStyle\}/);
+  assert.match(listSource, /<div style=\{swipeTransformStyle\}>[\s\S]*<ReactionBadge/);
+  assert.match(listSource, /touchAction: "pan-y"/);
+  assert.doesNotMatch(listSource, /const \[swipeOffset, setSwipeOffset\]/);
+  assert.doesNotMatch(listSource, /swipeGestureRef/);
 });

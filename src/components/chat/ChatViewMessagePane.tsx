@@ -1,10 +1,11 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useCallback, useRef, useState, type RefObject, type TouchEvent } from "react";
 import { NoticeBanner } from "./NoticeBanner";
-import { MessageList } from "./ChatMessageList";
+import { MessageList, type SwipeRevealSide, type SwipeRevealState } from "./ChatMessageList";
 import type { RestrictedChannelSummaryItem, ThreadedMessages } from "./chatMessageSelectors";
 import type { Message } from "./chatTypes";
+import { isHorizontalMessageSwipe, messageSwipeOffset } from "./messageSwipe";
 
 interface ChatViewMessagePaneProps {
   channelId: string;
@@ -95,6 +96,88 @@ export function ChatViewMessagePane({
   onReaction,
   onEmojiPicker,
 }: ChatViewMessagePaneProps) {
+  const [sharedSwipe, setSharedSwipe] = useState<SwipeRevealState>({
+    side: null,
+    revealOffset: 0,
+    isSwiping: false,
+  });
+  const swipeGestureRef = useRef<{
+    startX: number;
+    startY: number;
+    side: SwipeRevealSide;
+    axis: "pending" | "horizontal" | "vertical";
+  } | null>(null);
+
+  const finishSwipe = useCallback(() => {
+    swipeGestureRef.current = null;
+    setSharedSwipe((current) => {
+      if (current.revealOffset === 0 && !current.isSwiping) return current;
+      return {
+        side: current.side,
+        revealOffset: 0,
+        isSwiping: false,
+      };
+    });
+    onTouchEnd();
+  }, [onTouchEnd]);
+
+  const handleContainerTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLElement>("[data-message-row]")
+      : null;
+    const side = target?.dataset.messageSide;
+    if (side !== "sent" && side !== "received") {
+      swipeGestureRef.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    if (!touch) return;
+    swipeGestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      side,
+      axis: "pending",
+    };
+  }, []);
+
+  const handleContainerTouchMove = useCallback((event: TouchEvent<HTMLElement>) => {
+    const gesture = swipeGestureRef.current;
+    const touch = event.touches[0];
+    if (!gesture || !touch) return;
+
+    const deltaX = touch.clientX - gesture.startX;
+    const deltaY = touch.clientY - gesture.startY;
+
+    if (gesture.axis === "pending") {
+      if (isHorizontalMessageSwipe(deltaX, deltaY)) {
+        gesture.axis = "horizontal";
+        onTouchEnd();
+      } else if (Math.abs(deltaY) >= 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        gesture.axis = "vertical";
+        onTouchEnd();
+      }
+    }
+    if (gesture.axis !== "horizontal") return;
+
+    const nextOffset = messageSwipeOffset(deltaX, gesture.side === "sent");
+    if (nextOffset !== 0) event.preventDefault();
+    setSharedSwipe((current) => {
+      const revealOffset = Math.abs(nextOffset);
+      if (
+        current.side === gesture.side
+        && current.revealOffset === revealOffset
+        && current.isSwiping
+      ) {
+        return current;
+      }
+      return {
+        side: gesture.side,
+        revealOffset,
+        isSwiping: true,
+      };
+    });
+  }, [onTouchEnd]);
+
   return (
     <div
       className="relative flex-1 min-h-0 overflow-hidden"
@@ -156,6 +239,10 @@ export function ChatViewMessagePane({
       <main
         ref={messagesContainerRef}
         onScroll={onScroll}
+        onTouchStart={handleContainerTouchStart}
+        onTouchMove={handleContainerTouchMove}
+        onTouchEnd={finishSwipe}
+        onTouchCancel={finishSwipe}
         className="messages-scroll relative z-[1] h-full overflow-y-auto overflow-x-hidden flex flex-col"
         style={{ padding: "12px 14px 8px", WebkitOverflowScrolling: "touch", overflowAnchor: "none", background: "transparent" }}
       >
@@ -288,9 +375,9 @@ export function ChatViewMessagePane({
           editedMessageLabel={editedMessageLabel}
           locale={locale}
           timeZone={timeZone}
+          sharedSwipe={sharedSwipe}
           onLongPress={onLongPress}
           onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
           onOpenImage={onOpenImage}
           onExpand={onExpand}
           onReaction={onReaction}
