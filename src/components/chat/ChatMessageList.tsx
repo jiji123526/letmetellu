@@ -358,6 +358,7 @@ const MessageRow = React.memo(function MessageRow({
   return (
     <div
       id={`msg-${msg.id}`}
+      data-message-row
       className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
       style={{
         paddingTop: "calc(var(--bubble-font-size) * 0.32)",
@@ -395,15 +396,13 @@ const MessageRow = React.memo(function MessageRow({
               lineHeight: 1,
               textAlign: "center",
               whiteSpace: "nowrap",
-              opacity: `var(--message-swipe-${messageSide}-opacity, 0)`,
-              transform: `translate3d(calc(var(--message-swipe-inverse-x, 0px) ${isSent ? "+ 2px" : "- 2px"}), 0, 0)`,
-              transition: "opacity var(--message-swipe-opacity-duration, 160ms) ease, transform var(--message-swipe-transform-duration, 180ms) cubic-bezier(0.22, 0.8, 0.3, 1)",
               pointerEvents: "none",
             }}
           >
             {sentTime}
           </span>
           <div
+            data-message-swipe-content
             className={`flex flex-col ${isSent ? "items-end" : "items-start"}`}
           >
             {isReply ? (
@@ -417,7 +416,7 @@ const MessageRow = React.memo(function MessageRow({
           </div>
         </div>
         {!msg.dm && (
-          <div>
+          <div data-message-swipe-content>
             <ReactionBadge
               messageId={msg.id}
               reactions={msg.reactions}

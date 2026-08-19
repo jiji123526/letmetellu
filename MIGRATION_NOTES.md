@@ -4,18 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
-### Timestamp swipes move one compositor layer — 2026-08-19
+### Timestamp swipes animate only visible message rows — 2026-08-19
 
 - The mounted chat window remains capped at 300 message/DM items while preserving complete visual-root threads. A single exceptionally large thread can still exceed that soft cap so replies are never split from their root.
 - Horizontal timestamp gestures no longer put the current touch offset into React state. The previous path changed a prop received by every mounted `MessageRow`, forcing up to 300 row renders on each touch event.
-- Touch movement is now coalesced through `requestAnimationFrame` and writes CSS variables directly to one shared message-list layer. Messages, replies and reaction badges move together with a single parent `translate3d`.
-- Timestamp text is formatted during the normal row render and remains stationary during the gesture through an inverse CSS transform. Separate inherited opacity variables reveal only sent or received timestamps for the active direction.
-- The compositor hint is enabled only while swiping and during the 180ms reset, then removed. This avoids retaining hundreds of per-row transform layers or permanently promoting the full history.
-- Focused coverage now rejects the old `sharedSwipe` React-state path and pins the single-layer transform, animation-frame batching and side-filtered timestamp variables.
+- A first compositor-only revision moved the entire mounted history as one layer, but a 300-message history can produce a GPU surface tens of thousands of pixels tall. Mobile browsers may tile and raster that oversized layer, so it could remain laggy despite avoiding React.
+- An `IntersectionObserver` now tracks message rows intersecting the viewport plus `240px` of overscan. A mutation observer adds and removes rows as pagination trims one edge and mounts the other.
+- When a horizontal gesture activates, only that small visible-row snapshot receives the swipe-active attribute. Touch movement remains coalesced through `requestAnimationFrame`; each frame writes only offset and opacity to those bounded rows instead of invalidating inherited styles across the full 300-row subtree.
+- Each row's timestamp is a stationary sibling of its movable message/reaction wrapper, so timestamp markers no longer need inverse transforms. Separate opacity variables still reveal only sent or received timestamps for the active direction.
+- Focused coverage rejects the old `sharedSwipe` React-state path and the oversized parent transform, and pins visible-row observation, animation-frame batching, row-local content transforms and side-filtered timestamps.
 
-Trade-off: all mounted timestamp strings now exist in the DOM while hidden instead of being inserted only during a swipe. Formatting remains cached and the text nodes are small; this bounded memory cost is preferable to reconstructing and rerendering every row during each gesture frame. The shared history layer may be internally tiled by the browser when it is very tall, but only one layer is animated instead of message and reaction wrappers for every mounted item.
+Trade-off: observing up to 300 lightweight row elements adds a small amount of browser bookkeeping, and roughly the visible rows plus `240px` overscan receive temporary compositor layers during a swipe. This is intentionally preferable to animating one enormous history surface or all mounted rows. Timestamp strings remain pre-rendered but hidden; formatting is cached and the text nodes are small.
 
-Deployment note: frontend-only. Load history to the 300-item cap on a mobile device, swipe in both directions, verify every bubble moves together, only the matching side's timestamps appear stationary, vertical scrolling remains responsive, and the list returns without a horizontal offset.
+Deployment note: frontend-only. Load history to the 300-item cap on a mobile device, swipe in both directions, verify every visible bubble and reaction moves together, only the matching side's timestamps remain stationary, vertical scrolling stays responsive, and rows newly mounted by pagination participate when they enter the viewport.
 
 ### Link previews warm before readers reach them — 2026-08-19
 

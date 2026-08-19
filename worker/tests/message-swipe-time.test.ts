@@ -46,7 +46,7 @@ test("message time labels cache formatted results by timestamp and viewer locale
   assert.match(source, /chatTimeLabelCache\.set\(labelKey, label\)/);
 });
 
-test("message pane drives one compositor layer without per-frame React renders", () => {
+test("message pane animates only visible rows without per-frame React renders", () => {
   const paneSource = readFileSync(
     new URL("../../src/components/chat/ChatViewMessagePane.tsx", import.meta.url),
     "utf8",
@@ -55,34 +55,46 @@ test("message pane drives one compositor layer without per-frame React renders",
     new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
     "utf8",
   );
+  const globalStyles = readFileSync(
+    new URL("../../src/app/globals.css", import.meta.url),
+    "utf8",
+  );
 
   assert.match(paneSource, /const swipeLayerRef = useRef<HTMLDivElement>/);
+  assert.match(paneSource, /const visibleSwipeRowsRef = useRef<Set<HTMLElement>>/);
   assert.match(paneSource, /const swipeFrameRef = useRef<number \| null>/);
   assert.match(paneSource, /requestAnimationFrame\(\(\) =>/);
   assert.match(paneSource, /--message-swipe-x/);
-  assert.match(paneSource, /--message-swipe-inverse-x/);
-  assert.match(paneSource, /--message-swipe-sent-opacity/);
-  assert.match(paneSource, /--message-swipe-received-opacity/);
+  assert.match(paneSource, /--message-swipe-opacity/);
+  assert.match(paneSource, /new IntersectionObserver/);
+  assert.match(paneSource, /rootMargin: "240px 0px"/);
+  assert.match(paneSource, /new MutationObserver/);
+  assert.match(paneSource, /row\.setAttribute\("data-message-swipe-active", "true"\)/);
+  assert.match(paneSource, /row\.setAttribute\("data-message-swipe-side", side\)/);
   assert.match(paneSource, /startX: touch\.clientX,[\s\S]*side: null/);
-  assert.match(paneSource, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
+  assert.match(paneSource, /gesture\.axis = "horizontal";[\s\S]*activateVisibleSwipeRows\(gesture\.side\)[\s\S]*onTouchEnd\(\)/);
   assert.match(paneSource, /gesture\.side = deltaX < 0 \? "sent" : "received"/);
   assert.match(paneSource, /const nextOffset = messageSwipeOffset\(deltaX, gesture\.side === "sent"\)/);
   assert.match(paneSource, /onTouchStart=\{handleContainerTouchStart\}/);
   assert.match(paneSource, /onTouchMove=\{handleContainerTouchMove\}/);
   assert.match(paneSource, /onTouchEnd=\{finishSwipe\}/);
   assert.match(paneSource, /data-message-swipe-layer/);
-  assert.match(paneSource, /translate3d\(var\(--message-swipe-x, 0px\), 0, 0\)/);
+  assert.doesNotMatch(paneSource, /style=\{\{[\s\S]*transform: "translate3d\(var\(--message-swipe-x/);
   assert.doesNotMatch(paneSource, /setSharedSwipe/);
   assert.doesNotMatch(paneSource, /sharedSwipe=\{sharedSwipe\}/);
 
   assert.match(listSource, /const sentTime = chatTimeLabel\(msg\.created_at, locale, timeZone\)/);
+  assert.match(listSource, /data-message-row/);
+  assert.match(listSource, /data-message-swipe-content/);
   assert.match(listSource, /data-message-timestamp=\{messageSide\}/);
-  assert.match(listSource, /opacity: `var\(--message-swipe-\$\{messageSide\}-opacity, 0\)`/);
-  assert.match(listSource, /--message-swipe-inverse-x/);
   assert.match(listSource, /color: markerColor/);
   assert.match(listSource, /touchAction: "pan-y"/);
   assert.doesNotMatch(listSource, /sharedSwipe/);
   assert.doesNotMatch(listSource, /swipeTransformStyle/);
   assert.doesNotMatch(listSource, /swipeGestureRef/);
-  assert.doesNotMatch(listSource, /data-message-row/);
+
+  assert.match(globalStyles, /\[data-message-swipe-active="true"\] \[data-message-swipe-content\]/);
+  assert.match(globalStyles, /transform: translate3d\(var\(--message-swipe-x, 0px\), 0, 0\)/);
+  assert.match(globalStyles, /\[data-message-swipe-active="true"\]\[data-message-swipe-side="sent"\] \[data-message-timestamp="sent"\]/);
+  assert.match(globalStyles, /\[data-message-swipe-active="true"\]\[data-message-swipe-side="received"\] \[data-message-timestamp="received"\]/);
 });

@@ -120,6 +120,34 @@ body {
   width: 0;
 }
 
+[data-message-timestamp] {
+  opacity: 0;
+  transform: translate3d(var(--message-timestamp-offset, 0px), 0, 0);
+  transition: opacity var(--message-swipe-opacity-duration, 160ms) ease;
+}
+
+[data-message-timestamp="sent"] {
+  --message-timestamp-offset: 2px;
+}
+
+[data-message-timestamp="received"] {
+  --message-timestamp-offset: -2px;
+}
+
+[data-message-swipe-active="true"] [data-message-swipe-content] {
+  transform: translate3d(var(--message-swipe-x, 0px), 0, 0);
+  transition: transform var(--message-swipe-transform-duration, 180ms) cubic-bezier(0.22, 0.8, 0.3, 1);
+  will-change: transform;
+}
+
+[data-message-swipe-active="true"][data-message-swipe-side="sent"] [data-message-timestamp="sent"] {
+  opacity: var(--message-swipe-opacity, 0);
+}
+
+[data-message-swipe-active="true"][data-message-swipe-side="received"] [data-message-timestamp="received"] {
+  opacity: var(--message-swipe-opacity, 0);
+}
+
 /* Onboarding pages remain scrollable on short screens without showing a
    nested browser scrollbar inside the dialog. */
 .onboarding-scroll {

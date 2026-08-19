@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type CSSProperties, type RefObject, type TouchEvent } from "react";
+import { useCallback, useEffect, useRef, type RefObject, type TouchEvent } from "react";
 import { NoticeBanner } from "./NoticeBanner";
 import { MessageList } from "./ChatMessageList";
 import type { RestrictedChannelSummaryItem, ThreadedMessages } from "./chatMessageSelectors";
@@ -99,6 +99,8 @@ export function ChatViewMessagePane({
   onEmojiPicker,
 }: ChatViewMessagePaneProps) {
   const swipeLayerRef = useRef<HTMLDivElement>(null);
+  const visibleSwipeRowsRef = useRef<Set<HTMLElement>>(new Set());
+  const activeSwipeRowsRef = useRef<HTMLElement[]>([]);
   const swipeFrameRef = useRef<number | null>(null);
   const swipeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSwipeRef = useRef<{
@@ -113,22 +115,55 @@ export function ChatViewMessagePane({
   } | null>(null);
 
   const applySwipeVisual = useCallback((
-    side: SwipeRevealSide | null,
     offset: number,
     isSwiping: boolean,
   ) => {
-    const layer = swipeLayerRef.current;
-    if (!layer) return;
     const revealOffset = Math.abs(offset);
     const opacity = String(Math.min(1, revealOffset / 24));
-    layer.style.setProperty("--message-swipe-x", `${offset}px`);
-    layer.style.setProperty("--message-swipe-inverse-x", `${-offset}px`);
-    layer.style.setProperty("--message-swipe-sent-opacity", side === "sent" ? opacity : "0");
-    layer.style.setProperty("--message-swipe-received-opacity", side === "received" ? opacity : "0");
-    layer.style.setProperty("--message-swipe-transform-duration", isSwiping ? "0ms" : "180ms");
-    layer.style.setProperty("--message-swipe-opacity-duration", isSwiping ? "0ms" : "160ms");
-    layer.style.willChange = "transform";
+    activeSwipeRowsRef.current.forEach((row) => {
+      if (!isSwiping) {
+        row.style.setProperty("--message-swipe-transform-duration", "180ms");
+        row.style.setProperty("--message-swipe-opacity-duration", "160ms");
+      }
+      row.style.setProperty("--message-swipe-x", `${offset}px`);
+      row.style.setProperty("--message-swipe-opacity", opacity);
+    });
   }, []);
+
+  const clearActiveSwipeRows = useCallback(() => {
+    activeSwipeRowsRef.current.forEach((row) => {
+      row.removeAttribute("data-message-swipe-active");
+      row.removeAttribute("data-message-swipe-side");
+      row.style.removeProperty("--message-swipe-x");
+      row.style.removeProperty("--message-swipe-opacity");
+      row.style.removeProperty("--message-swipe-transform-duration");
+      row.style.removeProperty("--message-swipe-opacity-duration");
+    });
+    activeSwipeRowsRef.current = [];
+  }, []);
+
+  const activateVisibleSwipeRows = useCallback((side: SwipeRevealSide) => {
+    const layer = swipeLayerRef.current;
+    const scrollRoot = messagesContainerRef.current;
+    if (!layer || !scrollRoot) return;
+
+    let rows = [...visibleSwipeRowsRef.current].filter((row) => row.isConnected);
+    if (rows.length === 0) {
+      const rootRect = scrollRoot.getBoundingClientRect();
+      rows = [...layer.querySelectorAll<HTMLElement>("[data-message-row]")].filter((row) => {
+        const rect = row.getBoundingClientRect();
+        return rect.bottom >= rootRect.top - 240 && rect.top <= rootRect.bottom + 240;
+      });
+    }
+    clearActiveSwipeRows();
+    activeSwipeRowsRef.current = rows;
+    rows.forEach((row) => {
+      row.setAttribute("data-message-swipe-active", "true");
+      row.setAttribute("data-message-swipe-side", side);
+      row.style.setProperty("--message-swipe-transform-duration", "0ms");
+      row.style.setProperty("--message-swipe-opacity-duration", "0ms");
+    });
+  }, [clearActiveSwipeRows, messagesContainerRef]);
 
   const finishSwipe = useCallback(() => {
     const side = swipeGestureRef.current?.side || null;
@@ -140,14 +175,14 @@ export function ChatViewMessagePane({
     }
     if (side) {
       if (swipeResetTimerRef.current) clearTimeout(swipeResetTimerRef.current);
-      applySwipeVisual(side, 0, false);
+      applySwipeVisual(0, false);
       swipeResetTimerRef.current = setTimeout(() => {
-        swipeLayerRef.current?.style.removeProperty("will-change");
+        clearActiveSwipeRows();
         swipeResetTimerRef.current = null;
       }, 200);
     }
     onTouchEnd();
-  }, [applySwipeVisual, onTouchEnd]);
+  }, [applySwipeVisual, clearActiveSwipeRows, onTouchEnd]);
 
   const handleContainerTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
     const touch = event.touches[0];
@@ -161,8 +196,9 @@ export function ChatViewMessagePane({
     if (swipeResetTimerRef.current) {
       clearTimeout(swipeResetTimerRef.current);
       swipeResetTimerRef.current = null;
+      clearActiveSwipeRows();
     }
-  }, []);
+  }, [clearActiveSwipeRows]);
 
   const handleContainerTouchMove = useCallback((event: TouchEvent<HTMLElement>) => {
     const gesture = swipeGestureRef.current;
@@ -176,6 +212,7 @@ export function ChatViewMessagePane({
       if (isHorizontalMessageSwipe(deltaX, deltaY)) {
         gesture.axis = "horizontal";
         gesture.side = deltaX < 0 ? "sent" : "received";
+        activateVisibleSwipeRows(gesture.side);
         onTouchEnd();
       } else if (Math.abs(deltaY) >= 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
         gesture.axis = "vertical";
@@ -192,15 +229,68 @@ export function ChatViewMessagePane({
         swipeFrameRef.current = null;
         const pending = pendingSwipeRef.current;
         if (!pending) return;
-        applySwipeVisual(pending.side, pending.offset, true);
+        applySwipeVisual(pending.offset, true);
       });
     }
-  }, [applySwipeVisual, onTouchEnd]);
+  }, [activateVisibleSwipeRows, applySwipeVisual, onTouchEnd]);
+
+  useEffect(() => {
+    const layer = swipeLayerRef.current;
+    const scrollRoot = messagesContainerRef.current;
+    if (!layer || !scrollRoot || typeof IntersectionObserver === "undefined") return;
+
+    const visibleRows = visibleSwipeRowsRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const row = entry.target as HTMLElement;
+        if (entry.isIntersecting) visibleRows.add(row);
+        else visibleRows.delete(row);
+      });
+    }, { root: scrollRoot, rootMargin: "240px 0px" });
+    const observeRows = (root: ParentNode) => {
+      if (root instanceof HTMLElement && root.matches("[data-message-row]")) {
+        observer.observe(root);
+      }
+      root.querySelectorAll<HTMLElement>("[data-message-row]").forEach((row) => {
+        observer.observe(row);
+      });
+    };
+    const unobserveRows = (root: ParentNode) => {
+      if (root instanceof HTMLElement && root.matches("[data-message-row]")) {
+        observer.unobserve(root);
+        visibleRows.delete(root);
+      }
+      root.querySelectorAll<HTMLElement>("[data-message-row]").forEach((row) => {
+        observer.unobserve(row);
+        visibleRows.delete(row);
+      });
+    };
+
+    observeRows(layer);
+    const mutations = new MutationObserver((records) => {
+      records.forEach((record) => {
+        record.addedNodes.forEach((node) => {
+          if (node instanceof HTMLElement) observeRows(node);
+        });
+        record.removedNodes.forEach((node) => {
+          if (node instanceof HTMLElement) unobserveRows(node);
+        });
+      });
+    });
+    mutations.observe(layer, { childList: true });
+
+    return () => {
+      mutations.disconnect();
+      observer.disconnect();
+      visibleRows.clear();
+    };
+  }, [messagesContainerRef]);
 
   useEffect(() => () => {
     if (swipeFrameRef.current !== null) cancelAnimationFrame(swipeFrameRef.current);
     if (swipeResetTimerRef.current) clearTimeout(swipeResetTimerRef.current);
-  }, []);
+    clearActiveSwipeRows();
+  }, [clearActiveSwipeRows]);
 
   return (
     <div
@@ -385,10 +475,6 @@ export function ChatViewMessagePane({
           ref={swipeLayerRef}
           data-message-swipe-layer
           className="flex w-full flex-col"
-          style={{
-            transform: "translate3d(var(--message-swipe-x, 0px), 0, 0)",
-            transition: "transform var(--message-swipe-transform-duration, 180ms) cubic-bezier(0.22, 0.8, 0.3, 1)",
-          } as CSSProperties}
         >
           <MessageList
             threadedMessages={threadedMessages}
