@@ -46,7 +46,7 @@ function createFakeEnv(options: FakeEnvOptions = {}): {
   let cleanupBatches = 0;
 
   function firstResult(sql: string): unknown {
-    if (sql.includes("SELECT channels.*, users.name AS owner_name")) {
+    if (sql.includes("FROM channels") && sql.includes("owner_name") && sql.includes("owner_channel_count")) {
       return channelExists
         ? {
             id: channelId,
@@ -56,6 +56,8 @@ function createFakeEnv(options: FakeEnvOptions = {}): {
             passcode_hint: "hint",
             profile_image: null,
             bubble_color: "#ffffff",
+            owner_channel_count: 1,
+            moderation_status: "active",
           }
         : null;
     }

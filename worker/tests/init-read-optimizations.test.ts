@@ -26,7 +26,9 @@ const bootstrapSource = readFileSync(
 test("init only reads live-channel frozen state when the live row is relevant", () => {
   assert.match(initSource, /const liveChannelFrozenIndex = isLiveChannel \? statements\.length : null/);
   assert.match(initSource, /if \(isLiveChannel\) \{\s*statements\.push\(/);
-  assert.match(initSource, /const moderationRow = batchResults\[1\]\.results\?\.\[0\]/);
+  assert.match(initSource, /LEFT JOIN channel_moderation ON channel_moderation\.channel_id = channels\.id/);
+  assert.match(initSource, /WHERE id IN \(\?, \?, \?, \?, \?, \?\)/);
+  assert.doesNotMatch(initSource, /SELECT status FROM channel_moderation WHERE channel_id = \? LIMIT 1/);
 });
 
 test("owner moderation refresh uses a dedicated narrow channel-state route", () => {

@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `/api/init` now folds moderation and owner-profile probes into the channel read — 2026-08-19
+
+- The main channel bootstrap query now joins `channel_moderation` directly and derives `owner_channel_count` inline with a bounded `EXISTS` probe against the same owner's visible non-live channels.
+- Normal `/api/init` requests no longer issue separate follow-up reads for moderation status or the old two-row owner-profile eligibility check. The response contract stays the same: viewers still receive the same `viewerModerationStatus`, and the client still receives `owner_channel_count` capped to `0`, `1` or `2`.
+- The batched config read now looks up only the six exact config primary keys needed for bootstrap with one `id IN (...)` query, instead of mixing `channel_id` predicates with those IDs.
+- Focused Worker coverage now pins the new init query shape, the retained owner-channel metadata contract and room-lifecycle fixtures that depend on the bootstrap row.
+
+Trade-off: the primary channel lookup is now a little denser because it carries one extra join and one correlated existence probe. That is intentional because both values are cheap to answer at the same point where the channel row is already being read, and it removes two separate hot-path statements from every normal bootstrap.
+
+Deployment note: deploy the Worker. No D1 migration is required. After deployment, confirm normal and locked `/api/init` responses still return the same owner-profile button state and frozen-channel viewer behavior.
+
+### Whole-chat swipe detection now drives timestamp reveal — 2026-08-19
+
+- Timestamp reveal no longer requires the gesture to begin on a specific bubble. The chat view container now owns horizontal swipe detection for the mounted message pane.
+- Swiping anywhere across the chat view shifts the whole mounted window together: rightward gestures reveal received-message timestamps and shift the pane right, while leftward gestures reveal sent-message timestamps and shift the pane left.
+- Direction now determines which side is revealed, so the old row metadata used only to seed swipe ownership was removed.
+- Focused coverage now pins the container-owned gesture path and preserves the existing side-filtered timestamp rendering.
+
+Trade-off: a horizontal gesture that begins on empty space in the chat pane can now reveal timestamps if it has clear horizontal intent. This widens the activation zone on purpose, but vertical scrolling remains the dominant path and still cancels the reveal.
+
+Deployment note: frontend-only. Verify left and right swipes both work even when the touch starts between bubbles, and confirm only the matching side's timestamps appear while the mounted window shifts.
+
 ### Transient D1 resets retry `/api/init` once and alert separately — 2026-08-19
 
 - Production health investigation found a brief burst where `GET /api/init`

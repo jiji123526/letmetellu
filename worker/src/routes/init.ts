@@ -55,17 +55,42 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const isLiveChannel = channelId.endsWith("_live");
   const parentChannelId = isLiveChannel ? channelId.replace(/_live$/, "") : channelId;
   const reportsChannel = isReportsChannel(parentChannelId, env);
+  const reportsChannelId = getReportsChannelId(env);
   let routeStage = "load_channel";
 
   try {
     // Fetch channel config (always from parent)
     const channel = await env.DB.prepare(
-      `SELECT channels.*, users.name AS owner_name
+      `SELECT
+         channels.*,
+         users.name AS owner_name,
+         channel_moderation.status AS moderation_status,
+         CASE
+           WHEN channels.show_on_profile = 1 THEN
+             CASE
+               WHEN EXISTS(
+                 SELECT 1
+                 FROM channels AS owner_channels
+                 WHERE owner_channels.owner_uid = channels.owner_uid
+                   AND owner_channels.show_on_profile = 1
+                   AND owner_channels.id NOT LIKE '%_live'
+                   AND owner_channels.id != channels.id
+                   ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
+                 LIMIT 1
+               ) THEN 2
+               ELSE 1
+             END
+           ELSE 0
+         END AS owner_channel_count
        FROM channels
        LEFT JOIN users ON users.id = channels.owner_uid
+       LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
        WHERE channels.id = ?`
     )
-      .bind(parentChannelId).first();
+      .bind(
+        ...(reportsChannelId ? [reportsChannelId] : []),
+        parentChannelId,
+      ).first();
 
     if (!channel) {
       return Response.json({ error: "channel not found" }, { status: 404 });
@@ -184,19 +209,15 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const statements: D1PreparedStatement[] = [
       env.DB.prepare(`
         SELECT id, text, updated_at FROM config
-        WHERE (channel_id = ? AND id = ?)
-           OR (channel_id = ? AND id IN (?, ?, ?, ?, ?))
+        WHERE id IN (?, ?, ?, ?, ?, ?)
       `).bind(
-        channelId,
         `notice_${channelId}`,
-        parentChannelId,
         `welcome_${parentChannelId}`,
         `live_${parentChannelId}`,
         `liveEmojis_${parentChannelId}`,
         `petition_${parentChannelId}`,
         `dm_${parentChannelId}`,
       ),
-      env.DB.prepare("SELECT status FROM channel_moderation WHERE channel_id = ? LIMIT 1").bind(parentChannelId),
     ];
     const liveChannelFrozenIndex = isLiveChannel ? statements.length : null;
     if (isLiveChannel) {
@@ -204,22 +225,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId)
       );
     }
-    const reportsChannelId = getReportsChannelId(env);
-    const ownerChannelCountIndex = statements.length;
-    statements.push(
-      env.DB.prepare(`
-        SELECT id
-        FROM channels
-        WHERE owner_uid = ?
-          AND show_on_profile = 1
-          AND id NOT LIKE '%_live'
-          ${reportsChannelId ? "AND id != ?" : ""}
-        LIMIT 2
-      `).bind(
-        (channel as { owner_uid: string }).owner_uid,
-        ...(reportsChannelId ? [reportsChannelId] : []),
-      )
-    );
 
     routeStage = "prepare_viewer_block_lookup";
 
@@ -309,14 +314,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const rawMessages = messagePage?.messages || [];
     const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
     const config = new Map(configRows.map((row) => [row.id, row.text]));
-    const moderationRow = batchResults[1].results?.[0] as { status?: string } | undefined;
     const liveRow = liveChannelFrozenIndex === null
       ? undefined
       : batchResults[liveChannelFrozenIndex].results?.[0] as { is_frozen?: number } | undefined;
-    const ownerChannelCount = Math.min(
-      batchResults[ownerChannelCountIndex].results?.length || 0,
-      2,
-    );
     const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
     const viewerBlocked = viewerBlockedIndex === null
       ? false
@@ -344,9 +344,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     if (isLiveChannel && liveRow) {
       responseChannel = { ...channel, is_frozen: liveRow.is_frozen ?? 0 };
     }
+    const moderationStatus = typeof (channel as { moderation_status?: unknown }).moderation_status === "string"
+      ? (channel as { moderation_status?: string }).moderation_status || null
+      : null;
     const viewerModerationStatus = !isOwner
       && !isReportsOwnerViewer
-      && moderationRow?.status === "frozen"
+      && moderationStatus === "frozen"
         ? "frozen"
         : null;
 
@@ -354,7 +357,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     // need to know whether a gate exists, never the hash itself.
     const safeChannel = { ...(responseChannel as Record<string, unknown>) };
     delete safeChannel.passcode;
-    safeChannel.owner_channel_count = ownerChannelCount;
+    safeChannel.owner_channel_count = Math.min(
+      Number((channel as { owner_channel_count?: unknown }).owner_channel_count) || 0,
+      2,
+    );
     safeChannel.appearance_version = getChannelAppearanceVersion(responseChannel as {
       bubble_color?: string | null;
       background_type?: "default" | "color" | "image";

@@ -27,10 +27,14 @@ const migrationSource = readFileSync(
   "utf8",
 );
 
-test("init uses a two-row indexed owner-channel probe", () => {
-  assert.match(initSource, /const ownerChannelCountIndex = statements\.length/);
-  assert.match(initSource, /show_on_profile = 1[\s\S]*LIMIT 2/);
-  assert.match(initSource, /safeChannel\.owner_channel_count = ownerChannelCount/);
+test("init derives owner-channel eligibility inside the primary channel lookup", () => {
+  assert.match(initSource, /CASE\s+WHEN channels\.show_on_profile = 1 THEN/);
+  assert.match(initSource, /EXISTS\([\s\S]*owner_channels\.owner_uid = channels\.owner_uid/);
+  assert.match(initSource, /owner_channels\.id != channels\.id/);
+  assert.match(initSource, /END AS owner_channel_count/);
+  assert.match(initSource, /safeChannel\.owner_channel_count = Math\.min\(/);
+  assert.doesNotMatch(initSource, /const ownerChannelCountIndex = statements\.length/);
+  assert.doesNotMatch(initSource, /show_on_profile = 1[\s\S]*LIMIT 2/);
   assert.match(
     migrationSource,
     /channels_owner_profile_created_id_idx\s+ON channels\(owner_uid, show_on_profile, created_at, id\)/,
