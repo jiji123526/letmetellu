@@ -385,8 +385,6 @@ const MessageRow = React.memo(function MessageRow({
   return (
     <div
       id={`msg-${msg.id}`}
-      data-message-row
-      data-message-side={messageSide}
       className={`flex items-end gap-[6px] max-w-full ${isSent ? "justify-end" : "justify-start"}`}
       style={{
         paddingTop: "calc(var(--bubble-font-size) * 0.32)",

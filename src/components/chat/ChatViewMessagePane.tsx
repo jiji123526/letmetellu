@@ -104,7 +104,7 @@ export function ChatViewMessagePane({
   const swipeGestureRef = useRef<{
     startX: number;
     startY: number;
-    side: SwipeRevealSide;
+    side: SwipeRevealSide | null;
     axis: "pending" | "horizontal" | "vertical";
   } | null>(null);
 
@@ -122,20 +122,12 @@ export function ChatViewMessagePane({
   }, [onTouchEnd]);
 
   const handleContainerTouchStart = useCallback((event: TouchEvent<HTMLElement>) => {
-    const target = event.target instanceof HTMLElement
-      ? event.target.closest<HTMLElement>("[data-message-row]")
-      : null;
-    const side = target?.dataset.messageSide;
-    if (side !== "sent" && side !== "received") {
-      swipeGestureRef.current = null;
-      return;
-    }
     const touch = event.touches[0];
     if (!touch) return;
     swipeGestureRef.current = {
       startX: touch.clientX,
       startY: touch.clientY,
-      side,
+      side: null,
       axis: "pending",
     };
   }, []);
@@ -151,13 +143,14 @@ export function ChatViewMessagePane({
     if (gesture.axis === "pending") {
       if (isHorizontalMessageSwipe(deltaX, deltaY)) {
         gesture.axis = "horizontal";
+        gesture.side = deltaX < 0 ? "sent" : "received";
         onTouchEnd();
       } else if (Math.abs(deltaY) >= 6 && Math.abs(deltaY) > Math.abs(deltaX)) {
         gesture.axis = "vertical";
         onTouchEnd();
       }
     }
-    if (gesture.axis !== "horizontal") return;
+    if (gesture.axis !== "horizontal" || !gesture.side) return;
 
     const nextOffset = messageSwipeOffset(deltaX, gesture.side === "sent");
     if (nextOffset !== 0) event.preventDefault();

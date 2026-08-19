@@ -57,16 +57,16 @@ test("message pane owns swipe detection and rows only render side-filtered times
   );
 
   assert.match(paneSource, /const \[sharedSwipe, setSharedSwipe\] = useState<SwipeRevealState>/);
-  assert.match(paneSource, /event\.target instanceof HTMLElement[\s\S]*closest<HTMLElement>\("\[data-message-row\]"\)/);
+  assert.match(paneSource, /side: SwipeRevealSide \| null/);
+  assert.match(paneSource, /startX: touch\.clientX,[\s\S]*side: null/);
   assert.match(paneSource, /gesture\.axis = "horizontal";[\s\S]*onTouchEnd\(\)/);
+  assert.match(paneSource, /gesture\.side = deltaX < 0 \? "sent" : "received"/);
   assert.match(paneSource, /const nextOffset = messageSwipeOffset\(deltaX, gesture\.side === "sent"\)/);
   assert.match(paneSource, /onTouchStart=\{handleContainerTouchStart\}/);
   assert.match(paneSource, /onTouchMove=\{handleContainerTouchMove\}/);
   assert.match(paneSource, /onTouchEnd=\{finishSwipe\}/);
   assert.match(paneSource, /sharedSwipe=\{sharedSwipe\}/);
 
-  assert.match(listSource, /data-message-row/);
-  assert.match(listSource, /data-message-side=\{messageSide\}/);
   assert.match(listSource, /const swipeActive = sharedSwipe\.revealOffset > 0/);
   assert.match(listSource, /const swipeOffset = swipeActive[\s\S]*sharedSwipe\.side === "sent" \? -sharedSwipe\.revealOffset : sharedSwipe\.revealOffset/);
   assert.match(listSource, /const showTimestamp = swipeActive && sharedSwipe\.side === messageSide/);
@@ -77,4 +77,5 @@ test("message pane owns swipe detection and rows only render side-filtered times
   assert.match(listSource, /touchAction: "pan-y"/);
   assert.doesNotMatch(listSource, /const \[swipeOffset, setSwipeOffset\]/);
   assert.doesNotMatch(listSource, /swipeGestureRef/);
+  assert.doesNotMatch(listSource, /data-message-row/);
 });
