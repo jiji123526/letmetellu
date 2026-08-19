@@ -11,6 +11,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - On chat entry, the browser idly primes at most six unique uncached URLs from the nearest mounted message cards instead of fetching every URL in the 50-root timeline window.
 - Message preview requests now share a two-request queue. Visible cards take priority, while background priming uses at most one active slot so it cannot occupy all preview capacity.
 - Background priming is disabled when the browser reports data-saver mode or a 2G-class connection. Existing memory caching, 24-hour persistent freshness, seven-day stale display and Worker cache behavior remain unchanged.
+- Scroll-ahead activation uses a `1440px` margin on normal connections, `720px` on 3G and `240px` for data-saver or 2G clients. This gives fast connections about two mobile screens of preparation without imposing the same speculative work on constrained clients.
 
 Trade-off: each linked message can add up to two background Worker preview operations, and an entering viewer can initiate up to six bounded cache fills. This spends a small amount of controlled network work to reduce multi-second first-view metadata waits. Fetching every mounted link remains intentionally prohibited because replies and multiple URLs can make the mounted row count much larger than the 50-root page size.
 
@@ -1867,10 +1868,10 @@ Deployment note: apply D1 migration `0034_normalize_bubble_color.sql`, then depl
 
 - YouTube and Instagram activation expands to 1,000px around the viewport on normal connections, stays at 600px on 3G and drops to 300px for 2G or data-saver users.
 - When mounted chat history contains an Instagram link, its shared third-party SDK begins downloading during browser idle time without eagerly processing every off-screen post.
-- Generic and X/Twitter metadata-card requests begin within a fixed 720px preview margin and share per-URL request deduplication.
+- Generic and X/Twitter metadata-card requests use a connection-aware preview margin and share per-URL request deduplication. The current policy is 1,440px normally, 720px on 3G and 240px on data-saver or 2G connections.
 - X/Twitter no longer loads the native widget SDK or constructs tweet iframes; it uses the same lightweight metadata-card path as other previews.
 
-Trade-offs: normal fast connections perform nearby preview work and Instagram SDK download earlier, increasing background network use slightly. Data-saver and slow-network users retain conservative native-widget limits, while metadata-card timing remains fixed.
+Trade-offs: normal fast connections perform nearby preview work and Instagram SDK download earlier, increasing background network use slightly. Data-saver and slow-network users retain conservative native-widget and metadata-card limits.
 
 Deployment note: this is frontend-only and requires no D1 migration or Worker deployment.
 

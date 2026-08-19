@@ -32,6 +32,10 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /requestIdleCallback/);
   assert.match(messageEmbedsSource, /saveData/);
   assert.match(messageEmbedsSource, /effectiveType\?\.includes\("2g"\)/);
+  assert.match(messageEmbedsSource, /return "240px"/);
+  assert.match(messageEmbedsSource, /effectiveType === "3g"\) return "720px"/);
+  assert.match(messageEmbedsSource, /return "1440px"/);
+  assert.match(messageEmbedsSource, /rootMargin: getEmbedPreviewRootMargin\(\)/);
   assert.match(messageEmbedsSource, /mountedPreviewDistance\(left\) - mountedPreviewDistance\(right\)/);
   assert.match(messageEmbedsSource, /priority: "visible" \| "background"/);
 });

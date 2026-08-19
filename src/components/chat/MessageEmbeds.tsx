@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 // URL patterns
 const INSTAGRAM_REGEX = /https?:\/\/(www\.)?instagram\.com\/(p|reel)\/[\w-]+/;
 const URL_REGEX = /https?:\/\/[^\s<]+/g;
-const EMBED_PREVIEW_ROOT_MARGIN = "720px";
 
 interface PreviewData {
   title: string;
@@ -244,10 +243,23 @@ function mountedPreviewDistance(element: HTMLElement): number {
 }
 
 function shouldSkipMountedPreviewPrefetch(): boolean {
-  const connection = (navigator as Navigator & {
+  const connection = getPreviewConnection();
+  return connection?.saveData === true || connection?.effectiveType?.includes("2g") === true;
+}
+
+function getPreviewConnection() {
+  return (navigator as Navigator & {
     connection?: { saveData?: boolean; effectiveType?: string };
   }).connection;
-  return connection?.saveData === true || connection?.effectiveType?.includes("2g") === true;
+}
+
+function getEmbedPreviewRootMargin(): string {
+  const connection = getPreviewConnection();
+  if (connection?.saveData === true || connection?.effectiveType?.includes("2g")) {
+    return "240px";
+  }
+  if (connection?.effectiveType === "3g") return "720px";
+  return "1440px";
 }
 
 function scheduleMountedPreviewPrefetch() {
@@ -288,7 +300,7 @@ function scheduleMountedPreviewPrefetch() {
   }
 }
 
-function useDeferredEmbedVisibility(rootMargin: string) {
+function useDeferredEmbedVisibility() {
   const targetRef = useRef<HTMLAnchorElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -311,11 +323,11 @@ function useDeferredEmbedVisibility(rootMargin: string) {
         setIsVisible(true);
         observer.disconnect();
       }
-    }, { rootMargin });
+    }, { rootMargin: getEmbedPreviewRootMargin() });
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [isVisible, rootMargin]);
+  }, [isVisible]);
 
   return { targetRef, isVisible };
 }
@@ -333,7 +345,7 @@ function LinkPreviewCard({
 }) {
   const [data, setData] = useState<PreviewData | null>(previewCache.get(url) || null);
   const [hasResolved, setHasResolved] = useState(previewCache.has(url));
-  const { targetRef, isVisible } = useDeferredEmbedVisibility(EMBED_PREVIEW_ROOT_MARGIN);
+  const { targetRef, isVisible } = useDeferredEmbedVisibility();
 
   useEffect(() => {
     scheduleMountedPreviewPrefetch();
