@@ -93,6 +93,7 @@ interface SavedScrollPosition {
 }
 
 const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
+const SCROLL_POSITION_SAVE_INTERVAL_MS = 150;
 
 function messageCursor(message: Message | undefined): MessagePageCursor | null {
   return message?.id && message.created_at
@@ -356,6 +357,9 @@ export function useChatHistoryNavigation({
   const historyLoadAnchorRequestRef = useRef(0);
   const restoreAnchorFrameRef = useRef<number | null>(null);
   const pageExitRef = useRef(false);
+  const scrollPositionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollPositionTrackingReadyRef = useRef(false);
+  const unifiedTimelineItemsRef = useRef(unifiedTimelineItems);
   const pendingNavigationRequestRef = useRef(0);
   const olderPageCursorRef = useRef<MessagePageCursor | null>(initialPageStartCursor);
   const newerPageCursorRef = useRef<MessagePageCursor | null>(initialPageEndCursor);
@@ -372,24 +376,34 @@ export function useChatHistoryNavigation({
   const saveScrollPosition = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const containerTop = container.getBoundingClientRect().top;
-    const messageElements = [...container.querySelectorAll<HTMLElement>('[id^="msg-"]')];
-    const anchor = messageElements.find((element) => element.getBoundingClientRect().bottom > containerTop)
-      || messageElements.at(-1);
+    const anchor = findScrollAnchor(container);
     if (!anchor) return;
+    const messageId = anchor.id.slice(4);
     const position: SavedScrollPosition = {
-      messageId: anchor.id.slice(4),
-      source: unifiedTimelineItems?.find((item) => item.id === anchor.id.slice(4))?.source,
-      offset: anchor.getBoundingClientRect().top - containerTop,
+      messageId,
+      source: unifiedTimelineItemsRef.current?.find((item) => item.id === messageId)?.source,
+      offset: anchor.top,
       live: inLiveModeRef.current,
       savedAt: Date.now(),
     };
     sessionStorage.setItem(scrollStorageKey, JSON.stringify(position));
-  }, [inLiveModeRef, messagesContainerRef, scrollStorageKey, unifiedTimelineItems]);
+  }, [inLiveModeRef, messagesContainerRef, scrollStorageKey]);
+
+  const scheduleScrollPositionSave = useCallback(() => {
+    if (!scrollPositionTrackingReadyRef.current || scrollPositionSaveTimerRef.current) return;
+    scrollPositionSaveTimerRef.current = setTimeout(() => {
+      scrollPositionSaveTimerRef.current = null;
+      saveScrollPosition();
+    }, SCROLL_POSITION_SAVE_INTERVAL_MS);
+  }, [saveScrollPosition]);
 
   useEffect(() => {
     const handlePageExit = () => {
       pageExitRef.current = true;
+      if (scrollPositionSaveTimerRef.current) {
+        clearTimeout(scrollPositionSaveTimerRef.current);
+        scrollPositionSaveTimerRef.current = null;
+      }
       saveScrollPosition();
     };
     const handlePageShow = () => {
@@ -402,9 +416,21 @@ export function useChatHistoryNavigation({
       window.removeEventListener("beforeunload", handlePageExit);
       window.removeEventListener("pagehide", handlePageExit);
       window.removeEventListener("pageshow", handlePageShow);
+      if (scrollPositionSaveTimerRef.current) {
+        clearTimeout(scrollPositionSaveTimerRef.current);
+        scrollPositionSaveTimerRef.current = null;
+      }
       if (!pageExitRef.current) sessionStorage.removeItem(scrollStorageKey);
     };
   }, [saveScrollPosition, scrollStorageKey]);
+
+  useEffect(() => {
+    unifiedTimelineItemsRef.current = unifiedTimelineItems;
+  }, [unifiedTimelineItems]);
+
+  useEffect(() => {
+    scrollPositionTrackingReadyRef.current = false;
+  }, [scrollStorageKey]);
 
   useEffect(() => {
     historyModeRef.current = historyMode;
@@ -594,6 +620,7 @@ export function useChatHistoryNavigation({
     updateNearBottom(distanceFromBottom <= 120);
     setShowScrollBtn(distanceFromBottom > 200);
     updateScrollAnchor();
+    scheduleScrollPositionSave();
 
     if (
       element.scrollTop < 50
@@ -874,6 +901,7 @@ export function useChatHistoryNavigation({
     setHistoryMode,
     setMessages,
     setShowScrollBtn,
+    scheduleScrollPositionSave,
     updateNearBottom,
     updateScrollAnchor,
     unifiedTimelineEnabled,
@@ -1030,6 +1058,7 @@ export function useChatHistoryNavigation({
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
     const rawPosition = sessionStorage.getItem(scrollStorageKey);
     sessionStorage.removeItem(scrollStorageKey);
+    scrollPositionTrackingReadyRef.current = true;
     if (navigation?.type !== "reload") return false;
     if (!rawPosition) return false;
 

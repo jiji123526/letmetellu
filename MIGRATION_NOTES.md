@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### In-channel refresh preserves the current reading position reliably — 2026-08-19
+
+- The chat still restores by source-qualified message ID and viewport offset, fetching a small authorization-aware context window when the saved message is outside the latest page.
+- Scroll handling now writes a session-only anchor snapshot at most once every `150ms`. This removes the previous dependency on `beforeunload` or `pagehide` firing before a mobile browser refreshes or terminates the page.
+- Exit events remain as an immediate final snapshot. Tracking starts only after initial refresh restoration has consumed the prior snapshot, so bootstrap scrolling cannot overwrite the position being restored.
+- The current unified timeline is held in a ref for source lookup, avoiding listener teardown and recreation whenever pagination or realtime changes mounted items.
+- Normal in-app navigation clears the previous channel's snapshot. Restoration remains limited to a browser reload of the same channel and the same normal/live mode, and snapshots expire after 30 minutes.
+
+Trade-off: an active scroll performs one small `sessionStorage` write and visible-anchor scan per `150ms`. The mounted history is bounded near 300 items, and the throttle keeps this work off individual scroll events.
+
+Deployment note: frontend-only. Scroll to older normal and DM history, refresh while stationary and immediately after scrolling, and verify the same first visible message returns at the same offset. Also verify opening another channel starts at its normal latest position.
+
 ### Timestamp swipes animate only visible message rows — 2026-08-19
 
 - The mounted chat window remains capped at 300 message/DM items while preserving complete visual-root threads. A single exceptionally large thread can still exceed that soft cap so replies are never split from their root.
