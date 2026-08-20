@@ -460,11 +460,17 @@ test("unified prepend holds its viewport anchor while inserted media settles", (
 
   assert.match(unifiedPrepend, /holdViewportPosition\(/);
   assert.match(unifiedPrepend, /anchorMessageId: anchor\.id/);
+  assert.match(unifiedPrepend, /historyModeRef\.current = "context";/);
+  assert.match(unifiedPrepend, /setHistoryMode\("context"\);/);
   assert.match(unifiedPrepend, /applyUnifiedHistoryPage\(/);
   assert.match(unifiedPrepend, /waitForCompleteHistoryWindow\(/);
   assert.match(unifiedPrepend, /releaseHeldViewport\?\.\(\)/);
   assert.ok(
     unifiedPrepend.indexOf("holdViewportPosition(")
+      < unifiedPrepend.indexOf("applyUnifiedHistoryPage("),
+  );
+  assert.ok(
+    unifiedPrepend.indexOf("setHistoryMode(\"context\");")
       < unifiedPrepend.indexOf("applyUnifiedHistoryPage("),
   );
 });

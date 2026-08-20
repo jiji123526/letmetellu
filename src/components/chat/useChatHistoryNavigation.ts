@@ -669,6 +669,8 @@ export function useChatHistoryNavigation({
                 )
               : null;
             try {
+              historyModeRef.current = "context";
+              setHistoryMode("context");
               applyUnifiedHistoryPage(
                 "before",
                 data.items as unknown as ChatTimelineItem[],

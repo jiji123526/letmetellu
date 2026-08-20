@@ -26,6 +26,17 @@ Trade-off: context navigation performs one extra in-memory boundary check after 
 
 Deployment note: deploy the frontend only. No Worker or D1 migration is required.
 
+### Unified older-history paging now enters context mode immediately — 2026-08-20
+
+- The unified pagination path previously kept `historyMode` as `latest` while loading older pages from the top edge, even after the mounted window stopped representing the live tail of the channel.
+- That left two behaviors inconsistent with the legacy path: scrolling back down could stop at the bottom of the mounted DOM instead of reopening newer history, and the bottom button could just scroll to the mounted edge instead of forcing the latest timeline.
+- Unified top-edge paging now switches to `context` before merging the older page. Downward scroll therefore uses the newer-page cursor whenever the newer edge is pageable, and the bottom button consistently routes through the existing `returnToLatest` path.
+- Focused coverage now locks this context-mode transition into the unified prepend branch.
+
+Trade-off: if a reader loads a small amount of older unified history before the mounted window trims, the bottom button now prefers the authoritative latest reload path instead of merely scrolling within already-mounted latest rows. This adds at most one bounded request and avoids mode-dependent edge behavior.
+
+Deployment note: frontend-only. In a unified-enabled channel, scroll upward into older history, then verify manual downward scrolling resumes newer-page loading and the bottom button always returns to the latest channel tail.
+
 ### In-channel refresh preserves the current reading position reliably — 2026-08-19
 
 - The chat still restores by source-qualified message ID and viewport offset, fetching a small authorization-aware context window when the saved message is outside the latest page.
