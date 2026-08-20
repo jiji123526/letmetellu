@@ -548,6 +548,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     historyModeRef,
     isNearBottomRef,
     isNearBottom,
+    hasMoreNewerMessages,
     hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
@@ -1070,6 +1071,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         historyMode={historyMode}
         showScrollBtn={showScrollBtn}
         newerMessageCount={newerMessageCount}
+        latestButtonDisabled={historyMode === "context" && isNearBottom && !hasMoreNewerMessages}
         latestMessagesLabel={locale === "ko" ? "최신 메시지" : "Latest"}
         onScrollToBottom={scrollToBottom}
         banner={banner}

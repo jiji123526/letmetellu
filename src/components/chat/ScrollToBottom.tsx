@@ -2,17 +2,19 @@
 
 interface ScrollToBottomProps {
   visible: boolean;
+  disabled?: boolean;
   unreadCount?: number;
   label?: string;
   onClick: () => void;
 }
 
-export function ScrollToBottom({ visible, unreadCount, label, onClick }: ScrollToBottomProps) {
+export function ScrollToBottom({ visible, disabled = false, unreadCount, label, onClick }: ScrollToBottomProps) {
   if (!visible) return null;
 
   return (
     <button
       className="absolute bottom-[70px] left-1/2 -translate-x-1/2 z-10 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
+      disabled={disabled}
       style={{
         width: label ? "auto" : "36px",
         padding: label ? "0 13px" : 0,
@@ -21,6 +23,8 @@ export function ScrollToBottom({ visible, unreadCount, label, onClick }: ScrollT
         backdropFilter: "saturate(180%) blur(20px)",
         WebkitBackdropFilter: "saturate(180%) blur(20px)",
         boxShadow: "0 2px 12px rgba(0,0,0,.15)",
+        opacity: disabled ? 0.45 : 1,
+        cursor: disabled ? "default" : "pointer",
       }}
       onClick={onClick}
     >

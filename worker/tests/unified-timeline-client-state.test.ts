@@ -32,6 +32,14 @@ const historyNavigationSource = readFileSync(
   new URL("../../src/components/chat/useChatHistoryNavigation.ts", import.meta.url),
   "utf8",
 );
+const chatViewSource = readFileSync(
+  new URL("../../src/components/chat/ChatView.tsx", import.meta.url),
+  "utf8",
+);
+const bottomShellSource = readFileSync(
+  new URL("../../src/components/chat/ChatViewBottomShell.tsx", import.meta.url),
+  "utf8",
+);
 const unifiedTimelineRouteSource = readFileSync(
   new URL("../../src/app/api/unified-timeline/route.ts", import.meta.url),
   "utf8",
@@ -473,6 +481,14 @@ test("unified prepend holds its viewport anchor while inserted media settles", (
     unifiedPrepend.indexOf("setHistoryMode(\"context\");")
       < unifiedPrepend.indexOf("applyUnifiedHistoryPage("),
   );
+});
+
+test("latest button disables after context browsing reaches the newest edge", () => {
+  assert.match(historyNavigationSource, /const \[hasMoreNewerMessages, setHasMoreNewerMessages\] = useState\(false\)/);
+  assert.match(historyNavigationSource, /const updateHasMoreNewerMessages = useCallback/);
+  assert.match(historyNavigationSource, /hasMoreNewerMessages,/);
+  assert.match(chatViewSource, /latestButtonDisabled=\{historyMode === "context" && isNearBottom && !hasMoreNewerMessages\}/);
+  assert.match(bottomShellSource, /disabled=\{historyMode === "context" \? latestButtonDisabled : false\}/);
 });
 
 test("context navigation synchronizes cursors before checking gallery history edges", () => {

@@ -79,6 +79,7 @@ interface ChatViewBottomShellProps {
   historyMode: "latest" | "context";
   showScrollBtn: boolean;
   newerMessageCount: number;
+  latestButtonDisabled: boolean;
   latestMessagesLabel?: string;
   onScrollToBottom: () => void;
   banner: BannerState | null;
@@ -127,6 +128,7 @@ export function ChatViewBottomShell({
   historyMode,
   showScrollBtn,
   newerMessageCount,
+  latestButtonDisabled,
   latestMessagesLabel,
   onScrollToBottom,
   banner,
@@ -211,6 +213,7 @@ export function ChatViewBottomShell({
     <>
       <ScrollToBottom
         visible={historyMode === "context" || showScrollBtn}
+        disabled={historyMode === "context" ? latestButtonDisabled : false}
         unreadCount={historyMode === "context" ? newerMessageCount : undefined}
         label={historyMode === "context" ? latestMessagesLabel : undefined}
         onClick={onScrollToBottom}

@@ -61,6 +61,7 @@ interface UseChatHistoryNavigationResult {
   historyModeRef: MutableRefObject<HistoryMode>;
   isNearBottomRef: MutableRefObject<boolean>;
   isNearBottom: boolean;
+  hasMoreNewerMessages: boolean;
   hasMoreNewerMessagesRef: MutableRefObject<boolean>;
   isMessageNavigationPending: boolean;
   isOlderHistoryLoading: boolean;
@@ -345,6 +346,7 @@ export function useChatHistoryNavigation({
   const [isMessageNavigationPending, setIsMessageNavigationPending] = useState(false);
   const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [hasMoreNewerMessages, setHasMoreNewerMessages] = useState(false);
   const isNearBottomRef = useRef(true);
   const historyModeRef = useRef<HistoryMode>(historyMode);
   const loadingMoreRef = useRef(false);
@@ -371,6 +373,11 @@ export function useChatHistoryNavigation({
   const updateNearBottom = useCallback((nextIsNearBottom: boolean) => {
     isNearBottomRef.current = nextIsNearBottom;
     setIsNearBottom(nextIsNearBottom);
+  }, []);
+
+  const updateHasMoreNewerMessages = useCallback((nextHasMore: boolean) => {
+    hasMoreNewerMessagesRef.current = nextHasMore;
+    setHasMoreNewerMessages(nextHasMore);
   }, []);
 
   const saveScrollPosition = useCallback(() => {
@@ -446,7 +453,7 @@ export function useChatHistoryNavigation({
     unifiedEndCursorRef.current = unifiedPageEndCursor;
     if (unifiedTimelineEnabled) {
       hasMoreMessagesRef.current = unifiedHasMoreBefore;
-      hasMoreNewerMessagesRef.current = unifiedHasMoreAfter;
+      updateHasMoreNewerMessages(unifiedHasMoreAfter);
     }
   }, [
     unifiedHasMoreAfter,
@@ -454,6 +461,7 @@ export function useChatHistoryNavigation({
     unifiedPageEndCursor,
     unifiedPageStartCursor,
     unifiedTimelineEnabled,
+    updateHasMoreNewerMessages,
   ]);
 
   const updateScrollAnchor = useCallback(() => {
@@ -582,7 +590,7 @@ export function useChatHistoryNavigation({
         setHistoryMode("latest");
         setNewerMessageCount(0);
         hasMoreMessagesRef.current = data.has_more;
-        hasMoreNewerMessagesRef.current = false;
+        updateHasMoreNewerMessages(false);
         updateNearBottom(true);
         scrollAnchorRef.current = null;
         requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: "auto" }));
@@ -593,7 +601,7 @@ export function useChatHistoryNavigation({
       historyModeRef.current = "latest";
       setHistoryMode("latest");
       setNewerMessageCount(0);
-      hasMoreNewerMessagesRef.current = false;
+      updateHasMoreNewerMessages(false);
       hasMoreMessagesRef.current = typeof data.has_more === "boolean"
         ? data.has_more
         : (data.messages?.length || 0) >= 50;
@@ -610,7 +618,7 @@ export function useChatHistoryNavigation({
       setBanner({ text: "Failed to load latest messages", color: "#d32f2f" });
       setTimeout(() => setBanner(null), 2000);
     }
-  }, [channelId, inLiveModeRef, liveSessionId, messagesEndRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, updateNearBottom]);
+  }, [channelId, inLiveModeRef, liveSessionId, messagesEndRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, updateHasMoreNewerMessages, updateNearBottom]);
 
   const handleScroll = useCallback(() => {
     const element = messagesContainerRef.current;
@@ -726,7 +734,7 @@ export function useChatHistoryNavigation({
               if (combined.length <= MAX_MOUNTED_HISTORY_MESSAGES) return combined;
               historyModeRef.current = "context";
               setHistoryMode("context");
-              hasMoreNewerMessagesRef.current = true;
+              updateHasMoreNewerMessages(true);
               const trimmed = trimMessageWindow(combined, "older");
               newerPageCursorRef.current = rootBoundaryCursor(trimmed, "end")
                 || responseEndCursor;
@@ -819,7 +827,7 @@ export function useChatHistoryNavigation({
               data.page_end_cursor,
               data.has_more,
             );
-            hasMoreNewerMessagesRef.current = data.has_more;
+            updateHasMoreNewerMessages(data.has_more);
             await nextAnimationFrame();
             const anchor = lockedScrollAnchorRef.current;
             const anchorElement = anchor
@@ -845,9 +853,11 @@ export function useChatHistoryNavigation({
             const responseEndCursor = responseCursor(data.page_end_cursor)
               || messageCursor(data.messages.at(-1));
             newerPageCursorRef.current = responseEndCursor;
-            hasMoreNewerMessagesRef.current = typeof data.has_more === "boolean"
-              ? data.has_more
-              : data.messages.length >= 50;
+            updateHasMoreNewerMessages(
+              typeof data.has_more === "boolean"
+                ? data.has_more
+                : data.messages.length >= 50
+            );
             setMessages((previous) => {
               const byId = new Map(previous.map((message) => [message.id, message]));
               for (const message of data.messages as Message[]) {
@@ -880,7 +890,7 @@ export function useChatHistoryNavigation({
               });
             });
           } else {
-            hasMoreNewerMessagesRef.current = false;
+            updateHasMoreNewerMessages(false);
             releaseLockedScrollAnchor(appendRequestId);
           }
         })
@@ -904,6 +914,7 @@ export function useChatHistoryNavigation({
     setMessages,
     setShowScrollBtn,
     scheduleScrollPositionSave,
+    updateHasMoreNewerMessages,
     updateNearBottom,
     updateScrollAnchor,
     unifiedTimelineEnabled,
@@ -924,7 +935,7 @@ export function useChatHistoryNavigation({
     historyModeRef.current = "latest";
     setHistoryMode("latest");
     setNewerMessageCount(0);
-    hasMoreNewerMessagesRef.current = false;
+    updateHasMoreNewerMessages(false);
     updateNearBottom(true);
     scrollAnchorRef.current = null;
     setShowScrollBtn(false);
@@ -933,7 +944,7 @@ export function useChatHistoryNavigation({
         messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
       });
     });
-  }, [messagesEndRef, setHistoryMode, setNewerMessageCount, setShowScrollBtn, updateNearBottom]);
+  }, [messagesEndRef, setHistoryMode, setNewerMessageCount, setShowScrollBtn, updateHasMoreNewerMessages, updateNearBottom]);
 
   const scrollToMessage = useCallback(async (
     msgId: string,
@@ -999,7 +1010,7 @@ export function useChatHistoryNavigation({
             setHistoryMode("context");
             setNewerMessageCount(0);
             hasMoreMessagesRef.current = data.has_older === true;
-            hasMoreNewerMessagesRef.current = data.has_newer === true;
+            updateHasMoreNewerMessages(data.has_newer === true);
             element = await waitForMessageElement(msgId);
           } else {
             const data = await fetchMessageContext(fetchChannel, msgId);
@@ -1012,7 +1023,7 @@ export function useChatHistoryNavigation({
             setHistoryMode("context");
             setNewerMessageCount(0);
             hasMoreMessagesRef.current = data.has_older !== false;
-            hasMoreNewerMessagesRef.current = data.has_newer !== false;
+            updateHasMoreNewerMessages(data.has_newer !== false);
             olderPageCursorRef.current = responseCursor(data.page_start_cursor)
               || messageCursor(data.messages[0]);
             newerPageCursorRef.current = responseCursor(data.page_end_cursor)
@@ -1061,7 +1072,7 @@ export function useChatHistoryNavigation({
     } finally {
       finishPendingIndicator();
     }
-  }, [channelId, handleScroll, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems]);
+  }, [channelId, handleScroll, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems, updateHasMoreNewerMessages]);
 
   const restoreRefreshPosition = useCallback(async () => {
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
@@ -1108,13 +1119,13 @@ export function useChatHistoryNavigation({
           unifiedStartCursorRef.current = data.page_start_cursor;
           unifiedEndCursorRef.current = data.page_end_cursor;
           hasMoreMessagesRef.current = data.has_older === true;
-          hasMoreNewerMessagesRef.current = data.has_newer === true;
+          updateHasMoreNewerMessages(data.has_newer === true);
         } else {
           const data = await fetchMessageContext(fetchChannel, position.messageId);
           if (!data.messages?.some((message: Message) => message.id === position.messageId)) return false;
           setMessages(data.messages as Message[]);
           hasMoreMessagesRef.current = data.has_older !== false;
-          hasMoreNewerMessagesRef.current = data.has_newer !== false;
+          updateHasMoreNewerMessages(data.has_newer !== false);
           olderPageCursorRef.current = responseCursor(data.page_start_cursor)
             || messageCursor(data.messages[0]);
           newerPageCursorRef.current = responseCursor(data.page_end_cursor)
@@ -1143,12 +1154,13 @@ export function useChatHistoryNavigation({
     scrollAnchorRef.current = isNearBottomRef.current ? null : findScrollAnchor(container);
     setShowScrollBtn(distanceFromBottom > 200);
     return true;
-  }, [channelId, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn, unifiedTimelineEnabled, updateNearBottom]);
+  }, [channelId, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, scrollStorageKey, setHistoryMode, setMessages, setNewerMessageCount, setShowScrollBtn, unifiedTimelineEnabled, updateHasMoreNewerMessages, updateNearBottom]);
 
   return {
     historyModeRef,
     isNearBottomRef,
     isNearBottom,
+    hasMoreNewerMessages,
     hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
