@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Legacy gallery navigation uses canonical message IDs — 2026-08-20
+
+- The direct-gallery optimization initially returned `gallery.id` as the navigation target. Current image messages normally use the same value for `messages.id` and `gallery.id`, but historical rows can use a distinct gallery key stored in `messages.gallery_id`. Selecting one of those images sent the gallery key to message-context navigation, which correctly returned `message not found`.
+- Migration `0053_gallery_canonical_message_id.sql` adds and backfills `gallery.message_id`, replaces the synchronization triggers so every gallery row retains both identities, and indexes `(channel_id, created_at, message_id)` for stable paging. The endpoint now returns `message_id AS id` and uses that same canonical ID in its composite cursor.
+- Gallery storage keys remain unchanged, while navigation, mounted-message lookup and pagination now consistently use the owning message ID. Admin deletion staging and five-second undo continue removing and restoring the same canonical reference.
+
+Trade-off: gallery rows and image-message writes gain one text column plus a unique `(channel_id, message_id)` index. This small storage/write cost avoids restoring the per-row messages join and makes the gallery-to-message contract explicit.
+
+Deployment note: apply migration `0053`, then deploy the Worker. No frontend deployment is required. Run `scripts/audit-gallery-query.sql` and confirm zero orphan/missing rows, all triggers, and `gallery_channel_created_message_idx` in both plans.
+
 ### Gallery paging uses one ordered table instead of per-row message validation — 2026-08-20
 
 - The gallery fingerprint read about `53` rows per returned image across 33 executions. Its latency was already low (`0.9 ms` p99 and `0.35%` of database runtime), so this work isolates the optimization from higher-priority message paging.

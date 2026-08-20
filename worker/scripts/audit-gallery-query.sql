@@ -1,4 +1,5 @@
-PRAGMA index_info('gallery_channel_created_id_idx');
+PRAGMA index_info('gallery_channel_created_message_idx');
+PRAGMA index_info('gallery_channel_message_id_idx');
 
 SELECT
   (SELECT COUNT(*)
@@ -7,6 +8,7 @@ SELECT
      SELECT 1
      FROM messages m
      WHERE m.channel_id = g.channel_id
+       AND m.id = g.message_id
        AND m.gallery_id = g.id
        AND m.deleted = 0
        AND m.image IS NOT NULL
@@ -18,9 +20,10 @@ SELECT
      AND m.image IS NOT NULL
      AND NOT EXISTS (
        SELECT 1
-       FROM gallery g
-       WHERE g.channel_id = m.channel_id
-         AND g.id = m.gallery_id
+     FROM gallery g
+     WHERE g.channel_id = m.channel_id
+       AND g.message_id = m.id
+       AND g.id = m.gallery_id
      )) AS missing_gallery_rows;
 
 SELECT name
@@ -34,19 +37,19 @@ WHERE type = 'trigger'
 ORDER BY name;
 
 EXPLAIN QUERY PLAN
-SELECT id, image, auth_uid, channel_id, created_at
+SELECT message_id AS id, image, auth_uid, channel_id, created_at
 FROM gallery
 WHERE channel_id = '__index_audit__'
-ORDER BY created_at DESC, id DESC
+ORDER BY created_at DESC, message_id DESC
 LIMIT 50;
 
 EXPLAIN QUERY PLAN
-SELECT id, image, auth_uid, channel_id, created_at
+SELECT message_id AS id, image, auth_uid, channel_id, created_at
 FROM gallery
 WHERE channel_id = '__index_audit__'
-  AND (created_at, id) < (
+  AND (created_at, message_id) < (
     '9999-12-31T23:59:59.999Z',
     '__cursor_id__'
   )
-ORDER BY created_at DESC, id DESC
+ORDER BY created_at DESC, message_id DESC
 LIMIT 50;

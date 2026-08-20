@@ -328,7 +328,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const cursorId = url.searchParams.get("cursor_id");
       let query = `
         SELECT
-          id,
+          message_id AS id,
           image,
           auth_uid,
           channel_id,
@@ -338,13 +338,13 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       `;
       const params: unknown[] = [channelId];
       if (cursor && cursorId) {
-        query += " AND (created_at, id) < (?, ?)";
+        query += " AND (created_at, message_id) < (?, ?)";
         params.push(cursor, cursorId);
       } else if (cursor) {
         query += " AND created_at < ?";
         params.push(cursor);
       }
-      query += " ORDER BY created_at DESC, id DESC LIMIT 50";
+      query += " ORDER BY created_at DESC, message_id DESC LIMIT 50";
       const { results } = await env.DB.prepare(query).bind(...params).all();
       return Response.json({ gallery: results });
     }
