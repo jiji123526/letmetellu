@@ -1,5 +1,6 @@
 import type { Env } from "../types.ts";
 import {
+  buildVisibleRootPageQuery,
   VISIBLE_ROOT_MESSAGE_CONDITION,
   readVisibleFlatThreads,
   type VisibleMessageRow,
@@ -207,14 +208,21 @@ async function readMessageRootCandidates(
   candidateLimit: number,
   metrics: UnifiedTimelineReadMetrics,
 ): Promise<RootCandidate[]> {
-  let innerQuery = `SELECT * FROM messages WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}`;
-  const params: unknown[] = [channelId, channelId];
-  innerQuery = appendRootCursorRange(innerQuery, params, "message", cursor, direction);
-  innerQuery += direction === "after"
-    ? " ORDER BY created_at ASC, id ASC LIMIT ?"
-    : " ORDER BY created_at DESC, id DESC LIMIT ?";
-  params.push(candidateLimit);
-  const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
+  const cursorParams: unknown[] = [];
+  const cursorCondition = appendRootCursorRange(
+    "",
+    cursorParams,
+    "message",
+    cursor,
+    direction,
+  );
+  const { query, params } = buildVisibleRootPageQuery({
+    channelId,
+    cursorCondition,
+    cursorParams,
+    direction,
+    limit: candidateLimit,
+  });
   const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
   recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({

@@ -173,8 +173,8 @@ function createFixture(input: {
           };
         }
         if (sql.includes("reply_to IN")) return { results: [] };
-        if (sql.includes("FROM messages WHERE")) {
-          const result = { results: selectRootWindow(messageRoots, sql, params, 2) };
+        if (sql.includes("active_roots AS MATERIALIZED")) {
+          const result = { results: selectRootWindow(messageRoots, sql, params, 1) };
           if (input.endLiveDuringRead && !endedDuringRead) {
             endedDuringRead = true;
             liveSession = null;
@@ -789,8 +789,7 @@ test("gallery context uses a smaller server-controlled root radius", async () =>
     !call.sql.includes("WITH RECURSIVE ancestors")
     && (
       (
-        call.sql.includes("FROM messages WHERE")
-        && call.sql.includes("reply_to IS NULL")
+        call.sql.includes("active_roots AS MATERIALIZED")
       )
       || call.sql.includes("FROM dm WHERE")
     )

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildVisibleRootPageQuery,
   expandVisibleRootThreads,
   readVisibleMessagePage,
   readVisibleFlatThreads,
@@ -12,6 +13,48 @@ test("deleted parent visibility uses an indexed child existence probe", () => {
   assert.match(VISIBLE_MESSAGE_CONDITION, /EXISTS/);
   assert.match(VISIBLE_MESSAGE_CONDITION, /child\.reply_to = messages\.id/);
   assert.doesNotMatch(VISIBLE_MESSAGE_CONDITION, /id IN/);
+});
+
+test("root pages bound deleted-parent probes to the active page window", () => {
+  const before = buildVisibleRootPageQuery({
+    channelId: "channel-a",
+    cursorCondition: " AND (created_at, id) < (?, ?)",
+    cursorParams: ["2026-08-09T00:10:00.000Z", "root-a"],
+    direction: "before",
+    limit: 51,
+  });
+  assert.match(before.query, /INDEXED BY messages_active_root_page_idx/);
+  assert.match(before.query, /active_roots AS MATERIALIZED/);
+  assert.match(before.query, /\(created_at, id\) >= \(\s*SELECT created_at, id FROM page_boundary/);
+  assert.equal(
+    before.query.match(/\(created_at, id\) < \(\?, \?\)/g)?.length,
+    2,
+  );
+  assert.deepEqual(before.params, [
+    "channel-a",
+    "2026-08-09T00:10:00.000Z",
+    "root-a",
+    51,
+    51,
+    "",
+    "",
+    "channel-a",
+    "2026-08-09T00:10:00.000Z",
+    "root-a",
+    "channel-a",
+    51,
+  ]);
+
+  const after = buildVisibleRootPageQuery({
+    channelId: "channel-a",
+    direction: "after",
+    limit: 51,
+  });
+  assert.match(after.query, /\(created_at, id\) <= \(\s*SELECT created_at, id FROM page_boundary/);
+  assert.deepEqual(after.params.slice(3, 5), [
+    "9999-12-31T23:59:59.999Z",
+    "~",
+  ]);
 });
 
 test("flat thread expansion skips root lookups already present in the page", async () => {
@@ -315,17 +358,31 @@ test("message page cursors use composite timestamp and id ranges", async () => {
   assert.match(calls[0].query, /\(created_at, id\) < \(\?, \?\)/);
   assert.deepEqual(calls[0].params, [
     "channel-a",
+    "2026-08-09T00:10:00.000Z",
+    "root-a",
+    51,
+    51,
+    "",
+    "",
     "channel-a",
     "2026-08-09T00:10:00.000Z",
     "root-a",
+    "channel-a",
     51,
   ]);
   assert.match(calls[1].query, /\(created_at, id\) > \(\?, \?\)/);
   assert.deepEqual(calls[1].params, [
     "channel-a",
+    "2026-08-09T00:10:00.000Z",
+    "root-a",
+    51,
+    51,
+    "9999-12-31T23:59:59.999Z",
+    "~",
     "channel-a",
     "2026-08-09T00:10:00.000Z",
     "root-a",
+    "channel-a",
     51,
   ]);
 });

@@ -129,7 +129,7 @@ test("source queries stay bounded before the in-memory merge", async () => {
   const { env, calls } = createEnv({});
   await readUnifiedTimelinePage(env, "channel-a", { owner: true }, { limit: 50 });
   const rootCalls = calls.filter((call) =>
-    call.query.includes("FROM dm WHERE") || call.query.includes("FROM messages WHERE")
+    call.query.includes("FROM dm WHERE") || call.query.includes("active_roots AS MATERIALIZED")
   );
   assert.equal(rootCalls.length, 2);
   for (const call of rootCalls) assert.equal(call.params.at(-1), 51);
@@ -148,12 +148,13 @@ test("root cursor predicates reduce source ordering to indexable time ranges", a
       id: "dm-cursor",
     },
   });
-  const messageCall = calls.find((call) => call.query.includes("FROM messages WHERE"));
+  const messageCall = calls.find((call) => call.query.includes("active_roots AS MATERIALIZED"));
   const dmCall = calls.find((call) => call.query.includes("FROM dm WHERE"));
   assert.ok(messageCall);
   assert.ok(dmCall);
   assert.match(messageCall.query, /created_at <= \?/);
   assert.doesNotMatch(messageCall.query, /id < \?/);
+  assert.equal(messageCall.query.match(/created_at <= \?/g)?.length, 2);
   assert.match(dmCall.query, /created_at < \?[\s\S]*id < \?/);
   assert.ok(dmCall.params.includes("dm-cursor"));
 });
@@ -190,7 +191,7 @@ test("centered windows resolve one target and keep candidate reads bounded", asy
   assert.ok(page);
   assert.equal(page.targetId, "target-reply");
   const candidateCalls = calls.filter((call) =>
-    call.query.includes("FROM messages WHERE")
+    call.query.includes("active_roots AS MATERIALIZED")
     || call.query.includes("FROM dm WHERE")
   );
   assert.equal(candidateCalls.length, 4);

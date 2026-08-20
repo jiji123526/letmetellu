@@ -32,6 +32,97 @@ export const VISIBLE_ROOT_MESSAGE_CONDITION = `
   AND reply_to IS NULL
 `;
 
+export function buildVisibleRootPageQuery(input: {
+  channelId: string;
+  cursorCondition?: string;
+  cursorParams?: unknown[];
+  direction: "before" | "after";
+  limit: number;
+}): { query: string; params: unknown[] } {
+  const {
+    channelId,
+    cursorCondition = "",
+    cursorParams = [],
+    direction,
+    limit,
+  } = input;
+  const pageOrder = direction === "after" ? "ASC" : "DESC";
+  const boundaryOrder = direction === "after" ? "DESC" : "ASC";
+  const boundaryComparator = direction === "after" ? "<=" : ">=";
+  const fallbackCreatedAt = direction === "after"
+    ? "9999-12-31T23:59:59.999Z"
+    : "";
+  const fallbackId = direction === "after" ? "~" : "";
+  const query = `
+    WITH active_roots AS MATERIALIZED (
+      SELECT *
+      FROM messages INDEXED BY messages_active_root_page_idx
+      WHERE channel_id = ?
+        AND deleted = 0
+        AND reply_to IS NULL
+        ${cursorCondition}
+      ORDER BY created_at ${pageOrder}, id ${pageOrder}
+      LIMIT ?
+    ),
+    active_boundary AS (
+      SELECT created_at, id
+      FROM active_roots
+      WHERE (SELECT COUNT(*) FROM active_roots) = ?
+      ORDER BY created_at ${boundaryOrder}, id ${boundaryOrder}
+      LIMIT 1
+    ),
+    page_boundary AS (
+      SELECT created_at, id FROM active_boundary
+      UNION ALL
+      SELECT ?, ?
+      LIMIT 1
+    ),
+    visible_roots AS (
+      SELECT * FROM active_roots
+      UNION ALL
+      SELECT *
+      FROM messages
+      WHERE channel_id = ?
+        AND deleted = 1
+        AND reply_to IS NULL
+        ${cursorCondition}
+        AND (created_at, id) ${boundaryComparator} (
+          SELECT created_at, id FROM page_boundary
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM messages child
+          WHERE child.channel_id = ?
+            AND child.deleted = 0
+            AND child.reply_to = messages.id
+        )
+    )
+    SELECT *
+    FROM (
+      SELECT *
+      FROM visible_roots
+      ORDER BY created_at ${pageOrder}, id ${pageOrder}
+      LIMIT ?
+    )
+    ORDER BY created_at ASC, id ASC
+  `;
+  return {
+    query,
+    params: [
+      channelId,
+      ...cursorParams,
+      limit,
+      limit,
+      fallbackCreatedAt,
+      fallbackId,
+      channelId,
+      ...cursorParams,
+      channelId,
+      limit,
+    ],
+  };
+}
+
 function sortVisibleMessages(messages: VisibleMessageRow[]): VisibleMessageRow[] {
   return [...messages].sort((left, right) =>
     String(left.created_at || "").localeCompare(String(right.created_at || ""))
@@ -131,29 +222,30 @@ export async function readVisibleMessagePage(
   const direction = input?.direction || null;
   const limit = input?.limit || 50;
 
-  let innerQuery = `SELECT * FROM messages WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}`;
-  const params: unknown[] = [channelId, channelId];
+  let cursorCondition = "";
+  const cursorParams: unknown[] = [];
 
   if (cursor) {
     if (direction === "after") {
-      innerQuery += cursorId
+      cursorCondition = cursorId
         ? " AND (created_at, id) > (?, ?)"
         : " AND created_at > ?";
-      params.push(cursor, ...(cursorId ? [cursorId] : []));
+      cursorParams.push(cursor, ...(cursorId ? [cursorId] : []));
     } else {
-      innerQuery += cursorId
+      cursorCondition = cursorId
         ? " AND (created_at, id) < (?, ?)"
         : " AND created_at < ?";
-      params.push(cursor, ...(cursorId ? [cursorId] : []));
+      cursorParams.push(cursor, ...(cursorId ? [cursorId] : []));
     }
   }
 
-  innerQuery += direction === "after"
-    ? " ORDER BY created_at ASC, id ASC LIMIT ?"
-    : " ORDER BY created_at DESC, id DESC LIMIT ?";
-  params.push(limit + 1);
-
-  const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
+  const { query, params } = buildVisibleRootPageQuery({
+    channelId,
+    cursorCondition,
+    cursorParams,
+    direction: direction === "after" ? "after" : "before",
+    limit: limit + 1,
+  });
   const { results } = await env.DB.prepare(query).bind(...params).all<VisibleMessageRow>();
   const rawResults = results || [];
   const hasMore = rawResults.length > limit;

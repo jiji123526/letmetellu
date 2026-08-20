@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Visible message pages stop scanning old deleted roots — 2026-08-20
+
+- Production D1 Insights showed the main root-page query running 75 times, reading `139.18k` rows at a `53:1` read/return ratio and taking `5.1 ms` p50. The existing `(channel_id, reply_to, created_at, id)` index preserved ordering, but the `deleted = 0 OR EXISTS(live child)` visibility condition still made each request walk old root rows.
+- Migration `0051_active_message_root_pagination.sql` adds a partial `(channel_id, created_at, id)` index containing only active root messages. Legacy and unified paging now materialize at most one active page from that index, derive its oldest/newest visual boundary, and inspect deleted roots only inside that bounded interval.
+- Deleted-parent behavior is unchanged: a deleted root remains visible only while it has an active reply. Older, newer and timestamp-only cursors retain their existing ordering, and final rows remain ascending for the client.
+- `worker/scripts/audit-visible-root-pagination.sql` reports active/deleted root distribution and verifies both cursor directions with `EXPLAIN QUERY PLAN`. The low-runtime gallery fingerprint is intentionally unchanged.
+
+Trade-off: each active root adds one partial-index entry, and each page materializes at most 101 roots in a small temporary CTE before the final merge. This adds bounded query-planning and temporary-sort work, but avoids repeatedly evaluating visibility across a large channel. When fewer than one page of active roots remains at the end of history, the deleted-root branch can still inspect the remaining cursor range because no tighter complete-page boundary exists.
+
+Deployment note: apply migration `0051`, then deploy the Worker. No frontend deployment or data backfill is required. Run the audit script after migration, verify `messages_active_root_page_idx` and bounded `messages_channel_root_created_id_idx` ranges appear in both plans, then compare the new `WITH active_roots AS MATERIALIZED` fingerprint’s rows-read ratio and p50/p99 against the `53:1`, `5.1 ms` baseline.
+
 ### Platform admins can audit passcode-protected channels without the passcode — 2026-08-20
 
 - A trusted logged-in user whose ID is revalidated as the configured reports-channel owner can open ordinary passcode-protected channels without receiving the passcode gate.
