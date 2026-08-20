@@ -329,7 +329,7 @@ export function ChatViewBottomShell({
         />
 
         <button
-          className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-center"
+          className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-end"
           style={{
             color: "var(--meta)",
             width: "32px",
@@ -346,7 +346,7 @@ export function ChatViewBottomShell({
         </button>
 
         <div
-          className="flex-1 flex items-center relative"
+          className="flex-1 flex items-end relative"
           style={{
             minHeight: "calc(var(--bubble-font-size) + 19px)",
             padding: "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
@@ -386,10 +386,11 @@ export function ChatViewBottomShell({
               type="button"
               disabled={isSending}
               onClick={() => { void onSend(); }}
-              className="flex-none flex items-center justify-center border-none cursor-pointer"
+              className="flex-none flex items-center justify-center border-none cursor-pointer self-end"
               style={{
                 width: "calc(var(--bubble-font-size) + 9px)",
                 height: "calc(var(--bubble-font-size) + 9px)",
+                marginBottom: "8px",
                 borderRadius: "50%",
                 background: dmMode ? "#7b3fa0" : bubbleColor,
                 opacity: isSending ? 0.55 : 1,
