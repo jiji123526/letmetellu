@@ -543,7 +543,25 @@ test("gallery navigation skips context replacement when its target is already mo
     historyNavigationSource,
     /galleryBoundary\s*\? await waitForGalleryTargetReadiness\(/,
   );
-  assert.match(historyNavigationSource, /Promise\.all\(readinessPromises\)/);
+  assert.match(
+    historyNavigationSource,
+    /\[data-message-preview-url\]\[data-history-layout-pending\]/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /node\.dispatchEvent\(new Event\("chat-history-preview-activate"\)\)/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /await waitForRelevantPendingLayout\(container, target, controller\.signal\)/,
+  );
+  assert.ok(
+    historyNavigationSource.indexOf("await waitForRelevantPendingLayout(")
+      < historyNavigationSource.indexOf(
+        'const relevantMedia = [...container.querySelectorAll("img, video")]',
+      ),
+  );
+  assert.match(historyNavigationSource, /Promise\.all\(relevantMedia\.map/);
   assert.match(historyNavigationSource, /new ResizeObserver\(/);
   assert.match(historyNavigationSource, /stableFrames >= 3/);
   assert.match(

@@ -45,6 +45,14 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /window\.addEventListener\("chat-history-preload"/);
   assert.match(
     messageEmbedsSource,
+    /target\?\.addEventListener\("chat-history-preview-activate"/,
+  );
+  assert.match(
+    messageEmbedsSource,
+    /data-message-preview-url=\{url\}\s*data-history-layout-pending/,
+  );
+  assert.match(
+    messageEmbedsSource,
     /mountedPrefetchBudget = Math\.max\([\s\S]*MOUNTED_PREVIEW_PREFETCH_LIMIT/,
   );
 });

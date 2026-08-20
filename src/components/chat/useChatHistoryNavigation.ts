@@ -344,6 +344,7 @@ async function waitForCompleteHistoryWindow(
 }
 
 function waitForImageReady(image: HTMLImageElement, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
   const decode = async () => {
     if (!image.complete || image.naturalWidth === 0) return;
     await image.decode().catch(() => {});
@@ -364,6 +365,7 @@ function waitForImageReady(image: HTMLImageElement, signal: AbortSignal): Promis
 }
 
 function waitForVideoReady(video: HTMLVideoElement, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
   if (
     video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
     || video.readyState >= HTMLMediaElement.HAVE_METADATA
@@ -382,15 +384,20 @@ function waitForVideoReady(video: HTMLVideoElement, signal: AbortSignal): Promis
   });
 }
 
-function waitForPendingMarker(
+function waitForRelevantPendingLayout(
   container: HTMLElement,
-  marker: Element,
+  target: HTMLElement,
   signal: AbortSignal,
 ): Promise<void> {
-  if (!marker.isConnected) return Promise.resolve();
+  if (signal.aborted) return Promise.resolve();
+  const hasPendingLayout = () => [...container.querySelectorAll(
+    "[data-history-layout-pending]",
+  )].some((node) => isBeforeOrInsideTarget(node, target));
+  if (!hasPendingLayout()) return Promise.resolve();
+
   return new Promise<void>((resolve) => {
     const observer = new MutationObserver(() => {
-      if (!marker.isConnected) finish();
+      if (!hasPendingLayout()) finish();
     });
     const finish = () => {
       observer.disconnect();
@@ -462,18 +469,28 @@ async function waitForGalleryTargetReadiness(
   interactionContainer.addEventListener("touchstart", interrupt, { passive: true });
   interactionContainer.addEventListener("pointerdown", interrupt, { passive: true });
 
-  const relevantNodes = [...container.querySelectorAll(
-    "img, video, [data-history-layout-pending]",
-  )].filter((node) => isBeforeOrInsideTarget(node, target));
-  const readinessPromises = relevantNodes.map((node) => {
-    if (node instanceof HTMLImageElement) {
-      return waitForImageReady(node, controller.signal);
-    }
-    if (node instanceof HTMLVideoElement) {
-      return waitForVideoReady(node, controller.signal);
-    }
-    return waitForPendingMarker(container, node, controller.signal);
-  });
+  const prepareRelevantResources = async () => {
+    const deferredPreviews = [...container.querySelectorAll<HTMLElement>(
+      "[data-message-preview-url][data-history-layout-pending]",
+    )].filter((node) => isBeforeOrInsideTarget(node, target));
+    deferredPreviews.forEach((node) => {
+      node.dispatchEvent(new Event("chat-history-preview-activate"));
+    });
+
+    // Let scoped preview activation replace zero-height placeholders before
+    // collecting the image and video nodes whose dimensions affect the target.
+    await nextAnimationFrame();
+    await waitForRelevantPendingLayout(container, target, controller.signal);
+
+    const relevantMedia = [...container.querySelectorAll("img, video")]
+      .filter((node) => isBeforeOrInsideTarget(node, target));
+    await Promise.all(relevantMedia.map((node) => {
+      if (node instanceof HTMLImageElement) {
+        return waitForImageReady(node, controller.signal);
+      }
+      return waitForVideoReady(node as HTMLVideoElement, controller.signal);
+    }));
+  };
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const timedOut = new Promise<"timeout">((resolve) => {
     timeoutId = setTimeout(() => resolve("timeout"), timeoutMs);
@@ -481,7 +498,7 @@ async function waitForGalleryTargetReadiness(
 
   try {
     const resourceResult = await Promise.race([
-      Promise.all(readinessPromises).then(() => "ready" as const),
+      prepareRelevantResources().then(() => "ready" as const),
       interrupted.then(() => "cancelled" as const),
       timedOut,
     ]);

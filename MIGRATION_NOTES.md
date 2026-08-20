@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation waits for deferred preview geometry — 2026-08-20
+
+- Hidden gallery staging now activates only unresolved link previews at or above the selected message. Element-scoped activation avoids waking duplicate links in the visible history or unrelated previews below the destination.
+- Zero-height deferred preview anchors are now explicit layout-pending markers. Gallery readiness waits for those markers to resolve into a card or no preview, then waits for the resulting images and videos before checking three stable layout frames.
+- The final authorization-filtered context swap and centered scroll remain atomic and happen once. A preview above the selected image can no longer gain height after navigation and push the destination below the centered position.
+- The six-closest mounted-preview budget remains dedicated to speculative background warming. Correctness-critical gallery previews use the existing visible-priority queue, whose network concurrency remains capped at two.
+
+Trade-off: an uncached gallery jump may wait for more than six previews when several unresolved links appear above its destination in the bounded 12-root staging window. This work is required to know the final target offset; previews below the target stay deferred, duplicate URLs share requests, and user wheel/touch/pointer input still cancels the wait.
+
+Deployment note: frontend-only. In an image/link-heavy channel, navigate to an unmounted gallery item with cold previews above it and confirm the old viewport remains visible until one atomic centered jump. Confirm there is no delayed downward target shift, no scroll correction, and no activation of previews below the destination.
+
 ### Gallery navigation Stage 5 uses a smaller purpose-scoped context window — 2026-08-20
 
 - Gallery context requests now send a dedicated `navigation_purpose=gallery` marker through the frontend proxy.

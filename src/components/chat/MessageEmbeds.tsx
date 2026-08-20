@@ -364,8 +364,13 @@ function useDeferredEmbedVisibility() {
 
   useEffect(() => {
     const activateForNavigation = () => setIsVisible(true);
+    const target = targetRef.current;
     window.addEventListener("chat-history-preload", activateForNavigation);
-    return () => window.removeEventListener("chat-history-preload", activateForNavigation);
+    target?.addEventListener("chat-history-preview-activate", activateForNavigation);
+    return () => {
+      window.removeEventListener("chat-history-preload", activateForNavigation);
+      target?.removeEventListener("chat-history-preview-activate", activateForNavigation);
+    };
   }, []);
 
   useEffect(() => {
@@ -457,6 +462,7 @@ function LinkPreviewCard({
       <a
         ref={targetRef}
         data-message-preview-url={url}
+        data-history-layout-pending
         style={{ position: "relative", width: "100%", height: 0, overflow: "visible" }}
         aria-hidden="true"
         tabIndex={-1}
