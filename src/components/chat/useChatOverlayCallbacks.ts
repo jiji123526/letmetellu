@@ -20,7 +20,16 @@ interface UseChatOverlayCallbacksArgs {
   photoInputRef: RefObject<HTMLInputElement | null>;
   submittingModerationPetition: boolean;
   openGalleryImage: (src: string, meta: GalleryMeta, caption?: string) => void;
-  scrollToMessage: (msgId: string, alignment?: "message" | "media") => Promise<void>;
+  scrollToMessage: (
+    msgId: string,
+    alignment?: "message" | "media",
+    options?: {
+      preferMounted?: boolean;
+      preserveViewportUntilReady?: boolean;
+      anchorMessageId?: string | null;
+      purpose?: "gallery";
+    },
+  ) => Promise<void>;
   handleReaction: (messageId: string, emoji: string) => Promise<void>;
   closeEmojiPicker: () => void;
   setDmMode: Dispatch<SetStateAction<boolean>>;
@@ -246,7 +255,10 @@ export function useChatOverlayCallbacks({
   const jumpFromGalleryImage = useCallback((msgId: string) => {
     closeFullViewImage();
     closeGallery();
-    void scrollToMessage(msgId, "media");
+    void scrollToMessage(msgId, "media", {
+      preferMounted: true,
+      purpose: "gallery",
+    });
   }, [closeFullViewImage, closeGallery, scrollToMessage]);
 
   return {

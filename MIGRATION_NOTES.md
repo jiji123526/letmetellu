@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation Stage 1 reuses mounted targets and records phase timings — 2026-08-20
+
+- Selecting gallery media whose parent message is already mounted now takes the existing direct-scroll path. It no longer refetches a centered context page, replaces the history window, activates broad history preview work, or waits for unrelated media readiness.
+- Unmounted gallery targets retain the existing authorization-aware context lookup and complete-window readiness behavior. This keeps the first stage low risk while the slower path is measured.
+- Development builds retain the latest 20 gallery navigation measurements in `window.__letmetelluGalleryNavigationPerf`. Each entry identifies the mounted fast path and records context-fetch, React-mount, target-discovery, history-readiness and final-scroll milestones when applicable.
+- Production builds do not collect these client measurements.
+
+Trade-off: repeated navigation to media already in the mounted window is substantially cheaper, but the first jump to distant media remains unchanged until the gallery-specific staging work is complete.
+
+Deployment note: frontend-only. In a development or preview build, inspect `window.__letmetelluGalleryNavigationPerf` after selecting mounted and unmounted gallery entries; mounted entries should complete without context-fetch or history-readiness milestones.
+
 ### Ordinary chat disconnects now refresh silently instead of showing a reconnect bar — 2026-08-20
 
 - The reconnect notice no longer appears for ordinary channel reading, even at the latest edge. It remains reserved for `live` sessions and DM interactions where socket loss immediately affects the active surface.

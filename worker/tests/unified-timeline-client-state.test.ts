@@ -513,6 +513,26 @@ test("context navigation synchronizes cursors before checking gallery history ed
   assert.ok(boundaryCheckIndex > scrollIndex);
 });
 
+test("gallery navigation skips context replacement when its target is already mounted", () => {
+  const overlayCallbacksSource = readFileSync(
+    new URL("../../src/components/chat/useChatOverlayCallbacks.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    overlayCallbacksSource,
+    /scrollToMessage\(msgId, "media", \{\s*preferMounted: true,\s*purpose: "gallery",\s*\}\)/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /const useMountedFastPath = options\?\.preferMounted === true && !!element/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /startGalleryNavigationTiming\(msgId, useMountedFastPath\)/,
+  );
+});
+
 test("unified timeline proxy forwards anonymous identity cookies for joined viewers", () => {
   assert.match(
     unifiedTimelineRouteSource,

@@ -8,6 +8,11 @@ import {
   fetchUnifiedTimelineContext,
   fetchUnifiedTimelinePage,
 } from "@/lib/api-chat";
+import {
+  finishGalleryNavigationTiming,
+  markGalleryNavigationTiming,
+  startGalleryNavigationTiming,
+} from "@/lib/gallery-navigation-performance";
 import { MAX_MOUNTED_HISTORY_MESSAGES, trimMessageWindow } from "./chatMessageUtils";
 import type { Message, MessagePageCursor } from "./chatTypes";
 import type { ChatTimelineItem, UnifiedTimelineCursor } from "./chatTimelineState";
@@ -75,6 +80,7 @@ interface UseChatHistoryNavigationResult {
       preferMounted?: boolean;
       preserveViewportUntilReady?: boolean;
       anchorMessageId?: string | null;
+      purpose?: "gallery";
     },
   ) => Promise<void>;
   restoreRefreshPosition: () => Promise<boolean>;
@@ -953,6 +959,7 @@ export function useChatHistoryNavigation({
       preferMounted?: boolean;
       preserveViewportUntilReady?: boolean;
       anchorMessageId?: string | null;
+      purpose?: "gallery";
     },
   ) => {
     const navigationRequest = ++navigationRequestRef.current;
@@ -960,6 +967,10 @@ export function useChatHistoryNavigation({
     let element = document.getElementById(`msg-${msgId}`);
     const fallbackElement = element;
     const useMountedFastPath = options?.preferMounted === true && !!element;
+    const galleryTiming = options?.purpose === "gallery"
+      ? startGalleryNavigationTiming(msgId, useMountedFastPath)
+      : null;
+    markGalleryNavigationTiming(galleryTiming, "request-started");
     const container = messagesContainerRef.current;
     const needsPendingIndicator = !useMountedFastPath;
     if (needsPendingIndicator) {
@@ -995,6 +1006,7 @@ export function useChatHistoryNavigation({
               source,
               live ? liveSessionId : undefined,
             );
+            markGalleryNavigationTiming(galleryTiming, "context-fetched");
             if (navigationRequest !== navigationRequestRef.current) return;
             if (!data.items.some((item) => item.id === msgId)) throw new Error("message not found");
             replaceUnifiedContextPage(
@@ -1012,8 +1024,10 @@ export function useChatHistoryNavigation({
             hasMoreMessagesRef.current = data.has_older === true;
             updateHasMoreNewerMessages(data.has_newer === true);
             element = await waitForMessageElement(msgId);
+            markGalleryNavigationTiming(galleryTiming, "react-mounted");
           } else {
             const data = await fetchMessageContext(fetchChannel, msgId);
+            markGalleryNavigationTiming(galleryTiming, "context-fetched");
             if (navigationRequest !== navigationRequestRef.current) return;
             if (!data.messages?.some((message: Message) => message.id === msgId)) {
               throw new Error("message not found");
@@ -1029,6 +1043,7 @@ export function useChatHistoryNavigation({
             newerPageCursorRef.current = responseCursor(data.page_end_cursor)
               || messageCursor(data.messages.at(-1));
             element = await waitForMessageElement(msgId);
+            markGalleryNavigationTiming(galleryTiming, "react-mounted");
           }
         } catch {
           element = fallbackElement || null;
@@ -1038,6 +1053,7 @@ export function useChatHistoryNavigation({
       if (!element) {
         releaseHeldViewport?.();
         if (navigationRequest !== navigationRequestRef.current) return;
+        finishGalleryNavigationTiming(galleryTiming, "not-found");
         setBanner({ text: "Message not found", color: "var(--meta)" });
         setTimeout(() => setBanner(null), 2000);
         return;
@@ -1045,6 +1061,7 @@ export function useChatHistoryNavigation({
 
       if (navigationRequest !== navigationRequestRef.current) return;
       element = document.getElementById(`msg-${msgId}`) || element;
+      markGalleryNavigationTiming(galleryTiming, "target-discovered");
       if (container && !useMountedFastPath) {
         await nextAnimationFrame();
         window.dispatchEvent(new Event("chat-history-preload"));
@@ -1054,8 +1071,10 @@ export function useChatHistoryNavigation({
         );
         if (readiness === "cancelled") {
           releaseHeldViewport?.();
+          finishGalleryNavigationTiming(galleryTiming, "cancelled");
           return;
         }
+        markGalleryNavigationTiming(galleryTiming, "history-ready");
       }
       if (navigationRequest !== navigationRequestRef.current) return;
       element = document.getElementById(`msg-${msgId}`) || element;
@@ -1064,6 +1083,8 @@ export function useChatHistoryNavigation({
         : element;
       releaseHeldViewport?.();
       finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
+      markGalleryNavigationTiming(galleryTiming, "final-scroll");
+      finishGalleryNavigationTiming(galleryTiming, "completed");
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (navigationRequest === navigationRequestRef.current) handleScroll();
