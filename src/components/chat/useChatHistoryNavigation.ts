@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from "react";
+import { flushSync } from "react-dom";
 import {
   fetchMessageContext,
   fetchMessagePage,
@@ -38,6 +39,7 @@ interface UseChatHistoryNavigationArgs {
   historyMode: HistoryMode;
   enabled: boolean;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  galleryNavigationStageRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   inLiveModeRef: MutableRefObject<boolean>;
   liveSessionId: string;
@@ -70,6 +72,7 @@ interface UseChatHistoryNavigationResult {
   hasMoreNewerMessagesRef: MutableRefObject<boolean>;
   isMessageNavigationPending: boolean;
   isOlderHistoryLoading: boolean;
+  stagedGalleryTimelineItems: ChatTimelineItem[] | null;
   handleScroll: () => void;
   scrollToBottom: () => void;
   positionAtLatest: () => void;
@@ -179,6 +182,22 @@ async function waitForMessageElement(msgId: string, timeoutMs = 1500): Promise<H
   const startedAt = performance.now();
   while (performance.now() - startedAt < timeoutMs) {
     const element = document.getElementById(`msg-${msgId}`);
+    if (element) return element;
+    await nextAnimationFrame();
+  }
+  return null;
+}
+
+async function waitForStagedMessageElement(
+  containerRef: RefObject<HTMLDivElement | null>,
+  msgId: string,
+  timeoutMs = 1500,
+): Promise<HTMLElement | null> {
+  const startedAt = performance.now();
+  while (performance.now() - startedAt < timeoutMs) {
+    const element = containerRef.current?.querySelector<HTMLElement>(
+      `#msg-${CSS.escape(msgId)}`,
+    );
     if (element) return element;
     await nextAnimationFrame();
   }
@@ -423,6 +442,7 @@ async function waitForObservedTargetStability(
 async function waitForGalleryTargetReadiness(
   container: HTMLElement,
   target: HTMLElement,
+  interactionContainer: HTMLElement,
   isCurrent: () => boolean,
   onResourcesReady: () => void,
   timeoutMs = 45_000,
@@ -438,9 +458,9 @@ async function waitForGalleryTargetReadiness(
     resolveInterruption?.();
   };
 
-  container.addEventListener("wheel", interrupt, { passive: true });
-  container.addEventListener("touchstart", interrupt, { passive: true });
-  container.addEventListener("pointerdown", interrupt, { passive: true });
+  interactionContainer.addEventListener("wheel", interrupt, { passive: true });
+  interactionContainer.addEventListener("touchstart", interrupt, { passive: true });
+  interactionContainer.addEventListener("pointerdown", interrupt, { passive: true });
 
   const relevantNodes = [...container.querySelectorAll(
     "img, video, [data-history-layout-pending]",
@@ -474,9 +494,9 @@ async function waitForGalleryTargetReadiness(
   } finally {
     if (timeoutId !== null) clearTimeout(timeoutId);
     controller.abort();
-    container.removeEventListener("wheel", interrupt);
-    container.removeEventListener("touchstart", interrupt);
-    container.removeEventListener("pointerdown", interrupt);
+    interactionContainer.removeEventListener("wheel", interrupt);
+    interactionContainer.removeEventListener("touchstart", interrupt);
+    interactionContainer.removeEventListener("pointerdown", interrupt);
   }
 }
 
@@ -494,6 +514,7 @@ export function useChatHistoryNavigation({
   historyMode,
   enabled,
   messagesContainerRef,
+  galleryNavigationStageRef,
   messagesEndRef,
   inLiveModeRef,
   liveSessionId,
@@ -507,6 +528,10 @@ export function useChatHistoryNavigation({
 }: UseChatHistoryNavigationArgs): UseChatHistoryNavigationResult {
   const [isMessageNavigationPending, setIsMessageNavigationPending] = useState(false);
   const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
+  const [stagedGalleryTimelineItems, setStagedGalleryTimelineItems] = useState<{
+    requestId: number;
+    items: ChatTimelineItem[];
+  } | null>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasMoreNewerMessages, setHasMoreNewerMessages] = useState(false);
   const isNearBottomRef = useRef(true);
@@ -1148,6 +1173,18 @@ export function useChatHistoryNavigation({
       pendingNavigationRequestRef.current = 0;
       setIsMessageNavigationPending(false);
     };
+    const clearGalleryStage = () => {
+      setStagedGalleryTimelineItems((current) =>
+        current?.requestId === navigationRequest ? null : current
+      );
+    };
+    let pendingUnifiedGalleryContext: {
+      items: ChatTimelineItem[];
+      pageStartCursor: UnifiedTimelineCursor | null;
+      pageEndCursor: UnifiedTimelineCursor | null;
+      hasOlder: boolean;
+      hasNewer: boolean;
+    } | null = null;
 
     try {
       const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
@@ -1165,21 +1202,40 @@ export function useChatHistoryNavigation({
             markGalleryNavigationTiming(galleryTiming, "context-fetched");
             if (navigationRequest !== navigationRequestRef.current) return;
             if (!data.items.some((item) => item.id === msgId)) throw new Error("message not found");
-            replaceUnifiedContextPage(
-              data.items as unknown as ChatTimelineItem[],
-              data.page_start_cursor,
-              data.page_end_cursor,
-              data.has_older === true,
-              data.has_newer === true,
-            );
-            unifiedStartCursorRef.current = data.page_start_cursor;
-            unifiedEndCursorRef.current = data.page_end_cursor;
-            historyModeRef.current = "context";
-            setHistoryMode("context");
-            setNewerMessageCount(0);
-            hasMoreMessagesRef.current = data.has_older === true;
-            updateHasMoreNewerMessages(data.has_newer === true);
-            element = await waitForMessageElement(msgId);
+            const contextItems = data.items as unknown as ChatTimelineItem[];
+            if (options?.purpose === "gallery" && galleryNavigationStageRef.current) {
+              pendingUnifiedGalleryContext = {
+                items: contextItems,
+                pageStartCursor: data.page_start_cursor,
+                pageEndCursor: data.page_end_cursor,
+                hasOlder: data.has_older === true,
+                hasNewer: data.has_newer === true,
+              };
+              setStagedGalleryTimelineItems({
+                requestId: navigationRequest,
+                items: contextItems,
+              });
+              element = await waitForStagedMessageElement(
+                galleryNavigationStageRef,
+                msgId,
+              );
+            } else {
+              replaceUnifiedContextPage(
+                contextItems,
+                data.page_start_cursor,
+                data.page_end_cursor,
+                data.has_older === true,
+                data.has_newer === true,
+              );
+              unifiedStartCursorRef.current = data.page_start_cursor;
+              unifiedEndCursorRef.current = data.page_end_cursor;
+              historyModeRef.current = "context";
+              setHistoryMode("context");
+              setNewerMessageCount(0);
+              hasMoreMessagesRef.current = data.has_older === true;
+              updateHasMoreNewerMessages(data.has_newer === true);
+              element = await waitForMessageElement(msgId);
+            }
             markGalleryNavigationTiming(galleryTiming, "react-mounted");
           } else {
             const data = await fetchMessageContext(fetchChannel, msgId);
@@ -1208,6 +1264,7 @@ export function useChatHistoryNavigation({
 
       if (!element) {
         releaseHeldViewport?.();
+        clearGalleryStage();
         if (navigationRequest !== navigationRequestRef.current) return;
         finishGalleryNavigationTiming(galleryTiming, "not-found");
         setBanner({ text: "Message not found", color: "var(--meta)" });
@@ -1218,7 +1275,10 @@ export function useChatHistoryNavigation({
       if (navigationRequest !== navigationRequestRef.current) return;
       element = document.getElementById(`msg-${msgId}`) || element;
       markGalleryNavigationTiming(galleryTiming, "target-discovered");
-      if (container && !useMountedFastPath) {
+      const readinessContainer = pendingUnifiedGalleryContext
+        ? galleryNavigationStageRef.current
+        : container;
+      if (readinessContainer && !useMountedFastPath) {
         await nextAnimationFrame();
         const galleryBoundary = options?.purpose === "gallery" ? element : undefined;
         if (!galleryBoundary) {
@@ -1226,21 +1286,57 @@ export function useChatHistoryNavigation({
         }
         const readiness = galleryBoundary
           ? await waitForGalleryTargetReadiness(
-              container,
+              readinessContainer,
               galleryBoundary,
+              container || readinessContainer,
               () => navigationRequest === navigationRequestRef.current,
               () => markGalleryNavigationTiming(galleryTiming, "target-media-ready"),
             )
           : await waitForCompleteHistoryWindow(
-              container,
+              readinessContainer,
               () => navigationRequest === navigationRequestRef.current,
             );
         if (readiness === "cancelled") {
           releaseHeldViewport?.();
+          clearGalleryStage();
           finishGalleryNavigationTiming(galleryTiming, "cancelled");
           return;
         }
         markGalleryNavigationTiming(galleryTiming, "layout-stabilized");
+      }
+      if (navigationRequest !== navigationRequestRef.current) {
+        clearGalleryStage();
+        return;
+      }
+      if (pendingUnifiedGalleryContext) {
+        const context = pendingUnifiedGalleryContext;
+        flushSync(() => {
+          replaceUnifiedContextPage(
+            context.items,
+            context.pageStartCursor,
+            context.pageEndCursor,
+            context.hasOlder,
+            context.hasNewer,
+          );
+          setStagedGalleryTimelineItems((current) =>
+            current?.requestId === navigationRequest ? null : current
+          );
+          setHistoryMode("context");
+          setNewerMessageCount(0);
+          updateHasMoreNewerMessages(context.hasNewer);
+        });
+        unifiedStartCursorRef.current = context.pageStartCursor;
+        unifiedEndCursorRef.current = context.pageEndCursor;
+        historyModeRef.current = "context";
+        hasMoreMessagesRef.current = context.hasOlder;
+        element = document.getElementById(`msg-${msgId}`);
+        markGalleryNavigationTiming(galleryTiming, "context-committed");
+      }
+      if (!element) {
+        releaseHeldViewport?.();
+        clearGalleryStage();
+        finishGalleryNavigationTiming(galleryTiming, "not-found");
+        return;
       }
       if (navigationRequest !== navigationRequestRef.current) return;
       element = document.getElementById(`msg-${msgId}`) || element;
@@ -1259,7 +1355,7 @@ export function useChatHistoryNavigation({
     } finally {
       finishPendingIndicator();
     }
-  }, [channelId, handleScroll, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems, updateHasMoreNewerMessages]);
+  }, [channelId, galleryNavigationStageRef, handleScroll, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems, updateHasMoreNewerMessages]);
 
   const restoreRefreshPosition = useCallback(async () => {
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
@@ -1351,6 +1447,7 @@ export function useChatHistoryNavigation({
     hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
+    stagedGalleryTimelineItems: stagedGalleryTimelineItems?.items || null,
     handleScroll,
     scrollToBottom,
     positionAtLatest,

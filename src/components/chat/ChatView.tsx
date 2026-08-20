@@ -13,7 +13,7 @@ import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { readChannelAppearance, readChannelBackground } from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
-import type { MessagePageCursor } from "./chatTypes";
+import type { Message, MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReplyParents } from "./useChatReplyParents";
@@ -38,7 +38,10 @@ import {
 import { useChatChannelBootstrap } from "./useChatChannelBootstrap";
 import { useChatRealtimeSync } from "./useChatRealtimeSync";
 import { shouldShowReconnectNotice } from "./chatConnectionNotice";
-import { getAnonymousViewerDmMessages } from "./chatMessageSelectors";
+import {
+  deriveChatMessageCollections,
+  getAnonymousViewerDmMessages,
+} from "./chatMessageSelectors";
 import { useChatTimelineState } from "./useChatTimelineState";
 
 function getInitialUid(): string {
@@ -174,6 +177,7 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const galleryNavigationStageRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const initRequestIdRef = useRef(0);
@@ -552,6 +556,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     hasMoreNewerMessagesRef,
     isMessageNavigationPending,
     isOlderHistoryLoading,
+    stagedGalleryTimelineItems,
     handleScroll,
     scrollToBottom,
     positionAtLatest,
@@ -571,6 +576,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     historyMode,
     enabled: !loading && !passcodeGate && !showChannelDeleted,
     messagesContainerRef,
+    galleryNavigationStageRef,
     messagesEndRef,
     inLiveModeRef,
     liveSessionId,
@@ -582,6 +588,32 @@ export function ChatView({ channelId }: { channelId: string }) {
     setShowScrollBtn,
     setBanner,
   });
+  const stagedGalleryThreadedMessages = useMemo(() => {
+    if (!stagedGalleryTimelineItems) return null;
+    const stagedMessages: Message[] = stagedGalleryTimelineItems
+      .filter((item) => item.source === "message");
+    let stagedDmMessages: Message[] = stagedGalleryTimelineItems
+      .filter((item) => item.source === "dm");
+    if (isOwner && !effectiveAdmin) {
+      stagedDmMessages = getAnonymousViewerDmMessages(stagedDmMessages, uid);
+    }
+    return deriveChatMessageCollections({
+      messages: stagedMessages,
+      dmMessages: stagedDmMessages,
+      historyMode: "context",
+      unavailableReplyParentIds,
+      effectiveAdmin,
+      isReportsChannelView: false,
+      reportsOwnerFilter,
+    }).threadedMessages;
+  }, [
+    effectiveAdmin,
+    isOwner,
+    reportsOwnerFilter,
+    stagedGalleryTimelineItems,
+    uid,
+    unavailableReplyParentIds,
+  ]);
 
   const loadLiveChannelAtLatest = useCallback(async () => {
     await loadLiveChannelData();
@@ -1002,6 +1034,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         onDismissNotice={() => setActiveNotice("")}
         liveCount={liveCount}
         messagesContainerRef={messagesContainerRef}
+        galleryNavigationStageRef={galleryNavigationStageRef}
         messagesEndRef={messagesEndRef}
         onScroll={handleScroll}
         isReportsOwnerView={isReportsOwnerView}
@@ -1013,6 +1046,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         petitionOpenBadgeLabel={t("petitionOpenBadge")}
         viewReportedChannelLabel={t("viewReportedChannel")}
         threadedMessages={threadedMessages}
+        stagedGalleryThreadedMessages={stagedGalleryThreadedMessages}
         effectiveAdmin={effectiveAdmin}
         uid={uid}
         authUserId={authUserId}

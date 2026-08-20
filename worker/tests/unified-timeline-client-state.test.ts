@@ -546,6 +546,16 @@ test("gallery navigation skips context replacement when its target is already mo
   assert.match(historyNavigationSource, /Promise\.all\(readinessPromises\)/);
   assert.match(historyNavigationSource, /new ResizeObserver\(/);
   assert.match(historyNavigationSource, /stableFrames >= 3/);
+  assert.match(
+    historyNavigationSource,
+    /setStagedGalleryTimelineItems\(\{\s*requestId: navigationRequest,\s*items: contextItems/,
+  );
+  assert.match(historyNavigationSource, /waitForStagedMessageElement\(/);
+  assert.match(historyNavigationSource, /flushSync\(\(\) => \{/);
+  assert.ok(
+    historyNavigationSource.indexOf("waitForGalleryTargetReadiness(")
+      < historyNavigationSource.lastIndexOf("flushSync(() => {"),
+  );
 });
 
 test("unified timeline proxy forwards anonymous identity cookies for joined viewers", () => {

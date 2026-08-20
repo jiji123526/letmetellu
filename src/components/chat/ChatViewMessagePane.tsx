@@ -8,6 +8,7 @@ import type { Message } from "./chatTypes";
 import { isHorizontalMessageSwipe, messageSwipeOffset } from "./messageSwipe";
 
 type SwipeRevealSide = "sent" | "received";
+const EMPTY_MESSAGE_ID_SET = new Set<string>();
 
 interface ChatViewMessagePaneProps {
   channelId: string;
@@ -21,6 +22,7 @@ interface ChatViewMessagePaneProps {
   onDismissNotice: () => void;
   liveCount: number;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
+  galleryNavigationStageRef: RefObject<HTMLDivElement | null>;
   messagesEndRef: RefObject<HTMLDivElement | null>;
   onScroll: () => void;
   isReportsOwnerView: boolean;
@@ -32,6 +34,7 @@ interface ChatViewMessagePaneProps {
   petitionOpenBadgeLabel: string;
   viewReportedChannelLabel: string;
   threadedMessages: ThreadedMessages;
+  stagedGalleryThreadedMessages: ThreadedMessages | null;
   effectiveAdmin: boolean;
   uid: string;
   authUserId?: string | null;
@@ -66,6 +69,7 @@ export function ChatViewMessagePane({
   onDismissNotice,
   liveCount,
   messagesContainerRef,
+  galleryNavigationStageRef,
   messagesEndRef,
   onScroll,
   isReportsOwnerView,
@@ -77,6 +81,7 @@ export function ChatViewMessagePane({
   petitionOpenBadgeLabel,
   viewReportedChannelLabel,
   threadedMessages,
+  stagedGalleryThreadedMessages,
   effectiveAdmin,
   uid,
   authUserId,
@@ -349,6 +354,41 @@ export function ChatViewMessagePane({
           )}
         </div>
       )}
+
+      <div
+        ref={galleryNavigationStageRef}
+        data-gallery-navigation-stage
+        aria-hidden="true"
+        className="pointer-events-none absolute left-[14px] right-[14px] top-0 -z-10 flex flex-col overflow-hidden invisible"
+      >
+        {stagedGalleryThreadedMessages && (
+          <MessageList
+            threadedMessages={stagedGalleryThreadedMessages}
+            backgroundType={backgroundType}
+            backgroundColor={backgroundColor}
+            backgroundOverlay={backgroundOverlay}
+            effectiveAdmin={effectiveAdmin}
+            uid={uid}
+            authUserId={authUserId}
+            bubbleColor={bubbleColor}
+            reportedMsgIds={reportedMsgIds}
+            reportedTargetIds={reportedTargetIds}
+            searchQuery=""
+            searchResultIdSet={EMPTY_MESSAGE_ID_SET}
+            activeSearchId={null}
+            deletedMessageLabel={deletedMessageLabel}
+            editedMessageLabel={editedMessageLabel}
+            locale={locale}
+            timeZone={timeZone}
+            onLongPress={onLongPress}
+            onTouchStart={onTouchStart}
+            onOpenImage={onOpenImage}
+            onExpand={onExpand}
+            onReaction={onReaction}
+            onEmojiPicker={onEmojiPicker}
+          />
+        )}
+      </div>
 
       <main
         ref={messagesContainerRef}

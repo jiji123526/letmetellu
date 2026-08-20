@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation Stage 4 swaps staged history atomically — 2026-08-20
+
+- Distant unified gallery destinations now render into a hidden, non-interactive staging list while the currently visible history remains mounted and unchanged.
+- Relevant media readiness and geometry stabilization run against that staged list. User interruption discards it without replacing the visible timeline.
+- Once staging is trustworthy, the authorization-filtered context page, cursors and history mode are committed synchronously; the selected media is centered before the browser paints the replacement. This removes the intermediate uncentered context frame and avoids cloning live DOM or remounting external widgets in a visible overlay.
+- The staging list exists only during an unmounted unified gallery jump. Mounted targets, search, refresh restoration, realtime updates and ordinary pagination do not pay the duplicate-render cost.
+
+Trade-off: an unmounted gallery jump temporarily retains the old mounted window and one bounded staged context window, increasing short-lived DOM and memory usage. The staged tree is capped by the context endpoint and is discarded immediately after completion, cancellation or failure.
+
+Deployment note: frontend-only. On a throttled media-heavy channel, select distant gallery items and confirm the old viewport remains visually unchanged under the loading indicator, then transitions directly to one centered destination without an intermediate flash. Wheel or touch during staging must leave the old timeline intact.
+
 ### Gallery navigation Stage 3 uses event-based media readiness and observed stability — 2026-08-20
 
 - Gallery staging now collects relevant images, videos and active layout-pending markers once, limited to the selected message and content above it. It waits for image load/decode, video metadata and marker removal in parallel instead of rescanning the entire history DOM every animation frame.
