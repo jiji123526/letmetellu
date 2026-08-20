@@ -991,6 +991,8 @@ export function useChatHistoryNavigation({
               data.has_older === true,
               data.has_newer === true,
             );
+            unifiedStartCursorRef.current = data.page_start_cursor;
+            unifiedEndCursorRef.current = data.page_end_cursor;
             historyModeRef.current = "context";
             setHistoryMode("context");
             setNewerMessageCount(0);
@@ -1049,10 +1051,15 @@ export function useChatHistoryNavigation({
         : element;
       releaseHeldViewport?.();
       finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (navigationRequest === navigationRequestRef.current) handleScroll();
+        });
+      });
     } finally {
       finishPendingIndicator();
     }
-  }, [channelId, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems]);
+  }, [channelId, handleScroll, inLiveModeRef, liveSessionId, messagesContainerRef, replaceUnifiedContextPage, setBanner, setHistoryMode, setMessages, setNewerMessageCount, unifiedTimelineEnabled, unifiedTimelineItems]);
 
   const restoreRefreshPosition = useCallback(async () => {
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
@@ -1096,6 +1103,8 @@ export function useChatHistoryNavigation({
             data.has_older === true,
             data.has_newer === true,
           );
+          unifiedStartCursorRef.current = data.page_start_cursor;
+          unifiedEndCursorRef.current = data.page_end_cursor;
           hasMoreMessagesRef.current = data.has_older === true;
           hasMoreNewerMessagesRef.current = data.has_newer === true;
         } else {

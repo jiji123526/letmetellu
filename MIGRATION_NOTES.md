@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery context navigation can continue loading history — 2026-08-19
+
+- Gallery-to-message navigation now synchronizes the unified page start/end cursor refs at the same moment it installs the centered context page, instead of waiting for a later React effect.
+- After the target media is positioned, the chat explicitly rechecks the upper and lower history boundaries. This covers the case where the context window is already clamped to an edge and the browser therefore emits no additional user-scroll event.
+- The same immediate cursor synchronization is applied to reload-position restoration so both context entry paths use the page that is actually mounted.
+- Regression coverage verifies that context cursors are installed before the final scroll and that a boundary check follows it.
+
+Trade-off: context navigation performs one extra in-memory boundary check after two animation frames. It does not make a request unless the viewport is actually at an edge and the server reported more history, so normal centered navigation adds no D1 traffic.
+
+Deployment note: deploy the frontend only. No Worker or D1 migration is required.
+
 ### In-channel refresh preserves the current reading position reliably — 2026-08-19
 
 - The chat still restores by source-qualified message ID and viewport offset, fetching a small authorization-aware context window when the saved message is outside the latest page.

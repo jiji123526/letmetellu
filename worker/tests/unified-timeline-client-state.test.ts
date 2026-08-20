@@ -469,6 +469,28 @@ test("unified prepend holds its viewport anchor while inserted media settles", (
   );
 });
 
+test("context navigation synchronizes cursors before checking gallery history edges", () => {
+  const contextNavigation = historyNavigationSource.match(
+    /const scrollToMessage = useCallback[\s\S]*?const restoreRefreshPosition = useCallback/,
+  )?.[0] || "";
+  const replaceIndex = contextNavigation.indexOf("replaceUnifiedContextPage(");
+  const startCursorIndex = contextNavigation.indexOf(
+    "unifiedStartCursorRef.current = data.page_start_cursor",
+    replaceIndex,
+  );
+  const endCursorIndex = contextNavigation.indexOf(
+    "unifiedEndCursorRef.current = data.page_end_cursor",
+    replaceIndex,
+  );
+  const scrollIndex = contextNavigation.indexOf("finalAlignmentElement.scrollIntoView", replaceIndex);
+  const boundaryCheckIndex = contextNavigation.indexOf("handleScroll();", scrollIndex);
+
+  assert.ok(replaceIndex >= 0);
+  assert.ok(startCursorIndex > replaceIndex && startCursorIndex < scrollIndex);
+  assert.ok(endCursorIndex > startCursorIndex && endCursorIndex < scrollIndex);
+  assert.ok(boundaryCheckIndex > scrollIndex);
+});
+
 test("unified timeline proxy forwards anonymous identity cookies for joined viewers", () => {
   assert.match(
     unifiedTimelineRouteSource,
