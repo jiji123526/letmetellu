@@ -12,6 +12,7 @@ import { recordOperationalEvent, withOperationalErrorContext } from "../lib/oper
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
+import { parseMediaDimensions } from "../lib/media-dimensions.ts";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -143,9 +144,13 @@ export async function handleMessages(
       routeStage = "parse_body";
       const body = await request.json() as Record<string, unknown>;
       const { client_message_id, nick, text, channel_id, image, upload_id, reply_to, report, reported_msg_id } = body;
+      const mediaDimensions = parseMediaDimensions(body);
 
       if (!channel_id) {
         return Response.json({ error: "missing required fields" }, { status: 400 });
+      }
+      if (mediaDimensions === undefined || (!image && mediaDimensions)) {
+        return Response.json({ error: "invalid_media_dimensions" }, { status: 400 });
       }
       requestChannelId = String(channel_id);
       if (client_message_id !== undefined && !isValidClientMessageId(client_message_id)) {
@@ -342,9 +347,27 @@ export async function handleMessages(
       const isAdmin = isChannelOwner ? 1 : 0;
       const stmts = [
         env.DB.prepare(`
-          INSERT INTO messages (id, client_message_id, uid, auth_uid, nick, text, is_admin, channel_id, image, reply_to, root_id, report, reported_msg_id, gallery_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, clientMessageId, senderUid, senderUid, nick || null, text || "", isAdmin, requestChannelId, image || null, resolvedReplyTo, resolvedReplyTo || id, report ? 1 : 0, resolvedReportedMessageId, image ? id : null, created_at),
+          INSERT INTO messages (id, client_message_id, uid, auth_uid, nick, text, is_admin, channel_id, image, image_w, image_h, reply_to, root_id, report, reported_msg_id, gallery_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          id,
+          clientMessageId,
+          senderUid,
+          senderUid,
+          nick || null,
+          text || "",
+          isAdmin,
+          requestChannelId,
+          image || null,
+          mediaDimensions?.width ?? null,
+          mediaDimensions?.height ?? null,
+          resolvedReplyTo,
+          resolvedReplyTo || id,
+          report ? 1 : 0,
+          resolvedReportedMessageId,
+          image ? id : null,
+          created_at,
+        ),
       ];
       if (!isChannelOwner && requesterDeviceId) {
         routeStage = "persist_message_identities";
@@ -386,6 +409,7 @@ export async function handleMessages(
       const newMessage = {
         id, client_message_id: clientMessageId, uid: senderUid, auth_uid: senderUid, nick: nick || null, text: text || "", is_admin: isAdmin,
         channel_id: requestChannelId, image: image || null, reply_to: resolvedReplyTo, root_id: resolvedReplyTo || id,
+        image_w: mediaDimensions?.width ?? null, image_h: mediaDimensions?.height ?? null,
         report: report ? 1 : 0, reported_msg_id: resolvedReportedMessageId, gallery_id: image ? id : null,
         deleted: 0, edited: 0, reactions: "{}", created_at,
       };

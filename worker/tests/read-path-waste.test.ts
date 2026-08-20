@@ -42,7 +42,7 @@ test("recent-channel reads trust canonical proxy user ids instead of re-resolvin
 });
 
 test("private dm thread roots select only the columns the client uses", () => {
-  assert.match(dmThreadsSource, /const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at"/);
+  assert.match(dmThreadsSource, /const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at"/);
   assert.doesNotMatch(dmThreadsSource, /SELECT \* FROM \(SELECT \* FROM dm/);
 });
 

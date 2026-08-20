@@ -600,6 +600,8 @@ export async function sendMessage(payload: {
   text: string;
   channel_id: string;
   image?: string;
+  image_w?: number;
+  image_h?: number;
   upload_id?: string;
   reply_to?: string;
   report?: boolean;
@@ -632,6 +634,8 @@ export async function sendMessageAsAdmin(payload: {
   text: string;
   channel_id: string;
   image?: string;
+  image_w?: number;
+  image_h?: number;
   upload_id?: string;
   reply_to?: string;
   report?: boolean;
@@ -761,6 +765,8 @@ export async function sendDm(payload: {
   text: string;
   channel_id: string;
   image?: string;
+  image_w?: number;
+  image_h?: number;
   upload_id?: string;
 }) {
   if (IS_MOCK) return { ok: true };
@@ -799,6 +805,8 @@ export async function sendDmReply(payload: {
   dm_id: string;
   text: string;
   image?: string;
+  image_w?: number;
+  image_h?: number;
   upload_id?: string;
 }) {
   if (IS_MOCK) return { ok: true };

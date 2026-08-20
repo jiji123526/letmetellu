@@ -380,6 +380,7 @@ export function ChatViewMessagePane({
             editedMessageLabel={editedMessageLabel}
             locale={locale}
             timeZone={timeZone}
+            eagerMedia
             onLongPress={onLongPress}
             onTouchStart={onTouchStart}
             onOpenImage={onOpenImage}

@@ -12,6 +12,7 @@ import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation.ts";
 import { deleteMediaByUrl } from "../lib/media.ts";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
+import { parseMediaDimensions } from "../lib/media-dimensions.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -26,6 +27,8 @@ interface DmRoot {
   nick: string | null;
   text: string;
   image: string | null;
+  image_w: number | null;
+  image_h: number | null;
   channel_id: string;
   created_at: string;
 }
@@ -48,6 +51,8 @@ function serializeDmReply(reply: {
   owner_uid: string;
   text: string;
   image: string | null;
+  image_w: number | null;
+  image_h: number | null;
   created_at: string;
 }) {
   return {
@@ -59,6 +64,8 @@ function serializeDmReply(reply: {
     text: reply.text,
     is_admin: 1,
     image: reply.image,
+    image_w: reply.image_w,
+    image_h: reply.image_h,
     reactions: "{}",
     reply_to: reply.dm_id,
     channel_id: reply.channel_id,
@@ -133,6 +140,10 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     const rawText = typeof body.text === "string" ? body.text : "";
     const image = typeof body.image === "string" ? body.image : "";
     const uploadId = typeof body.upload_id === "string" ? body.upload_id : "";
+    const mediaDimensions = parseMediaDimensions(body);
+    if (mediaDimensions === undefined || (!image && mediaDimensions)) {
+      return Response.json({ error: "invalid_media_dimensions" }, { status: 400 });
+    }
     if (
       !dmId
       || !isValidClientMessageId(clientReplyId)
@@ -174,7 +185,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
 
     const existing = await env.DB.prepare(`
-      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
+      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at
       FROM dm_replies
       WHERE owner_uid = ? AND client_reply_id = ?
       LIMIT 1
@@ -186,6 +197,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       owner_uid: string;
       text: string;
       image: string | null;
+      image_w: number | null;
+      image_h: number | null;
       created_at: string;
     }>();
     if (existing) {
@@ -222,8 +235,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     let result: D1Result;
     try {
       result = await env.DB.prepare(`
-        INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?
+        INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (
           SELECT 1
           FROM dm_replies
@@ -239,13 +252,15 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         trustedUserId,
         rawText,
         image || null,
+        mediaDimensions?.width ?? null,
+        mediaDimensions?.height ?? null,
         createdAt,
         dmId,
         DM_REPLY_LIMIT - 1,
       ).run();
     } catch (error) {
       const duplicate = await env.DB.prepare(`
-        SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
+        SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at
         FROM dm_replies
         WHERE owner_uid = ? AND client_reply_id = ?
         LIMIT 1
@@ -257,6 +272,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         owner_uid: string;
         text: string;
         image: string | null;
+        image_w: number | null;
+        image_h: number | null;
         created_at: string;
       }>();
       if (duplicate?.dm_id === dmId) {
@@ -298,6 +315,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         owner_uid: trustedUserId,
         text: rawText,
         image: image || null,
+        image_w: mediaDimensions?.width ?? null,
+        image_h: mediaDimensions?.height ?? null,
         created_at: createdAt,
       }),
     });
@@ -369,6 +388,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
   if (request.method === "POST") {
     const body = await request.json() as Record<string, unknown>;
     const { client_message_id, nick, text, channel_id, image, upload_id } = body;
+    const mediaDimensions = parseMediaDimensions(body);
 
     if (typeof channel_id !== "string" || !channel_id) {
       return Response.json({ error: "missing required fields" }, { status: 400 });
@@ -378,6 +398,9 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
     if (image !== undefined && typeof image !== "string") {
       return Response.json({ error: "missing required fields" }, { status: 400 });
+    }
+    if (mediaDimensions === undefined || (!image && mediaDimensions)) {
+      return Response.json({ error: "invalid_media_dimensions" }, { status: 400 });
     }
     if (client_message_id !== undefined && !isValidClientMessageId(client_message_id)) {
       return Response.json({ error: "invalid_client_message_id" }, { status: 400 });
@@ -522,8 +545,20 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     try {
       await env.DB.batch([
         env.DB.prepare(
-          "INSERT INTO dm (id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(id, clientMessageId, requesterUid, requesterUid, nick || null, rawText, image || null, channel_id, created_at),
+          "INSERT INTO dm (id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(
+          id,
+          clientMessageId,
+          requesterUid,
+          requesterUid,
+          nick || null,
+          rawText,
+          image || null,
+          mediaDimensions?.width ?? null,
+          mediaDimensions?.height ?? null,
+          channel_id,
+          created_at,
+        ),
         env.DB.prepare(
           `INSERT OR REPLACE INTO message_actor_identities
             (record_id, record_type, channel_id, uid, device_id_hash, created_at)
@@ -554,6 +589,8 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       nick: nick || null,
       text: rawText,
       image: image || null,
+      image_w: mediaDimensions?.width ?? null,
+      image_h: mediaDimensions?.height ?? null,
       channel_id,
       created_at,
     };

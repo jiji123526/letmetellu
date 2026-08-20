@@ -367,6 +367,8 @@ export function useChatMessageMutations({
         dm_id: replyingTo.reply_to || replyingTo.id,
         text: nextText,
         image: upload?.url,
+        image_w: photos[0]?.width,
+        image_h: photos[0]?.height,
         upload_id: upload?.uploadId,
       });
       if (!result?.ok || !result.reply) {
@@ -406,6 +408,8 @@ export function useChatMessageMutations({
         text: nextText,
         channel_id: dmChannelId,
         image: dmUpload?.url,
+        image_w: photos[0]?.width,
+        image_h: photos[0]?.height,
         upload_id: dmUpload?.uploadId,
       });
       if (!result?.ok) {
@@ -464,6 +468,8 @@ export function useChatMessageMutations({
             text: index === 0 ? nextText : "",
             channel_id: activeChannelId,
             image: upload.url,
+            image_w: photos[index].width,
+            image_h: photos[index].height,
             upload_id: upload.uploadId,
             reply_to: savedReplyTo,
           });

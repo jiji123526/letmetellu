@@ -7,6 +7,8 @@ export interface ChatMessageSnapshot {
   text: string;
   is_admin: number;
   image: string | null;
+  image_w?: number | null;
+  image_h?: number | null;
   reactions: string;
   reply_to: string | null;
   created_at: string;

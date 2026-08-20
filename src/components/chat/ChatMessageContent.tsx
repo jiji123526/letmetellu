@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 import { MessageEmbeds } from "./MessageEmbeds";
@@ -8,6 +8,9 @@ import { highlightText } from "./search-highlight";
 
 interface MessageImageProps {
   src: string;
+  width?: number | null;
+  height?: number | null;
+  eager?: boolean;
   onOpen: () => void;
 }
 
@@ -37,15 +40,73 @@ interface MessageTextWithEmbedsProps {
 }
 
 const URL_LINK_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))(?:\/[^\s<]*)?)/g;
-const LOADED_MESSAGE_MEDIA_CACHE_LIMIT = 500;
-const loadedMessageMediaUrls = new Set<string>();
+const READY_MESSAGE_IMAGE_LIMIT = 500;
+const readyMessageImages = new Set<string>();
+const messageImageObserverGroups = new WeakMap<HTMLElement, {
+  observer: IntersectionObserver;
+  callbacks: Map<Element, () => void>;
+}>();
 
-function rememberLoadedMessageMedia(url: string) {
-  loadedMessageMediaUrls.delete(url);
-  loadedMessageMediaUrls.add(url);
-  if (loadedMessageMediaUrls.size <= LOADED_MESSAGE_MEDIA_CACHE_LIMIT) return;
-  const oldestUrl = loadedMessageMediaUrls.values().next().value;
-  if (oldestUrl) loadedMessageMediaUrls.delete(oldestUrl);
+function getMessageImageRootMargin(): string {
+  const connection = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+  if (connection?.saveData === true || connection?.effectiveType?.includes("2g")) {
+    return "240px 0px";
+  }
+  if (connection?.effectiveType === "3g") return "720px 0px";
+  return "1440px 0px";
+}
+
+function rememberReadyMessageImage(src: string): void {
+  readyMessageImages.delete(src);
+  readyMessageImages.add(src);
+  while (readyMessageImages.size > READY_MESSAGE_IMAGE_LIMIT) {
+    const oldest = readyMessageImages.values().next().value;
+    if (typeof oldest !== "string") break;
+    readyMessageImages.delete(oldest);
+  }
+}
+
+function observeMessageImage(
+  root: HTMLElement,
+  target: HTMLElement,
+  activate: () => void,
+): () => void {
+  let group = messageImageObserverGroups.get(root);
+  if (!group) {
+    const callbacks = new Map<Element, () => void>();
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        callbacks.get(entry.target)?.();
+        callbacks.delete(entry.target);
+        observer.unobserve(entry.target);
+      });
+      if (callbacks.size === 0) {
+        observer.disconnect();
+        messageImageObserverGroups.delete(root);
+      }
+    }, {
+      root,
+      rootMargin: getMessageImageRootMargin(),
+    });
+    group = { observer, callbacks };
+    messageImageObserverGroups.set(root, group);
+  }
+  group.callbacks.set(target, activate);
+  group.observer.observe(target);
+
+  return () => {
+    const current = messageImageObserverGroups.get(root);
+    if (!current) return;
+    current.observer.unobserve(target);
+    current.callbacks.delete(target);
+    if (current.callbacks.size === 0) {
+      current.observer.disconnect();
+      messageImageObserverGroups.delete(root);
+    }
+  };
 }
 
 function linkifyText(text: string, isMine: boolean, hiddenEmbedUrls: Set<string>): (string | React.ReactElement)[] {
@@ -123,21 +184,67 @@ function highlightRenderedText(
   ));
 }
 
-export function MessageImage({ src, onOpen }: MessageImageProps) {
+export function MessageImage({
+  src,
+  width,
+  height,
+  eager = false,
+  onOpen,
+}: MessageImageProps) {
   const { t } = useLocale();
-  const [loaded, setLoaded] = useState(() => loadedMessageMediaUrls.has(src));
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hasStableDimensions = Number.isFinite(width)
+    && Number.isFinite(height)
+    && Number(width) > 0
+    && Number(height) > 0;
+  const initiallyReady = readyMessageImages.has(src);
+  const [shouldLoad, setShouldLoad] = useState(
+    () => eager || !hasStableDimensions || initiallyReady,
+  );
+  const [loaded, setLoaded] = useState(initiallyReady);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
+  useEffect(() => {
+    if (shouldLoad || eager || !hasStableDimensions) return;
+    const target = containerRef.current;
+    if (!target || typeof IntersectionObserver === "undefined") {
+      setShouldLoad(true);
+      return;
+    }
+    const root = target.closest<HTMLElement>(".messages-scroll");
+    if (!root) {
+      setShouldLoad(true);
+      return;
+    }
+    return observeMessageImage(root, target, () => {
+      setShouldLoad(true);
+    });
+  }, [eager, hasStableDimensions, shouldLoad]);
+
+  const reservedStyle = hasStableDimensions
+    ? {
+        width: `${Number(width)}px`,
+        maxWidth: "100%",
+        aspectRatio: `${Number(width)} / ${Number(height)}`,
+      }
+    : undefined;
+
   return (
-    <div data-message-media className="relative inline-block select-none" onContextMenu={(event) => event.preventDefault()}>
-      {!loaded && !failed && <MediaLoadingDots />}
+    <div
+      ref={containerRef}
+      data-message-media
+      className="relative inline-block select-none"
+      style={reservedStyle}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {shouldLoad && !loaded && !failed && <MediaLoadingDots />}
       {failed ? (
         <button
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            loadedMessageMediaUrls.delete(src);
+            readyMessageImages.delete(src);
             setFailed(false);
             setLoaded(false);
             setAttempt((value) => value + 1);
@@ -149,17 +256,20 @@ export function MessageImage({ src, onOpen }: MessageImageProps) {
       ) : (
         <img
           key={attempt}
-          src={src}
+          src={shouldLoad ? src : undefined}
           alt=""
           draggable={false}
+          decoding="async"
           className="block h-auto rounded-[15px] select-none"
-          style={{ display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain", userSelect: "none" }}
+          style={hasStableDimensions
+            ? { display: loaded ? "block" : "none", width: "100%", height: "100%", objectFit: "contain", userSelect: "none" }
+            : { display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain", userSelect: "none" }}
           onLoad={() => {
-            rememberLoadedMessageMedia(src);
+            rememberReadyMessageImage(src);
             setLoaded(true);
           }}
           onError={() => {
-            loadedMessageMediaUrls.delete(src);
+            readyMessageImages.delete(src);
             setFailed(true);
           }}
         />

@@ -25,6 +25,19 @@ Trade-off: an uncached gallery jump may wait for more than six previews when sev
 
 Deployment note: frontend-only. In an image/link-heavy channel, navigate to an unmounted gallery item with cold previews above it and confirm the old viewport remains visible until one atomic centered jump. Confirm there is no delayed downward target shift, no scroll correction, and no activation of previews below the destination.
 
+### Direct message images now load near the viewport without changing layout — 2026-08-20
+
+- New normal-message, DM-root and DM-reply image sends now persist the client-measured image width and height. Migration `0050_dm_media_dimensions.sql` adds the missing dimension columns to both DM tables; the original messages table already contained them.
+- Message bubbles with validated client-measured dimensions reserve their final width and aspect ratio before the image request starts. Their actual `src` activates only when the bubble enters the chat viewport margin: `1440px` on normal connections, `720px` on 3G, and `240px` with Save-Data or a 2G-class connection.
+- Once an image activates it remains loaded while its message stays in the bounded mounted window. Up to 500 recently confirmed image URLs are remembered so hidden gallery staging can hand off to the visible atomic swap without a placeholder frame, while long browser sessions cannot grow that in-memory set without limit.
+- Historical images without dimensions retain eager loading. This intentionally prevents old messages from collapsing to zero height and shifting the reader when their unknown geometry arrives.
+- The hidden gallery-navigation context remains eager and bounded to its smaller context window. This preserves the one-swap, one-scroll guarantee while ordinary mounted history no longer requests every dimensioned off-screen image.
+- Worker validation accepts only complete integer dimension pairs from `1` through `10000`; dimensions without an image, partial pairs and unbounded values are rejected.
+
+Trade-off: new image sends add two small integer fields. Deferred image bubbles share one `IntersectionObserver` per chat scroller until activation, avoiding per-image observers. Fast scrolling can briefly expose the reserved loading state, but the large adaptive margin normally starts decoding before entry and reserved geometry prevents vertical bounce. Old media keeps its prior network behavior until dimensions are backfilled or the rows leave the mounted window.
+
+Deployment note: apply migration `0050`, then deploy the Worker and frontend together. Verify new normal images, DM images and DM-reply images store dimensions; scroll quickly through image-heavy history on normal, 3G and Save-Data profiles; and confirm gallery navigation still swaps once without post-navigation correction.
+
 ### Gallery navigation Stage 5 uses a smaller purpose-scoped context window — 2026-08-20
 
 - Gallery context requests now send a dedicated `navigation_purpose=gallery` marker through the frontend proxy.

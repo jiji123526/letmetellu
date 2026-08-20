@@ -521,12 +521,13 @@ test("context navigation synchronizes cursors before checking gallery history ed
 });
 
 test("gallery navigation reuses staged image readiness and centers the media geometry", () => {
-  assert.match(messageContentSource, /LOADED_MESSAGE_MEDIA_CACHE_LIMIT = 500/);
+  assert.match(messageContentSource, /READY_MESSAGE_IMAGE_LIMIT = 500/);
   assert.match(
     messageContentSource,
-    /useState\(\(\) => loadedMessageMediaUrls\.has\(src\)\)/,
+    /const initiallyReady = readyMessageImages\.has\(src\)/,
   );
-  assert.match(messageContentSource, /rememberLoadedMessageMedia\(src\)/);
+  assert.match(messageContentSource, /const \[loaded, setLoaded\] = useState\(initiallyReady\)/);
+  assert.match(messageContentSource, /rememberReadyMessageImage\(src\)/);
   assert.match(
     historyNavigationSource,
     /const centerDelta = elementRect\.top[\s\S]*containerRect\.top \+ container\.clientHeight \/ 2/,

@@ -8,6 +8,8 @@ interface DmRootRow {
   nick: string | null;
   text: string;
   image: string | null;
+  image_w: number | null;
+  image_h: number | null;
   channel_id: string;
   created_at: string;
 }
@@ -20,6 +22,8 @@ interface DmReplyRow {
   owner_uid: string;
   text: string;
   image: string | null;
+  image_w: number | null;
+  image_h: number | null;
   created_at: string;
 }
 
@@ -32,6 +36,8 @@ export interface PrivateDmMessage {
   text: string;
   is_admin: number;
   image: string | null;
+  image_w: number | null;
+  image_h: number | null;
   reactions: string;
   reply_to: string | null;
   channel_id: string;
@@ -45,7 +51,7 @@ export async function readDmThreads(
   channelId: string,
   viewer: { owner: true } | { owner: false; anonymousUid: string },
 ): Promise<PrivateDmMessage[]> {
-  const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, channel_id, created_at";
+  const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at";
   const rootQuery = viewer.owner
     ? `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC`
     : `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ? AND uid = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC`;
@@ -57,7 +63,7 @@ export async function readDmThreads(
 
   const placeholders = roots.map(() => "?").join(", ");
   const replies = (await env.DB.prepare(`
-    SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
+    SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at
     FROM dm_replies
     WHERE dm_id IN (${placeholders})
       AND pending_delete_at IS NULL
@@ -73,6 +79,8 @@ export async function readDmThreads(
     text: root.text || "",
     is_admin: 0,
     image: root.image,
+    image_w: root.image_w,
+    image_h: root.image_h,
     reactions: "{}",
     reply_to: null,
     channel_id: root.channel_id,
@@ -88,6 +96,8 @@ export async function readDmThreads(
     text: reply.text,
     is_admin: 1,
     image: reply.image,
+    image_w: reply.image_w,
+    image_h: reply.image_h,
     reactions: "{}",
     reply_to: reply.dm_id,
     channel_id: reply.channel_id,

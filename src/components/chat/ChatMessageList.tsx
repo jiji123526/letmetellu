@@ -33,6 +33,7 @@ interface MessageRowProps {
   editedMessageLabel: string;
   locale: "ko" | "en";
   timeZone: string;
+  eagerMedia: boolean;
   onLongPress: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onTouchStart: (msg: Message, isSent: boolean, el: HTMLElement) => void;
   onOpenImage: (msg: Message) => void;
@@ -59,6 +60,7 @@ interface MessageListProps {
   editedMessageLabel: string;
   locale: "ko" | "en";
   timeZone: string;
+  eagerMedia?: boolean;
   onLongPress: MessageRowProps["onLongPress"];
   onTouchStart: MessageRowProps["onTouchStart"];
   onOpenImage: MessageRowProps["onOpenImage"];
@@ -158,6 +160,7 @@ const MessageRow = React.memo(function MessageRow({
   editedMessageLabel,
   locale,
   timeZone,
+  eagerMedia,
   onLongPress,
   onTouchStart,
   onOpenImage,
@@ -295,7 +298,15 @@ const MessageRow = React.memo(function MessageRow({
               </a>
             </div>
           )}
-          {msg.image && <MessageImage src={msg.image} onOpen={() => onOpenImage(msg)} />}
+          {msg.image && (
+            <MessageImage
+              src={msg.image}
+              width={msg.image_w}
+              height={msg.image_h}
+              eager={eagerMedia}
+              onOpen={() => onOpenImage(msg)}
+            />
+          )}
           {msg.text && (
             <MemoizedMessageTextWithEmbeds
               key={`${msg.id}:${msg.text}:${msg.report_meta?.channel_id || msg.petition_meta?.channel_id || ""}`}
@@ -451,6 +462,7 @@ export const MessageList = React.memo(function MessageList({
   editedMessageLabel,
   locale,
   timeZone,
+  eagerMedia = false,
   onLongPress,
   onTouchStart,
   onOpenImage,
@@ -483,6 +495,7 @@ export const MessageList = React.memo(function MessageList({
     editedMessageLabel,
     locale,
     timeZone,
+    eagerMedia,
     onLongPress,
     onTouchStart,
     onOpenImage,

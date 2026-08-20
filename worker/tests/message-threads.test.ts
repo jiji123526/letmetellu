@@ -80,7 +80,7 @@ test("canonical roots are backfilled once and persisted by every message writer"
   assert.match(migrationSource, /INNER JOIN message_roots ON child\.reply_to = message_roots\.id/);
   assert.doesNotMatch(migrationSource, /CREATE INDEX/);
 
-  assert.match(messagesRouteSource, /reply_to, root_id, report/);
-  assert.match(messagesRouteSource, /resolvedReplyTo, resolvedReplyTo \|\| id, report/);
+  assert.match(messagesRouteSource, /image_w, image_h, reply_to, root_id, report/);
+  assert.match(messagesRouteSource, /mediaDimensions\?\.height \?\? null,\s*resolvedReplyTo,\s*resolvedReplyTo \|\| id,/);
   assert.match(moderationSource, /reply_to, root_id, report/);
 });

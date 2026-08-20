@@ -26,6 +26,8 @@ type DmReplyRow = Record<string, unknown> & {
   owner_uid: string;
   text: string;
   image: string | null;
+  image_w: number | null;
+  image_h: number | null;
   channel_id: string;
   created_at: string;
 };
@@ -262,7 +264,7 @@ async function readDmReplies(
     const lookupIds = normalizeLookupIds(rootChunk);
     const placeholders = lookupIds.map(() => "?").join(", ");
     const result = await env.DB.prepare(`
-      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, created_at
+      SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at
       FROM dm_replies
       WHERE channel_id = ?
         AND dm_id IN (${placeholders})
