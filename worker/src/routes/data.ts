@@ -7,7 +7,7 @@ import {
   VISIBLE_MESSAGE_CONDITION,
   VISIBLE_ROOT_MESSAGE_CONDITION,
 } from "../lib/visible-messages";
-import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { authorizeRoomToken } from "./passcode";
 import { getChannelPasscodeInfo } from "../lib/validation";
@@ -45,9 +45,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   }
   const trustedUserId = getTrustedUserId(request, env) || "";
   const isOwner = trustedUserId === owner_uid;
-  const isReportsOwnerViewer = reportsChannel && !isOwner
-    ? await isReportsChannelOwner(trustedUserId, env)
-    : false;
+  const isPlatformAdminViewer = !isOwner
+    && Boolean(passcode)
+    && await isPlatformAdmin(trustedUserId, env);
   const reportsOwnerLocale = reportsChannel && isOwner && trustedUserId
     ? await getUserLocale(trustedUserId, env)
     : "ko";
@@ -56,7 +56,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   }
 
   if (passcode) {
-    if (!isOwner && !isReportsOwnerViewer) {
+    if (!isOwner && !isPlatformAdminViewer) {
       const roomToken = request.headers.get("X-Room-Token");
       if (!roomToken) return Response.json({ error: "passcode required" }, { status: 403 });
       const decoded = await authorizeRoomToken(roomToken, parentChannelId, passcode, env);

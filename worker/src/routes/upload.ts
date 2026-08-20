@@ -1,7 +1,7 @@
 import type { Env } from "../types.ts";
 import { verifyAnonymousIdentityToken } from "../lib/anonymous-identity.ts";
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
-import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels.ts";
+import { getParentChannelId, isPlatformAdmin, isReportsChannel } from "../lib/special-channels.ts";
 import { createUploadTicket, enforceUploadQuota, getUploadRequestIp, hashUploadIp, type UploadPurpose } from "../lib/upload-tickets.ts";
 import { matchesImageSignature } from "../lib/image-signature.ts";
 import { getMediaCacheControl } from "../lib/media-cache-control.ts";
@@ -350,8 +350,9 @@ export async function handleMediaServe(
     const directUserId = mediaAccess?.user_id || "";
     const authorizedUserId = trustedUserId || directUserId;
     const isOwner = authorizedUserId === owner_uid;
-    const isReportsOwnerViewer = !isOwner
-      && await isReportsChannelOwner(authorizedUserId, env);
+    const isPlatformAdminViewer = !isOwner
+      && Boolean(passcode)
+      && await isPlatformAdmin(authorizedUserId, env);
     const hasCurrentRoomBinding = Boolean(
       passcode
       && mediaAccess?.channel_id === parentChannelId
@@ -365,7 +366,7 @@ export async function handleMediaServe(
     );
 
     if (passcode) {
-      if (!isOwner && !isReportsOwnerViewer && !hasCurrentRoomBinding) {
+      if (!isOwner && !isPlatformAdminViewer && !hasCurrentRoomBinding) {
         const token = new URL(request.url).searchParams.get("token") || request.headers.get("X-Room-Token");
         if (!token) return Response.json({ error: "passcode required" }, { status: 403 });
         const decoded = await authorizeRoomToken(token, parentChannelId, passcode, env);
@@ -373,7 +374,7 @@ export async function handleMediaServe(
           return Response.json({ error: "invalid token" }, { status: 403 });
         }
       }
-    } else if (isReportsChannel(parentChannelId, env) && !isOwner && !isReportsOwnerViewer) {
+    } else if (isReportsChannel(parentChannelId, env) && !isOwner) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
   }

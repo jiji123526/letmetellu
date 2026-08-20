@@ -13,7 +13,7 @@ import {
 import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout.ts";
 import { resolveActiveLiveSession } from "../lib/live-sessions.ts";
 import { resolveUnifiedTimelineViewer } from "../lib/unified-timeline-viewer.ts";
-import { isReportsChannel } from "../lib/special-channels.ts";
+import { isPlatformAdmin, isReportsChannel } from "../lib/special-channels.ts";
 import { getUserLocale } from "../lib/channel-moderation.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getChannelPasscodeInfo } from "../lib/validation.ts";
@@ -49,11 +49,14 @@ export async function handleUnifiedTimeline(
 
   const trustedUserId = getTrustedUserId(request, env);
   const isOwner = Boolean(trustedUserId && trustedUserId === ownerId);
+  const isPlatformAdminViewer = !isOwner
+    && Boolean(passcode)
+    && await isPlatformAdmin(trustedUserId, env);
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
 
-  if (passcode && !isOwner) {
+  if (passcode && !isOwner && !isPlatformAdminViewer) {
     const roomToken = request.headers.get("X-Room-Token");
     if (!roomToken) {
       return Response.json({ error: "passcode required" }, { status: 403 });

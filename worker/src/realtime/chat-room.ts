@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { verifyAdminWsToken, verifyRoomViewerWsToken, verifyViewerWsToken } from "../lib/admin-ws-token";
 import { getLiveJoinDisposition, readLiveSessionState } from "../lib/live-sessions";
-import { isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 import { advanceChannelRateLimit, type ChannelRateLimitBucket } from "../lib/channel-rate-limit";
 
@@ -249,7 +249,7 @@ export class ChatRoom {
         const payload = await verifyViewerWsToken(data.token, this.env);
         const valid = !!payload?.user_id
           && payload.channel_id === connection.channelId
-          && await isReportsChannelOwner(payload.user_id, this.env);
+          && await isPlatformAdmin(payload.user_id, this.env);
         if (valid && payload) {
           connection.authAttempt++;
           connection.uid = payload.user_id;

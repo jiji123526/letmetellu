@@ -69,6 +69,7 @@ function createFixture(input: {
   ownerId?: string;
   passcode?: string | null;
   reportsChannelId?: string;
+  platformAdminId?: string;
   normalAllowlist?: string;
   globalEnabled?: string;
   samplePercent?: string;
@@ -107,6 +108,12 @@ function createFixture(input: {
           return channelExists ? { passcode, owner_uid: ownerId } : null;
         }
         if (sql.includes("SELECT owner_uid FROM channels")) {
+          if (
+            input.reportsChannelId
+            && params[0] === input.reportsChannelId
+          ) {
+            return { owner_uid: input.platformAdminId || ownerId };
+          }
           return channelExists ? { owner_uid: ownerId } : null;
         }
         if (sql.includes("SELECT locale FROM users")) {
@@ -425,6 +432,46 @@ test("protected channels require a room token bound to the current passcode", as
   }), fixture.env);
   assert.equal(stale.status, 403);
   assert.equal((await readJson<{ error: string }>(stale)).error, "invalid token");
+});
+
+test("trusted platform admins bypass passcodes without gaining owner DM visibility", async () => {
+  const platformAdminId = "platform-admin-a";
+  const fixture = createFixture({
+    passcode: "current-passcode-hash",
+    reportsChannelId: "reports-room",
+    platformAdminId,
+    normalAllowlist: CHANNEL_ID,
+    messageRoots: [{ id: "m1", created_at: "2026-08-18T00:00:00.000Z" }],
+    dmRoots: [
+      { id: "d-a", created_at: "2026-08-18T01:00:00.000Z", uid: "visitor-a" },
+      { id: "d-b", created_at: "2026-08-18T02:00:00.000Z", uid: "visitor-b" },
+    ],
+  });
+  const visitor = await createAnonymousIdentity(fixture.env, "visitor-a");
+  const trusted = await handleUnifiedTimeline(unifiedRequest({
+    headers: {
+      "X-Internal-Token": INTERNAL_SECRET,
+      "X-User-Id": platformAdminId,
+      "X-Anonymous-Token": visitor.token,
+    },
+  }), fixture.env);
+  assert.equal(trusted.status, 200);
+  assert.deepEqual(
+    (await readJson<{ items: Array<{ id: string }> }>(trusted)).items.map((item) => item.id),
+    ["m1", "d-a"],
+  );
+
+  const forged = await handleUnifiedTimeline(unifiedRequest({
+    headers: {
+      "X-User-Id": platformAdminId,
+      "X-Anonymous-Token": visitor.token,
+    },
+  }), fixture.env);
+  assert.equal(forged.status, 403);
+  assert.equal(
+    (await readJson<{ error: string }>(forged)).error,
+    "passcode required",
+  );
 });
 
 test("deleted, live and reports channels retain explicit route boundaries", async () => {

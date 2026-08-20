@@ -10,7 +10,7 @@ import {
   type LiveSessionState,
 } from "../lib/live-sessions";
 import { withOperationalErrorContext } from "../lib/operational-events";
-import { getReportsChannelId, getReportsChannelOwnerId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { getReportsChannelId, getReportsChannelOwnerId, isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
 import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout";
@@ -105,9 +105,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const userId = request.headers.get("X-User-Id");
     const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
     const isOwner = trustedUserId === (channel as any).owner_uid;
-    const isReportsOwnerViewer = reportsChannel && !isOwner
-      ? await isReportsChannelOwner(trustedUserId, env)
-      : false;
+    const isPlatformAdminViewer = !isOwner
+      && Boolean((channel as any).passcode)
+      && await isPlatformAdmin(trustedUserId, env);
     const adminDataStatus = userId === (channel as any).owner_uid
       ? (isOwner ? "authorized" : "unauthorized")
       : undefined;
@@ -133,7 +133,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     // Passcode gate: if channel has passcode, verify token or owner identity
     if ((channel as any).passcode) {
-      if (!isOwner && !isReportsOwnerViewer) {
+      if (!isOwner && !isPlatformAdminViewer) {
         const token = request.headers.get("X-Room-Token");
         if (token) {
           const decoded = await authorizeRoomToken(token, parentChannelId, (channel as any).passcode, env);
@@ -348,7 +348,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       ? (channel as { moderation_status?: string }).moderation_status || null
       : null;
     const viewerModerationStatus = !isOwner
-      && !isReportsOwnerViewer
       && moderationStatus === "frozen"
         ? "frozen"
         : null;
@@ -424,7 +423,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       viewerBlocked,
       viewerModerationStatus,
       adminDataStatus,
-      viewerAccess: isOwner ? "owner" : isReportsOwnerViewer ? "reports_owner" : "standard",
+      viewerAccess: isOwner ? "owner" : "standard",
       isReportsChannel: reportsChannel,
       unifiedTimelineEnabled: responseUnifiedTimelineEnabled,
       bannerNotice: config.get(`notice_${channelId}`) || "",

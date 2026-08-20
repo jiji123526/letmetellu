@@ -26,13 +26,23 @@ const dmRouteSource = readFileSync(
   new URL("../src/routes/dm.ts", import.meta.url),
   "utf8",
 );
+const socketAuthSource = readFileSync(
+  new URL("../src/routes/socket-auth.ts", import.meta.url),
+  "utf8",
+);
+const uploadSource = readFileSync(
+  new URL("../src/routes/upload.ts", import.meta.url),
+  "utf8",
+);
 
-test("init and data only resolve reports-owner access on reports channels", () => {
+test("init and data only resolve platform-admin access for locked channels", () => {
   assert.match(initSource, /const reportsChannel = isReportsChannel\(parentChannelId, env\)/);
-  assert.match(initSource, /const isReportsOwnerViewer = reportsChannel && !isOwner/);
+  assert.match(initSource, /const isPlatformAdminViewer = !isOwner\s*&& Boolean\(\(channel as any\)\.passcode\)/);
   assert.match(dataSource, /const reportsChannel = isReportsChannel\(parentChannelId, env\)/);
-  assert.match(dataSource, /const isReportsOwnerViewer = reportsChannel && !isOwner/);
+  assert.match(dataSource, /const isPlatformAdminViewer = !isOwner\s*&& Boolean\(passcode\)/);
   assert.match(dataSource, /const reportsOwnerLocale = reportsChannel && isOwner && trustedUserId/);
+  assert.match(socketAuthSource, /const isPlatformAdminViewer = Boolean\(channel\.passcode\)/);
+  assert.match(uploadSource, /const isPlatformAdminViewer = !isOwner\s*&& Boolean\(passcode\)/);
 });
 
 test("recent-channel reads trust canonical proxy user ids instead of re-resolving users", () => {

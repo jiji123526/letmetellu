@@ -23,8 +23,12 @@ export async function getReportsChannelOwnerId(env: Env): Promise<string | null>
   return channel?.owner_uid || null;
 }
 
-export async function isReportsChannelOwner(userId: string | null | undefined, env: Env): Promise<boolean> {
+export async function isPlatformAdmin(userId: string | null | undefined, env: Env): Promise<boolean> {
   if (!userId) return false;
   const ownerId = await getReportsChannelOwnerId(env);
   return Boolean(ownerId && ownerId === userId);
+}
+
+export async function isReportsChannelOwner(userId: string | null | undefined, env: Env): Promise<boolean> {
+  return isPlatformAdmin(userId, env);
 }

@@ -1,5 +1,5 @@
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../lib/special-channels";
+import { getParentChannelId, isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import type { Env } from "../types";
 import { authorizeRoomToken } from "./passcode";
 import { getTrustedUserId } from "../lib/trusted-identity";
@@ -25,11 +25,12 @@ export async function handleSocketAuth(request: Request, env: Env): Promise<Resp
     return Response.json({ mode: "admin", userId: trustedUserId });
   }
 
-  const isReportsOwnerViewer = await isReportsChannelOwner(trustedUserId, env);
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
-  if (isReportsOwnerViewer) {
+  const isPlatformAdminViewer = Boolean(channel.passcode)
+    && await isPlatformAdmin(trustedUserId, env);
+  if (isPlatformAdminViewer) {
     return Response.json({ mode: "viewer", userId: trustedUserId });
   }
 

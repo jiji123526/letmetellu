@@ -9,7 +9,11 @@ import {
 import type { Env } from "../src/types.ts";
 
 const adminSource = readFileSync(new URL("../src/routes/admin.ts", import.meta.url), "utf8");
+const initSource = readFileSync(new URL("../src/routes/init.ts", import.meta.url), "utf8");
 const dataSource = readFileSync(new URL("../src/routes/data.ts", import.meta.url), "utf8");
+const messagesSource = readFileSync(new URL("../src/routes/messages.ts", import.meta.url), "utf8");
+const dmSource = readFileSync(new URL("../src/routes/dm.ts", import.meta.url), "utf8");
+const unifiedTimelineSource = readFileSync(new URL("../src/routes/unified-timeline.ts", import.meta.url), "utf8");
 const socketAuthSource = readFileSync(new URL("../src/routes/socket-auth.ts", import.meta.url), "utf8");
 const supportSource = readFileSync(new URL("../src/routes/support.ts", import.meta.url), "utf8");
 const reportsSource = readFileSync(new URL("../src/routes/channel-reports.ts", import.meta.url), "utf8");
@@ -66,6 +70,15 @@ test("owner-only collections are denied before their data switch", () => {
   assert.ok(boundary >= 0);
   assert.ok(routeSwitch > boundary);
   assert.match(dataSource.slice(boundary, routeSwitch), /if \(!isOwner\)/);
+});
+
+test("platform admin passcode bypass remains read-only and server-verified", () => {
+  assert.match(initSource, /await isPlatformAdmin\(trustedUserId, env\)/);
+  assert.match(dataSource, /await isPlatformAdmin\(trustedUserId, env\)/);
+  assert.match(unifiedTimelineSource, /await isPlatformAdmin\(trustedUserId, env\)/);
+  assert.match(dataSource, /type === "blocked" \|\| type === "dm" \|\| type === "banned-words"/);
+  assert.doesNotMatch(messagesSource, /\bisPlatformAdmin\b/);
+  assert.doesNotMatch(dmSource, /\bisPlatformAdmin\b/);
 });
 
 test("account preference writes still require the internal proxy secret", () => {

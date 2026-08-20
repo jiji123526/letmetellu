@@ -19,18 +19,18 @@ function normalizeSql(sql: string): string {
 
 function createMediaFixture(
   initialPasscode: string | null,
-  options: { attachedTicket?: boolean } = {},
+  options: { attachedTicket?: boolean; platformAdminId?: string } = {},
 ) {
   const attachedTicket = options.attachedTicket ?? true;
   let channelExists = true;
   let passcode = initialPasscode;
   let mediaReads = 0;
 
-  function statement(sqlText: string) {
+  function statement(sqlText: string, params: unknown[] = []) {
     const sql = normalizeSql(sqlText);
     return {
-      bind() {
-        return statement(sql);
+      bind(...nextParams: unknown[]) {
+        return statement(sql, nextParams);
       },
       async first() {
         if (sql.includes("FROM upload_tickets WHERE key = ? LIMIT 1")) {
@@ -46,6 +46,11 @@ function createMediaFixture(
         if (sql.includes("SELECT passcode, owner_uid FROM channels WHERE id = ?")) {
           return channelExists ? { passcode, owner_uid: OWNER_ID } : null;
         }
+        if (sql.includes("SELECT owner_uid FROM channels WHERE id = ?")) {
+          return params[0] === "reports"
+            ? { owner_uid: options.platformAdminId || OWNER_ID }
+            : null;
+        }
         return null;
       },
       async all() {
@@ -59,6 +64,7 @@ function createMediaFixture(
 
   const env = {
     INTERNAL_SECRET,
+    REPORTS_CHANNEL_ID: "reports",
     DB: {
       prepare: statement,
       async batch(statements: Array<{ all(): Promise<{ results: unknown[] }> }>) {
@@ -160,6 +166,22 @@ test("channel owners retain media access without a room token", async () => {
   }), fixture.env, MEDIA_KEY);
 
   assert.equal(response.status, 200);
+});
+
+test("trusted platform admins audit protected media while forged identities remain gated", async () => {
+  const platformAdminId = "platform-admin-a";
+  const fixture = createMediaFixture(NEW_PASSCODE_HASH, { platformAdminId });
+  const trusted = await handleMediaServe(mediaRequest({
+    "X-Internal-Token": INTERNAL_SECRET,
+    "X-User-Id": platformAdminId,
+  }), fixture.env, MEDIA_KEY);
+  assert.equal(trusted.status, 200);
+
+  const forged = await handleMediaServe(mediaRequest({
+    "X-User-Id": platformAdminId,
+  }), fixture.env, MEDIA_KEY);
+  assert.equal(forged.status, 403);
+  assert.equal((await forged.json() as { error?: string }).error, "passcode required");
 });
 
 test("direct owner media capabilities require current channel ownership", async () => {

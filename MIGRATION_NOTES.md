@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Platform admins can audit passcode-protected channels without the passcode — 2026-08-20
+
+- A trusted logged-in user whose ID is revalidated as the configured reports-channel owner can open ordinary passcode-protected channels without receiving the passcode gate.
+- The bypass is limited to read surfaces: bootstrap, public history/gallery/links/search, authorization-filtered unified timeline, viewer-mode realtime and protected media. Platform admins do not inherit channel-owner state, other visitors' DMs, blocked/banned-word collections, message or DM mutations, uploads, or channel settings.
+- Every Worker boundary derives identity only from the app proxy's internal secret plus session user ID and rechecks the platform role in D1. Client-supplied user headers without the internal secret remain ignored.
+
+Trade-off: opening a locked channel as a non-owner authenticated user adds one indexed reports-channel owner lookup when evaluating the bypass. This preserves immediate server-side role revocation and avoids a stale authorization cache; public channels and anonymous locked-room viewers do not pay the extra role lookup.
+
+Deployment note: deploy the Worker. No frontend deployment or D1 migration is required. Verify a platform admin can directly open a locked ordinary channel and its media without entering the passcode, while another logged-in user remains gated and the platform admin still cannot send, edit, delete, upload, read owner DM collections or open channel settings.
+
 ### Newer-history paging replenishes bounded link-preview warming — 2026-08-20
 
 - Scrolling down from an older context now replenishes the six-URL mounted-preview background budget after each newly appended unified or legacy history batch.
