@@ -37,6 +37,16 @@ interface MessageTextWithEmbedsProps {
 }
 
 const URL_LINK_REGEX = /(https?:\/\/[^\s<]+|(?:www\.|(?:[a-zA-Z0-9-]+\.)+(?:com|net|org|io|dev|app|co|me|tv|gg|xyz|kr|jp))(?:\/[^\s<]*)?)/g;
+const LOADED_MESSAGE_MEDIA_CACHE_LIMIT = 500;
+const loadedMessageMediaUrls = new Set<string>();
+
+function rememberLoadedMessageMedia(url: string) {
+  loadedMessageMediaUrls.delete(url);
+  loadedMessageMediaUrls.add(url);
+  if (loadedMessageMediaUrls.size <= LOADED_MESSAGE_MEDIA_CACHE_LIMIT) return;
+  const oldestUrl = loadedMessageMediaUrls.values().next().value;
+  if (oldestUrl) loadedMessageMediaUrls.delete(oldestUrl);
+}
 
 function linkifyText(text: string, isMine: boolean, hiddenEmbedUrls: Set<string>): (string | React.ReactElement)[] {
   const parts: (string | React.ReactElement)[] = [];
@@ -115,7 +125,7 @@ function highlightRenderedText(
 
 export function MessageImage({ src, onOpen }: MessageImageProps) {
   const { t } = useLocale();
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => loadedMessageMediaUrls.has(src));
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -127,6 +137,7 @@ export function MessageImage({ src, onOpen }: MessageImageProps) {
           type="button"
           onClick={(event) => {
             event.stopPropagation();
+            loadedMessageMediaUrls.delete(src);
             setFailed(false);
             setLoaded(false);
             setAttempt((value) => value + 1);
@@ -143,8 +154,14 @@ export function MessageImage({ src, onOpen }: MessageImageProps) {
           draggable={false}
           className="block h-auto rounded-[15px] select-none"
           style={{ display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain", userSelect: "none" }}
-          onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
+          onLoad={() => {
+            rememberLoadedMessageMedia(src);
+            setLoaded(true);
+          }}
+          onError={() => {
+            loadedMessageMediaUrls.delete(src);
+            setFailed(true);
+          }}
         />
       )}
       {loaded && (

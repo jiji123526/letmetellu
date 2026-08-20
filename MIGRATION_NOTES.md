@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation centers the committed image geometry — 2026-08-20
+
+- Images loaded in the hidden gallery staging tree now record a bounded session-local readiness entry. When the same image mounts in the committed visible timeline, it starts in its loaded state instead of briefly collapsing back to the loading indicator.
+- Final gallery alignment now calculates the selected media element's center relative to the chat scroll viewport and applies that exact delta to the container. It no longer delegates the critical alignment to the browser's nested `scrollIntoView` behavior.
+- Failed and manually retried images leave the readiness cache. The cache retains at most 500 URL strings and stores no image bytes; browser caching continues to own the underlying media response.
+
+Trade-off: the frontend retains a small bounded set of successfully loaded message-media URLs for the current page session. This avoids remount geometry loss without keeping DOM nodes or decoded image data alive. As with any scroll container, a destination at the absolute first or last edge can only center when enough scrollable content exists around it.
+
+Deployment note: frontend-only. Navigate from the gallery to cold images surrounded by link previews and confirm the selected image itself, rather than its message row or loading placeholder, is centered after the single atomic transition.
+
 ### Gallery navigation waits for deferred preview geometry — 2026-08-20
 
 - Hidden gallery staging now activates only unresolved link previews at or above the selected message. Element-scoped activation avoids waking duplicate links in the visible history or unrelated previews below the destination.

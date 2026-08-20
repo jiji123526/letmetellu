@@ -48,6 +48,10 @@ const timelineStateSource = readFileSync(
   new URL("../../src/components/chat/chatTimelineState.ts", import.meta.url),
   "utf8",
 );
+const messageContentSource = readFileSync(
+  new URL("../../src/components/chat/ChatMessageContent.tsx", import.meta.url),
+  "utf8",
+);
 
 function message(
   id: string,
@@ -504,13 +508,33 @@ test("context navigation synchronizes cursors before checking gallery history ed
     "unifiedEndCursorRef.current = data.page_end_cursor",
     replaceIndex,
   );
-  const scrollIndex = contextNavigation.indexOf("finalAlignmentElement.scrollIntoView", replaceIndex);
+  const scrollIndex = contextNavigation.indexOf(
+    "centerElementInScrollContainer(container, finalAlignmentElement)",
+    replaceIndex,
+  );
   const boundaryCheckIndex = contextNavigation.indexOf("handleScroll();", scrollIndex);
 
   assert.ok(replaceIndex >= 0);
   assert.ok(startCursorIndex > replaceIndex && startCursorIndex < scrollIndex);
   assert.ok(endCursorIndex > startCursorIndex && endCursorIndex < scrollIndex);
   assert.ok(boundaryCheckIndex > scrollIndex);
+});
+
+test("gallery navigation reuses staged image readiness and centers the media geometry", () => {
+  assert.match(messageContentSource, /LOADED_MESSAGE_MEDIA_CACHE_LIMIT = 500/);
+  assert.match(
+    messageContentSource,
+    /useState\(\(\) => loadedMessageMediaUrls\.has\(src\)\)/,
+  );
+  assert.match(messageContentSource, /rememberLoadedMessageMedia\(src\)/);
+  assert.match(
+    historyNavigationSource,
+    /const centerDelta = elementRect\.top[\s\S]*containerRect\.top \+ container\.clientHeight \/ 2/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /centerElementInScrollContainer\(container, finalAlignmentElement\)/,
+  );
 });
 
 test("gallery navigation skips context replacement when its target is already mounted", () => {

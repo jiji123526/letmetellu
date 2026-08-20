@@ -131,6 +131,21 @@ function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function centerElementInScrollContainer(
+  container: HTMLElement,
+  element: HTMLElement,
+) {
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  const centerDelta = elementRect.top
+    + elementRect.height / 2
+    - (containerRect.top + container.clientHeight / 2);
+  container.scrollTo({
+    top: container.scrollTop + centerDelta,
+    behavior: "auto",
+  });
+}
+
 function holdViewportPosition(
   container: HTMLElement,
   input: { scrollTop: number; anchorMessageId?: string | null },
@@ -1362,7 +1377,11 @@ export function useChatHistoryNavigation({
         ? element.querySelector<HTMLElement>("[data-message-media]") || element
         : element;
       releaseHeldViewport?.();
-      finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
+      if (container) {
+        centerElementInScrollContainer(container, finalAlignmentElement);
+      } else {
+        finalAlignmentElement.scrollIntoView({ behavior: "auto", block: "center" });
+      }
       markGalleryNavigationTiming(galleryTiming, "final-scroll");
       finishGalleryNavigationTiming(galleryTiming, "completed");
       requestAnimationFrame(() => {
