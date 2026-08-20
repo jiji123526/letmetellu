@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation Stage 5 uses a smaller purpose-scoped context window — 2026-08-20
+
+- Gallery context requests now send a dedicated `navigation_purpose=gallery` marker through the frontend proxy.
+- The Worker validates that marker and selects 12 visual roots before and after the target instead of the generic 25. The target root and all of its authorization-visible replies remain intact, and existing start/end cursors continue paging in both directions.
+- Context requests without the marker retain the 25-root radius used by search, refresh restoration and generic navigation. Clients cannot submit an arbitrary radius; the Worker owns the fixed purpose-to-radius mapping.
+- Route coverage verifies gallery candidate reads use a bounded limit of 13 per source and rejects unknown navigation purposes.
+
+Trade-off: gallery context renders and stages less than half as many roots, but readers who continue scrolling from the destination will reach an older/newer boundary sooner and may perform an additional bounded pagination request.
+
+Deployment note: deploy the Worker and frontend together. Confirm distant gallery navigation returns up to 25 roots plus complete replies, then verify both upward and downward pagination continue from the returned context cursors.
+
 ### Gallery navigation Stage 4 swaps staged history atomically — 2026-08-20
 
 - Distant unified gallery destinations now render into a hidden, non-interactive staging list while the currently visible history remains mounted and unchanged.

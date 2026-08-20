@@ -124,6 +124,11 @@ function createFixture(input: {
       },
       async all() {
         calls.push({ sql, params });
+        if (sql.includes("WITH RECURSIVE ancestors")) {
+          return {
+            results: messageRoots.filter((row) => row.id === String(params[1] || "")),
+          };
+        }
         if (sql.includes("FROM channel_reports cr")) {
           const selectedIds = new Set(JSON.parse(String(params[0] || "[]")) as string[]);
           return {
@@ -716,6 +721,48 @@ test("centered navigation rejects invalid sources and missing targets", async ()
     params: { target_id: "missing", target_source: "message" },
   }), fixture.env);
   assert.equal(missingTarget.status, 404);
+});
+
+test("gallery context uses a smaller server-controlled root radius", async () => {
+  const fixture = createFixture({
+    messageRoots: [
+      { id: "target", created_at: "2026-08-18T02:00:00.000Z" },
+    ],
+  });
+  const response = await handleUnifiedTimeline(unifiedRequest({
+    headers: ownerHeaders(),
+    params: {
+      target_id: "target",
+      target_source: "message",
+      navigation_purpose: "gallery",
+    },
+  }), fixture.env);
+  assert.equal(response.status, 200);
+  const candidateCalls = fixture.calls.filter((call) =>
+    !call.sql.includes("WITH RECURSIVE ancestors")
+    && (
+      (
+        call.sql.includes("FROM messages WHERE")
+        && call.sql.includes("reply_to IS NULL")
+      )
+      || call.sql.includes("FROM dm WHERE")
+    )
+  );
+  assert.equal(candidateCalls.length, 4);
+  for (const call of candidateCalls) assert.equal(call.params.at(-1), 13);
+
+  const invalidPurpose = await handleUnifiedTimeline(unifiedRequest({
+    headers: ownerHeaders(),
+    params: {
+      target_id: "target",
+      target_source: "message",
+      navigation_purpose: "search",
+    },
+  }), fixture.env);
+  assert.equal(invalidPurpose.status, 400);
+  assert.deepEqual(await readJson<{ error: string }>(invalidPurpose), {
+    error: "invalid_navigation_purpose",
+  });
 });
 
 test("latest, before and after root pages join without duplicates or gaps", async () => {

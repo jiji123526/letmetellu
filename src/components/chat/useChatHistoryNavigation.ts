@@ -1198,6 +1198,7 @@ export function useChatHistoryNavigation({
               msgId,
               source,
               live ? liveSessionId : undefined,
+              options?.purpose,
             );
             markGalleryNavigationTiming(galleryTiming, "context-fetched");
             if (navigationRequest !== navigationRequestRef.current) return;

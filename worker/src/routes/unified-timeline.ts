@@ -131,6 +131,10 @@ export async function handleUnifiedTimeline(
 
   const targetId = url.searchParams.get("target_id");
   if (targetId) {
+    const navigationPurpose = url.searchParams.get("navigation_purpose");
+    if (navigationPurpose && navigationPurpose !== "gallery") {
+      return Response.json({ error: "invalid_navigation_purpose" }, { status: 400 });
+    }
     const targetSource = url.searchParams.get("target_source") || "message";
     if (targetSource !== "message" && targetSource !== "dm") {
       return Response.json({ error: "invalid_target_source" }, { status: 400 });
@@ -142,6 +146,7 @@ export async function handleUnifiedTimeline(
       viewer,
       targetSource,
       targetId,
+      navigationPurpose === "gallery" ? 12 : 25,
     );
     if (!selectedContextPage) {
       return Response.json({ error: "target_not_found" }, { status: 404 });

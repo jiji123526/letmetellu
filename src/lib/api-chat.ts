@@ -387,6 +387,7 @@ export function fetchUnifiedTimelineContext(
   targetId: string,
   targetSource: "message" | "dm" = "message",
   liveSessionId?: string,
+  navigationPurpose?: "gallery",
 ): Promise<UnifiedTimelinePagePayload> {
   const params = new URLSearchParams({
     channel: channelId,
@@ -394,6 +395,7 @@ export function fetchUnifiedTimelineContext(
     target_source: targetSource,
   });
   if (liveSessionId) params.set("live_session_id", liveSessionId);
+  if (navigationPurpose) params.set("navigation_purpose", navigationPurpose);
   const key = params.toString();
   const existing = unifiedPageRequests.get(key);
   if (existing) return existing as Promise<UnifiedTimelinePagePayload>;

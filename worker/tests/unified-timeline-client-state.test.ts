@@ -552,6 +552,10 @@ test("gallery navigation skips context replacement when its target is already mo
   );
   assert.match(historyNavigationSource, /waitForStagedMessageElement\(/);
   assert.match(historyNavigationSource, /flushSync\(\(\) => \{/);
+  assert.match(
+    historyNavigationSource,
+    /live \? liveSessionId : undefined,\s*options\?\.purpose/,
+  );
   assert.ok(
     historyNavigationSource.indexOf("waitForGalleryTargetReadiness(")
       < historyNavigationSource.lastIndexOf("flushSync(() => {"),
