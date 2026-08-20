@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Newer-history paging replenishes bounded link-preview warming — 2026-08-20
+
+- Scrolling down from an older context now replenishes the six-URL mounted-preview background budget after each newly appended unified or legacy history batch.
+- The new history-mounted signal only schedules idle warming for the closest uncached links. It does not broadcast the broad navigation preload signal, so unrelated mounted preview cards remain deferred until their normal viewport margin reaches them.
+- Existing URL deduplication, persistent cache checks, Save-Data/2G suppression and the two-request concurrency cap remain unchanged.
+
+Trade-off: each downward page can fetch and decode up to six nearby preview thumbnails before they enter the viewport. This matches upward history warming and reduces placeholder exposure during continuous downward reading without activating every link in the mounted 300-item window.
+
+Deployment note: frontend-only. No Worker deployment or D1 migration is required for this follow-up. From an older context, load multiple newer pages and confirm at most six closest uncached previews per page warm in the background while farther previews remain deferred.
+
 ### Gallery navigation centers the committed image geometry — 2026-08-20
 
 - Images loaded in the hidden gallery staging tree now record a bounded session-local readiness entry. When the same image mounts in the committed visible timeline, it starts in its loaded state instead of briefly collapsing back to the loading indicator.

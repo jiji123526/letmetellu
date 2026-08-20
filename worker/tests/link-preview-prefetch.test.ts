@@ -45,6 +45,10 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /window\.addEventListener\("chat-history-preload"/);
   assert.match(
     messageEmbedsSource,
+    /window\.addEventListener\("chat-history-mounted", replenishMountedPreviewPrefetch\)/,
+  );
+  assert.match(
+    messageEmbedsSource,
     /target\?\.addEventListener\("chat-history-preview-activate"/,
   );
   assert.match(

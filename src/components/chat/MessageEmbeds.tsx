@@ -349,13 +349,15 @@ function scheduleMountedPreviewPrefetch() {
 function ensureHistoryPrefetchListener() {
   if (historyPrefetchListenerInstalled) return;
   historyPrefetchListenerInstalled = true;
-  window.addEventListener("chat-history-preload", () => {
+  const replenishMountedPreviewPrefetch = () => {
     mountedPrefetchBudget = Math.max(
       mountedPrefetchBudget,
       MOUNTED_PREVIEW_PREFETCH_LIMIT,
     );
     scheduleMountedPreviewPrefetch();
-  });
+  };
+  window.addEventListener("chat-history-preload", replenishMountedPreviewPrefetch);
+  window.addEventListener("chat-history-mounted", replenishMountedPreviewPrefetch);
 }
 
 function useDeferredEmbedVisibility() {

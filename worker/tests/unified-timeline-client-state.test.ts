@@ -495,6 +495,23 @@ test("latest button disables after context browsing reaches the newest edge", ()
   assert.match(bottomShellSource, /disabled=\{historyMode === "context" \? latestButtonDisabled : false\}/);
 });
 
+test("newer pagination replenishes bounded preview warming in both readers", () => {
+  const unifiedAfter = historyNavigationSource.indexOf('"after",\n          unifiedEndCursorRef.current');
+  const legacyAfter = historyNavigationSource.indexOf('fetchMessagePage(fetchChannel, "after"');
+  const mountedEvents = [...historyNavigationSource.matchAll(
+    /window\.dispatchEvent\(new Event\("chat-history-mounted"\)\)/g,
+  )].map((match) => match.index);
+
+  assert.ok(unifiedAfter >= 0);
+  assert.ok(legacyAfter > unifiedAfter);
+  assert.equal(
+    mountedEvents.length,
+    2,
+  );
+  assert.ok(mountedEvents[0] > unifiedAfter && mountedEvents[0] < legacyAfter);
+  assert.ok(mountedEvents[1] > legacyAfter);
+});
+
 test("context navigation synchronizes cursors before checking gallery history edges", () => {
   const contextNavigation = historyNavigationSource.match(
     /const scrollToMessage = useCallback[\s\S]*?const restoreRefreshPosition = useCallback/,

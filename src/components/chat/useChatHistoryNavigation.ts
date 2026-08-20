@@ -1048,6 +1048,7 @@ export function useChatHistoryNavigation({
             );
             updateHasMoreNewerMessages(data.has_more);
             await nextAnimationFrame();
+            window.dispatchEvent(new Event("chat-history-mounted"));
             const anchor = lockedScrollAnchorRef.current;
             const anchorElement = anchor
               ? document.getElementById(anchor.id) as HTMLElement | null
@@ -1093,6 +1094,7 @@ export function useChatHistoryNavigation({
               return trimmed;
             });
             requestAnimationFrame(() => {
+              window.dispatchEvent(new Event("chat-history-mounted"));
               const anchor = lockedScrollAnchorRef.current;
               const nextAnchorTop = anchor ? getAnchorTop(element, anchor.id) : null;
               if (anchor && nextAnchorTop !== null) {
