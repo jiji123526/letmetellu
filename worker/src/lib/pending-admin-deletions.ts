@@ -304,24 +304,19 @@ export async function undoPendingDeletion(
 }
 
 async function finalizeMessageDeletion(env: Env, row: PendingDeletionRow, ids: string[]): Promise<void> {
-  const records: Array<{ id: string; image: string | null; gallery_id: string | null }> = [];
+  const records: Array<{ id: string; image: string | null }> = [];
   for (const idChunk of chunks(ids)) {
     const { results } = await env.DB.prepare(`
-      SELECT id, image, gallery_id
+      SELECT id, image
       FROM messages
       WHERE channel_id = ? AND id IN (${placeholders(idChunk)})
     `).bind(row.channel_id, ...idChunk)
-      .all<{ id: string; image: string | null; gallery_id: string | null }>();
+      .all<{ id: string; image: string | null }>();
     records.push(...(results || []));
   }
-  const galleryIds = records.map((record) => record.gallery_id).filter((id): id is string => !!id);
   const childIds = ids.filter((id) => id !== row.root_id);
   const statements: D1PreparedStatement[] = [];
   statements.push(
-    ...chunks(galleryIds).map((idChunk) =>
-      env.DB.prepare(`DELETE FROM gallery WHERE channel_id = ? AND id IN (${placeholders(idChunk)})`)
-        .bind(row.channel_id, ...idChunk)
-    ),
     ...chunks(ids).map((idChunk) =>
       env.DB.prepare(`DELETE FROM message_links WHERE message_id IN (${placeholders(idChunk)})`)
         .bind(...idChunk)

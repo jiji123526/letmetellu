@@ -7,7 +7,11 @@ const dataRouteSource = readFileSync(
   "utf8",
 );
 const migrationSource = readFileSync(
-  new URL("../migrations/0040_gallery_lookup_indexes.sql", import.meta.url),
+  new URL("../migrations/0052_gallery_message_consistency.sql", import.meta.url),
+  "utf8",
+);
+const messagesSource = readFileSync(
+  new URL("../src/routes/messages.ts", import.meta.url),
   "utf8",
 );
 const apiSource = readFileSync(
@@ -19,22 +23,20 @@ const channelActionsSource = readFileSync(
   "utf8",
 );
 
-test("gallery paging drives ordered gallery rows into indexed visibility lookups", () => {
+test("gallery paging reads the synchronized ordered gallery table directly", () => {
   const galleryCaseStart = dataRouteSource.indexOf('case "gallery"');
   const dmCaseStart = dataRouteSource.indexOf('case "dm"', galleryCaseStart);
   const galleryCase = dataRouteSource.slice(galleryCaseStart, dmCaseStart);
 
-  assert.match(galleryCase, /FROM gallery g\s+CROSS JOIN messages m/);
-  assert.match(galleryCase, /m\.gallery_id = g\.id/);
-  assert.match(galleryCase, /m\.deleted = 0/);
-  assert.match(galleryCase, /ORDER BY g\.created_at DESC, g\.id DESC LIMIT 50/);
-  assert.doesNotMatch(galleryCase, /INNER JOIN messages/);
+  assert.match(galleryCase, /FROM gallery\s+WHERE channel_id = \?/);
+  assert.match(galleryCase, /ORDER BY created_at DESC, id DESC LIMIT 50/);
+  assert.doesNotMatch(galleryCase, /JOIN messages|FROM messages/);
 });
 
 test("gallery paging uses a stable timestamp and id cursor", () => {
   assert.match(
     dataRouteSource,
-    /g\.created_at < \? OR \(g\.created_at = \? AND g\.id < \?\)/,
+    /\(created_at, id\) < \(\?, \?\)/,
   );
   assert.match(apiSource, /params\.set\("cursor_id", cursorId\)/);
   assert.match(
@@ -43,13 +45,21 @@ test("gallery paging uses a stable timestamp and id cursor", () => {
   );
 });
 
-test("gallery indexes cover display order and visible message mappings", () => {
+test("message lifecycle triggers keep gallery rows synchronized", () => {
   assert.match(
     migrationSource,
-    /gallery_channel_created_id_idx\s+ON gallery\(channel_id, created_at DESC, id DESC\)/,
+    /DELETE FROM gallery\s+WHERE NOT EXISTS/,
   );
   assert.match(
     migrationSource,
-    /messages_visible_gallery_lookup_idx\s+ON messages\(channel_id, gallery_id\)\s+WHERE deleted = 0 AND gallery_id IS NOT NULL/,
+    /CREATE TRIGGER IF NOT EXISTS messages_gallery_after_insert/,
   );
+  assert.match(migrationSource, /CREATE TRIGGER IF NOT EXISTS messages_gallery_after_update/);
+  assert.match(
+    migrationSource,
+    /WHEN OLD\.gallery_id IS NOT NULL OR NEW\.gallery_id IS NOT NULL/,
+  );
+  assert.match(migrationSource, /CREATE TRIGGER IF NOT EXISTS messages_gallery_after_delete/);
+  assert.match(migrationSource, /DROP INDEX IF EXISTS messages_visible_gallery_lookup_idx/);
+  assert.doesNotMatch(messagesSource, /INSERT INTO gallery/);
 });

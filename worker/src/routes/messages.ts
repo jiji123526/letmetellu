@@ -317,7 +317,8 @@ export async function handleMessages(
       }
       const resolvedReportedMessageId = resolvedReportedMessage?.id || null;
 
-      // Insert message (+ gallery if image) in a single batch
+      // The gallery consistency trigger mirrors image messages in the same D1
+      // transaction, including later delete and undo state changes.
       const id = crypto.randomUUID();
       if (image) {
         routeStage = "attach_upload_ticket";
@@ -378,12 +379,6 @@ export async function handleMessages(
               (record_id, record_type, channel_id, uid, device_id_hash, created_at)
              VALUES (?, 'message', ?, ?, ?, ?)`
           ).bind(id, parentChannelId, senderUid, deviceIdHash, created_at)
-        );
-      }
-      if (image) {
-        stmts.push(
-          env.DB.prepare("INSERT INTO gallery (id, image, auth_uid, channel_id, created_at) VALUES (?, ?, ?, ?, ?)")
-            .bind(id, image, senderUid, requestChannelId, created_at)
         );
       }
       routeStage = "persist_message_batch";
@@ -496,8 +491,6 @@ export async function handleMessages(
       if (soft) {
         routeStage = "soft_delete_message";
         await env.DB.batch([
-          env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
-            .bind(message_id, requestChannelId),
           env.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
             .bind(message_id),
           env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
@@ -508,8 +501,6 @@ export async function handleMessages(
       } else {
         routeStage = "hard_delete_message";
         await env.DB.batch([
-          env.DB.prepare("DELETE FROM gallery WHERE id = ? AND channel_id = ?")
-            .bind(message_id, requestChannelId),
           env.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
             .bind(message_id),
           env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")

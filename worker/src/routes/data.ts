@@ -326,30 +326,25 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     case "gallery": {
       const cursor = url.searchParams.get("cursor");
       const cursorId = url.searchParams.get("cursor_id");
-      // CROSS JOIN keeps the ordered gallery index as the outer loop.
       let query = `
         SELECT
-          m.id AS id,
-          g.image,
-          g.auth_uid,
-          g.channel_id,
-          g.created_at
-        FROM gallery g
-        CROSS JOIN messages m
-        WHERE g.channel_id = ?
-          AND m.channel_id = g.channel_id
-          AND m.gallery_id = g.id
-          AND m.deleted = 0
+          id,
+          image,
+          auth_uid,
+          channel_id,
+          created_at
+        FROM gallery
+        WHERE channel_id = ?
       `;
       const params: unknown[] = [channelId];
       if (cursor && cursorId) {
-        query += " AND (g.created_at < ? OR (g.created_at = ? AND g.id < ?))";
-        params.push(cursor, cursor, cursorId);
+        query += " AND (created_at, id) < (?, ?)";
+        params.push(cursor, cursorId);
       } else if (cursor) {
-        query += " AND g.created_at < ?";
+        query += " AND created_at < ?";
         params.push(cursor);
       }
-      query += " ORDER BY g.created_at DESC, g.id DESC LIMIT 50";
+      query += " ORDER BY created_at DESC, id DESC LIMIT 50";
       const { results } = await env.DB.prepare(query).bind(...params).all();
       return Response.json({ gallery: results });
     }

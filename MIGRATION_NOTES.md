@@ -4,6 +4,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery paging uses one ordered table instead of per-row message validation — 2026-08-20
+
+- The gallery fingerprint read about `53` rows per returned image across 33 executions. Its latency was already low (`0.9 ms` p99 and `0.35%` of database runtime), so this work isolates the optimization from higher-priority message paging.
+- Migration `0052_gallery_message_consistency.sql` first removes orphan gallery rows and reconstructs missing or stale rows from active image messages. Insert, relevant update and delete triggers then keep gallery visibility synchronized atomically with message state, including the five-second admin deletion stage and undo.
+- Gallery paging now reads `gallery` directly through `gallery_channel_created_id_idx` and uses the composite `(created_at, id)` cursor range. It no longer joins each ordered gallery candidate to `messages`, and the now-unused `messages_visible_gallery_lookup_idx` is removed.
+- Message creation and normal/admin deletion no longer issue duplicate gallery writes in application code. Bulk channel and live-session cleanup retain their defensive gallery deletion.
+- `worker/scripts/audit-gallery-query.sql` verifies zero orphan/missing rows, all three synchronization triggers and indexed newest/cursor plans.
+
+Trade-off: image-message writes now execute a small trigger-maintained gallery write, while text-only message updates are excluded by the trigger condition. The database schema becomes responsible for gallery consistency, so migration `0052` must be applied before deploying the Worker. Reconciliation rewrites current active gallery rows once during migration; this is acceptable for the present database size but should be scheduled as a normal D1 migration window.
+
+Expected UX: gallery contents, ordering, pagination and five-second deletion undo remain unchanged. Gallery opening and older-image paging may become slightly more consistent under image-heavy or deletion-heavy channels, but the previous p99 was already below one millisecond, so a visible speed improvement is not guaranteed.
+
+Deployment note: apply migration `0052`, then deploy the Worker. No frontend deployment is required. Run the gallery audit afterward and confirm `orphan_gallery_rows = 0`, `missing_gallery_rows = 0`, all three triggers are listed and both plans use `gallery_channel_created_id_idx`.
+
 ### Visible message pages stop scanning old deleted roots — 2026-08-20
 
 - Production D1 Insights showed the main root-page query running 75 times, reading `139.18k` rows at a `53:1` read/return ratio and taking `5.1 ms` p50. The existing `(channel_id, reply_to, created_at, id)` index preserved ordering, but the `deleted = 0 OR EXISTS(live child)` visibility condition still made each request walk old root rows.
