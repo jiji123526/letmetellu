@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation Stage 3 uses event-based media readiness and observed stability — 2026-08-20
+
+- Gallery staging now collects relevant images, videos and active layout-pending markers once, limited to the selected message and content above it. It waits for image load/decode, video metadata and marker removal in parallel instead of rescanning the entire history DOM every animation frame.
+- After relevant resources settle, a short-lived `ResizeObserver` watches only message rows through the target. Navigation proceeds after three stable animation frames, replacing the previous 900 ms quiet period on the gallery path.
+- Wheel, touch and pointer input still cancel pending alignment immediately. The existing 45-second safety timeout remains, and browsers without `ResizeObserver` fall back to the prior stable-layout check.
+- Development timing now distinguishes target-media readiness from final layout stabilization.
+
+Trade-off: the staged region installs temporary listeners and observes up to the bounded context rows during a jump. Those objects are removed immediately after completion, cancellation or timeout, avoiding the repeated selector allocation and full-window scanning of the previous path.
+
+Deployment note: frontend-only. Test cached, uncached, failed and slow images plus video/link content above the target; each jump should center once after relevant geometry settles, and a user scroll or touch should cancel it without a delayed correction.
+
 ### Gallery navigation Stage 2 limits readiness to content affecting the target — 2026-08-20
 
 - Unmounted gallery navigation no longer broadcasts the generic `chat-history-preload` event. Selecting one image therefore does not activate every deferred link card or replenish unrelated mounted-preview warming while the destination is being prepared.

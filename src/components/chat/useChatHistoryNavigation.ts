@@ -324,6 +324,162 @@ async function waitForCompleteHistoryWindow(
   }
 }
 
+function waitForImageReady(image: HTMLImageElement, signal: AbortSignal): Promise<void> {
+  const decode = async () => {
+    if (!image.complete || image.naturalWidth === 0) return;
+    await image.decode().catch(() => {});
+  };
+  if (image.complete) return decode();
+
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      image.removeEventListener("load", finish);
+      image.removeEventListener("error", finish);
+      signal.removeEventListener("abort", finish);
+      void decode().finally(resolve);
+    };
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
+function waitForVideoReady(video: HTMLVideoElement, signal: AbortSignal): Promise<void> {
+  if (
+    video.networkState === HTMLMediaElement.NETWORK_NO_SOURCE
+    || video.readyState >= HTMLMediaElement.HAVE_METADATA
+  ) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      video.removeEventListener("loadedmetadata", finish);
+      video.removeEventListener("error", finish);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    video.addEventListener("loadedmetadata", finish, { once: true });
+    video.addEventListener("error", finish, { once: true });
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
+function waitForPendingMarker(
+  container: HTMLElement,
+  marker: Element,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!marker.isConnected) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const observer = new MutationObserver(() => {
+      if (!marker.isConnected) finish();
+    });
+    const finish = () => {
+      observer.disconnect();
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    observer.observe(container, { childList: true, subtree: true });
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
+async function waitForObservedTargetStability(
+  container: HTMLElement,
+  target: HTMLElement,
+  signal: AbortSignal,
+  timeoutMs = 2000,
+): Promise<void> {
+  if (typeof ResizeObserver === "undefined") {
+    await waitForStableMessageLayout(container, target, timeoutMs);
+    return;
+  }
+
+  const relevantRows = [...container.querySelectorAll<HTMLElement>('[id^="msg-"]')]
+    .filter((row) => isBeforeOrInsideTarget(row, target));
+  let resized = true;
+  const observer = new ResizeObserver(() => {
+    resized = true;
+  });
+  relevantRows.forEach((row) => observer.observe(row));
+  observer.observe(target);
+
+  const startedAt = performance.now();
+  let previousSignature = "";
+  let stableFrames = 0;
+  try {
+    while (!signal.aborted && performance.now() - startedAt < timeoutMs) {
+      await nextAnimationFrame();
+      const signature = `${target.offsetTop}:${target.offsetHeight}`;
+      stableFrames = !resized && signature === previousSignature ? stableFrames + 1 : 0;
+      resized = false;
+      previousSignature = signature;
+      if (stableFrames >= 3) return;
+    }
+  } finally {
+    observer.disconnect();
+  }
+}
+
+async function waitForGalleryTargetReadiness(
+  container: HTMLElement,
+  target: HTMLElement,
+  isCurrent: () => boolean,
+  onResourcesReady: () => void,
+  timeoutMs = 45_000,
+): Promise<"ready" | "timeout" | "cancelled"> {
+  const controller = new AbortController();
+  let userInterrupted = false;
+  let resolveInterruption: (() => void) | null = null;
+  const interrupted = new Promise<void>((resolve) => {
+    resolveInterruption = resolve;
+  });
+  const interrupt = () => {
+    userInterrupted = true;
+    resolveInterruption?.();
+  };
+
+  container.addEventListener("wheel", interrupt, { passive: true });
+  container.addEventListener("touchstart", interrupt, { passive: true });
+  container.addEventListener("pointerdown", interrupt, { passive: true });
+
+  const relevantNodes = [...container.querySelectorAll(
+    "img, video, [data-history-layout-pending]",
+  )].filter((node) => isBeforeOrInsideTarget(node, target));
+  const readinessPromises = relevantNodes.map((node) => {
+    if (node instanceof HTMLImageElement) {
+      return waitForImageReady(node, controller.signal);
+    }
+    if (node instanceof HTMLVideoElement) {
+      return waitForVideoReady(node, controller.signal);
+    }
+    return waitForPendingMarker(container, node, controller.signal);
+  });
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timedOut = new Promise<"timeout">((resolve) => {
+    timeoutId = setTimeout(() => resolve("timeout"), timeoutMs);
+  });
+
+  try {
+    const resourceResult = await Promise.race([
+      Promise.all(readinessPromises).then(() => "ready" as const),
+      interrupted.then(() => "cancelled" as const),
+      timedOut,
+    ]);
+    if (resourceResult !== "ready" || !isCurrent() || userInterrupted) {
+      return resourceResult === "timeout" ? "timeout" : "cancelled";
+    }
+    onResourcesReady();
+    await waitForObservedTargetStability(container, target, controller.signal);
+    return isCurrent() && !userInterrupted ? "ready" : "cancelled";
+  } finally {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    controller.abort();
+    container.removeEventListener("wheel", interrupt);
+    container.removeEventListener("touchstart", interrupt);
+    container.removeEventListener("pointerdown", interrupt);
+  }
+}
+
 export function useChatHistoryNavigation({
   channelId,
   messages,
@@ -1068,18 +1224,23 @@ export function useChatHistoryNavigation({
         if (!galleryBoundary) {
           window.dispatchEvent(new Event("chat-history-preload"));
         }
-        const readiness = await waitForCompleteHistoryWindow(
-          container,
-          () => navigationRequest === navigationRequestRef.current,
-          45_000,
-          galleryBoundary,
-        );
+        const readiness = galleryBoundary
+          ? await waitForGalleryTargetReadiness(
+              container,
+              galleryBoundary,
+              () => navigationRequest === navigationRequestRef.current,
+              () => markGalleryNavigationTiming(galleryTiming, "target-media-ready"),
+            )
+          : await waitForCompleteHistoryWindow(
+              container,
+              () => navigationRequest === navigationRequestRef.current,
+            );
         if (readiness === "cancelled") {
           releaseHeldViewport?.();
           finishGalleryNavigationTiming(galleryTiming, "cancelled");
           return;
         }
-        markGalleryNavigationTiming(galleryTiming, "history-ready");
+        markGalleryNavigationTiming(galleryTiming, "layout-stabilized");
       }
       if (navigationRequest !== navigationRequestRef.current) return;
       element = document.getElementById(`msg-${msgId}`) || element;

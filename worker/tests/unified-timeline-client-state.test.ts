@@ -541,8 +541,11 @@ test("gallery navigation skips context replacement when its target is already mo
   );
   assert.match(
     historyNavigationSource,
-    /waitForCompleteHistoryWindow\(\s*container,[\s\S]*?45_000,\s*galleryBoundary/,
+    /galleryBoundary\s*\? await waitForGalleryTargetReadiness\(/,
   );
+  assert.match(historyNavigationSource, /Promise\.all\(readinessPromises\)/);
+  assert.match(historyNavigationSource, /new ResizeObserver\(/);
+  assert.match(historyNavigationSource, /stableFrames >= 3/);
 });
 
 test("unified timeline proxy forwards anonymous identity cookies for joined viewers", () => {
