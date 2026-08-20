@@ -26,6 +26,8 @@ const MOUNTED_PREVIEW_PREFETCH_LIMIT = 6;
 const previewCache = new Map<string, PreviewData | null>();
 const previewCacheMetadata = new Map<string, { cachedAt: number }>();
 const previewRequests = new Map<string, Promise<PreviewData | null>>();
+const previewImageRequests = new Map<string, Promise<void>>();
+const previewSubscribers = new Map<string, Set<(data: PreviewData) => void>>();
 const previewRequestQueue: Array<{
   url: string;
   forceRefresh: boolean;
@@ -38,6 +40,43 @@ let activePreviewRequests = 0;
 let mountedPrefetchPath = "";
 let mountedPrefetchBudget = MOUNTED_PREVIEW_PREFETCH_LIMIT;
 let mountedPrefetchScheduled = false;
+let historyPrefetchListenerInstalled = false;
+
+function notifyPreviewSubscribers(url: string, data: PreviewData) {
+  previewSubscribers.get(url)?.forEach((subscriber) => subscriber(data));
+}
+
+function subscribeToPreview(url: string, subscriber: (data: PreviewData) => void) {
+  const subscribers = previewSubscribers.get(url) || new Set<(data: PreviewData) => void>();
+  subscribers.add(subscriber);
+  previewSubscribers.set(url, subscribers);
+  return () => {
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) previewSubscribers.delete(url);
+  };
+}
+
+function preloadPreviewImage(data: PreviewData): Promise<void> {
+  if (!data.image || typeof Image === "undefined") return Promise.resolve();
+  const pending = previewImageRequests.get(data.image);
+  if (pending) return pending;
+
+  const request = new Promise<void>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      if (typeof image.decode === "function") {
+        void image.decode().catch(() => {}).finally(resolve);
+      } else {
+        resolve();
+      }
+    };
+    image.onerror = () => resolve();
+    image.src = data.image;
+    if (image.complete) image.onload?.(new Event("load"));
+  });
+  previewImageRequests.set(data.image, request);
+  return request;
+}
 
 function isYouTubeUrl(rawUrl: string): boolean {
   try {
@@ -230,9 +269,16 @@ function requestPreview(
 
 async function primePreview(url: string) {
   const cached = await readCachedPreview(url);
-  if (cached && !cached.isStale) return;
+  if (cached) {
+    await preloadPreviewImage(cached.data);
+    notifyPreviewSubscribers(url, cached.data);
+    if (!cached.isStale) return;
+  }
   if (!cached && previewCache.has(url)) return;
-  await requestPreview(url, !!cached, "background");
+  const result = await requestPreview(url, !!cached, "background");
+  if (!result) return;
+  await preloadPreviewImage(result);
+  notifyPreviewSubscribers(url, result);
 }
 
 function mountedPreviewDistance(element: HTMLElement): number {
@@ -300,6 +346,18 @@ function scheduleMountedPreviewPrefetch() {
   }
 }
 
+function ensureHistoryPrefetchListener() {
+  if (historyPrefetchListenerInstalled) return;
+  historyPrefetchListenerInstalled = true;
+  window.addEventListener("chat-history-preload", () => {
+    mountedPrefetchBudget = Math.max(
+      mountedPrefetchBudget,
+      MOUNTED_PREVIEW_PREFETCH_LIMIT,
+    );
+    scheduleMountedPreviewPrefetch();
+  });
+}
+
 function useDeferredEmbedVisibility() {
   const targetRef = useRef<HTMLAnchorElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -347,7 +405,13 @@ function LinkPreviewCard({
   const [hasResolved, setHasResolved] = useState(previewCache.has(url));
   const { targetRef, isVisible } = useDeferredEmbedVisibility();
 
+  useEffect(() => subscribeToPreview(url, (preview) => {
+    setData(preview);
+    setHasResolved(true);
+  }), [url]);
+
   useEffect(() => {
+    ensureHistoryPrefetchListener();
     scheduleMountedPreviewPrefetch();
   }, [url]);
 

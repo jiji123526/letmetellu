@@ -38,6 +38,15 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /rootMargin: getEmbedPreviewRootMargin\(\)/);
   assert.match(messageEmbedsSource, /mountedPreviewDistance\(left\) - mountedPreviewDistance\(right\)/);
   assert.match(messageEmbedsSource, /priority: "visible" \| "background"/);
+  assert.match(messageEmbedsSource, /previewSubscribers/);
+  assert.match(messageEmbedsSource, /preloadPreviewImage\(cached\.data\)/);
+  assert.match(messageEmbedsSource, /preloadPreviewImage\(result\)/);
+  assert.match(messageEmbedsSource, /subscribeToPreview\(url/);
+  assert.match(messageEmbedsSource, /window\.addEventListener\("chat-history-preload"/);
+  assert.match(
+    messageEmbedsSource,
+    /mountedPrefetchBudget = Math\.max\([\s\S]*MOUNTED_PREVIEW_PREFETCH_LIMIT/,
+  );
 });
 
 test("successful sends warm previews without delaying acknowledgement", () => {

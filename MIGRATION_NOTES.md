@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Nearby link previews are visually ready before history scroll — 2026-08-19
+
+- The bounded six-link prefetch still avoids mounting off-screen X, Instagram, video, or iframe widgets, but it now preloads and decodes each preview thumbnail as well as fetching preview metadata.
+- Background prefetch completion is published to any already-mounted preview card. Cards no longer wait until intersection visibility to copy an already-fetched result into React state, removing the metadata placeholder flash while scrolling upward.
+- Each newly mounted history batch replenishes the bounded six-link prefetch budget through the existing history preload signal, so older links inserted after the initial page are eligible instead of inheriting an exhausted page-level budget.
+- Regression coverage keeps concurrency, connection-aware limits, result publication, thumbnail warming, and history-budget replenishment explicit.
+
+Trade-off: up to six nearby thumbnail files may be downloaded and decoded before they enter the viewport after each history batch. Save-Data and 2G detection still disables this background work, external widgets remain deferred, and preview request concurrency remains capped at two.
+
+Deployment note: deploy the frontend only. No Worker or D1 migration is required.
+
 ### Gallery context navigation can continue loading history — 2026-08-19
 
 - Gallery-to-message navigation now synchronizes the unified page start/end cursor refs at the same moment it installs the centered context page, instead of waiting for a later React effect.
