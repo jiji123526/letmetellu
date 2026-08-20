@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery navigation Stage 2 limits readiness to content affecting the target — 2026-08-20
+
+- Unmounted gallery navigation no longer broadcasts the generic `chat-history-preload` event. Selecting one image therefore does not activate every deferred link card or replenish unrelated mounted-preview warming while the destination is being prepared.
+- The existing conservative readiness wait is now bounded at the selected message for gallery navigation. Images, videos and layout-pending embeds below the target cannot delay centering it; the selected media and unresolved content above it remain included because they can still change the target's final offset.
+- Search, refresh restoration and ordinary history pagination retain their existing broad readiness behavior.
+
+Trade-off: deferred link previews below a gallery destination remain cold until normal intersection-based warming reaches them. This removes unrelated work from the navigation-critical path without changing what eventually renders.
+
+Deployment note: frontend-only. Test an unmounted gallery target with slow media both above and below it; content below the target should no longer extend the navigation wait, while late media above it must still be allowed to settle before centering.
+
 ### Gallery navigation Stage 1 reuses mounted targets and records phase timings — 2026-08-20
 
 - Selecting gallery media whose parent message is already mounted now takes the existing direct-scroll path. It no longer refetches a centered context page, replaces the history window, activates broad history preview work, or waits for unrelated media readiness.

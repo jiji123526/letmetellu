@@ -531,6 +531,18 @@ test("gallery navigation skips context replacement when its target is already mo
     historyNavigationSource,
     /startGalleryNavigationTiming\(msgId, useMountedFastPath\)/,
   );
+  assert.match(
+    historyNavigationSource,
+    /const galleryBoundary = options\?\.purpose === "gallery" \? element : undefined/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /if \(!galleryBoundary\) \{\s*window\.dispatchEvent\(new Event\("chat-history-preload"\)\)/,
+  );
+  assert.match(
+    historyNavigationSource,
+    /waitForCompleteHistoryWindow\(\s*container,[\s\S]*?45_000,\s*galleryBoundary/,
+  );
 });
 
 test("unified timeline proxy forwards anonymous identity cookies for joined viewers", () => {

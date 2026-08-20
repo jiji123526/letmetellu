@@ -1064,10 +1064,15 @@ export function useChatHistoryNavigation({
       markGalleryNavigationTiming(galleryTiming, "target-discovered");
       if (container && !useMountedFastPath) {
         await nextAnimationFrame();
-        window.dispatchEvent(new Event("chat-history-preload"));
+        const galleryBoundary = options?.purpose === "gallery" ? element : undefined;
+        if (!galleryBoundary) {
+          window.dispatchEvent(new Event("chat-history-preload"));
+        }
         const readiness = await waitForCompleteHistoryWindow(
           container,
           () => navigationRequest === navigationRequestRef.current,
+          45_000,
+          galleryBoundary,
         );
         if (readiness === "cancelled") {
           releaseHeldViewport?.();
