@@ -4,15 +4,91 @@ This file contains only unimplemented product and platform plans. Launch
 requirements belong in [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md), and shipped
 behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## Top Priority: Faster Gallery-To-Message Navigation
+
+The current gallery navigation is paginated, but it still waits for too much of
+the mounted context window before revealing the target. A context lookup mounts
+up to 25 visual roots before the target, the target itself, and 25 roots after
+it, expands their replies, activates history preview work, and then repeatedly
+scans pending images, videos and layout markers until the relevant window has
+been quiet for 900 ms. The scan may continue for up to 45 seconds. Media-heavy
+history therefore becomes slower even though the database read is bounded.
+
+Treat this as an atomic staged-navigation project rather than increasing
+prefetch distance or page size. Do not reveal the destination as soon as only
+the selected image is ready: media or widgets above it can still change height,
+move the target and reintroduce the scroll flash or vertical bounce that the
+current complete-window wait was designed to prevent.
+
+### Safe implementation order
+
+1. Add development timing marks for context fetch, React mount, target element
+   discovery, target-media readiness, layout stabilization and final scroll.
+   Keep production logging sampled and aggregate-only if it is later needed.
+2. Keep the current viewport visibly fixed while the destination context is
+   mounted and prepared. Reveal the new context and perform the final scroll as
+   one atomic transition only after its target position is trustworthy.
+3. Split gallery staging from the broad `chat-history-preload` signal. Await the
+   selected media plus every image, video or embed above it whose unresolved
+   height can change the target offset. Content below the target and bounded
+   nearby-preview warming must not delay the transition.
+4. Reserve final geometry before resource completion wherever possible: use
+   stored media dimensions for image aspect ratios and stable preview-card
+   placeholders for known link types. Then wait on the remaining relevant
+   `decode()`/load/metadata promises in parallel.
+5. Replace repeated full-container `querySelectorAll()` polling on the gallery
+   path with the collected readiness promises and a short-lived
+   `ResizeObserver` covering the staged region above and including the target.
+   Once those promises finish, require only two or three stable layout frames.
+6. After the staged path is stable, reduce gallery context radius from 25
+   roots per side to approximately 12 per side. Existing bidirectional cursors
+   must continue loading older and newer pages from that smaller window.
+7. Remove the old broad wait from gallery navigation only after slow-network,
+   media-heavy and reply-heavy regression coverage passes. Keep it available
+   for history operations that genuinely require a complete mounted window.
+
+### Acceptance criteria
+
+- A cached gallery image centers without waiting for content below it or
+  unrelated background link warming.
+- A slow selected image keeps the old viewport fixed while staging, then
+  reveals and centers the destination once without a visible intermediate
+  position, scroll flash or vertical vibration.
+- Late resource completion above the target cannot change its visible offset;
+  geometry is either reserved in advance or included in staged readiness.
+- Older and newer loading both continue after entering the smaller context
+  window.
+- Nearby preview metadata and up to six thumbnails still warm in the
+  background without mounting off-screen external widgets.
+- User interruption cancels pending alignment immediately.
+- Target-not-found, deleted-message and authorization behavior remains
+  unchanged.
+
+### Trade-offs and rollback
+
+Staging preserves visual stability but still delays navigation when media above
+the target has unknown geometry or a relevant resource is genuinely slow.
+Geometry reservation and parallel event-based readiness reduce that delay; they
+must not be replaced with an early visible jump followed by repeated scroll
+corrections. A staged context can also temporarily retain the old and new
+windows at once, increasing short-lived DOM and memory usage, so keep the
+context bounded and discard the old window immediately after the atomic
+transition. Reducing the context radius causes pagination requests to occur
+sooner, trading a smaller and faster staged render for occasional additional
+bounded reads. Ship staging/event separation before changing the radius so each
+effect can be measured and rolled back independently.
+
 ## Recommended Order
 
-1. Use beta traffic to identify real abuse, reliability and performance needs.
-2. Improve the guided-support workflow before adding another large
+1. Complete the atomic staged gallery navigation work above and validate it on
+   slow, media-heavy history.
+2. Use beta traffic to identify real abuse, reliability and performance needs.
+3. Improve the guided-support workflow before adding another large
    communication surface.
-3. Add notice comments only if channels need lightweight public discussion.
-4. Add rewarded media credits only after a viable ad provider and server-side
+4. Add notice comments only if channels need lightweight public discussion.
+5. Add rewarded media credits only after a viable ad provider and server-side
    reward verification are confirmed.
-5. Add delegated platform moderation only when one super admin is no longer
+6. Add delegated platform moderation only when one super admin is no longer
    operationally sufficient.
 
 ## Operational Improvements
