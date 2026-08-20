@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Ordinary chat disconnects now refresh silently instead of showing a reconnect bar — 2026-08-20
+
+- The reconnect notice no longer appears for ordinary channel reading, even at the latest edge. It remains reserved for `live` sessions and DM interactions where socket loss immediately affects the active surface.
+- While a viewer stays on the normal chat tail, a dropped socket now triggers a delayed HTTP refresh fallback instead. After `3.5s`, the client reconciles the latest channel snapshot and repeats that bounded refresh every `5s` until the socket returns or the reader leaves the live edge.
+- If nothing changed, the user sees no banner. If new normal-chat messages arrived, they are merged into the latest view without waiting for the WebSocket to recover.
+- The fallback is suppressed while reading older/context history, while away from the bottom, while hidden in the background, and during live mode.
+
+Trade-off: a prolonged socket outage now generates one small latest-snapshot request every `5s` for a viewer who remains on the ordinary chat tail. This is intentional user-facing work reduction: it removes a noisy reconnect banner from idle reading while keeping latest normal chat reasonably fresh.
+
+Deployment note: deploy the frontend only. With the socket intentionally disconnected, verify normal chat at the latest edge shows no reconnect bar and still picks up new messages after the fallback interval, while live mode and DM mode still show the reconnect notice.
+
 ### Nearby link previews are visually ready before history scroll — 2026-08-19
 
 - The bounded six-link prefetch still avoids mounting off-screen X, Instagram, video, or iframe widgets, but it now preloads and decodes each preview thumbnail as well as fetching preview metadata.

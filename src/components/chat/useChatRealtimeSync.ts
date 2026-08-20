@@ -57,9 +57,13 @@ interface RealtimeEvent {
   [key: string]: unknown;
 }
 
+const NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS = 3_500;
+const NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS = 5_000;
+
 interface UseChatRealtimeSyncArgs {
   channelId: string;
   connected: boolean;
+  reconnectPending: boolean;
   uid: string;
   isOwner: boolean;
   isLoggedIn: boolean;
@@ -121,6 +125,7 @@ interface UseChatRealtimeSyncArgs {
 export function useChatRealtimeSync({
   channelId,
   connected,
+  reconnectPending,
   uid,
   isOwner,
   isLoggedIn,
@@ -175,9 +180,13 @@ export function useChatRealtimeSync({
   const pendingContextMessageIdsRef = useRef(new Set<string>());
   const dmRefreshRequestIdRef = useRef(0);
   const unifiedRefreshPromiseRef = useRef<Promise<void> | null>(null);
+  const disconnectRefreshPromiseRef = useRef<Promise<void> | null>(null);
+  const disconnectRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disconnectRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     dmRefreshRequestIdRef.current += 1;
     unifiedRefreshPromiseRef.current = null;
+    disconnectRefreshPromiseRef.current = null;
   }, [channelId]);
 
   const getViewingChannelId = useCallback(() => {
@@ -344,6 +353,49 @@ export function useChatRealtimeSync({
         : refreshLatestTimeline(),
     );
   }, [inLiveModeRef, refreshLatestTimeline, synchronizeLiveSession]);
+
+  const clearDisconnectRefreshTimers = useCallback(() => {
+    if (disconnectRefreshTimeoutRef.current) {
+      clearTimeout(disconnectRefreshTimeoutRef.current);
+      disconnectRefreshTimeoutRef.current = null;
+    }
+    if (disconnectRefreshIntervalRef.current) {
+      clearInterval(disconnectRefreshIntervalRef.current);
+      disconnectRefreshIntervalRef.current = null;
+    }
+  }, []);
+
+  const refreshDisconnectedLatestView = useCallback(() => {
+    if (connected) return Promise.resolve();
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      return Promise.resolve();
+    }
+    if (inLiveModeRef.current) return Promise.resolve();
+    if (historyModeRef.current !== "latest") return Promise.resolve();
+    if (!isNearBottomRef.current) return Promise.resolve();
+    return shareInFlightRequest(
+      disconnectRefreshPromiseRef,
+      () => refreshLatestTimeline().catch(() => {}),
+    );
+  }, [
+    connected,
+    historyModeRef,
+    inLiveModeRef,
+    isNearBottomRef,
+    refreshLatestTimeline,
+  ]);
+
+  useEffect(() => {
+    clearDisconnectRefreshTimers();
+    if (connected || !reconnectPending) return;
+    disconnectRefreshTimeoutRef.current = setTimeout(() => {
+      void refreshDisconnectedLatestView();
+      disconnectRefreshIntervalRef.current = setInterval(() => {
+        void refreshDisconnectedLatestView();
+      }, NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS);
+    }, NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS);
+    return clearDisconnectRefreshTimers;
+  }, [clearDisconnectRefreshTimers, connected, reconnectPending, refreshDisconnectedLatestView]);
 
   useEffect(() => {
     return subscribe((event) => {
@@ -743,4 +795,6 @@ export function useChatRealtimeSync({
     refreshLatestTimeline,
     synchronizeLiveSession,
   ]);
+
+  useEffect(() => clearDisconnectRefreshTimers, [clearDisconnectRefreshTimers]);
 }

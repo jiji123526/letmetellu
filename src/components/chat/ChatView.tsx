@@ -598,6 +598,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   useChatRealtimeSync({
     channelId,
     connected,
+    reconnectPending: showReconnectNotice,
     uid,
     isOwner,
     isLoggedIn,

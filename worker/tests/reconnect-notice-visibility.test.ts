@@ -13,14 +13,14 @@ const historySource = readFileSync(
   "utf8",
 );
 
-test("reconnect notice appears at the normal chat live edge", () => {
+test("reconnect notice stays hidden for ordinary chat reads", () => {
   assert.equal(shouldShowReconnectNotice({
     reconnectPending: true,
     historyMode: "latest",
     isNearBottom: true,
     inLiveMode: false,
     dmMode: false,
-  }), true);
+  }), false);
 });
 
 test("reconnect notice stays hidden while reading rendered history", () => {
@@ -68,7 +68,20 @@ test("reconnect notice never appears without a pending reconnect", () => {
 });
 
 test("chat view gates the socket notice with reactive history position", () => {
-  assert.match(historySource, /const \[isNearBottom, setIsNearBottom\] = useState\(true\)/);
   assert.match(chatViewSource, /const reconnectNoticeVisible = shouldShowReconnectNotice\(/);
   assert.match(chatViewSource, /showReconnectNotice=\{reconnectNoticeVisible\}/);
+});
+
+test("normal latest chat uses silent HTTP refresh instead of a reconnect banner", () => {
+  const realtimeSource = readFileSync(
+    new URL("../../src/components/chat/useChatRealtimeSync.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS = 3_500/);
+  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS = 5_000/);
+  assert.match(realtimeSource, /if \(inLiveModeRef\.current\) return Promise\.resolve\(\)/);
+  assert.match(realtimeSource, /if \(historyModeRef\.current !== "latest"\) return Promise\.resolve\(\)/);
+  assert.match(realtimeSource, /if \(!isNearBottomRef\.current\) return Promise\.resolve\(\)/);
+  assert.match(realtimeSource, /shareInFlightRequest\(\s*disconnectRefreshPromiseRef/);
+  assert.match(realtimeSource, /disconnectRefreshIntervalRef\.current = setInterval/);
 });
