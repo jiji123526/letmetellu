@@ -25,6 +25,14 @@ export interface ImageQuotaActorIdentity {
   secondaryType: "device" | null;
 }
 
+function isTruthyFlag(value: string | null | undefined): boolean {
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+export function isBetaGrandfatherAllUsersEnabled(env: Env): boolean {
+  return isTruthyFlag(env.PLUS_BETA_GRANDFATHER_ALL_USERS);
+}
+
 export async function readActivePlusEntitlement(
   env: Env,
   userId: string | null | undefined,
@@ -53,6 +61,46 @@ export async function hasActivePlusEntitlement(
   now = new Date().toISOString(),
 ): Promise<boolean> {
   return Boolean(await readActivePlusEntitlement(env, userId, now));
+}
+
+export async function ensureBetaGrandfatheredPlusEntitlement(
+  env: Env,
+  userId: string | null | undefined,
+  now = new Date().toISOString(),
+): Promise<ActiveUserEntitlement | null> {
+  if (!userId) return null;
+  const existing = await readActivePlusEntitlement(env, userId, now);
+  if (existing) return existing;
+  if (!isBetaGrandfatherAllUsersEnabled(env)) return null;
+
+  await env.DB.prepare(`
+    INSERT OR IGNORE INTO user_entitlements (
+      id, user_id, provider, plan, status, starts_at, ends_at,
+      source_order_id, source_type, provider_customer_id,
+      provider_subscription_id, auto_renews, grandfathered_channel_id
+    )
+    SELECT ?, ?, NULL, 'plus', 'active', ?, NULL,
+           NULL, 'grandfathered_beta', NULL,
+           NULL, 0, NULL
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM user_entitlements
+      WHERE user_id = ?
+        AND plan = 'plus'
+        AND status = 'active'
+        AND starts_at <= ?
+        AND (ends_at IS NULL OR ends_at > ?)
+    )
+  `).bind(
+    crypto.randomUUID(),
+    userId,
+    now,
+    userId,
+    now,
+    now,
+  ).run();
+
+  return readActivePlusEntitlement(env, userId, now);
 }
 
 export function buildImageQuotaActorIdentity(input: {

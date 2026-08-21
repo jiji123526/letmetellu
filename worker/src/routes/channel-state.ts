@@ -1,6 +1,6 @@
 import { getChannelModeration } from "../lib/channel-moderation";
 import { buildOwnerPlanState } from "../lib/plan-feature-gates";
-import { hasActivePlusEntitlement } from "../lib/plan-entitlements";
+import { ensureBetaGrandfatheredPlusEntitlement, hasActivePlusEntitlement } from "../lib/plan-entitlements";
 import { getParentChannelId } from "../lib/special-channels";
 import type { Env } from "../types";
 
@@ -37,6 +37,8 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
   if (parentChannel.owner_uid !== userId) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
+
+  await ensureBetaGrandfatheredPlusEntitlement(env, userId);
 
   const liveChannel = channelId !== parentChannelId
     ? await env.DB.prepare(`

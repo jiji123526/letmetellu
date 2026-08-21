@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { deleteChannel } from "../lib/channel-cleanup";
 import { buildOwnerPlanState } from "../lib/plan-feature-gates";
-import { hasActivePlusEntitlement } from "../lib/plan-entitlements";
+import { ensureBetaGrandfatheredPlusEntitlement, hasActivePlusEntitlement } from "../lib/plan-entitlements";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -130,6 +130,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       }
       const user = await resolveUserIdentity(env, userId, userEmail);
       if (!user) return Response.json({ error: "user_not_found" }, { status: 404 });
+      await ensureBetaGrandfatheredPlusEntitlement(env, user.id);
       const state = await readUserState(env, user.id, reportsChannelId);
       return Response.json({
         ok: true,
@@ -294,6 +295,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       ]);
     }
 
+    await ensureBetaGrandfatheredPlusEntitlement(env, canonicalUserId);
     const state = await readUserState(env, canonicalUserId, reportsChannelId);
     return Response.json({
       ok: true,

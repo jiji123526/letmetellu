@@ -33,6 +33,11 @@ Last updated: 2026-08-21
 - Reflected the plan snapshot in the dashboard create flow so channel-slot limits are visible before create attempts.
 - Reflected the same snapshot in chat owner UI so live, freeze and customization entry points show Plus-locked state before mutation attempts.
 
+Uncommitted in progress after `9ea7771`:
+
+- Added the decision that beta users should receive permanent grandfathered Plus entitlements rather than coupons or temporary discounts.
+- Started implementing a permanent `grandfathered_beta` entitlement path with a backfill migration for current users and an automatic server-side grant path for new beta accounts while the flag is enabled.
+
 ## Current working decisions
 
 Chosen direction as of 2026-08-21:
@@ -45,7 +50,8 @@ Chosen direction as of 2026-08-21:
 - Entitlement scope: the paying user keeps the Plus image exception in any channel, not only in channels they own.
 - Quota identity: use authenticated account ID when available; otherwise use anonymous UID with device-based checks as a secondary anti-abuse backstop.
 - Free plan ownership is limited to one channel. Owning more than one channel is a Plus benefit rather than an ad-gated Free action.
-- Existing channels should be migrated into an automatic Plus cohort so current customized channels do not lose access at launch.
+- Beta users should receive permanent account-level Plus benefits through a non-billable `grandfathered_beta` entitlement, not through coupons.
+- Current authenticated beta accounts should be backfilled into that permanent Plus cohort, and new authenticated accounts created during the beta should receive the same entitlement automatically while the beta-grandfathering flag is enabled.
 - Downgrade behavior: reset premium customization values to defaults, lock premium rendering and controls, retain uploaded premium background media for later cleanup rather than deleting it immediately.
 - Pricing should be stored and modeled as VAT-exclusive until tax and storefront display rules are finalized.
 
@@ -53,7 +59,7 @@ Implementation consequences:
 
 - Account-wide sender entitlements require the message-send and upload flows to recognize a paid authenticated user even when that person is participating as an ordinary non-owner visitor.
 - Automatic renewal narrows the viable Korean payment-method set if Toss automatic billing is used; domestic easy-pay wallets are not automatically covered by that product.
-- Granting automatic Plus to current channels requires a migration rule for who receives that entitlement, how long it lasts and whether it is a separate grandfathered status or a normal billed plan.
+- Granting automatic Plus to beta users requires one permanent, non-billable entitlement source that remains distinguishable from paid subscriptions in analytics and support tooling.
 
 ## Recommended beta implementation order
 
@@ -101,7 +107,7 @@ Phase 5: daily image quota
 
 Phase 6: migration and rollout
 
-- Grant automatic Plus access to existing customized channels or their owners according to the chosen grandfathering rule.
+- Grant permanent grandfathered Plus access to the beta user cohort through a dedicated entitlement source and keep it distinct from paid subscriptions.
 - Turn on premium customization enforcement only after the migration is complete.
 - Add rewarded advertisements only if later business validation still requires them.
 
@@ -205,10 +211,11 @@ Chosen downgrade behavior:
 - Render the channel with locked premium styling and controls while the user is not entitled.
 - Keep premium background media rather than deleting it immediately; define a later cleanup policy for unreferenced retained assets.
 
-Chosen migration policy for existing channels:
+Chosen migration policy for beta users:
 
-- Existing channels should be granted automatic Plus access during the rollout migration so they keep their current customization without manual intervention.
-- The migration still needs a precise entitlement representation and expiry rule if this automatic access is not intended to be permanent.
+- Beta users should receive permanent account-level Plus through `user_entitlements` with `source_type = 'grandfathered_beta'`.
+- This entitlement should be non-billable, non-renewing and have no expiry by default.
+- Do not model this benefit as a coupon. Coupons belong to checkout pricing, while this policy is a server-side entitlement and should work even without any payment flow.
 
 ## Billing provider direction
 
@@ -370,7 +377,7 @@ Do not optimize for ad views alone. The primary health measures are successful c
 5. Add one server-side entitlement helper used by message sending, media uploads and customization updates.
 6. Extend ordinary participant write flows so a paid authenticated user can be recognized separately from anonymous-only participation.
 7. Implement the five-images-per-calendar-day Free quota with idempotent consumption on accepted image messages.
-8. Run the migration that grants automatic Plus access to current channels or their owners according to the chosen grandfathering rule.
+8. Run the migration that grants permanent grandfathered Plus access to the beta user cohort and keep the same automatic grant path on for new beta accounts until the beta ends.
 9. Enforce premium customization locking, image-quota bypass and advertisement removal from the shared entitlement helper.
 10. Add rewarded advertisements only if the later growth model still requires them.
 
@@ -379,6 +386,5 @@ Do not optimize for ad views alone. The primary health measures are successful c
 - Which provider and payment-method scope will back automatic renewal at launch if recurring Korean wallets are required.
 - Which timezone defines the “daily” reset for the five-image Free quota.
 - Whether image-quota bypass in “all channels” also includes every DM and live-message surface from day one or rolls out in phases.
-- Whether the automatic Plus migration for current channels is permanent grandfathering, a fixed-term trial or a separate non-billable entitlement tier.
 - Final VAT-exclusive price points, public storefront wording and refund calculations after tax and PG review.
 - The exact placement and maximum frequency of non-rewarded advertisements in free-owned channels.
