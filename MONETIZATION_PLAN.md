@@ -29,6 +29,7 @@ Uncommitted in progress after `5df0016`:
 - Added the first idempotent webhook reconciliation path so cancellation and refund events are durably recorded in `billing_webhook_events` and reflected back into orders, payments and entitlements.
 - Extended the owner plan snapshot so dashboard and owner reads can show whether Plus is grandfathered, auto-renewing or time-bounded, instead of exposing only a bare `hasPlus` flag.
 - Added a dedicated billing state read path and dashboard plan-details sheet so pricing, active entitlement and reusable pending orders are visible before the real checkout adapter is connected.
+- Added the first Toss automatic-billing checkout skeleton: authenticated prepare/confirm routes, dashboard checkout entry points, and success/fail callback pages for the billing-auth flow.
 
 `0dfdb7d` Add monetization foundation and plus owner gates
 

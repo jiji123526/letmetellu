@@ -66,6 +66,12 @@ interface BillingWebhookEventRow {
   user_id: string | null;
 }
 
+interface TossBillingPrepareRow {
+  id: string;
+  email: string | null;
+  name: string | null;
+}
+
 function buildOrderResponse(
   order: PendingBillingOrderRow,
   taxMode: "vat_exclusive",
@@ -96,6 +102,25 @@ function buildCatalogEntryResponse(entry: ReturnType<typeof getBillingPlanCatalo
     tax_mode: entry.taxMode,
     duration_days: entry.durationDays,
   };
+}
+
+function buildTossCustomerKey(userId: string): string {
+  const normalized = userId.replace(/[^A-Za-z0-9_-]/g, "");
+  return `yap-user-${normalized}`.slice(0, 50);
+}
+
+function buildTossOrderName(order: PendingBillingOrderRow): string {
+  return order.billing_cycle === "yearly"
+    ? "yap. Plus 365 days"
+    : "yap. Plus 30 days";
+}
+
+function getTossApiAuthorizationHeader(secretKey: string): string {
+  return `Basic ${btoa(`${secretKey}:`)}`;
+}
+
+function getTossApiBaseUrl(): string {
+  return "https://api.tosspayments.com";
 }
 
 function buildPaymentResponse(payment: PaymentRow) {
@@ -379,6 +404,335 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
   });
 }
 
+async function persistBillingConfirmation(input: {
+  env: Env;
+  userId: string;
+  order: PendingBillingOrderRow;
+  provider: string;
+  providerOrderId: string;
+  providerPaymentId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string | null;
+  providerCustomerId: string | null;
+  providerSubscriptionId: string | null;
+  approvedAt: string;
+}): Promise<Response> {
+  const selection = resolveBillingPlanSelection({
+    plan: input.order.plan,
+    billingCycle: input.order.billing_cycle,
+    provider: input.order.provider,
+  });
+  if (!selection) {
+    return Response.json({ error: "unsupported_order_plan" }, { status: 409 });
+  }
+
+  if (
+    input.order.provider !== input.provider
+    || input.order.amount !== input.amount
+    || input.order.currency !== input.currency
+  ) {
+    return Response.json({ error: "confirmation_mismatch" }, { status: 409 });
+  }
+
+  if (input.order.provider_order_id && input.order.provider_order_id !== input.providerOrderId) {
+    return Response.json({ error: "provider_order_conflict" }, { status: 409 });
+  }
+
+  if (input.order.status !== "pending" && input.order.status !== "confirmed") {
+    return Response.json({ error: "order_not_confirmable" }, { status: 409 });
+  }
+
+  const now = new Date().toISOString();
+  if (input.order.status === "pending" && input.order.expires_at && input.order.expires_at <= now) {
+    return Response.json({ error: "order_expired" }, { status: 409 });
+  }
+
+  const existingPayment = await input.env.DB.prepare(`
+    SELECT provider_payment_id, order_id, user_id, provider, method,
+           amount, currency, status, approved_at, canceled_at
+    FROM payments
+    WHERE provider_payment_id = ?
+    LIMIT 1
+  `).bind(input.providerPaymentId).first<PaymentRow>();
+  if (existingPayment && (existingPayment.order_id !== input.order.order_id || existingPayment.user_id !== input.userId)) {
+    return Response.json({ error: "payment_conflict" }, { status: 409 });
+  }
+
+  const entitlementId = `billing-order:${input.order.order_id}`;
+  const entitlementEndsAt = calculateBillingEntitlementEndsAt(input.approvedAt, selection.durationDays);
+
+  if (!existingPayment) {
+    await input.env.DB.prepare(`
+      INSERT INTO payments (
+        provider_payment_id, order_id, user_id, provider, method,
+        amount, currency, status, approved_at, canceled_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?, NULL, ?)
+    `).bind(
+      input.providerPaymentId,
+      input.order.order_id,
+      input.userId,
+      input.provider,
+      input.paymentMethod,
+      input.amount,
+      input.currency,
+      input.approvedAt,
+      now,
+    ).run();
+  }
+
+  await input.env.DB.prepare(`
+    UPDATE billing_orders
+    SET provider_order_id = ?, status = 'confirmed', updated_at = ?
+    WHERE order_id = ? AND user_id = ?
+  `).bind(
+    input.providerOrderId,
+    now,
+    input.order.order_id,
+    input.userId,
+  ).run();
+
+  await input.env.DB.prepare(`
+    INSERT OR IGNORE INTO user_entitlements (
+      id, user_id, provider, plan, status, starts_at, ends_at,
+      source_order_id, source_type, provider_customer_id,
+      provider_subscription_id, auto_renews, grandfathered_channel_id, updated_at
+    ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 'billing', ?, ?, ?, NULL, ?)
+  `).bind(
+    entitlementId,
+    input.userId,
+    input.provider,
+    selection.plan,
+    input.approvedAt,
+    entitlementEndsAt,
+    input.order.order_id,
+    input.providerCustomerId,
+    input.providerSubscriptionId,
+    selection.autoRenews ? 1 : 0,
+    now,
+  ).run();
+
+  const [confirmedOrder, payment, entitlement] = await Promise.all([
+    input.env.DB.prepare(`
+      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
+             provider, provider_order_id, status, auto_renews, expires_at
+      FROM billing_orders
+      WHERE order_id = ? AND user_id = ?
+      LIMIT 1
+    `).bind(input.order.order_id, input.userId).first<PendingBillingOrderRow>(),
+    input.env.DB.prepare(`
+      SELECT provider_payment_id, order_id, user_id, provider, method,
+             amount, currency, status, approved_at, canceled_at
+      FROM payments
+      WHERE provider_payment_id = ?
+      LIMIT 1
+    `).bind(input.providerPaymentId).first<PaymentRow>(),
+    input.env.DB.prepare(`
+      SELECT id, user_id, provider, plan, status, starts_at, ends_at,
+             source_order_id, source_type, provider_customer_id,
+             provider_subscription_id, auto_renews
+      FROM user_entitlements
+      WHERE id = ?
+      LIMIT 1
+    `).bind(entitlementId).first<BillingEntitlementRow>(),
+  ]);
+
+  if (!confirmedOrder || !payment || !entitlement) {
+    return Response.json({ error: "confirmation_persist_failed" }, { status: 500 });
+  }
+
+  return Response.json({
+    ok: true,
+    reused: Boolean(existingPayment),
+    order: buildOrderResponse(confirmedOrder, selection.taxMode),
+    payment: buildPaymentResponse(payment),
+    entitlement: buildEntitlementResponse(entitlement),
+  });
+}
+
+async function handleBillingTossPrepare(request: Request, env: Env, userId: string): Promise<Response> {
+  const body = await request.json() as { order_id?: unknown };
+  const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";
+  if (!orderId) {
+    return Response.json({ error: "missing_order_id" }, { status: 400 });
+  }
+
+  const [order, user] = await Promise.all([
+    env.DB.prepare(`
+      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
+             provider, provider_order_id, status, auto_renews, expires_at
+      FROM billing_orders
+      WHERE order_id = ? AND user_id = ?
+      LIMIT 1
+    `).bind(orderId, userId).first<PendingBillingOrderRow>(),
+    env.DB.prepare(`
+      SELECT id, email, name
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).bind(userId).first<TossBillingPrepareRow>(),
+  ]);
+  if (!order || !user) {
+    return Response.json({ error: "order_not_found" }, { status: 404 });
+  }
+  if (order.provider !== "toss_autobilling") {
+    return Response.json({ error: "unsupported_provider" }, { status: 409 });
+  }
+  if (order.status !== "pending") {
+    return Response.json({ error: "order_not_pending" }, { status: 409 });
+  }
+
+  const now = new Date().toISOString();
+  if (order.expires_at && order.expires_at <= now) {
+    return Response.json({ error: "order_expired" }, { status: 409 });
+  }
+
+  return Response.json({
+    ok: true,
+    order: buildOrderResponse(order, "vat_exclusive"),
+    checkout: {
+      provider: "toss_autobilling",
+      customer_key: buildTossCustomerKey(user.id),
+      customer_email: user.email,
+      customer_name: user.name,
+      order_name: buildTossOrderName(order),
+      success_url: `${env.APP_ORIGIN.replace(/\/$/, "")}/billing/callback/toss/success?order_id=${encodeURIComponent(order.order_id)}`,
+      fail_url: `${env.APP_ORIGIN.replace(/\/$/, "")}/billing/callback/toss/fail?order_id=${encodeURIComponent(order.order_id)}`,
+    },
+  });
+}
+
+async function handleBillingTossConfirm(request: Request, env: Env, userId: string): Promise<Response> {
+  const secretKey = env.TOSS_PAYMENTS_SECRET_KEY?.trim() || "";
+  if (!secretKey) {
+    return Response.json({ error: "billing_provider_not_configured" }, { status: 503 });
+  }
+
+  const body = await request.json() as {
+    order_id?: unknown;
+    auth_key?: unknown;
+    customer_key?: unknown;
+  };
+  const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";
+  const authKey = typeof body.auth_key === "string" ? body.auth_key.trim() : "";
+  const customerKey = typeof body.customer_key === "string" ? body.customer_key.trim() : "";
+  if (!orderId || !authKey || !customerKey) {
+    return Response.json({ error: "invalid_toss_confirmation_payload" }, { status: 400 });
+  }
+
+  const [order, user] = await Promise.all([
+    env.DB.prepare(`
+      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
+             provider, provider_order_id, status, auto_renews, expires_at
+      FROM billing_orders
+      WHERE order_id = ? AND user_id = ?
+      LIMIT 1
+    `).bind(orderId, userId).first<PendingBillingOrderRow>(),
+    env.DB.prepare(`
+      SELECT id, email, name
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).bind(userId).first<TossBillingPrepareRow>(),
+  ]);
+  if (!order || !user) {
+    return Response.json({ error: "order_not_found" }, { status: 404 });
+  }
+  if (order.provider !== "toss_autobilling") {
+    return Response.json({ error: "unsupported_provider" }, { status: 409 });
+  }
+  if (customerKey !== buildTossCustomerKey(userId)) {
+    return Response.json({ error: "customer_key_mismatch" }, { status: 409 });
+  }
+
+  const authHeader = getTossApiAuthorizationHeader(secretKey);
+  const issueResponse = await fetch(`${getTossApiBaseUrl()}/v1/billing/authorizations/issue`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      authKey,
+      customerKey,
+    }),
+  });
+  const issueData = await issueResponse.json().catch(() => ({})) as {
+    billingKey?: string;
+    customerKey?: string;
+  };
+  if (!issueResponse.ok || !issueData.billingKey) {
+    return Response.json({
+      error: "toss_billing_key_issue_failed",
+      provider_status: issueResponse.status,
+    }, { status: 502 });
+  }
+
+  const chargeResponse = await fetch(`${getTossApiBaseUrl()}/v1/billing/${encodeURIComponent(issueData.billingKey)}`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      customerKey,
+      amount: order.amount,
+      orderId: order.order_id,
+      orderName: buildTossOrderName(order),
+      customerEmail: user.email,
+      customerName: user.name,
+    }),
+  });
+  const chargeData = await chargeResponse.json().catch(() => ({})) as {
+    paymentKey?: string;
+    orderId?: string;
+    totalAmount?: number;
+    method?: string;
+    approvedAt?: string;
+    customerKey?: string;
+    mId?: string;
+  };
+  if (!chargeResponse.ok || !chargeData.paymentKey || !Number.isInteger(chargeData.totalAmount)) {
+    return Response.json({
+      error: "toss_first_charge_failed",
+      provider_status: chargeResponse.status,
+    }, { status: 502 });
+  }
+
+  const approvedAt = typeof chargeData.approvedAt === "string" && isIsoTimestamp(chargeData.approvedAt)
+    ? new Date(chargeData.approvedAt).toISOString()
+    : new Date().toISOString();
+
+  const persistenceResponse = await persistBillingConfirmation({
+    env,
+    userId,
+    order,
+    provider: "toss_autobilling",
+    providerOrderId: chargeData.orderId || order.order_id,
+    providerPaymentId: chargeData.paymentKey,
+    amount: Number(chargeData.totalAmount),
+    currency: order.currency,
+    paymentMethod: chargeData.method || "card",
+    providerCustomerId: chargeData.customerKey || customerKey,
+    providerSubscriptionId: null,
+    approvedAt,
+  });
+  if (!persistenceResponse.ok) {
+    return persistenceResponse;
+  }
+
+  const persisted = await persistenceResponse.json() as Record<string, unknown>;
+  return Response.json({
+    ...persisted,
+    provider_flow: {
+      provider: "toss_autobilling",
+      billing_key_issued: true,
+      renewal_storage_pending: true,
+      merchant_id: chargeData.mId || null,
+    },
+  });
+}
+
 async function handleBillingConfirm(request: Request, env: Env, userId: string): Promise<Response> {
   const body = await request.json() as {
     order_id?: unknown;
@@ -426,131 +780,19 @@ async function handleBillingConfirm(request: Request, env: Env, userId: string):
     return Response.json({ error: "order_not_found" }, { status: 404 });
   }
 
-  const selection = resolveBillingPlanSelection({
-    plan: order.plan,
-    billingCycle: order.billing_cycle,
-    provider: order.provider,
-  });
-  if (!selection) {
-    return Response.json({ error: "unsupported_order_plan" }, { status: 409 });
-  }
-
-  if (order.provider !== provider || order.amount !== amount || order.currency !== currency) {
-    return Response.json({ error: "confirmation_mismatch" }, { status: 409 });
-  }
-
-  if (order.provider_order_id && order.provider_order_id !== providerOrderId) {
-    return Response.json({ error: "provider_order_conflict" }, { status: 409 });
-  }
-
-  if (order.status !== "pending" && order.status !== "confirmed") {
-    return Response.json({ error: "order_not_confirmable" }, { status: 409 });
-  }
-
-  const now = new Date().toISOString();
-  if (order.status === "pending" && order.expires_at && order.expires_at <= now) {
-    return Response.json({ error: "order_expired" }, { status: 409 });
-  }
-
-  const existingPayment = await env.DB.prepare(`
-    SELECT provider_payment_id, order_id, user_id, provider, method,
-           amount, currency, status, approved_at, canceled_at
-    FROM payments
-    WHERE provider_payment_id = ?
-    LIMIT 1
-  `).bind(providerPaymentId).first<PaymentRow>();
-  if (existingPayment && (existingPayment.order_id !== orderId || existingPayment.user_id !== userId)) {
-    return Response.json({ error: "payment_conflict" }, { status: 409 });
-  }
-
-  const entitlementId = `billing-order:${orderId}`;
-  const entitlementEndsAt = calculateBillingEntitlementEndsAt(approvedAt, selection.durationDays);
-
-  if (!existingPayment) {
-    await env.DB.prepare(`
-      INSERT INTO payments (
-        provider_payment_id, order_id, user_id, provider, method,
-        amount, currency, status, approved_at, canceled_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?, NULL, ?)
-    `).bind(
-      providerPaymentId,
-      orderId,
-      userId,
-      provider,
-      paymentMethod,
-      amount,
-      currency,
-      approvedAt,
-      now,
-    ).run();
-  }
-
-  await env.DB.prepare(`
-    UPDATE billing_orders
-    SET provider_order_id = ?, status = 'confirmed', updated_at = ?
-    WHERE order_id = ? AND user_id = ?
-  `).bind(
-    providerOrderId,
-    now,
-    orderId,
+  return persistBillingConfirmation({
+    env,
     userId,
-  ).run();
-
-  await env.DB.prepare(`
-    INSERT OR IGNORE INTO user_entitlements (
-      id, user_id, provider, plan, status, starts_at, ends_at,
-      source_order_id, source_type, provider_customer_id,
-      provider_subscription_id, auto_renews, grandfathered_channel_id, updated_at
-    ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 'billing', ?, ?, ?, NULL, ?)
-  `).bind(
-    entitlementId,
-    userId,
+    order,
     provider,
-    selection.plan,
-    approvedAt,
-    entitlementEndsAt,
-    orderId,
+    providerOrderId,
+    providerPaymentId,
+    amount,
+    currency,
+    paymentMethod,
     providerCustomerId,
     providerSubscriptionId,
-    selection.autoRenews ? 1 : 0,
-    now,
-  ).run();
-
-  const [confirmedOrder, payment, entitlement] = await Promise.all([
-    env.DB.prepare(`
-      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
-             provider, provider_order_id, status, auto_renews, expires_at
-      FROM billing_orders
-      WHERE order_id = ? AND user_id = ?
-      LIMIT 1
-    `).bind(orderId, userId).first<PendingBillingOrderRow>(),
-    env.DB.prepare(`
-      SELECT provider_payment_id, order_id, user_id, provider, method,
-             amount, currency, status, approved_at, canceled_at
-      FROM payments
-      WHERE provider_payment_id = ?
-      LIMIT 1
-    `).bind(providerPaymentId).first<PaymentRow>(),
-    env.DB.prepare(`
-      SELECT id, user_id, provider, plan, status, starts_at, ends_at,
-             source_order_id, source_type, provider_customer_id,
-             provider_subscription_id, auto_renews
-      FROM user_entitlements
-      WHERE id = ?
-      LIMIT 1
-    `).bind(entitlementId).first<BillingEntitlementRow>(),
-  ]);
-
-  if (!confirmedOrder || !payment || !entitlement) {
-    return Response.json({ error: "confirmation_persist_failed" }, { status: 500 });
-  }
-
-  return Response.json({
-    ok: true,
-    reused: Boolean(existingPayment),
-    order: buildOrderResponse(confirmedOrder, selection.taxMode),
-    payment: buildPaymentResponse(payment),
-    entitlement: buildEntitlementResponse(entitlement),
+    approvedAt,
   });
 }
 
@@ -808,6 +1050,14 @@ export async function handleBilling(request: Request, env: Env): Promise<Respons
 
   if (url.pathname === "/api/billing/order") {
     return handleBillingOrderCreate(request, env, userId);
+  }
+
+  if (url.pathname === "/api/billing/toss/prepare") {
+    return handleBillingTossPrepare(request, env, userId);
+  }
+
+  if (url.pathname === "/api/billing/toss/confirm") {
+    return handleBillingTossConfirm(request, env, userId);
   }
 
   if (url.pathname === "/api/billing/confirm") {

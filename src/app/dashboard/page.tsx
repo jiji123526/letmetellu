@@ -52,7 +52,11 @@ import {
   startDashboardPerformanceTrace,
   startDashboardRequest,
 } from "@/lib/dashboard-performance";
-import { fetchBillingState, type BillingStateResponse } from "@/lib/api-billing";
+import {
+  createBillingOrder,
+  fetchBillingState,
+  type BillingStateResponse,
+} from "@/lib/api-billing";
 import { fetchCurrentUserState } from "@/lib/current-user-state";
 import type { OwnerPlanState } from "@/lib/owner-plan";
 import type { LocaleKeys } from "@/lib/locales/ko";
@@ -400,6 +404,8 @@ function DashboardPageContent() {
   const [billingState, setBillingState] = useState<BillingStateResponse | null>(null);
   const [billingStateLoading, setBillingStateLoading] = useState(false);
   const [billingStateError, setBillingStateError] = useState("");
+  const [checkoutStartingCycle, setCheckoutStartingCycle] = useState<"monthly" | "yearly" | null>(null);
+  const [checkoutStartError, setCheckoutStartError] = useState("");
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -573,6 +579,27 @@ function DashboardPageContent() {
       await loadBillingState();
     }
   }, [authenticatedUserId, billingStateLoading, loadBillingState]);
+
+  const startBillingCheckout = useCallback(async (billingCycle: "monthly" | "yearly") => {
+    if (!authenticatedUserId) return;
+    setCheckoutStartingCycle(billingCycle);
+    setCheckoutStartError("");
+    try {
+      const data = await createBillingOrder({
+        plan: "plus",
+        billing_cycle: billingCycle,
+      });
+      if (!data.order?.order_id) {
+        throw new Error(data.error || "checkout_start_failed");
+      }
+      setShowPlanDetails(false);
+      router.push(`/billing/checkout?order_id=${encodeURIComponent(data.order.order_id)}`);
+    } catch {
+      setCheckoutStartError(t("dashboardPlanCheckoutFailed"));
+    } finally {
+      setCheckoutStartingCycle(null);
+    }
+  }, [authenticatedUserId, router, t]);
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -2550,6 +2577,24 @@ function DashboardPageContent() {
                     <div className="mt-1 text-[11px]" style={{ color: "var(--meta)" }}>
                       {plan.auto_renews ? t("dashboardPlanAutorenewBadge") : t("dashboardPlanExpiresBadge")}
                     </div>
+                    <button
+                      type="button"
+                      disabled={Boolean(ownerPlan?.hasPlus) || checkoutStartingCycle !== null}
+                      className="mt-3 w-full rounded-[10px] border-none px-3 py-2 text-[12px] font-semibold"
+                      style={{
+                        background: ownerPlan?.hasPlus ? "var(--bg)" : "#007aff",
+                        color: ownerPlan?.hasPlus ? "var(--meta)" : "#fff",
+                        cursor: ownerPlan?.hasPlus || checkoutStartingCycle !== null ? "default" : "pointer",
+                        opacity: ownerPlan?.hasPlus || checkoutStartingCycle !== null ? 0.7 : 1,
+                      }}
+                      onClick={() => void startBillingCheckout(plan.billing_cycle)}
+                    >
+                      {checkoutStartingCycle === plan.billing_cycle
+                        ? t("dashboardPlanCheckoutProcessing")
+                        : billingState?.latest_pending_order?.billing_cycle === plan.billing_cycle
+                          ? t("dashboardPlanCheckoutResume")
+                          : t("dashboardPlanCheckoutStart")}
+                    </button>
                   </div>
                 ))}
               </div>
@@ -2575,6 +2620,16 @@ function DashboardPageContent() {
             {billingStateError && !billingStateLoading && (
               <div className="mt-4 text-[12px]" style={{ color: "#ff3b30" }}>
                 {t("dashboardPlanDetailsLoadFailed")}
+              </div>
+            )}
+            {!billingStateLoading && ownerPlan?.hasPlus && (
+              <div className="mt-4 text-[12px]" style={{ color: "var(--meta)" }}>
+                {t("dashboardPlanCheckoutUnavailable")}
+              </div>
+            )}
+            {checkoutStartError && (
+              <div className="mt-4 text-[12px]" style={{ color: "#ff3b30" }}>
+                {checkoutStartError}
               </div>
             )}
           </div>

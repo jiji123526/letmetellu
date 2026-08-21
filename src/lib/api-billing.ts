@@ -44,10 +44,94 @@ export interface BillingStateResponse {
   latest_pending_order?: BillingPendingOrder | null;
 }
 
+export interface BillingOrderResponse {
+  ok?: boolean;
+  error?: string;
+  reused?: boolean;
+  order?: BillingPendingOrder;
+}
+
+export interface TossCheckoutPrepareResponse {
+  ok?: boolean;
+  error?: string;
+  order?: BillingPendingOrder;
+  checkout?: {
+    provider: "toss_autobilling";
+    client_key: string;
+    customer_key: string;
+    customer_email: string | null;
+    customer_name: string | null;
+    order_name: string;
+    success_url: string;
+    fail_url: string;
+  };
+}
+
+export interface TossCheckoutConfirmResponse {
+  ok?: boolean;
+  error?: string;
+  reused?: boolean;
+  order?: BillingPendingOrder | null;
+  payment?: {
+    provider_payment_id: string;
+    provider: string;
+    method: string | null;
+    amount: number;
+    currency: string;
+    status: string;
+    approved_at: string | null;
+    canceled_at: string | null;
+  } | null;
+  entitlement?: BillingActiveEntitlement | null;
+  provider_flow?: {
+    provider: "toss_autobilling";
+    billing_key_issued: boolean;
+    renewal_storage_pending: boolean;
+    merchant_id: string | null;
+  };
+}
+
 export async function fetchBillingState(): Promise<BillingStateResponse> {
   const response = await fetch("/api/billing", {
     method: "GET",
     cache: "no-store",
   });
   return response.json() as Promise<BillingStateResponse>;
+}
+
+export async function createBillingOrder(input: {
+  plan: "plus";
+  billing_cycle: "monthly" | "yearly";
+}): Promise<BillingOrderResponse> {
+  const response = await fetch("/api/billing", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  return response.json() as Promise<BillingOrderResponse>;
+}
+
+export async function prepareTossCheckout(orderId: string): Promise<TossCheckoutPrepareResponse> {
+  const response = await fetch("/api/billing/toss/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_id: orderId }),
+    cache: "no-store",
+  });
+  return response.json() as Promise<TossCheckoutPrepareResponse>;
+}
+
+export async function confirmTossCheckout(input: {
+  order_id: string;
+  auth_key: string;
+  customer_key: string;
+}): Promise<TossCheckoutConfirmResponse> {
+  const response = await fetch("/api/billing/toss/confirm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+  return response.json() as Promise<TossCheckoutConfirmResponse>;
 }
