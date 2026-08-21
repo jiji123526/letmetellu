@@ -61,6 +61,7 @@ interface UseChatChannelSettingsArgs<TChannel extends ChannelSettingsState> {
     channelShownOnProfile: string;
     channelHiddenFromProfile: string;
     backgroundChanged: string;
+    plusRequiredCustomization: string;
     nameChanged: string;
     profileChanged: string;
     rulesChanged: string;
@@ -147,7 +148,20 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
     flashBanner(visible ? text.channelShownOnProfile : text.channelHiddenFromProfile, bubbleColor, 2500);
   }, [bubbleColor, channelId, flashBanner, setChannel, text.channelHiddenFromProfile, text.channelShownOnProfile]);
 
-  const handleColorChange = useCallback((color: string) => {
+  const handleColorChange = useCallback(async (color: string) => {
+    const result = await adminAction("update-profile", channelId, { bubble_color: color }) as {
+      ok?: boolean;
+      error?: string;
+      _status?: number;
+    };
+    if (result?.error === "plus_required" || result?._status === 403) {
+      flashBanner(text.plusRequiredCustomization, "#d32f2f");
+      return;
+    }
+    if (!result?.ok && (result?._status || 200) >= 400) {
+      return;
+    }
+
     const nextAppearance = {
       bubble_color: color,
       background_type: channel?.background_type,
@@ -176,10 +190,30 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
     } else {
       updateRecentChannelAppearance(channelId, { bubbleColor: color });
     }
-    adminAction("update-profile", channelId, { bubble_color: color });
-  }, [channel, channelId, isLoggedIn, setChannel, setLocalBubbleColor]);
+  }, [
+    channel,
+    channelId,
+    flashBanner,
+    isLoggedIn,
+    setChannel,
+    setLocalBubbleColor,
+    text.plusRequiredCustomization,
+  ]);
 
-  const handleBackgroundChange = useCallback((background: BackgroundUpdate) => {
+  const handleBackgroundChange = useCallback(async (background: BackgroundUpdate) => {
+    const result = await adminAction("update-profile", channelId, background as Record<string, unknown>) as {
+      ok?: boolean;
+      error?: string;
+      _status?: number;
+    };
+    if (result?.error === "plus_required" || result?._status === 403) {
+      flashBanner(text.plusRequiredCustomization, "#d32f2f");
+      return;
+    }
+    if (!result?.ok && (result?._status || 200) >= 400) {
+      return;
+    }
+
     const decoratedBackgroundImage = decorateProtectedMediaUrl(background.background_image) || background.background_image;
     const nextAppearance = {
       bubble_color: channel?.bubble_color,
@@ -205,9 +239,16 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
       background_image: decoratedBackgroundImage,
       appearance_version: appearanceVersion,
     });
-    void adminAction("update-profile", channelId, background as Record<string, unknown>);
     flashBanner(text.backgroundChanged, bubbleColor, 2500);
-  }, [bubbleColor, channel, channelId, flashBanner, setChannel, text.backgroundChanged]);
+  }, [
+    bubbleColor,
+    channel,
+    channelId,
+    flashBanner,
+    setChannel,
+    text.backgroundChanged,
+    text.plusRequiredCustomization,
+  ]);
 
   const handleNameChange = useCallback((name: string) => {
     setChannel((previous) => previous ? { ...previous, name } : null);

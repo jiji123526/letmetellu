@@ -79,7 +79,7 @@ export async function adminAction(
   _channelId: string,
   _payload?: Record<string, unknown>
 ) {
-  return { ok: true };
+  return { ok: true, _status: 200 };
 }
 
 export function getWebSocketUrl(_channelId: string, _uid: string): string {

@@ -1,7 +1,7 @@
 # yap. Monetization Plan
 
 Status: product proposal; not yet implemented  
-Last updated: 2026-08-15
+Last updated: 2026-08-21
 
 ## Goals
 
@@ -11,42 +11,87 @@ Last updated: 2026-08-15
 - Validate willingness to pay before building complex usage-based billing.
 - Keep billing and rewarded-ad authorization enforceable by the server rather than trusting browser state.
 
-## Current beta recommendation
+## Current working decisions
 
-Recommended starting point as of 2026-08-21:
+Chosen direction as of 2026-08-21:
 
-- Launch Plus passes before building rewarded advertisements.
-- Replace the initial rewarded-media gate with a simpler Free quota of five successful image messages per rolling 24-hour window.
-- Treat the quota as image-message based, not upload-attempt based. Failed uploads or rejected sends must not consume the daily allowance.
-- Apply the first Plus media exception at the channel-owner level: channels owned by a Plus subscriber may bypass the public channel image quota.
-- Do not initially grant unlimited images to a paying visitor in every channel. The current write path identifies ordinary participants primarily through anonymous and device identities, so account-wide sender entitlements would require a broader identity-model change.
-- Keep owner DMs out of the first Plus media exception unless post-launch data shows a clear need. Public-channel image sends and owner DMs have different spam and cost profiles.
+- Launch Plus with advertisement removal, customization controls, image-quota exceptions and automatic renewal.
+- Make live-session creation and channel freezing Plus-only owner features.
+- Free image policy: five successful image messages per user per calendar day, resetting at server-defined midnight.
+- Count successful accepted image messages, not upload attempts. Failed uploads, rejected sends and ambiguous retries must not consume the daily allowance.
+- Plus image exception scope: all supported image surfaces while the user is entitled, including public channel messages, live-channel messages and owner DMs.
+- Entitlement scope: the paying user keeps the Plus image exception in any channel, not only in channels they own.
+- Quota identity: use authenticated account ID when available; otherwise use anonymous UID with device-based checks as a secondary anti-abuse backstop.
+- Free plan ownership is limited to one channel. Owning more than one channel is a Plus benefit rather than an ad-gated Free action.
+- Existing channels should be migrated into an automatic Plus cohort so current customized channels do not lose access at launch.
+- Downgrade behavior: reset premium customization values to defaults, lock premium rendering and controls, retain uploaded premium background media for later cleanup rather than deleting it immediately.
+- Pricing should be stored and modeled as VAT-exclusive until tax and storefront display rules are finalized.
 
-Rationale:
+Implementation consequences:
 
-- A daily image quota is materially easier to explain, enforce and measure than rewarded-ad grants.
-- Plus still has a stronger core reason to pay through ad-free owned channels and customization, so media can remain a secondary benefit.
-- Channel-owner-level Plus benefits fit the existing product model better than account-wide sender privileges for anonymous participants.
+- Account-wide sender entitlements require the message-send and upload flows to recognize a paid authenticated user even when that person is participating as an ordinary non-owner visitor.
+- Automatic renewal narrows the viable Korean payment-method set if Toss automatic billing is used; domestic easy-pay wallets are not automatically covered by that product.
+- Granting automatic Plus to current channels requires a migration rule for who receives that entitlement, how long it lasts and whether it is a separate grandfathered status or a normal billed plan.
 
 ## Recommended beta implementation order
 
-1. Finalize the paid product decisions needed for Plus passes, pricing and downgrade behavior.
+1. Finalize the paid product decisions needed for automatic renewal, pricing and downgrade behavior.
 2. Add provider-neutral billing and entitlement records in D1.
-3. Add one server-side entitlement helper and use it first for channel customization locking.
-4. Implement Toss test-key order creation, confirmation, refund reconciliation and idempotent webhook handling.
-5. Launch Plus passes without rewarded ads.
-6. Add the five-images-per-24-hours Free quota at message acceptance time, not at upload-ticket creation time.
-7. Add the first Plus media exception for public image messages in channels owned by a subscribed owner.
-8. Revisit rewarded advertisements only after billing, expiry, downgrade and image-quota behavior are stable.
+3. Add one server-side entitlement helper and use it first for channel customization locking and image-quota bypass decisions.
+4. Extend the ordinary non-owner message and upload paths so an authenticated paid user can be recognized server-side without relying on browser-only flags.
+5. Implement the chosen automatic-billing flow, confirmation, renewal, cancellation, refund reconciliation and idempotent webhook handling.
+6. Add the five-images-per-calendar-day Free quota at message acceptance time, not at upload-ticket creation time.
+7. Apply the Plus image exception to every chosen image surface with explicit tests for public channels, live channels and owner DMs.
+8. Run the migration for current channels and grandfathered Plus access before enabling premium customization enforcement.
+9. Revisit rewarded advertisements only after billing, renewal, downgrade and image-quota behavior are stable.
+
+## Implementation work plan
+
+Phase 1: monetization foundation
+
+- Add D1 schema for billing orders, payments, user entitlements, webhook events and daily image-quota consumption.
+- Add a Worker entitlement helper that can answer whether a user currently has Plus and how to derive quota actors for authenticated and anonymous participants.
+- Do not change product behavior yet in this phase. The goal is to land durable source-of-truth primitives first.
+
+Phase 2: owner-only Plus gates
+
+- Enforce Free one-channel ownership and Plus five-channel ownership in the channel-creation route.
+- Enforce Plus-only live-session creation and Plus-only manual freeze/unfreeze controls in owner admin routes.
+- Enforce Plus-only premium customization writes for bubble color, background color, background image and blur.
+- Reflect those locks in dashboard and channel settings UI with clear upgrade prompts.
+
+Phase 3: billing flow
+
+- Implement order creation, provider confirmation, recurring renewal, cancellation and refund reconciliation.
+- Persist entitlements only after authoritative server-side confirmation.
+- Surface current entitlement state to dashboard and channel settings so the client can render locked and unlocked states consistently.
+
+Phase 4: participant identity extension
+
+- Extend ordinary non-owner write paths so a signed-in paid user can be recognized server-side even when participating as a normal visitor rather than a channel owner.
+- Keep anonymous participation working for non-paying visitors without trusting browser-only Plus flags.
+
+Phase 5: daily image quota
+
+- Enforce the Free five-images-per-calendar-day rule at accepted-message time, not upload time.
+- Apply Plus bypass after the new participant-identity path is in place.
+- Cover public channel messages, live-channel messages and owner DMs with explicit tests.
+
+Phase 6: migration and rollout
+
+- Grant automatic Plus access to existing customized channels or their owners according to the chosen grandfathering rule.
+- Turn on premium customization enforcement only after the migration is complete.
+- Add rewarded advertisements only if later business validation still requires them.
 
 ## Proposed plans
 
 ### Free
 
 - Own one channel without watching an advertisement.
-- Create channels two through five after completing one rewarded advertisement for each channel creation.
-- Send a media bundle containing up to five photos after completing one rewarded advertisement.
+- Send up to five successful image messages per calendar day without Plus.
 - Use the default bubble color and default channel background.
+- Do not create live sessions.
+- Do not freeze or unfreeze channel chat.
 - See advertisements in free-owned channels according to the final ad placement policy.
 - Join and participate in other channels without a subscription.
 
@@ -57,19 +102,19 @@ Proposed beta founding price:
 - Korean domestic launch candidate: KRW 2,900 for 30 days; or
 - Korean domestic launch candidate: KRW 17,000 for 365 days.
 
-Recommended beta behavior is a non-renewing pass paid through Toss Payments. It supports a straightforward card, KakaoPay or Naver Pay purchase without storing a billing key. Before expiry, the dashboard invites the user to purchase another pass.
-
-If automatic renewal is later validated as necessary, Toss Payments can provide card or account billing after additional review and contract. Its billing product does not support automatic renewal through Toss Pay, KakaoPay or Naver Pay. Supporting recurring Korean wallets would require a different PG or direct integration, potentially through PortOne.
+Recommended beta behavior is an automatically renewing plan. If Toss automatic billing is selected as the first implementation path, expect card or account-based recurring billing after additional review and contract. That product does not automatically provide recurring Toss Pay, KakaoPay or Naver Pay support. Supporting recurring Korean wallets would require a different PG or direct integration, potentially through PortOne.
 
 An overseas Polar product at USD 2 monthly or USD 12 yearly remains a future option rather than the initial Korean launch path.
 
 Benefits:
 
-- Own up to five channels without watching channel-creation advertisements.
+- Own up to five channels.
 - Remove advertisements from channels owned by the subscriber.
-- Send photo bundles without watching rewarded advertisements, subject to the normal file-count and file-size limits.
+- Bypass the Free daily image quota in any supported channel while entitled, subject to the normal file-count, file-size and abuse-control limits.
 - Customize the outgoing bubble color.
 - Select a channel background color or upload a background image, including the existing blur option.
+- Create and operate live sessions.
+- Freeze and unfreeze channel chat.
 - Use the same functional moderation, reporting and security limits as Free; payment does not bypass abuse controls.
 
 The beta price should be presented as founding-user pricing. Decide before launch whether active founding subscriptions retain this price after general availability.
@@ -97,12 +142,10 @@ Text-only messages should never require an advertisement.
 Recommended rule:
 
 - Channel one: no advertisement.
-- Channels two through five: one verified rewarded advertisement immediately before each creation.
-- The credit authorizes one successful channel creation and is consumed atomically with creation.
-- If validation fails because the address is taken or the request is malformed, the credit remains usable until expiry.
-- Deleting a free-owned channel opens a slot, but creating its replacement requires another rewarded advertisement.
-- Plus subscribers bypass this advertisement check while their subscription is entitled.
-- The existing global beta channel ceiling and the per-account five-channel ceiling remain authoritative.
+- Free users are limited to one owned channel.
+- Plus subscribers may own up to five channels while their subscription is entitled.
+- Deleting a Free-owned channel opens the one available slot for another channel creation.
+- The existing global beta channel ceiling remains authoritative above plan-specific limits.
 
 ## Media size policy
 
@@ -134,39 +177,31 @@ Plus controls:
 - Background image upload.
 - Background image blur toggle.
 
-Recommended downgrade behavior:
+Chosen downgrade behavior:
 
-- Preserve the saved premium settings in D1 so a later resubscription restores them.
-- Render the channel with safe default styling while the owner is not entitled.
-- Keep the controls visible but locked with a concise Plus explanation.
-- Never delete an uploaded background immediately on downgrade; define a retention period before deleting unreferenced premium media.
+- Reset premium customization values to defaults when entitlement ends.
+- Render the channel with locked premium styling and controls while the user is not entitled.
+- Keep premium background media rather than deleting it immediately; define a later cleanup policy for unreferenced retained assets.
 
-Existing free channels may already have custom colors or backgrounds. Before enforcing this entitlement, choose one migration policy:
+Chosen migration policy for existing channels:
 
-1. Grandfather existing customization until it is changed; recommended for the least disruptive beta transition.
-2. Preserve the values but render defaults until Plus is activated.
-3. Give existing owners a time-limited Plus trial.
-
-Do not silently erase existing settings.
+- Existing channels should be granted automatic Plus access during the rollout migration so they keep their current customization without manual intervention.
+- The migration still needs a precise entitlement representation and expiry rule if this automatic access is not intended to be permanent.
 
 ## Billing provider direction
 
 The initial launch should prioritize Korean customers, KRW settlement and Korean tax reporting through a domestic business and PG contract.
 
-### Recommended beta path: Toss Payments passes
+### Current preferred path: automatic billing
 
-- Sell a 30-day and 365-day Plus pass without automatic renewal.
-- Offer contracted domestic cards and easy-pay methods through the Toss Payments payment window or widget.
+- Sell a 30-day and 365-day Plus plan with automatic renewal.
+- Offer only the payment methods that the chosen recurring-billing provider contract can actually support.
 - Naver Pay can be exercised with general test keys; KakaoPay becomes available for testing only after the merchant contract and MID test keys are issued.
 - Treat the payment-window success redirect as untrusted input. The Worker must compare the authenticated user, pending order, plan and authoritative amount before calling the Toss payment confirmation API.
 - Grant the entitlement only after server-side confirmation succeeds and is durably recorded.
-- Use payment status webhooks for cancellation and refund reconciliation; make event handling idempotent.
+- Use payment status webhooks for renewal, cancellation and refund reconciliation; make event handling idempotent.
 
-### Optional later path: Toss automatic billing
-
-Toss automatic billing supports cards and account transfer, not domestic easy-pay wallets. It also requires risk review and an additional contract. yap. would need to issue and securely store a billing key, schedule charges itself, implement retry and dunning rules, stop scheduling after cancellation, and handle expired or replaced payment instruments.
-
-Do not add this complexity until pass renewal behavior demonstrates a real need for automatic renewal.
+If Toss automatic billing is chosen, yap. must issue and securely store a billing key, schedule recurring charges itself, implement retry and dunning rules, stop scheduling after cancellation, and handle expired or replaced payment instruments.
 
 ### Overseas path: Polar
 
@@ -184,7 +219,7 @@ Before applying for live domestic payments:
 - Provide Toss and card reviewers a production-like website and test account.
 - Ask Toss for the exact contracted methods, transaction fee, setup, annual or minimum fee and settlement schedule. Do not infer them from SDK availability.
 
-Domestic PG sales, advertising revenue and related expenses remain part of Korean bookkeeping and tax reporting. Customer-facing KRW pricing should state clearly whether VAT is included; VAT-inclusive display is the recommended consumer presentation subject to professional confirmation.
+Domestic PG sales, advertising revenue and related expenses remain part of Korean bookkeeping and tax reporting. Customer-facing KRW pricing should state clearly whether VAT is included or excluded. The current working decision is to model pricing as VAT-exclusive, but public display and legal wording still require professional confirmation.
 
 ## Server-side source of truth
 
@@ -249,6 +284,16 @@ Suggested records:
 
 The Worker must verify webhook/ad-provider signatures, reject replayed provider references, use transactions or equivalent conditional writes for consumption, and apply existing rate limits.
 
+### `usage_quotas` or equivalent daily image ledger
+
+- actor identifier
+- actor type: authenticated user or anonymous/device-backed visitor
+- quota date bucket
+- image message count
+- last consumed at
+
+The ledger must support idempotent consumption so a retry of the same accepted image message does not double-charge the daily allowance.
+
 ## Failure and abuse handling
 
 - Ad blockers, consent denial or a lack of available inventory can make rewarded ads unavailable. Do not leave users in an unexplained disabled state.
@@ -262,9 +307,9 @@ The Worker must verify webhook/ad-provider signatures, reject replayed provider 
 
 ## Key UX flows
 
-### Free photo bundle
+### Free daily image allowance
 
-Select photos → explain “Watch one ad to send up to 5 photos” → completed and server verified → upload/send → retry safely on ambiguous failure.
+Select photos → if the sender is not currently Plus-entitled, check the remaining five-image daily allowance → upload/send → consume allowance only when the Worker accepts each image message → show the remaining allowance or a limit-reached prompt.
 
 ### Free second-to-fifth channel
 
@@ -274,11 +319,11 @@ The advertisement should appear only after the form is valid so users do not wat
 
 ### Plus purchase
 
-Open Plus sheet → select 365 days by default or 30 days → create a server-priced pending order → Toss payment window → Worker confirms payment with Toss → D1 entitlement begins → dashboard refreshes account state → premium controls unlock.
+Open Plus sheet → select 365 days by default or 30 days → create a server-priced pending order → provider billing-window flow → Worker confirms payment with the provider → D1 entitlement begins → billing key or equivalent recurring authorization is stored if required → dashboard refreshes account state → premium controls unlock.
 
 ### Cancellation
 
-For a non-renewing pass, no cancellation is needed to stop future charges. A refund request follows the published policy and provider cancellation API, with the entitlement adjusted only after the server records the result. At normal expiry, downgrade non-destructively and preserve recoverable premium settings.
+For automatic billing, cancellation must stop future renewals without deleting current entitlement history. A refund request follows the published policy and provider cancellation API, with the entitlement adjusted only after the server records the result. At expiry after cancellation or payment failure, downgrade by resetting premium values, locking premium rendering and retaining background media for later cleanup.
 
 ## Metrics for deciding whether this model works
 
@@ -296,26 +341,22 @@ Do not optimize for ad views alone. The primary health measures are successful c
 
 ## Recommended rollout
 
-1. Register the Korean business and tax setup and ask Toss about the specific UGC SaaS, payment methods, fees and review requirements.
-2. Finalize the unresolved product decisions below.
-3. Add provider-neutral D1 order, payment, entitlement, webhook-event and rewarded-ad grant schema.
-4. Implement Toss test-key order creation, payment confirmation, cancellation and refund reconciliation, and idempotency tests.
-5. Add one server-side entitlement helper used by channel creation, media sending and customization updates.
-6. Complete merchant and card review, then test all contracted methods with the merchant MID test keys, including mobile redirect behavior.
-7. Launch Plus passes without ads first to validate purchase, expiry and downgrade behavior.
-8. Add rewarded ads behind a feature flag for a small percentage of Free users.
-9. Measure ad availability and completion before enforcing the gate for all Free users.
-10. Consider card automatic billing only after repeat-purchase data demonstrates sufficient demand.
-11. Add Polar only after overseas demand justifies a second billing and tax path.
+1. Register the Korean business and tax setup and confirm the automatic-billing-capable provider, contracted payment methods, fees and review requirements.
+2. Finalize the remaining implementation clarifications below.
+3. Add provider-neutral D1 order, payment, entitlement, webhook-event and daily image-ledger schema.
+4. Implement automatic-billing order creation, payment confirmation, recurring renewal scheduling, cancellation, refund reconciliation and idempotency tests.
+5. Add one server-side entitlement helper used by message sending, media uploads and customization updates.
+6. Extend ordinary participant write flows so a paid authenticated user can be recognized separately from anonymous-only participation.
+7. Implement the five-images-per-calendar-day Free quota with idempotent consumption on accepted image messages.
+8. Run the migration that grants automatic Plus access to current channels or their owners according to the chosen grandfathering rule.
+9. Enforce premium customization locking, image-quota bypass and advertisement removal from the shared entitlement helper.
+10. Add rewarded advertisements only if the later growth model still requires them.
 
-## Decisions still required
+## Remaining implementation clarifications
 
-- Whether the initial Korean product is definitively a non-renewing 30-day and 365-day pass; recommended for beta.
-- Final VAT-inclusive KRW prices and refund amounts after receiving the PG fee quote.
-- Whether Plus removes ads for every visitor in the owner channels or only for the owner; recommended: every visitor.
+- Which provider and payment-method scope will back automatic renewal at launch if recurring Korean wallets are required.
+- Which timezone defines the “daily” reset for the five-image Free quota.
+- Whether image-quota bypass in “all channels” also includes every DM and live-message surface from day one or rolls out in phases.
+- Whether the automatic Plus migration for current channels is permanent grandfathering, a fixed-term trial or a separate non-billable entitlement tier.
+- Final VAT-exclusive price points, public storefront wording and refund calculations after tax and PG review.
 - The exact placement and maximum frequency of non-rewarded advertisements in free-owned channels.
-- The fallback when no rewarded advertisement is available; recommended during beta: one bounded daily fallback grant.
-- The migration treatment for existing customized channels; recommended: grandfather until changed or offer a transition trial.
-- Whether active founding users keep their launch price on later repeat purchases.
-- The retention period for premium background images after downgrade.
-- Minimum account age or verification requirements before rewarded channel creation.

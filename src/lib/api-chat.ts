@@ -585,7 +585,11 @@ export async function adminAction(
     body: JSON.stringify({ action, channel_id: channelId, payload }),
     keepalive: options?.keepalive,
   });
-  return res.json();
+  const data = await res.json();
+  return {
+    ...data,
+    _status: res.status,
+  };
 }
 
 export async function submitModerationPetition(channelId: string, text: string) {

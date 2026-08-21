@@ -196,7 +196,13 @@ export function FirstChannelOnboarding({ onCreated, onClose, onBetaCapacityReach
           onBetaCapacityReached?.();
           return;
         }
-        setError(data.error === "channel already exists" ? t("channelExists") : t("dashboardCreateFailed"));
+        setError(
+          data.error === "channel already exists"
+            ? t("channelExists")
+            : data.error === "channel limit reached"
+              ? t("dashboardChannelLimit")
+              : t("dashboardCreateFailed")
+        );
         return;
       }
       clearChannelLocalState(normalizedSlug);

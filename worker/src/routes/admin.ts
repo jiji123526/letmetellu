@@ -7,6 +7,11 @@ import { getReportsChannelOwnerId } from "../lib/special-channels";
 import { getChannelAppearanceVersion } from "../lib/channel-appearance";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
+import { hasActivePlusEntitlement } from "../lib/plan-entitlements";
+import {
+  getOwnedChannelLimit,
+  isPremiumAppearanceWrite,
+} from "../lib/plan-feature-gates";
 import { createPasscodeHash } from "./passcode";
 import { isTrustedInternalRequest } from "../lib/trusted-identity";
 import { deleteChannel } from "../lib/channel-cleanup";
@@ -135,6 +140,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     case "create-channel": {
       const { name } = payload || {};
       const instanceId = crypto.randomUUID();
+      const hasPlus = await hasActivePlusEntitlement(env, userId);
+      const ownedChannelLimit = getOwnedChannelLimit(hasPlus);
       // channel_id is the slug, userId is the owner
       const existing = await env.DB.prepare("SELECT id FROM channels WHERE id = ?").bind(channel_id).first();
       if (existing) return Response.json({ error: "channel already exists" }, { status: 409 });
@@ -146,13 +153,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           SELECT COUNT(*)
           FROM channels
           WHERE owner_uid = ? AND id NOT LIKE '%_live'
-        ) < 5
+        ) < ?
         AND (
           SELECT COUNT(*)
           FROM channels
           WHERE id NOT LIKE '%_live'
         ) < 50
-      `).bind(channel_id, userId, name || "My Channel", instanceId, userId).run();
+      `).bind(channel_id, userId, name || "My Channel", instanceId, userId, ownedChannelLimit).run();
       if (!result.meta.changes) {
         const counts = await env.DB.prepare(`
           SELECT
@@ -164,7 +171,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         if (Number(counts?.total_count || 0) >= 50) {
           return Response.json({ error: "beta channel limit reached" }, { status: 403 });
         }
-        return Response.json({ error: "channel limit reached" }, { status: 403 });
+        return Response.json({
+          error: "channel limit reached",
+          owned_channel_limit: ownedChannelLimit,
+          requires_plus: !hasPlus,
+        }, { status: 403 });
       }
 
       return Response.json({ ok: true, channel_id });
@@ -273,6 +284,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "freeze": {
+      if (!await hasActivePlusEntitlement(env, userId)) {
+        return Response.json({ error: "plus_required", feature: "channel_freeze" }, { status: 403 });
+      }
       const frozen = payload?.frozen ? 1 : 0;
       await env.DB.prepare("UPDATE channels SET is_frozen = ? WHERE id = ?")
         .bind(frozen, channel_id).run();
@@ -528,6 +542,8 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       let previousBackgroundImage: string | null = null;
       let normalizedBackgroundImage: string | null | undefined;
       const normalizedBubbleColor = normalizeBubbleColor(bubble_color);
+      let normalizedBackgroundOverlay: number | undefined;
+      let normalizedBackgroundBlur: number | undefined;
       const currentAppearance = hasAppearanceUpdate
         ? await env.DB.prepare(
             `SELECT bubble_color, background_type, background_color, background_image,
@@ -591,13 +607,25 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         }
         updates.push("background_overlay = ?");
         values.push(overlay);
+        normalizedBackgroundOverlay = overlay;
       }
       if (background_blur !== undefined) {
         if (background_blur !== true && background_blur !== false && background_blur !== 1 && background_blur !== 0) {
           return Response.json({ error: "invalid background blur" }, { status: 400 });
         }
+        normalizedBackgroundBlur = background_blur === true || background_blur === 1 ? 1 : 0;
         updates.push("background_blur = ?");
-        values.push(background_blur === true || background_blur === 1 ? 1 : 0);
+        values.push(normalizedBackgroundBlur);
+      }
+      if (isPremiumAppearanceWrite({
+        bubbleColor: normalizedBubbleColor,
+        backgroundType: background_type,
+        backgroundColor: background_color,
+        backgroundImage: normalizedBackgroundImage,
+        backgroundOverlay: normalizedBackgroundOverlay,
+        backgroundBlur: normalizedBackgroundBlur,
+      }) && !await hasActivePlusEntitlement(env, userId)) {
+        return Response.json({ error: "plus_required", feature: "channel_customization" }, { status: 403 });
       }
       const appearanceVersion = hasAppearanceUpdate
         ? getChannelAppearanceVersion({
@@ -827,6 +855,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     }
 
     case "start-live": {
+      if (!await hasActivePlusEntitlement(env, userId)) {
+        return Response.json({ error: "plus_required", feature: "live_session" }, { status: 403 });
+      }
       const { title } = payload || {};
       const sessionId = crypto.randomUUID();
       const liveSession = createLiveSessionState(

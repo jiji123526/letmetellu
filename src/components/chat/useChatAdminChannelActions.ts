@@ -38,6 +38,7 @@ interface UseChatAdminChannelActionsArgs<TChannel extends ChannelState> {
   text: {
     chatUnfrozen: string;
     chatFrozen: string;
+    plusRequiredFreeze: string;
     channelLinkCopied: string;
     channelShareFailed: string;
     channelReported: string;
@@ -248,18 +249,35 @@ export function useChatAdminChannelActions<TChannel extends ChannelState>({
     setGalleryItems,
   ]);
 
-  const handleAdminFreezeToggle = useCallback(() => {
-    if (channel?.is_frozen) {
-      setChannel((previous) => previous ? { ...previous, is_frozen: 0 } : null);
-      adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: false });
-      flashBanner(text.chatUnfrozen, bubbleColor);
+  const handleAdminFreezeToggle = useCallback(async () => {
+    const nextFrozen = channel?.is_frozen ? false : true;
+    const result = await adminAction(
+      "freeze",
+      inLiveMode ? `${channelId}_live` : channelId,
+      { frozen: nextFrozen },
+    ) as { ok?: boolean; error?: string; _status?: number };
+
+    if (result?.error === "plus_required" || result?._status === 403) {
+      flashBanner(text.plusRequiredFreeze, "#d32f2f");
+      return;
+    }
+    if (!result?.ok && (result?._status || 200) >= 400) {
       return;
     }
 
-    setChannel((previous) => previous ? { ...previous, is_frozen: 1 } : null);
-    adminAction("freeze", inLiveMode ? `${channelId}_live` : channelId, { frozen: true });
-    flashBanner(text.chatFrozen, "#4a4d8f");
-  }, [bubbleColor, channel?.is_frozen, channelId, flashBanner, inLiveMode, setChannel, text.chatFrozen, text.chatUnfrozen]);
+    setChannel((previous) => previous ? { ...previous, is_frozen: nextFrozen ? 1 : 0 } : null);
+    flashBanner(nextFrozen ? text.chatFrozen : text.chatUnfrozen, nextFrozen ? "#4a4d8f" : bubbleColor);
+  }, [
+    bubbleColor,
+    channel?.is_frozen,
+    channelId,
+    flashBanner,
+    inLiveMode,
+    setChannel,
+    text.chatFrozen,
+    text.chatUnfrozen,
+    text.plusRequiredFreeze,
+  ]);
 
   const handleAdminLiveToggle = useCallback(() => {
     if (liveActive) {

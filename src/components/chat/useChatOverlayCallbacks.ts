@@ -40,8 +40,10 @@ interface UseChatOverlayCallbacksArgs {
   setActiveNotice: Dispatch<SetStateAction<string>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   liveStartedBannerText: string;
+  liveStartFailedText: string;
   liveEndFailedText: string;
   liveSessionChangedText: string;
+  plusRequiredLiveText: string;
   liveSessionId: string;
   syncLiveSessionDetails: (input: { sessionId: string; expiresAt: string | null }) => void;
   handleLiveStartedEvent: (input: { title?: string; sessionId?: string; expiresAt?: string | null }) => void;
@@ -92,8 +94,10 @@ export function useChatOverlayCallbacks({
   setActiveNotice,
   setBanner,
   liveStartedBannerText,
+  liveStartFailedText,
   liveEndFailedText,
   liveSessionChangedText,
+  plusRequiredLiveText,
   liveSessionId,
   syncLiveSessionDetails,
   handleLiveStartedEvent,
@@ -145,15 +149,27 @@ export function useChatOverlayCallbacks({
   }, [setPlusMenu]);
 
   const startLiveFromPrompt = useCallback(async (title: string) => {
+    const result = await adminAction("start-live", channelId, { title }) as {
+      ok?: boolean;
+      error?: string;
+      _status?: number;
+      sessionId?: string;
+      live?: { expiresAt?: string };
+    };
+    if (result?.error === "plus_required" || result?._status === 403) {
+      flashBanner(plusRequiredLiveText, "#d32f2f");
+      return;
+    }
+    if (!result?.ok && (result?._status || 200) >= 400) {
+      flashBanner(liveStartFailedText, "#d32f2f");
+      return;
+    }
+
     startLiveLocally(title);
     setMessages([]);
     setDmMessages([]);
     setActiveNotice("");
     flashBanner(liveStartedBannerText, "#c0392b");
-    const result = await adminAction("start-live", channelId, { title }) as {
-      sessionId?: string;
-      live?: { expiresAt?: string };
-    };
     syncLiveSessionDetails({
       sessionId: typeof result?.sessionId === "string" ? result.sessionId : "",
       expiresAt: typeof result?.live?.expiresAt === "string" ? result.live.expiresAt : null,
@@ -161,7 +177,9 @@ export function useChatOverlayCallbacks({
   }, [
     channelId,
     flashBanner,
+    liveStartFailedText,
     liveStartedBannerText,
+    plusRequiredLiveText,
     setActiveNotice,
     setDmMessages,
     setMessages,
