@@ -31,3 +31,38 @@ ALLOWED_ORIGIN = "https://yapndot.com,https://www.yapndot.com,https://letmetellu
 REPORTS_CHANNEL_ID = "reports"
 # For development, temporarily use "*" if needed:
 # ALLOWED_ORIGIN = "*"
+
+
+[env.preview]
+name = "letsplay-api-preview"
+workers_dev = true
+preview_urls = false
+
+[env.preview.triggers]
+crons = []
+
+[env.preview.durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoom" }
+]
+
+[[env.preview.migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "letsplay-db-preview"
+database_id = "040436f2-4fe9-467a-9573-aa86e508bef7"
+remote = true
+
+[[env.preview.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "letmetellu-media-preview"
+remote = true
+
+[env.preview.vars]
+ALLOWED_ORIGIN = "https://letmetellu.vercel.app"
+APP_ORIGIN = "https://letmetellu.vercel.app"
+REPORTS_CHANNEL_ID = "reports"
+UNIFIED_TIMELINE_GLOBAL_ENABLED = "true"

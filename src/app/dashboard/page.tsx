@@ -2460,7 +2460,7 @@ function DashboardPageContent() {
         <LegalFooter />
       </div>
 
-      {showCreate && isLoggedIn && (
+      {showCreate && isLoggedIn && !createLimitReached && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(0,0,0,.35)", backdropFilter: "blur(4px)" }} onMouseDown={(event) => { if (event.target === event.currentTarget && !creating) setShowCreate(false); }}>
           <div className="w-full max-w-[390px] rounded-[20px] p-6" style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}>
             <div className="flex items-center justify-between mb-5">
@@ -2781,7 +2781,7 @@ function DashboardPageContent() {
         />
       )}
 
-      {isLoggedIn && !isPlatformAdmin && !editing && ownedChannelIds.size < 5 && (
+      {isLoggedIn && !isPlatformAdmin && !editing && !createLimitReached && (
         <button
           type="button"
           className="fixed z-40 w-14 h-14 rounded-full border-none cursor-pointer flex items-center justify-center text-white"

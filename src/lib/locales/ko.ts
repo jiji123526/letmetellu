@@ -47,7 +47,6 @@ export const ko = {
   plusBadge: "Plus",
   planFree: "Free",
   planPlus: "Plus",
-  plusCustomizationLockedNote: "버블 색상과 채팅 배경 꾸미기는 Plus에서 열립니다.",
   dashboardPlanActiveNote: "Plus가 활성화되어 있습니다.",
   dashboardPlanFreeNote: "무료 플랜입니다. 채널 1개까지 만들 수 있습니다.",
   dashboardPlanGrandfatheredBadge: "베타 혜택",

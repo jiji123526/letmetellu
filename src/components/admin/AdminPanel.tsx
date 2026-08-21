@@ -272,16 +272,7 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {/* Content */}
         {view === "main" && renderMenuList(mainItems)}
-        {view === "channel" && (
-          <>
-            {appearanceLocked && (
-              <div style={{ margin: "12px 18px 4px", padding: "10px 12px", borderRadius: "12px", background: "#fff7df", color: "#7c5b00", fontSize: "12px", lineHeight: 1.45 }}>
-                {t("plusCustomizationLockedNote")}
-              </div>
-            )}
-            {renderMenuList(channelItems)}
-          </>
-        )}
+        {view === "channel" && renderMenuList(channelItems)}
         {view === "manage" && renderMenuList(manageItems)}
 
         {/* Profile panel */}
@@ -377,11 +368,6 @@ export function AdminPanel(props: AdminPanelProps) {
         {/* Color panel */}
         {view === "color" && (
           <div style={{ padding: "12px 18px" }}>
-            {appearanceLocked && (
-              <div style={{ marginBottom: "14px", padding: "10px 12px", borderRadius: "12px", background: "#fff7df", color: "#7c5b00", fontSize: "12px", lineHeight: 1.45 }}>
-                {t("plusCustomizationLockedNote")}
-              </div>
-            )}
             <div style={{ fontSize: "13px", color: "var(--meta)", textAlign: "center", marginBottom: "16px" }}>{t("colorDesc")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", width: "200px", margin: "0 auto", justifyItems: "center", padding: "2px" }}>
               {BUBBLE_COLORS.map((color) => (
@@ -408,11 +394,6 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {view === "background" && (
           <div style={{ padding: "14px 18px 18px" }}>
-            {appearanceLocked && (
-              <div style={{ marginBottom: "14px", padding: "10px 12px", borderRadius: "12px", background: "#fff7df", color: "#7c5b00", fontSize: "12px", lineHeight: 1.45 }}>
-                {t("plusCustomizationLockedNote")}
-              </div>
-            )}
             <div
               style={{
                 height: "150px",

@@ -49,7 +49,6 @@ export const en: Record<LocaleKeys, string> = {
   plusBadge: "Plus",
   planFree: "Free",
   planPlus: "Plus",
-  plusCustomizationLockedNote: "Bubble color and chat background customization unlock with Plus.",
   dashboardPlanActiveNote: "Plus is active.",
   dashboardPlanFreeNote: "You are on Free. You can own 1 channel.",
   dashboardPlanGrandfatheredBadge: "Beta benefit",
