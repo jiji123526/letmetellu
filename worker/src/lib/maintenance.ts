@@ -3,6 +3,7 @@ import { deleteCompletedCleanupJobs, retryPendingChannelCleanups } from "./chann
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState } from "./live-sessions";
 import { cleanupExpiredUploadTickets } from "./upload-tickets";
 import { finalizeExpiredAdminDeletions } from "./pending-admin-deletions";
+import { runBillingSubscriptionRenewals } from "./billing-renewals";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DURABLE_RATE_LIMIT_RETENTION_MS = 7 * DAY_MS;
@@ -94,6 +95,9 @@ async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<numb
 }
 
 export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Promise<{
+  billingRenewalsAttempted: number;
+  billingRenewalsSucceeded: number;
+  billingRenewalsFailed: number;
   expiredLiveSessionsEnded: number;
   uploadTicketsDeleted: number;
   durableRateLimitsDeleted: number;
@@ -107,6 +111,10 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   completedCleanupJobsDeleted: number;
   pendingAdminDeletionsFinalized: number;
 }> {
+  const billingRenewals = await runBillingSubscriptionRenewals(
+    env,
+    new Date(nowMs).toISOString(),
+  );
   const expiredLiveSessionsEnded = await expireTimedOutLiveSessions(env, nowMs);
   const pendingAdminDeletionsFinalized = await finalizeExpiredAdminDeletions(env, nowMs);
   const channelCleanup = await retryPendingChannelCleanups(env, nowMs, CHANNEL_CLEANUP_RETRY_LIMIT);
@@ -147,6 +155,9 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   );
 
   return {
+    billingRenewalsAttempted: billingRenewals.attempted,
+    billingRenewalsSucceeded: billingRenewals.renewed,
+    billingRenewalsFailed: billingRenewals.failed,
     expiredLiveSessionsEnded,
     uploadTicketsDeleted,
     durableRateLimitsDeleted,

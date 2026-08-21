@@ -30,6 +30,7 @@ Uncommitted in progress after `5df0016`:
 - Extended the owner plan snapshot so dashboard and owner reads can show whether Plus is grandfathered, auto-renewing or time-bounded, instead of exposing only a bare `hasPlus` flag.
 - Added a dedicated billing state read path and dashboard plan-details sheet so pricing, active entitlement and reusable pending orders are visible before the real checkout adapter is connected.
 - Added the first Toss automatic-billing checkout skeleton: authenticated prepare/confirm routes, dashboard checkout entry points, and success/fail callback pages for the billing-auth flow.
+- Added subscription-side billing key storage and the first scheduled auto-renewal worker path, with a conservative 24-hour retry delay when a renewal charge fails.
 
 `0dfdb7d` Add monetization foundation and plus owner gates
 

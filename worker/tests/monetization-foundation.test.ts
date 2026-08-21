@@ -18,6 +18,10 @@ const grandfatheredMigrationSource = readFileSync(
   new URL("../migrations/0056_grandfathered_beta_plus.sql", import.meta.url),
   "utf8",
 );
+const billingSubscriptionsMigrationSource = readFileSync(
+  new URL("../migrations/0057_billing_subscriptions.sql", import.meta.url),
+  "utf8",
+);
 
 test("monetization foundation migration creates billing and quota tables", () => {
   assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS billing_orders/);
@@ -35,6 +39,14 @@ test("grandfathered beta migration backfills permanent plus entitlements for cur
   assert.match(grandfatheredMigrationSource, /'grandfathered-beta:' \|\| users\.id/);
   assert.match(grandfatheredMigrationSource, /'grandfathered_beta'/);
   assert.match(grandfatheredMigrationSource, /FROM users/);
+});
+
+test("billing subscriptions migration adds renewal storage for automatic charges", () => {
+  assert.match(billingSubscriptionsMigrationSource, /CREATE TABLE IF NOT EXISTS billing_subscriptions/);
+  assert.match(billingSubscriptionsMigrationSource, /billing_key TEXT NOT NULL/);
+  assert.match(billingSubscriptionsMigrationSource, /next_charge_at TEXT NOT NULL/);
+  assert.match(billingSubscriptionsMigrationSource, /CREATE UNIQUE INDEX IF NOT EXISTS billing_subscriptions_user_plan_provider_idx/);
+  assert.match(billingSubscriptionsMigrationSource, /CREATE INDEX IF NOT EXISTS billing_subscriptions_status_next_charge_idx/);
 });
 
 test("image quota actor identity prefers authenticated users", () => {

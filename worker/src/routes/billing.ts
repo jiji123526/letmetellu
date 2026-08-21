@@ -1,58 +1,27 @@
 import type { Env } from "../types.ts";
 import {
-  calculateBillingEntitlementEndsAt,
   calculateBillingOrderExpiresAt,
   getBillingPlanCatalog,
   resolveBillingPlanSelection,
 } from "../lib/billing-plans.ts";
 import {
+  markBillingSubscriptionCancelRequested,
+  markBillingSubscriptionCanceled,
+  upsertBillingSubscription,
+} from "../lib/billing-subscriptions.ts";
+import {
   ensureBetaGrandfatheredPlusEntitlement,
   isBetaGrandfatherAllUsersEnabled,
   readActivePlusEntitlement,
 } from "../lib/plan-entitlements.ts";
+import {
+  persistBillingConfirmation,
+  readBillingEntitlementByOrderId,
+  type BillingEntitlementRow,
+  type PaymentRow,
+  type PendingBillingOrderRow,
+} from "../lib/billing-persistence.ts";
 import { isTrustedInternalRequest } from "../lib/trusted-identity.ts";
-
-interface PendingBillingOrderRow {
-  order_id: string;
-  user_id?: string;
-  plan: string;
-  billing_cycle: string;
-  amount: number;
-  currency: string;
-  provider: string;
-  provider_order_id?: string | null;
-  status: string;
-  auto_renews: number;
-  expires_at: string | null;
-}
-
-interface PaymentRow {
-  provider_payment_id: string;
-  order_id: string;
-  user_id: string;
-  provider: string;
-  method: string | null;
-  amount: number;
-  currency: string;
-  status: string;
-  approved_at: string | null;
-  canceled_at: string | null;
-}
-
-interface BillingEntitlementRow {
-  id: string;
-  user_id: string;
-  provider: string | null;
-  plan: string;
-  status: string;
-  starts_at: string;
-  ends_at: string | null;
-  source_order_id: string | null;
-  source_type: string;
-  provider_customer_id: string | null;
-  provider_subscription_id: string | null;
-  auto_renews: number;
-}
 
 interface BillingWebhookEventRow {
   provider_event_id: string;
@@ -200,21 +169,6 @@ async function readBillingOrderByReference(
     WHERE provider = ? AND provider_order_id = ?
     LIMIT 1
   `).bind(provider, providerOrderId).first<PendingBillingOrderRow>();
-}
-
-async function readBillingEntitlementByOrderId(
-  env: Env,
-  orderId: string,
-): Promise<BillingEntitlementRow | null> {
-  return env.DB.prepare(`
-    SELECT id, user_id, provider, plan, status, starts_at, ends_at,
-           source_order_id, source_type, provider_customer_id,
-           provider_subscription_id, auto_renews
-    FROM user_entitlements
-    WHERE source_order_id = ? AND source_type = 'billing'
-    ORDER BY starts_at DESC, updated_at DESC
-    LIMIT 1
-  `).bind(orderId).first<BillingEntitlementRow>();
 }
 
 async function updateBillingWebhookEventStatus(
@@ -404,152 +358,6 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
   });
 }
 
-async function persistBillingConfirmation(input: {
-  env: Env;
-  userId: string;
-  order: PendingBillingOrderRow;
-  provider: string;
-  providerOrderId: string;
-  providerPaymentId: string;
-  amount: number;
-  currency: string;
-  paymentMethod: string | null;
-  providerCustomerId: string | null;
-  providerSubscriptionId: string | null;
-  approvedAt: string;
-}): Promise<Response> {
-  const selection = resolveBillingPlanSelection({
-    plan: input.order.plan,
-    billingCycle: input.order.billing_cycle,
-    provider: input.order.provider,
-  });
-  if (!selection) {
-    return Response.json({ error: "unsupported_order_plan" }, { status: 409 });
-  }
-
-  if (
-    input.order.provider !== input.provider
-    || input.order.amount !== input.amount
-    || input.order.currency !== input.currency
-  ) {
-    return Response.json({ error: "confirmation_mismatch" }, { status: 409 });
-  }
-
-  if (input.order.provider_order_id && input.order.provider_order_id !== input.providerOrderId) {
-    return Response.json({ error: "provider_order_conflict" }, { status: 409 });
-  }
-
-  if (input.order.status !== "pending" && input.order.status !== "confirmed") {
-    return Response.json({ error: "order_not_confirmable" }, { status: 409 });
-  }
-
-  const now = new Date().toISOString();
-  if (input.order.status === "pending" && input.order.expires_at && input.order.expires_at <= now) {
-    return Response.json({ error: "order_expired" }, { status: 409 });
-  }
-
-  const existingPayment = await input.env.DB.prepare(`
-    SELECT provider_payment_id, order_id, user_id, provider, method,
-           amount, currency, status, approved_at, canceled_at
-    FROM payments
-    WHERE provider_payment_id = ?
-    LIMIT 1
-  `).bind(input.providerPaymentId).first<PaymentRow>();
-  if (existingPayment && (existingPayment.order_id !== input.order.order_id || existingPayment.user_id !== input.userId)) {
-    return Response.json({ error: "payment_conflict" }, { status: 409 });
-  }
-
-  const entitlementId = `billing-order:${input.order.order_id}`;
-  const entitlementEndsAt = calculateBillingEntitlementEndsAt(input.approvedAt, selection.durationDays);
-
-  if (!existingPayment) {
-    await input.env.DB.prepare(`
-      INSERT INTO payments (
-        provider_payment_id, order_id, user_id, provider, method,
-        amount, currency, status, approved_at, canceled_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?, NULL, ?)
-    `).bind(
-      input.providerPaymentId,
-      input.order.order_id,
-      input.userId,
-      input.provider,
-      input.paymentMethod,
-      input.amount,
-      input.currency,
-      input.approvedAt,
-      now,
-    ).run();
-  }
-
-  await input.env.DB.prepare(`
-    UPDATE billing_orders
-    SET provider_order_id = ?, status = 'confirmed', updated_at = ?
-    WHERE order_id = ? AND user_id = ?
-  `).bind(
-    input.providerOrderId,
-    now,
-    input.order.order_id,
-    input.userId,
-  ).run();
-
-  await input.env.DB.prepare(`
-    INSERT OR IGNORE INTO user_entitlements (
-      id, user_id, provider, plan, status, starts_at, ends_at,
-      source_order_id, source_type, provider_customer_id,
-      provider_subscription_id, auto_renews, grandfathered_channel_id, updated_at
-    ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, 'billing', ?, ?, ?, NULL, ?)
-  `).bind(
-    entitlementId,
-    input.userId,
-    input.provider,
-    selection.plan,
-    input.approvedAt,
-    entitlementEndsAt,
-    input.order.order_id,
-    input.providerCustomerId,
-    input.providerSubscriptionId,
-    selection.autoRenews ? 1 : 0,
-    now,
-  ).run();
-
-  const [confirmedOrder, payment, entitlement] = await Promise.all([
-    input.env.DB.prepare(`
-      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
-             provider, provider_order_id, status, auto_renews, expires_at
-      FROM billing_orders
-      WHERE order_id = ? AND user_id = ?
-      LIMIT 1
-    `).bind(input.order.order_id, input.userId).first<PendingBillingOrderRow>(),
-    input.env.DB.prepare(`
-      SELECT provider_payment_id, order_id, user_id, provider, method,
-             amount, currency, status, approved_at, canceled_at
-      FROM payments
-      WHERE provider_payment_id = ?
-      LIMIT 1
-    `).bind(input.providerPaymentId).first<PaymentRow>(),
-    input.env.DB.prepare(`
-      SELECT id, user_id, provider, plan, status, starts_at, ends_at,
-             source_order_id, source_type, provider_customer_id,
-             provider_subscription_id, auto_renews
-      FROM user_entitlements
-      WHERE id = ?
-      LIMIT 1
-    `).bind(entitlementId).first<BillingEntitlementRow>(),
-  ]);
-
-  if (!confirmedOrder || !payment || !entitlement) {
-    return Response.json({ error: "confirmation_persist_failed" }, { status: 500 });
-  }
-
-  return Response.json({
-    ok: true,
-    reused: Boolean(existingPayment),
-    order: buildOrderResponse(confirmedOrder, selection.taxMode),
-    payment: buildPaymentResponse(payment),
-    entitlement: buildEntitlementResponse(entitlement),
-  });
-}
-
 async function handleBillingTossPrepare(request: Request, env: Env, userId: string): Promise<Response> {
   const body = await request.json() as { order_id?: unknown };
   const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";
@@ -718,16 +526,32 @@ async function handleBillingTossConfirm(request: Request, env: Env, userId: stri
     approvedAt,
   });
   if (!persistenceResponse.ok) {
-    return persistenceResponse;
+    return Response.json({ error: persistenceResponse.error }, { status: persistenceResponse.status });
   }
 
-  const persisted = await persistenceResponse.json() as Record<string, unknown>;
+  await upsertBillingSubscription(env, {
+    userId,
+    provider: "toss_autobilling",
+    plan: order.plan,
+    billingCycle: order.billing_cycle,
+    providerCustomerKey: chargeData.customerKey || customerKey,
+    billingKey: issueData.billingKey,
+    currentPeriodOrderId: order.order_id,
+    currentPeriodStartedAt: persistenceResponse.entitlement.starts_at,
+    currentPeriodEndsAt: persistenceResponse.entitlement.ends_at || approvedAt,
+    lastChargedAt: approvedAt,
+  });
+
   return Response.json({
-    ...persisted,
+    ok: true,
+    reused: persistenceResponse.reusedPayment,
+    order: buildOrderResponse(persistenceResponse.order, persistenceResponse.selection.taxMode),
+    payment: buildPaymentResponse(persistenceResponse.payment),
+    entitlement: buildEntitlementResponse(persistenceResponse.entitlement),
     provider_flow: {
       provider: "toss_autobilling",
       billing_key_issued: true,
-      renewal_storage_pending: true,
+      renewal_storage_pending: false,
       merchant_id: chargeData.mId || null,
     },
   });
@@ -780,7 +604,7 @@ async function handleBillingConfirm(request: Request, env: Env, userId: string):
     return Response.json({ error: "order_not_found" }, { status: 404 });
   }
 
-  return persistBillingConfirmation({
+  const persisted = await persistBillingConfirmation({
     env,
     userId,
     order,
@@ -793,6 +617,17 @@ async function handleBillingConfirm(request: Request, env: Env, userId: string):
     providerCustomerId,
     providerSubscriptionId,
     approvedAt,
+  });
+  if (!persisted.ok) {
+    return Response.json({ error: persisted.error }, { status: persisted.status });
+  }
+
+  return Response.json({
+    ok: true,
+    reused: persisted.reusedPayment,
+    order: buildOrderResponse(persisted.order, persisted.selection.taxMode),
+    payment: buildPaymentResponse(persisted.payment),
+    entitlement: buildEntitlementResponse(persisted.entitlement),
   });
 }
 
@@ -905,6 +740,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
       processedAt,
       order.order_id,
     ).run();
+    await markBillingSubscriptionCancelRequested(env, order.order_id, effectiveAt, providerSubscriptionId || null);
   } else if (eventType === "payment.canceled" || eventType === "payment.refunded") {
     const paymentStatus = eventType === "payment.refunded" ? "refunded" : "canceled";
     const orderStatus = eventType === "payment.refunded" ? "refunded" : "canceled";
@@ -959,6 +795,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
       processedAt,
       order.order_id,
     ).run();
+    await markBillingSubscriptionCanceled(env, order.order_id, effectiveAt);
   } else {
     const failedEvent = await updateBillingWebhookEventStatus(env, {
       providerEventId,
