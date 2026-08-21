@@ -52,6 +52,7 @@ import {
   startDashboardPerformanceTrace,
   startDashboardRequest,
 } from "@/lib/dashboard-performance";
+import { fetchBillingState, type BillingStateResponse } from "@/lib/api-billing";
 import { fetchCurrentUserState } from "@/lib/current-user-state";
 import type { OwnerPlanState } from "@/lib/owner-plan";
 import type { LocaleKeys } from "@/lib/locales/ko";
@@ -160,6 +161,14 @@ function formatDurationMinutes(minutes: number, locale: "ko" | "en") {
   if (hours < 24) return locale === "ko" ? `${hours}시간` : `${hours}h`;
   const days = Math.floor(hours / 24);
   return locale === "ko" ? `${days}일` : `${days}d`;
+}
+
+function formatCurrency(amount: number, currency: string, locale: "ko" | "en") {
+  return new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 function getOwnerPlanStatusNote(
@@ -344,6 +353,7 @@ function DashboardPageContent() {
   const [submittedLinkedChannelId, setSubmittedLinkedChannelId] = useState<string | null>(null);
   const [linkedChannel, setLinkedChannel] = useState<Channel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showPlanDetails, setShowPlanDetails] = useState(false);
   const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -387,6 +397,9 @@ function DashboardPageContent() {
   const [operationalHealthLoading, setOperationalHealthLoading] = useState(false);
   const [operationalHealthError, setOperationalHealthError] = useState(false);
   const [operationalHealthExpanded, setOperationalHealthExpanded] = useState(false);
+  const [billingState, setBillingState] = useState<BillingStateResponse | null>(null);
+  const [billingStateLoading, setBillingStateLoading] = useState(false);
+  const [billingStateError, setBillingStateError] = useState("");
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -535,6 +548,31 @@ function DashboardPageContent() {
         ? t("dashboardPlanAutorenewBadge")
         : t("dashboardPlanExpiresBadge")
     : null;
+
+  const loadBillingState = useCallback(async () => {
+    if (!authenticatedUserId) return;
+    setBillingStateLoading(true);
+    setBillingStateError("");
+    try {
+      const data = await fetchBillingState();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      setBillingState(data);
+    } catch {
+      setBillingStateError("load_failed");
+    } finally {
+      setBillingStateLoading(false);
+    }
+  }, [authenticatedUserId]);
+
+  const openPlanDetails = useCallback(async () => {
+    if (!authenticatedUserId) return;
+    setShowPlanDetails(true);
+    if (!billingStateLoading) {
+      await loadBillingState();
+    }
+  }, [authenticatedUserId, billingStateLoading, loadBillingState]);
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -1992,6 +2030,14 @@ function DashboardPageContent() {
               <div className="mt-1 text-[12px]" style={{ color: "var(--meta)" }}>
                 {ownerPlanStatusNote}
               </div>
+              <button
+                type="button"
+                className="mt-3 border-none bg-transparent p-0 text-[13px] font-semibold cursor-pointer"
+                style={{ color: "#007aff" }}
+                onClick={() => void openPlanDetails()}
+              >
+                {t("dashboardPlanDetails")}
+              </button>
             </div>
           </section>
         )}
@@ -2372,6 +2418,14 @@ function DashboardPageContent() {
               <div className="mt-1" style={{ color: "var(--meta)" }}>
                 {ownerPlanStatusNote}
               </div>
+              <button
+                type="button"
+                className="mt-2 border-none bg-transparent p-0 text-[12px] font-semibold cursor-pointer"
+                style={{ color: "#007aff" }}
+                onClick={() => void openPlanDetails()}
+              >
+                {t("dashboardPlanDetails")}
+              </button>
             </div>
             <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
             <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
@@ -2405,6 +2459,126 @@ function DashboardPageContent() {
         <GuestOnboarding
           onClose={closeGuestOnboarding}
         />
+      )}
+
+      {showPlanDetails && isLoggedIn && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-5"
+          style={{ background: "rgba(0,0,0,.35)", backdropFilter: "blur(4px)" }}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !billingStateLoading) {
+              setShowPlanDetails(false);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-[410px] rounded-[20px] p-6"
+            style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="m-0 text-[19px] font-semibold">{t("dashboardPlanDetailsTitle")}</h2>
+              <button
+                type="button"
+                className="border-none bg-transparent p-0 text-[14px] font-medium"
+                style={{ color: "#007aff" }}
+                onClick={() => setShowPlanDetails(false)}
+              >
+                {t("close")}
+              </button>
+            </div>
+            <p className="mt-0 mb-4 text-[13px] leading-[1.5]" style={{ color: "var(--meta)" }}>
+              {t("dashboardPlanDetailsDesc")}
+            </p>
+
+            <div className="rounded-[14px] p-3" style={{ background: "var(--card)" }}>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--meta)" }}>
+                {t("dashboardPlanDetailsCurrent")}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <span
+                  className="rounded-full px-2 py-1 text-[11px] font-semibold"
+                  style={{
+                    background: ownerPlan?.hasPlus ? "#fff5d6" : "var(--bg)",
+                    color: ownerPlan?.hasPlus ? "#9a6700" : "var(--meta)",
+                  }}
+                >
+                  {ownerPlan?.hasPlus ? t("planPlus") : t("planFree")}
+                </span>
+                {ownerPlanStatusBadge ? (
+                  <span
+                    className="rounded-full px-2 py-1 text-[11px] font-semibold"
+                    style={{
+                      background: ownerPlan?.billingSummary?.isGrandfathered ? "#e8f6ee" : "#eef2ff",
+                      color: ownerPlan?.billingSummary?.isGrandfathered ? "#166534" : "#3730a3",
+                    }}
+                  >
+                    {ownerPlanStatusBadge}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-2 text-[13px]" style={{ color: "var(--gray-text)" }}>
+                {ownerPlan?.hasPlus ? ownerPlanStatusNote : t("dashboardPlanDetailsCurrentFree")}
+              </div>
+              {billingState?.latest_pending_order?.expires_at ? (
+                <div className="mt-3 rounded-[12px] px-3 py-2 text-[12px]" style={{ background: "var(--bg)", color: "var(--meta)" }}>
+                  <div style={{ color: "var(--gray-text)", fontWeight: 600 }}>
+                    {t("dashboardPlanDetailsPending")}
+                  </div>
+                  <div className="mt-1">
+                    {t("dashboardPlanDetailsPendingDesc").replace(
+                      "{date}",
+                      formatDate(billingState.latest_pending_order.expires_at, locale),
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4">
+              <div className="mb-2 text-[12px] font-semibold" style={{ color: "var(--meta)" }}>
+                {t("dashboardPlanDetailsPrice")}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(billingState?.plans || []).map((plan) => (
+                  <div key={plan.billing_cycle} className="rounded-[14px] p-3" style={{ background: "var(--card)" }}>
+                    <div className="text-[12px] font-semibold" style={{ color: "var(--meta)" }}>
+                      {plan.billing_cycle === "monthly" ? t("dashboardPlanDetailsMonthly") : t("dashboardPlanDetailsYearly")}
+                    </div>
+                    <div className="mt-1 text-[18px] font-semibold">
+                      {formatCurrency(plan.amount, plan.currency, locale)}
+                    </div>
+                    <div className="mt-1 text-[11px]" style={{ color: "var(--meta)" }}>
+                      {plan.auto_renews ? t("dashboardPlanAutorenewBadge") : t("dashboardPlanExpiresBadge")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="mb-2 text-[12px] font-semibold" style={{ color: "var(--meta)" }}>
+                {t("dashboardPlanDetailsFeatures")}
+              </div>
+              <div className="rounded-[14px] p-3 text-[13px] leading-[1.55]" style={{ background: "var(--card)" }}>
+                <div>• {t("dashboardPlanDetailsFeatureAds")}</div>
+                <div>• {t("dashboardPlanDetailsFeatureCustomization")}</div>
+                <div>• {t("dashboardPlanDetailsFeatureImages")}</div>
+                <div>• {t("dashboardPlanDetailsFeatureOwner")}</div>
+              </div>
+            </div>
+
+            {billingStateLoading && (
+              <div className="mt-4 text-[12px]" style={{ color: "var(--meta)" }}>
+                {t("loading")}
+              </div>
+            )}
+            {billingStateError && !billingStateLoading && (
+              <div className="mt-4 text-[12px]" style={{ color: "#ff3b30" }}>
+                {t("dashboardPlanDetailsLoadFailed")}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {showUserGuide && (

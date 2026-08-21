@@ -2,6 +2,7 @@ import type { Env } from "../types.ts";
 import {
   calculateBillingEntitlementEndsAt,
   calculateBillingOrderExpiresAt,
+  getBillingPlanCatalog,
   resolveBillingPlanSelection,
 } from "../lib/billing-plans.ts";
 import {
@@ -81,6 +82,19 @@ function buildOrderResponse(
     auto_renews: Number(order.auto_renews) === 1,
     expires_at: order.expires_at,
     tax_mode: taxMode,
+  };
+}
+
+function buildCatalogEntryResponse(entry: ReturnType<typeof getBillingPlanCatalog>[number]) {
+  return {
+    plan: entry.plan,
+    billing_cycle: entry.billingCycle,
+    provider: entry.provider,
+    amount: entry.amount,
+    currency: entry.currency,
+    auto_renews: entry.autoRenews,
+    tax_mode: entry.taxMode,
+    duration_days: entry.durationDays,
   };
 }
 
@@ -315,6 +329,54 @@ async function handleBillingOrderCreate(request: Request, env: Env, userId: stri
       expires_at: expiresAt,
     }, selection.taxMode),
   }, { status: 201 });
+}
+
+async function handleBillingState(env: Env, userId: string): Promise<Response> {
+  const user = await env.DB.prepare(
+    "SELECT id FROM users WHERE id = ? LIMIT 1",
+  ).bind(userId).first<{ id: string }>();
+  if (!user) {
+    return Response.json({ error: "user_not_found" }, { status: 404 });
+  }
+
+  await ensureBetaGrandfatheredPlusEntitlement(env, userId);
+
+  const now = new Date().toISOString();
+  const [activeEntitlement, latestPendingOrder] = await Promise.all([
+    readActivePlusEntitlement(env, userId, now),
+    env.DB.prepare(`
+      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
+             provider, provider_order_id, status, auto_renews, expires_at
+      FROM billing_orders
+      WHERE user_id = ?
+        AND status = 'pending'
+        AND (expires_at IS NULL OR expires_at > ?)
+      ORDER BY created_at DESC, order_id DESC
+      LIMIT 1
+    `).bind(userId, now).first<PendingBillingOrderRow>(),
+  ]);
+
+  return Response.json({
+    ok: true,
+    plans: getBillingPlanCatalog().map((entry) => buildCatalogEntryResponse(entry)),
+    active_entitlement: activeEntitlement
+      ? {
+          id: activeEntitlement.id,
+          plan: activeEntitlement.plan,
+          status: activeEntitlement.status,
+          provider: activeEntitlement.provider,
+          starts_at: activeEntitlement.starts_at,
+          ends_at: activeEntitlement.ends_at,
+          source_type: activeEntitlement.source_type,
+          provider_customer_id: activeEntitlement.provider_customer_id,
+          provider_subscription_id: activeEntitlement.provider_subscription_id,
+          auto_renews: Number(activeEntitlement.auto_renews) === 1,
+        }
+      : null,
+    latest_pending_order: latestPendingOrder
+      ? buildOrderResponse(latestPendingOrder, "vat_exclusive")
+      : null,
+  });
 }
 
 async function handleBillingConfirm(request: Request, env: Env, userId: string): Promise<Response> {
@@ -713,6 +775,20 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
 
 export async function handleBilling(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  if (url.pathname === "/api/billing/state") {
+    if (request.method !== "GET") {
+      return Response.json({ error: "method not allowed" }, { status: 405 });
+    }
+    if (!isTrustedInternalRequest(request, env)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const userId = request.headers.get("X-User-Id")?.trim() || "";
+    if (!userId) {
+      return Response.json({ error: "missing user id" }, { status: 400 });
+    }
+    return handleBillingState(env, userId);
+  }
+
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
   }
