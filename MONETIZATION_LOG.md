@@ -9,6 +9,11 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Clarify the owned-channel image benefit
+
+- Replaced the Plus panel's owned-channel advertising benefit copy with unlimited image sending in channels owned by the subscriber.
+- Updated both Korean and English panel copy while keeping `Plus` as the plan name.
+
 #### Expired Plus retains one active channel
 
 - Added an owner-selected retained channel for accounts that will end Plus with more than one owned channel. Cancellation and the third renewal failure choose the most recently active channel by default.
