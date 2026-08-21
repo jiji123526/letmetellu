@@ -41,7 +41,6 @@ export interface BillingStateResponse {
   error?: string;
   plans?: BillingPlanCatalogEntry[];
   active_entitlement?: BillingActiveEntitlement | null;
-  latest_pending_order?: BillingPendingOrder | null;
   subscription?: BillingSubscriptionSnapshot | null;
 }
 
@@ -115,6 +114,14 @@ export interface BillingCancelResponse {
   subscription?: BillingSubscriptionSnapshot | null;
 }
 
+export interface BillingOrderCancelResponse {
+  ok?: boolean;
+  error?: string;
+  reused?: boolean;
+  order_id?: string;
+  status?: "canceled";
+}
+
 export async function fetchBillingState(): Promise<BillingStateResponse> {
   const response = await fetch("/api/billing", {
     method: "GET",
@@ -144,6 +151,17 @@ export async function prepareTossCheckout(orderId: string): Promise<TossCheckout
     cache: "no-store",
   });
   return response.json() as Promise<TossCheckoutPrepareResponse>;
+}
+
+export async function cancelBillingOrder(orderId: string): Promise<BillingOrderCancelResponse> {
+  const response = await fetch("/api/billing/order/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_id: orderId }),
+    cache: "no-store",
+    keepalive: true,
+  });
+  return response.json() as Promise<BillingOrderCancelResponse>;
 }
 
 export async function confirmTossCheckout(input: {

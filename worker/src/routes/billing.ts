@@ -338,18 +338,8 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
   await ensureBetaGrandfatheredPlusEntitlement(env, userId);
 
   const now = new Date().toISOString();
-  const [activeEntitlement, latestPendingOrder, billingSubscription] = await Promise.all([
+  const [activeEntitlement, billingSubscription] = await Promise.all([
     readActivePlusEntitlement(env, userId, now),
-    env.DB.prepare(`
-      SELECT order_id, user_id, plan, billing_cycle, amount, currency,
-             provider, provider_order_id, status, auto_renews, expires_at
-      FROM billing_orders
-      WHERE user_id = ?
-        AND status = 'pending'
-        AND (expires_at IS NULL OR expires_at > ?)
-      ORDER BY created_at DESC, order_id DESC
-      LIMIT 1
-    `).bind(userId, now).first<PendingBillingOrderRow>(),
     readBillingSubscriptionForUser(env, userId),
   ]);
 
@@ -370,9 +360,6 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
           auto_renews: Number(activeEntitlement.auto_renews) === 1,
         }
       : null,
-    latest_pending_order: latestPendingOrder
-      ? buildOrderResponse(latestPendingOrder, "vat_exclusive")
-      : null,
     subscription: billingSubscription
       ? {
           id: billingSubscription.id,
@@ -391,6 +378,38 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
         } satisfies BillingStateSubscriptionResponse
       : null,
   });
+}
+
+async function handleBillingOrderCancel(request: Request, env: Env, userId: string): Promise<Response> {
+  const body = await request.json() as { order_id?: unknown };
+  const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";
+  if (!orderId) {
+    return Response.json({ error: "missing_order_id" }, { status: 400 });
+  }
+
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare(`
+    UPDATE billing_orders
+    SET status = 'canceled', updated_at = ?
+    WHERE order_id = ? AND user_id = ? AND status = 'pending'
+  `).bind(now, orderId, userId).run();
+  if (Number(result.meta.changes || 0) > 0) {
+    return Response.json({ ok: true, reused: false, order_id: orderId, status: "canceled" });
+  }
+
+  const existing = await env.DB.prepare(`
+    SELECT status
+    FROM billing_orders
+    WHERE order_id = ? AND user_id = ?
+    LIMIT 1
+  `).bind(orderId, userId).first<{ status: string }>();
+  if (!existing) {
+    return Response.json({ error: "order_not_found" }, { status: 404 });
+  }
+  if (existing.status === "canceled") {
+    return Response.json({ ok: true, reused: true, order_id: orderId, status: "canceled" });
+  }
+  return Response.json({ error: "order_not_pending" }, { status: 409 });
 }
 
 async function handleBillingCancel(env: Env, userId: string): Promise<Response> {
@@ -995,6 +1014,20 @@ export async function handleBilling(request: Request, env: Env): Promise<Respons
       return Response.json({ error: "missing user id" }, { status: 400 });
     }
     return handleBillingCancel(env, userId);
+  }
+
+  if (url.pathname === "/api/billing/order/cancel") {
+    if (request.method !== "POST") {
+      return Response.json({ error: "method not allowed" }, { status: 405 });
+    }
+    if (!isTrustedInternalRequest(request, env)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const userId = request.headers.get("X-User-Id")?.trim() || "";
+    if (!userId) {
+      return Response.json({ error: "missing user id" }, { status: 400 });
+    }
+    return handleBillingOrderCancel(request, env, userId);
   }
 
   if (request.method !== "POST") {

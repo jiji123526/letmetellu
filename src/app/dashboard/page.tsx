@@ -2615,19 +2615,6 @@ function DashboardPageContent() {
                   ) : null}
                 </div>
               ) : null}
-              {billingState?.latest_pending_order?.expires_at ? (
-                <div className="mt-3 rounded-[12px] px-3 py-2 text-[12px]" style={{ background: "var(--bg)", color: "var(--meta)" }}>
-                  <div style={{ color: "var(--gray-text)", fontWeight: 600 }}>
-                    {t("dashboardPlanDetailsPending")}
-                  </div>
-                  <div className="mt-1">
-                    {t("dashboardPlanDetailsPendingDesc").replace(
-                      "{date}",
-                      formatDate(billingState.latest_pending_order.expires_at, locale),
-                    )}
-                  </div>
-                </div>
-              ) : null}
               {billingSubscription && (billingSubscription.status === "active" || billingSubscription.status === "past_due") ? (
                 <button
                   type="button"
@@ -2681,9 +2668,7 @@ function DashboardPageContent() {
                     >
                       {checkoutStartingCycle === plan.billing_cycle
                         ? t("dashboardPlanCheckoutProcessing")
-                        : billingState?.latest_pending_order?.billing_cycle === plan.billing_cycle
-                          ? t("dashboardPlanCheckoutResume")
-                          : t("dashboardPlanCheckoutStart")}
+                        : t("dashboardPlanCheckoutStart")}
                     </button>
                   </div>
                 ))}

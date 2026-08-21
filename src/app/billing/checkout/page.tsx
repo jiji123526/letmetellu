@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { prepareTossCheckout, type TossCheckoutPrepareResponse } from "@/lib/api-billing";
+import {
+  cancelBillingOrder,
+  prepareTossCheckout,
+  type TossCheckoutPrepareResponse,
+} from "@/lib/api-billing";
 import { useLocale } from "@/hooks/useLocale";
 
 declare global {
@@ -51,16 +55,15 @@ export default function BillingCheckoutPage() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("order_id") || "";
   const [state, setState] = useState<TossCheckoutPrepareResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(orderId));
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [error, setError] = useState(orderId ? "" : "missing_order_id");
+  const checkoutStartedRef = useRef(false);
+  const cancellationSentRef = useRef(false);
 
   useEffect(() => {
-    if (!orderId) {
-      setError("missing_order_id");
-      setLoading(false);
-      return;
-    }
+    if (!orderId) return;
 
     let cancelled = false;
     void (async () => {
@@ -90,6 +93,35 @@ export default function BillingCheckoutPage() {
     };
   }, [orderId]);
 
+  useEffect(() => {
+    const cancelBeforeLeaving = () => {
+      if (!orderId || checkoutStartedRef.current || cancellationSentRef.current) return;
+      const body = new Blob(
+        [JSON.stringify({ order_id: orderId })],
+        { type: "application/json" },
+      );
+      if (navigator.sendBeacon("/api/billing/order/cancel", body)) {
+        cancellationSentRef.current = true;
+      }
+    };
+    window.addEventListener("pagehide", cancelBeforeLeaving);
+    return () => window.removeEventListener("pagehide", cancelBeforeLeaving);
+  }, [orderId]);
+
+  const cancelPendingOrder = async () => {
+    if (!orderId || cancellationSentRef.current) return;
+    cancellationSentRef.current = true;
+    try {
+      const response = await cancelBillingOrder(orderId);
+      if (!response.ok) {
+        throw new Error(response.error || "order_cancel_failed");
+      }
+    } catch (cancelError) {
+      cancellationSentRef.current = false;
+      throw cancelError;
+    }
+  };
+
   const startCheckout = async () => {
     if (!state?.checkout?.client_key || !state.checkout.customer_key) return;
     setStarting(true);
@@ -100,6 +132,7 @@ export default function BillingCheckoutPage() {
         throw new Error("toss_unavailable");
       }
       const tossPayments = window.TossPayments(state.checkout.client_key);
+      checkoutStartedRef.current = true;
       await tossPayments.requestBillingAuth("카드", {
         customerKey: state.checkout.customer_key,
         successUrl: state.checkout.success_url,
@@ -108,8 +141,28 @@ export default function BillingCheckoutPage() {
         customerName: state.checkout.customer_name,
       });
     } catch (startError) {
+      checkoutStartedRef.current = false;
+      try {
+        await cancelPendingOrder();
+        setState(null);
+      } catch {
+        // Keep the prepared checkout available so cancellation can be retried.
+      }
       setError(startError instanceof Error ? startError.message : "checkout_failed");
       setStarting(false);
+    }
+  };
+
+  const closeCheckout = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    setError("");
+    try {
+      await cancelPendingOrder();
+      router.replace("/dashboard");
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "order_cancel_failed");
+      setCancelling(false);
     }
   };
 
@@ -157,10 +210,11 @@ export default function BillingCheckoutPage() {
           <button
             type="button"
             className="rounded-[14px] border-none px-4 py-3 text-[14px] font-semibold"
-            style={{ background: "var(--bg)", color: "var(--gray-text)" }}
-            onClick={() => router.push("/dashboard")}
+            style={{ background: "var(--bg)", color: "var(--gray-text)", opacity: cancelling ? 0.7 : 1 }}
+            disabled={cancelling}
+            onClick={() => void closeCheckout()}
           >
-            {t("close")}
+            {cancelling ? t("loading") : t("close")}
           </button>
         </div>
       </div>

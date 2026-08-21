@@ -88,14 +88,12 @@ function createBillingCancelRequest(headers?: HeadersInit) {
 function createMockEnv(options?: {
   userExists?: boolean;
   activeEntitlement?: BillingEntitlementFixture | null;
-  pendingOrder?: BillingOrderFixture | null;
   currentOrder?: BillingOrderFixture | null;
   subscription?: BillingSubscriptionFixture | null;
 }) {
   const state = {
     userExists: options?.userExists ?? true,
     activeEntitlement: options?.activeEntitlement ?? null,
-    pendingOrder: options?.pendingOrder ?? null,
     currentOrder: options?.currentOrder ?? null,
     subscription: options?.subscription ?? null,
   };
@@ -119,9 +117,6 @@ function createMockEnv(options?: {
                   return state.subscription as T | null;
                 }
                 if (query.includes("FROM billing_orders")) {
-                  if (query.includes("status = 'pending'")) {
-                    return state.pendingOrder as T | null;
-                  }
                   return state.currentOrder as T | null;
                 }
                 return null;
@@ -185,7 +180,7 @@ function createMockEnv(options?: {
   return { env, state };
 }
 
-test("billing state route returns active entitlement, pending order, and subscription snapshots", async () => {
+test("billing state route returns active entitlement and subscription snapshots", async () => {
   const fixture = createMockEnv({
     activeEntitlement: {
       id: "entitlement-1",
@@ -203,19 +198,6 @@ test("billing state route returns active entitlement, pending order, and subscri
       grandfathered_channel_id: null,
       created_at: "2026-08-21T00:00:00.000Z",
       updated_at: "2026-08-21T00:00:00.000Z",
-    },
-    pendingOrder: {
-      order_id: "order-2",
-      user_id: "user-1",
-      plan: "plus",
-      billing_cycle: "monthly",
-      amount: 2900,
-      currency: "KRW",
-      provider: "toss_autobilling",
-      provider_order_id: null,
-      status: "pending",
-      auto_renews: 1,
-      expires_at: "2026-08-21T00:30:00.000Z",
     },
     subscription: {
       id: "subscription-1",
@@ -261,19 +243,7 @@ test("billing state route returns active entitlement, pending order, and subscri
     provider_subscription_id: "subscription-1",
     auto_renews: true,
   });
-  assert.deepEqual(data.latest_pending_order, {
-    order_id: "order-2",
-    plan: "plus",
-    billing_cycle: "monthly",
-    amount: 2900,
-    currency: "KRW",
-    provider: "toss_autobilling",
-    provider_order_id: null,
-    status: "pending",
-    auto_renews: true,
-    expires_at: "2026-08-21T00:30:00.000Z",
-    tax_mode: "vat_exclusive",
-  });
+  assert.equal("latest_pending_order" in data, false);
   assert.deepEqual(data.subscription, {
     id: "subscription-1",
     provider: "toss_autobilling",
@@ -383,7 +353,7 @@ test("billing state and cancel routes are wired through next proxies and dashboa
   assert.match(nextBillingCancelProxySource, /\/api\/billing\/cancel/);
   assert.match(dashboardSource, /dashboardPlanDetailsTitle/);
   assert.match(dashboardSource, /fetchBillingState/);
-  assert.match(dashboardSource, /latest_pending_order/);
+  assert.doesNotMatch(dashboardSource, /latest_pending_order/);
   assert.match(dashboardSource, /cancelBillingSubscription/);
   assert.match(dashboardSource, /dashboardPlanRetryNotice/);
 });

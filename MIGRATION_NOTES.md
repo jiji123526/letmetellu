@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Abandoned checkout clears pending billing state — 2026-08-21
+
+- The Plus details panel no longer displays or resumes a previously prepared order. Billing-state reads now return only the plan catalog, active entitlement and subscription snapshot, removing the pending-order query from every panel load.
+- A new authenticated `/api/billing/order/cancel` path changes only the requesting user's `pending` order to `canceled`. Repeated cancellation is idempotent, while confirmed, non-pending and foreign orders cannot be modified.
+- Closing the checkout page waits for cancellation before returning to the dashboard. Leaving before Toss starts uses a keepalive beacon, checkout startup rejection cancels the prepared order, and the Toss failure callback clears the referenced pending order before enabling dashboard return.
+- Canceled rows remain in `billing_orders` for payment audit history. A later checkout creates a fresh server-authoritative order rather than reviving abandoned state.
+
+Trade-off: a browser or network failure after the user has entered the external Toss flow can still leave a pending row until its existing 30-minute expiry because canceling during a possible successful provider redirect would race payment confirmation. This stale row is no longer shown in the dashboard and remains unusable after expiry.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
 ### Sparse history edges scan only deleted roots — 2026-08-21
 
 - One `active_roots AS MATERIALIZED` fingerprint ran 18 times at `8.8 ms` p50/p99 and read `43.79k` rows at a `130:1` read/return ratio. This is the sparse-edge case: when fewer than one full active page remains after a cursor, no active boundary exists and correctness requires checking the entire remaining range for deleted roots retained by active replies.
