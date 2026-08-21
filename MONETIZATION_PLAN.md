@@ -42,6 +42,7 @@ Implementation consequences:
 - Automatic renewal narrows the viable Korean payment-method set if Toss automatic billing is used; domestic easy-pay wallets are not automatically covered by that product.
 - Granting automatic Plus to beta users requires one permanent, non-billable entitlement source that remains distinguishable from paid subscriptions in analytics and support tooling.
 - Deriving channel locks from live entitlements instead of persisted flags makes renewal unlock immediate and avoids a reconciliation job, at the cost of one lock-state query on protected mutation paths.
+- Normalized billing webhook events must atomically claim one provider event ID before reconciliation. Concurrent deliveries return a retryable error, stale claims can be replayed, and event IDs cannot be reused across event identities.
 
 ## Recommended beta implementation order
 

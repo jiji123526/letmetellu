@@ -9,6 +9,14 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Billing webhooks claim events before reconciliation
+
+- Added an atomic `processing` claim so concurrent deliveries of one provider event cannot both reconcile billing state.
+- Reject reuse of a provider event ID with a different provider or event type, and allow a stale claim to be safely retried after five minutes.
+- Return a retryable non-success response while another delivery owns a fresh claim, preventing an interrupted first delivery from being silently abandoned.
+- Persist a default retained-channel choice when subscription cancellation or refund reconciliation can lead to Plus expiry.
+- Added migration `0059_billing_webhook_claims.sql` and a billing reconciliation audit.
+
 #### Clarify the owned-channel image benefit
 
 - Replaced the Plus panel's owned-channel advertising benefit copy with unlimited image sending in channels owned by the subscriber.

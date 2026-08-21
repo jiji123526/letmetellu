@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Billing webhook deliveries use atomic processing claims — 2026-08-21
+
+- Migration `0059_billing_webhook_claims.sql` adds `processing_started_at`, `attempt_count` and a processing-state index to `billing_webhook_events`.
+- After idempotently inserting an event, the Worker atomically changes only a matching `pending`, `failed` or stale `processing` event to `processing`. A second delivery cannot run payment, order, entitlement or subscription reconciliation while the first claim is fresh.
+- Reusing one provider event ID with a different provider or event type now returns `webhook_event_identity_conflict` without changing the original event.
+- A fresh concurrent claim returns retryable `503` with `Retry-After: 5`. Claims older than five minutes can be recovered by a provider or operator replay; reconciliation writes remain idempotent.
+- Subscription cancellation records the default retained channel using the entitlement end date. Immediate cancellation or refund records it at the effective cancellation time, so multi-channel downgrade behavior is deterministic.
+- `worker/scripts/audit-billing-reconciliation.sql` reports event status, stale claims, terminal-payment/active-entitlement conflicts, terminal-order/paid-payment conflicts and non-renewing subscriptions that still expose an auto-renewing entitlement.
+
+Trade-off: every webhook adds one conditional claim write and successful events now perform one retained-channel check. The normalized internal webhook contract and shared-secret boundary remain unchanged; a provider-specific Toss payload adapter still requires confirmed production payload samples and signature requirements.
+
+Deployment note: apply migration `0059` before deploying the Worker. No frontend or R2 deployment is required.
+
+```bash
+cd worker
+npx wrangler d1 migrations apply letsplay-db-preview --env preview --remote
+npx wrangler deploy --env preview
+npx wrangler d1 execute letsplay-db-preview --env preview --remote --file scripts/audit-billing-reconciliation.sql
+```
+
+The three reconciliation conflict counts and `stuck_webhook_events` should all be `0`.
+
 ### Plus expiry retains one writable channel — 2026-08-21
 
 - Migration `0058_channel_retention_choices.sql` stores one owner-scoped retained-channel choice and its effective date. It does not store lock flags on channels.

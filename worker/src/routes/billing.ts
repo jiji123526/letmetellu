@@ -35,6 +35,8 @@ interface BillingWebhookEventRow {
   event_type: string;
   received_at: string;
   processed_at: string | null;
+  processing_started_at?: string | null;
+  attempt_count?: number;
   status: string;
   failure_code: string | null;
   order_id: string | null;
@@ -206,7 +208,8 @@ async function updateBillingWebhookEventStatus(
 ): Promise<BillingWebhookEventRow | null> {
   await env.DB.prepare(`
     UPDATE billing_webhook_events
-    SET processed_at = ?, status = ?, failure_code = ?, order_id = ?, user_id = ?
+    SET processed_at = ?, processing_started_at = NULL,
+        status = ?, failure_code = ?, order_id = ?, user_id = ?
     WHERE provider_event_id = ?
   `).bind(
     input.processedAt,
@@ -219,11 +222,51 @@ async function updateBillingWebhookEventStatus(
 
   return env.DB.prepare(`
     SELECT provider_event_id, provider, event_type, received_at, processed_at,
+           processing_started_at, attempt_count,
            status, failure_code, order_id, user_id
     FROM billing_webhook_events
     WHERE provider_event_id = ?
     LIMIT 1
   `).bind(input.providerEventId).first<BillingWebhookEventRow>();
+}
+
+async function claimBillingWebhookEvent(
+  env: Env,
+  input: {
+    providerEventId: string;
+    provider: string;
+    eventType: string;
+    claimedAt: string;
+  },
+): Promise<boolean> {
+  const staleBefore = new Date(
+    new Date(input.claimedAt).getTime() - 5 * 60 * 1000,
+  ).toISOString();
+  const result = await env.DB.prepare(`
+    UPDATE billing_webhook_events
+    SET status = 'processing',
+        processing_started_at = ?,
+        processed_at = NULL,
+        failure_code = NULL,
+        attempt_count = attempt_count + 1
+    WHERE provider_event_id = ?
+      AND provider = ?
+      AND event_type = ?
+      AND (
+        status IN ('pending', 'failed')
+        OR (
+          status = 'processing'
+          AND (processing_started_at IS NULL OR processing_started_at < ?)
+        )
+      )
+  `).bind(
+    input.claimedAt,
+    input.providerEventId,
+    input.provider,
+    input.eventType,
+    staleBefore,
+  ).run();
+  return Number(result.meta.changes || 0) === 1;
 }
 
 async function handleBillingOrderCreate(request: Request, env: Env, userId: string): Promise<Response> {
@@ -869,8 +912,9 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
     eventType,
   ).run();
 
-  const existingEvent = await env.DB.prepare(`
+  let existingEvent = await env.DB.prepare(`
     SELECT provider_event_id, provider, event_type, received_at, processed_at,
+           processing_started_at, attempt_count,
            status, failure_code, order_id, user_id
     FROM billing_webhook_events
     WHERE provider_event_id = ?
@@ -880,12 +924,50 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
   if (!existingEvent) {
     return Response.json({ error: "webhook_event_persist_failed" }, { status: 500 });
   }
+  if (existingEvent.provider !== provider || existingEvent.event_type !== eventType) {
+    return Response.json({
+      error: "webhook_event_identity_conflict",
+      event: buildWebhookEventResponse(existingEvent),
+    }, { status: 409 });
+  }
 
   if (existingEvent.status === "processed") {
     return Response.json({
       ok: true,
       reused: true,
       event: buildWebhookEventResponse(existingEvent),
+    });
+  }
+  const claimedAt = new Date().toISOString();
+  const claimed = await claimBillingWebhookEvent(env, {
+    providerEventId,
+    provider,
+    eventType,
+    claimedAt,
+  });
+  if (!claimed) {
+    existingEvent = await env.DB.prepare(`
+      SELECT provider_event_id, provider, event_type, received_at, processed_at,
+             processing_started_at, attempt_count,
+             status, failure_code, order_id, user_id
+      FROM billing_webhook_events
+      WHERE provider_event_id = ?
+      LIMIT 1
+    `).bind(providerEventId).first<BillingWebhookEventRow>() || existingEvent;
+    if (existingEvent.status === "processed") {
+      return Response.json({
+        ok: true,
+        reused: true,
+        event: buildWebhookEventResponse(existingEvent),
+      });
+    }
+    return Response.json({
+      error: "webhook_event_processing",
+      retryable: true,
+      event: buildWebhookEventResponse(existingEvent),
+    }, {
+      status: 503,
+      headers: { "Retry-After": "5" },
     });
   }
 
@@ -909,7 +991,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
   }
 
   let payment: PaymentRow | null = null;
-  let entitlement: BillingEntitlementRow | null = null;
+  let entitlement = await readBillingEntitlementByOrderId(env, order.order_id);
 
   if (eventType === "subscription.canceled") {
     await env.DB.prepare(`
@@ -934,6 +1016,11 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
       order.order_id,
     ).run();
     await markBillingSubscriptionCancelRequested(env, order.order_id, effectiveAt, providerSubscriptionId || null);
+    await ensureDefaultChannelRetentionChoice(
+      env,
+      order.user_id,
+      entitlement?.ends_at || effectiveAt,
+    );
   } else if (eventType === "payment.canceled" || eventType === "payment.refunded") {
     const paymentStatus = eventType === "payment.refunded" ? "refunded" : "canceled";
     const orderStatus = eventType === "payment.refunded" ? "refunded" : "canceled";
@@ -989,6 +1076,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
       order.order_id,
     ).run();
     await markBillingSubscriptionCanceled(env, order.order_id, effectiveAt);
+    await ensureDefaultChannelRetentionChoice(env, order.user_id, effectiveAt);
   } else {
     const failedEvent = await updateBillingWebhookEventStatus(env, {
       providerEventId,
