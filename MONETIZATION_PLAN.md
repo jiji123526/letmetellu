@@ -26,6 +26,7 @@ Uncommitted in progress after `5df0016`:
 - Order creation is server-authoritative for plan, billing cycle, amount, currency, provider and auto-renew flags, and reuses still-valid pending orders instead of minting a new row on every retry.
 - Active Plus users, including `grandfathered_beta`, are blocked from creating redundant checkout orders so beta users cannot accidentally enter a paid flow.
 - Extended the skeleton with a first confirmation path that validates provider success payloads against the stored order before writing `payments` and `user_entitlements`.
+- Added the first idempotent webhook reconciliation path so cancellation and refund events are durably recorded in `billing_webhook_events` and reflected back into orders, payments and entitlements.
 
 `0dfdb7d` Add monetization foundation and plus owner gates
 
