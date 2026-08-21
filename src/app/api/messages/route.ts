@@ -51,6 +51,9 @@ async function forwardMessageRequest(request: Request, method: "POST" | "PATCH" 
   if (session?.user?.id && !anonymousMode) {
     headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
     headers["X-User-Id"] = session.user.id;
+  } else if (session?.user?.id && anonymousMode) {
+    headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
+    headers["X-Authenticated-User-Id"] = session.user.id;
   }
 
   const res = await fetch(`${workerUrl}/api/${proxyTarget}`, {

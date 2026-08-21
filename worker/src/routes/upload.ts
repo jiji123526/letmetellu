@@ -9,6 +9,7 @@ import {
   readPublicBackgroundCache,
   storePublicBackgroundCache,
 } from "../lib/public-background-cache.ts";
+import { getTrustedAuthenticatedUserId, getTrustedUserId } from "../lib/trusted-identity.ts";
 import { authorizeRoomToken, isCurrentRoomTokenBinding } from "./passcode.ts";
 import { getChannelPasscodeInfo } from "../lib/validation.ts";
 
@@ -107,13 +108,13 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
       return Response.json({ error: "live_session_ended" }, { status: 403 });
     }
   }
-  const internalRequest = request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET;
-  const internalUserId = request.headers.get("X-User-Id") || "";
+  const trustedOwnerUserId = getTrustedUserId(request, env) || "";
+  const trustedAuthenticatedUserId = getTrustedAuthenticatedUserId(request, env) || "";
   let ownerUpload = false;
-  if (internalRequest && internalUserId) {
+  if (trustedOwnerUserId) {
     const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
       .bind(parentChannelId).first<{ owner_uid: string }>();
-    ownerUpload = channel?.owner_uid === internalUserId;
+    ownerUpload = channel?.owner_uid === trustedOwnerUserId;
     if (!ownerUpload) return Response.json({ error: "not owner" }, { status: 403 });
   }
   if (isReportsChannel(parentChannelId, env) && !ownerUpload) {
@@ -204,8 +205,8 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     env,
     key,
     channelId,
-    uid: ownerUpload ? internalUserId : anonymousPayload!.uid,
-    authUid: ownerUpload ? internalUserId : null,
+    uid: ownerUpload ? trustedOwnerUserId : anonymousPayload!.uid,
+    authUid: ownerUpload ? trustedOwnerUserId : (trustedAuthenticatedUserId || null),
     ipHash: ipHash!,
     purpose,
   });

@@ -24,6 +24,7 @@ export interface BillingSubscriptionRow {
 
 export const BILLING_RENEWAL_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 export const BILLING_RENEWAL_BATCH_LIMIT = 20;
+export const BILLING_RENEWAL_MAX_FAILURES = 3;
 
 export function calculateBillingSubscriptionRetryAt(
   failedAt: string,
@@ -176,18 +177,51 @@ export async function markBillingSubscriptionRenewalFailed(env: Env, input: {
   const retryAt = calculateBillingSubscriptionRetryAt(input.failedAt);
   await env.DB.prepare(`
     UPDATE billing_subscriptions
-    SET status = 'past_due',
-        next_charge_at = ?,
+    SET status = CASE
+          WHEN failure_count + 1 >= ? THEN 'non_renewing'
+          ELSE 'past_due'
+        END,
+        next_charge_at = CASE
+          WHEN failure_count + 1 >= ? THEN current_period_ends_at
+          ELSE ?
+        END,
         last_failed_at = ?,
         failure_count = failure_count + 1,
+        cancel_requested_at = CASE
+          WHEN failure_count + 1 >= ? THEN COALESCE(cancel_requested_at, ?)
+          ELSE cancel_requested_at
+        END,
         updated_at = ?
     WHERE id = ?
   `).bind(
+    BILLING_RENEWAL_MAX_FAILURES,
+    BILLING_RENEWAL_MAX_FAILURES,
     retryAt,
+    input.failedAt,
+    BILLING_RENEWAL_MAX_FAILURES,
     input.failedAt,
     now,
     input.subscriptionId,
   ).run();
+}
+
+export async function readBillingSubscriptionForUser(
+  env: Env,
+  userId: string,
+  plan = "plus",
+): Promise<BillingSubscriptionRow | null> {
+  return env.DB.prepare(`
+    SELECT id, user_id, provider, plan, billing_cycle,
+           provider_customer_key, billing_key, status,
+           current_period_order_id, current_period_started_at,
+           current_period_ends_at, next_charge_at, last_charged_at,
+           last_failed_at, failure_count, cancel_requested_at, canceled_at,
+           created_at, updated_at
+    FROM billing_subscriptions
+    WHERE user_id = ? AND plan = ?
+    ORDER BY updated_at DESC, created_at DESC
+    LIMIT 1
+  `).bind(userId, plan).first<BillingSubscriptionRow>();
 }
 
 export async function markBillingSubscriptionCancelRequested(

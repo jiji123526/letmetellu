@@ -8,3 +8,10 @@ export function getTrustedUserId(request: Request, env: Env): string | null {
   if (!isTrustedInternalRequest(request, env)) return null;
   return request.headers.get("X-User-Id") || null;
 }
+
+export function getTrustedAuthenticatedUserId(request: Request, env: Env): string | null {
+  if (!isTrustedInternalRequest(request, env)) return null;
+  return request.headers.get("X-Authenticated-User-Id")
+    || request.headers.get("X-User-Id")
+    || null;
+}

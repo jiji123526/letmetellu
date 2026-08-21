@@ -53,6 +53,7 @@ import {
   startDashboardRequest,
 } from "@/lib/dashboard-performance";
 import {
+  cancelBillingSubscription,
   createBillingOrder,
   fetchBillingState,
   type BillingStateResponse,
@@ -208,6 +209,22 @@ function getOwnerPlanStatusNote(
   return t("dashboardPlanActiveNote");
 }
 
+function getBillingSubscriptionStatusLabel(
+  status: "active" | "past_due" | "non_renewing" | "canceled",
+  t: (key: Extract<
+    LocaleKeys,
+    | "dashboardPlanSubscriptionStatusActive"
+    | "dashboardPlanSubscriptionStatusPastDue"
+    | "dashboardPlanSubscriptionStatusNonRenewing"
+    | "dashboardPlanSubscriptionStatusCanceled"
+  >) => string,
+): string {
+  if (status === "past_due") return t("dashboardPlanSubscriptionStatusPastDue");
+  if (status === "non_renewing") return t("dashboardPlanSubscriptionStatusNonRenewing");
+  if (status === "canceled") return t("dashboardPlanSubscriptionStatusCanceled");
+  return t("dashboardPlanSubscriptionStatusActive");
+}
+
 function getChannelPreviewColor(channelId: string, fallback: string) {
   if (typeof window === "undefined") return fallback;
   try {
@@ -358,6 +375,7 @@ function DashboardPageContent() {
   const [linkedChannel, setLinkedChannel] = useState<Channel | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showPlanDetails, setShowPlanDetails] = useState(false);
+  const [showBillingCancelConfirm, setShowBillingCancelConfirm] = useState(false);
   const [showFirstOnboarding, setShowFirstOnboarding] = useState(false);
   const [showGuestOnboarding, setShowGuestOnboarding] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -406,6 +424,8 @@ function DashboardPageContent() {
   const [billingStateError, setBillingStateError] = useState("");
   const [checkoutStartingCycle, setCheckoutStartingCycle] = useState<"monthly" | "yearly" | null>(null);
   const [checkoutStartError, setCheckoutStartError] = useState("");
+  const [billingCancelLoading, setBillingCancelLoading] = useState(false);
+  const [billingCancelError, setBillingCancelError] = useState("");
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -554,6 +574,10 @@ function DashboardPageContent() {
         ? t("dashboardPlanAutorenewBadge")
         : t("dashboardPlanExpiresBadge")
     : null;
+  const billingSubscription = billingState?.subscription || null;
+  const billingSubscriptionStatusLabel = billingSubscription
+    ? getBillingSubscriptionStatusLabel(billingSubscription.status, t)
+    : null;
 
   const loadBillingState = useCallback(async () => {
     if (!authenticatedUserId) return;
@@ -574,6 +598,8 @@ function DashboardPageContent() {
 
   const openPlanDetails = useCallback(async () => {
     if (!authenticatedUserId) return;
+    setBillingCancelError("");
+    setShowBillingCancelConfirm(false);
     setShowPlanDetails(true);
     if (!billingStateLoading) {
       await loadBillingState();
@@ -600,6 +626,29 @@ function DashboardPageContent() {
       setCheckoutStartingCycle(null);
     }
   }, [authenticatedUserId, router, t]);
+
+  const requestBillingCancel = useCallback(async () => {
+    if (billingCancelLoading) return;
+    setBillingCancelLoading(true);
+    setBillingCancelError("");
+    try {
+      const response = await cancelBillingSubscription();
+      if (!response.ok) {
+        throw new Error(response.error || "cancel_failed");
+      }
+      setBillingState((current) => current ? {
+        ...current,
+        subscription: response.subscription || null,
+      } : current);
+      setShowBillingCancelConfirm(false);
+      await loadBillingState();
+      await loadChannels();
+    } catch {
+      setBillingCancelError(t("dashboardPlanCancelFailed"));
+    } finally {
+      setBillingCancelLoading(false);
+    }
+  }, [billingCancelLoading, loadBillingState, loadChannels, t]);
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -2546,6 +2595,26 @@ function DashboardPageContent() {
               <div className="mt-2 text-[13px]" style={{ color: "var(--gray-text)" }}>
                 {ownerPlan?.hasPlus ? ownerPlanStatusNote : t("dashboardPlanDetailsCurrentFree")}
               </div>
+              {billingSubscription && billingSubscriptionStatusLabel ? (
+                <div className="mt-3 rounded-[12px] px-3 py-2 text-[12px]" style={{ background: "var(--bg)", color: "var(--meta)" }}>
+                  <div style={{ color: "var(--gray-text)", fontWeight: 600 }}>
+                    {billingSubscriptionStatusLabel}
+                  </div>
+                  {billingSubscription.status === "past_due" ? (
+                    <div className="mt-1">
+                      {t("dashboardPlanRetryNotice").replace(
+                        "{count}",
+                        String(billingSubscription.failure_count),
+                      )}
+                    </div>
+                  ) : null}
+                  {billingSubscription.status === "non_renewing" ? (
+                    <div className="mt-1">
+                      {t("dashboardPlanCancelPending")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {billingState?.latest_pending_order?.expires_at ? (
                 <div className="mt-3 rounded-[12px] px-3 py-2 text-[12px]" style={{ background: "var(--bg)", color: "var(--meta)" }}>
                   <div style={{ color: "var(--gray-text)", fontWeight: 600 }}>
@@ -2558,6 +2627,27 @@ function DashboardPageContent() {
                     )}
                   </div>
                 </div>
+              ) : null}
+              {billingSubscription && (billingSubscription.status === "active" || billingSubscription.status === "past_due") ? (
+                <button
+                  type="button"
+                  disabled={billingCancelLoading}
+                  className="mt-3 rounded-[10px] border-none px-3 py-2 text-[12px] font-semibold"
+                  style={{
+                    background: "#ffe8e8",
+                    color: "#b91c1c",
+                    cursor: billingCancelLoading ? "default" : "pointer",
+                    opacity: billingCancelLoading ? 0.7 : 1,
+                  }}
+                  onClick={() => {
+                    setBillingCancelError("");
+                    setShowBillingCancelConfirm(true);
+                  }}
+                >
+                  {billingCancelLoading
+                    ? t("loading")
+                    : t("dashboardPlanCancelAction")}
+                </button>
               ) : null}
             </div>
 
@@ -2632,8 +2722,27 @@ function DashboardPageContent() {
                 {checkoutStartError}
               </div>
             )}
+            {billingCancelError && (
+              <div className="mt-4 text-[12px]" style={{ color: "#ff3b30" }}>
+                {billingCancelError}
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {showBillingCancelConfirm && (
+        <ConfirmDialog
+          title={t("dashboardPlanCancelConfirmTitle")}
+          message={t("dashboardPlanCancelConfirmBody")}
+          confirmLabel={billingCancelLoading ? t("loading") : t("dashboardPlanCancelAction")}
+          onConfirm={() => { void requestBillingCancel(); }}
+          onCancel={() => {
+            if (billingCancelLoading) return;
+            setShowBillingCancelConfirm(false);
+          }}
+          disabled={billingCancelLoading}
+        />
       )}
 
       {showUserGuide && (

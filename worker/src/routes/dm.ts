@@ -8,7 +8,7 @@ import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts"
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { readDmThreads } from "../lib/dm-threads.ts";
-import { getTrustedUserId } from "../lib/trusted-identity.ts";
+import { getTrustedAuthenticatedUserId, getTrustedUserId } from "../lib/trusted-identity.ts";
 import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-moderation.ts";
 import { deleteMediaByUrl } from "../lib/media.ts";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
@@ -386,6 +386,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
   }
 
   if (request.method === "POST") {
+    const trustedAuthenticatedUserId = getTrustedAuthenticatedUserId(request, env);
     const body = await request.json() as Record<string, unknown>;
     const { client_message_id, nick, text, channel_id, image, upload_id } = body;
     const mediaDimensions = parseMediaDimensions(body);
@@ -533,7 +534,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         channelId: channel_id as string,
         purpose: "dm",
         uid: requesterUid,
-        authUid: null,
+        authUid: trustedAuthenticatedUserId,
         attachedRecordId: id,
       });
       if (!attachment.ok) {

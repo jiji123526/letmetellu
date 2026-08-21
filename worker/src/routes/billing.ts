@@ -5,6 +5,7 @@ import {
   resolveBillingPlanSelection,
 } from "../lib/billing-plans.ts";
 import {
+  readBillingSubscriptionForUser,
   markBillingSubscriptionCancelRequested,
   markBillingSubscriptionCanceled,
   upsertBillingSubscription,
@@ -39,6 +40,22 @@ interface TossBillingPrepareRow {
   id: string;
   email: string | null;
   name: string | null;
+}
+
+interface BillingStateSubscriptionResponse {
+  id: string;
+  provider: string;
+  plan: string;
+  billing_cycle: string;
+  status: string;
+  current_period_started_at: string;
+  current_period_ends_at: string;
+  next_charge_at: string;
+  last_charged_at: string | null;
+  last_failed_at: string | null;
+  failure_count: number;
+  cancel_requested_at: string | null;
+  canceled_at: string | null;
 }
 
 function buildOrderResponse(
@@ -321,7 +338,7 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
   await ensureBetaGrandfatheredPlusEntitlement(env, userId);
 
   const now = new Date().toISOString();
-  const [activeEntitlement, latestPendingOrder] = await Promise.all([
+  const [activeEntitlement, latestPendingOrder, billingSubscription] = await Promise.all([
     readActivePlusEntitlement(env, userId, now),
     env.DB.prepare(`
       SELECT order_id, user_id, plan, billing_cycle, amount, currency,
@@ -333,6 +350,7 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
       ORDER BY created_at DESC, order_id DESC
       LIMIT 1
     `).bind(userId, now).first<PendingBillingOrderRow>(),
+    readBillingSubscriptionForUser(env, userId),
   ]);
 
   return Response.json({
@@ -354,6 +372,103 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
       : null,
     latest_pending_order: latestPendingOrder
       ? buildOrderResponse(latestPendingOrder, "vat_exclusive")
+      : null,
+    subscription: billingSubscription
+      ? {
+          id: billingSubscription.id,
+          provider: billingSubscription.provider,
+          plan: billingSubscription.plan,
+          billing_cycle: billingSubscription.billing_cycle,
+          status: billingSubscription.status,
+          current_period_started_at: billingSubscription.current_period_started_at,
+          current_period_ends_at: billingSubscription.current_period_ends_at,
+          next_charge_at: billingSubscription.next_charge_at,
+          last_charged_at: billingSubscription.last_charged_at,
+          last_failed_at: billingSubscription.last_failed_at,
+          failure_count: Number(billingSubscription.failure_count || 0),
+          cancel_requested_at: billingSubscription.cancel_requested_at,
+          canceled_at: billingSubscription.canceled_at,
+        } satisfies BillingStateSubscriptionResponse
+      : null,
+  });
+}
+
+async function handleBillingCancel(env: Env, userId: string): Promise<Response> {
+  const subscription = await readBillingSubscriptionForUser(env, userId);
+  if (!subscription) {
+    return Response.json({ error: "subscription_not_found" }, { status: 404 });
+  }
+  if (subscription.status === "non_renewing" || subscription.status === "canceled") {
+    return Response.json({
+      ok: true,
+      reused: true,
+      subscription: {
+        id: subscription.id,
+        provider: subscription.provider,
+        plan: subscription.plan,
+        billing_cycle: subscription.billing_cycle,
+        status: subscription.status,
+        current_period_started_at: subscription.current_period_started_at,
+        current_period_ends_at: subscription.current_period_ends_at,
+        next_charge_at: subscription.next_charge_at,
+        last_charged_at: subscription.last_charged_at,
+        last_failed_at: subscription.last_failed_at,
+        failure_count: Number(subscription.failure_count || 0),
+        cancel_requested_at: subscription.cancel_requested_at,
+        canceled_at: subscription.canceled_at,
+      },
+    });
+  }
+
+  const now = new Date().toISOString();
+  await markBillingSubscriptionCancelRequested(
+    env,
+    subscription.current_period_order_id || "",
+    now,
+    null,
+  );
+  await env.DB.prepare(`
+    UPDATE billing_orders
+    SET status = CASE
+      WHEN status = 'confirmed' THEN 'non_renewing'
+      ELSE status
+    END,
+        updated_at = ?
+    WHERE order_id = ?
+  `).bind(
+    now,
+    subscription.current_period_order_id,
+  ).run();
+  await env.DB.prepare(`
+    UPDATE user_entitlements
+    SET auto_renews = 0,
+        updated_at = ?
+    WHERE source_order_id = ? AND source_type = 'billing'
+  `).bind(
+    now,
+    subscription.current_period_order_id,
+  ).run();
+
+  const refreshed = await readBillingSubscriptionForUser(env, userId);
+  return Response.json({
+    ok: true,
+    reused: false,
+    subscription: refreshed
+      ? {
+          id: refreshed.id,
+          provider: refreshed.provider,
+          plan: refreshed.plan,
+          billing_cycle: refreshed.billing_cycle,
+          status: refreshed.status,
+          current_period_started_at: refreshed.current_period_started_at,
+          current_period_ends_at: refreshed.current_period_ends_at,
+          next_charge_at: refreshed.next_charge_at,
+          last_charged_at: refreshed.last_charged_at,
+          last_failed_at: refreshed.last_failed_at,
+          failure_count: Number(refreshed.failure_count || 0),
+          cancel_requested_at: refreshed.cancel_requested_at,
+          canceled_at: refreshed.canceled_at,
+        } satisfies BillingStateSubscriptionResponse
       : null,
   });
 }
@@ -866,6 +981,20 @@ export async function handleBilling(request: Request, env: Env): Promise<Respons
       return Response.json({ error: "missing user id" }, { status: 400 });
     }
     return handleBillingState(env, userId);
+  }
+
+  if (url.pathname === "/api/billing/cancel") {
+    if (request.method !== "POST") {
+      return Response.json({ error: "method not allowed" }, { status: 405 });
+    }
+    if (!isTrustedInternalRequest(request, env)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const userId = request.headers.get("X-User-Id")?.trim() || "";
+    if (!userId) {
+      return Response.json({ error: "missing user id" }, { status: 400 });
+    }
+    return handleBillingCancel(env, userId);
   }
 
   if (request.method !== "POST") {

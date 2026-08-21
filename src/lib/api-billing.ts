@@ -42,6 +42,23 @@ export interface BillingStateResponse {
   plans?: BillingPlanCatalogEntry[];
   active_entitlement?: BillingActiveEntitlement | null;
   latest_pending_order?: BillingPendingOrder | null;
+  subscription?: BillingSubscriptionSnapshot | null;
+}
+
+export interface BillingSubscriptionSnapshot {
+  id: string;
+  provider: string;
+  plan: string;
+  billing_cycle: "monthly" | "yearly";
+  status: "active" | "past_due" | "non_renewing" | "canceled";
+  current_period_started_at: string;
+  current_period_ends_at: string;
+  next_charge_at: string;
+  last_charged_at: string | null;
+  last_failed_at: string | null;
+  failure_count: number;
+  cancel_requested_at: string | null;
+  canceled_at: string | null;
 }
 
 export interface BillingOrderResponse {
@@ -91,6 +108,13 @@ export interface TossCheckoutConfirmResponse {
   };
 }
 
+export interface BillingCancelResponse {
+  ok?: boolean;
+  error?: string;
+  reused?: boolean;
+  subscription?: BillingSubscriptionSnapshot | null;
+}
+
 export async function fetchBillingState(): Promise<BillingStateResponse> {
   const response = await fetch("/api/billing", {
     method: "GET",
@@ -134,4 +158,12 @@ export async function confirmTossCheckout(input: {
     cache: "no-store",
   });
   return response.json() as Promise<TossCheckoutConfirmResponse>;
+}
+
+export async function cancelBillingSubscription(): Promise<BillingCancelResponse> {
+  const response = await fetch("/api/billing/cancel", {
+    method: "POST",
+    cache: "no-store",
+  });
+  return response.json() as Promise<BillingCancelResponse>;
 }

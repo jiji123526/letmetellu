@@ -9,6 +9,7 @@ import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
 import { syncMessageLink, syncNewMessageLink } from "../lib/message-links.ts";
 import { recordOperationalEvent, withOperationalErrorContext } from "../lib/operational-events.ts";
+import { getTrustedAuthenticatedUserId } from "../lib/trusted-identity.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
@@ -172,6 +173,7 @@ export async function handleMessages(
       // Ownership is verified against the target channel below.
       const internalToken = request.headers.get("X-Internal-Token");
       const verifiedUserId = request.headers.get("X-User-Id");
+      const trustedAuthenticatedUserId = getTrustedAuthenticatedUserId(request, env);
       const hasVerifiedIdentity = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
 
       // Passcode gate — check if channel requires passcode for writing
@@ -332,7 +334,7 @@ export async function handleMessages(
           channelId: requestChannelId,
           purpose: "message",
           uid: isChannelOwner ? null : requesterUid,
-          authUid: isChannelOwner ? requesterUid : null,
+          authUid: isChannelOwner ? requesterUid : trustedAuthenticatedUserId,
           attachedRecordId: id,
         });
         if (!attachment.ok) {
