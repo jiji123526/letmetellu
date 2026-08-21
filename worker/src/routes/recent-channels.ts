@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { ensureBetaGrandfatheredPlusEntitlement } from "../lib/plan-entitlements";
 
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -99,9 +100,16 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   if (!identity) return Response.json({ error: "unauthorized" }, { status: 401 });
   const userId = await resolveRecentChannelUser(env, identity);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
+  let viewerPlusPromise: ReturnType<typeof ensureBetaGrandfatheredPlusEntitlement> | null = null;
+  const viewerHasPlus = async () => {
+    viewerPlusPromise ||= ensureBetaGrandfatheredPlusEntitlement(env, userId);
+    return Boolean(await viewerPlusPromise);
+  };
 
   if (request.method === "GET") {
-    const { results } = await env.DB.prepare(`
+    const [hasPlus, { results }] = await Promise.all([
+      viewerHasPlus(),
+      env.DB.prepare(`
       SELECT c.id, c.name, c.profile_image, c.bubble_color, c.created_at, c.owner_uid,
              c.passcode IS NOT NULL AS has_passcode,
              u.name AS owner_name,
@@ -122,8 +130,14 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
       WHERE r.user_id = ?
       ORDER BY r.pinned DESC, r.last_visited_at DESC, r.channel_id DESC
       LIMIT ?
-    `).bind(userId, RECENT_CHANNEL_LIMIT).all();
-    return Response.json({ channels: results });
+    `).bind(userId, RECENT_CHANNEL_LIMIT).all<Record<string, unknown>>(),
+    ]);
+    return Response.json({
+      channels: results.map((channel) => ({
+        ...channel,
+        personal_bubble_color: hasPlus ? channel.personal_bubble_color : null,
+      })),
+    });
   }
 
   if (request.method === "DELETE") {
@@ -147,6 +161,7 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   };
 
   if (body.action === "merge") {
+    const hasPlus = await viewerHasPlus();
     const candidates = (body.channels || [])
       .filter((channel) => typeof channel.id === "string" && CHANNEL_ID_PATTERN.test(channel.id))
       .slice(0, 20);
@@ -179,7 +194,7 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
         channel.id,
         Number.isFinite(channel.lastVisitedAt) ? Math.min(channel.lastVisitedAt!, now) : now,
         channel.pinned ? 1 : 0,
-        validColor(channel.bubbleColor),
+        hasPlus ? validColor(channel.bubbleColor) : null,
       ));
     if (statements.length) await env.DB.batch(statements);
     if (mayAddRows) {
@@ -216,6 +231,12 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
       "UPDATE user_recent_channels SET pinned = ? WHERE user_id = ? AND channel_id = ?"
     ).bind(body.pinned ? 1 : 0, userId, channelId).run();
   } else if (body.action === "color") {
+    if (!await viewerHasPlus()) {
+      return Response.json({
+        error: "plus_required",
+        feature: "personal_bubble_color",
+      }, { status: 403 });
+    }
     const color = validColor(body.bubble_color);
     if (!color) return Response.json({ error: "invalid color" }, { status: 400 });
     const updated = await env.DB.prepare(`

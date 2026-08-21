@@ -1,4 +1,5 @@
 import type { Message, MessagePageCursor } from "./chatTypes";
+import type { ViewerPlanState } from "@/lib/owner-plan";
 import type {
   ChatTimelineItem,
   UnifiedTimelineCursor,
@@ -53,6 +54,7 @@ export interface InitData {
   adminDataStatus?: "authorized" | "unauthorized";
   anonymousUid?: string;
   viewerAccess?: "owner" | "reports_owner" | "standard";
+  viewerPlan?: ViewerPlanState;
   isReportsChannel?: boolean;
   unifiedTimelineEnabled?: boolean;
   unifiedTimeline?: UnifiedTimelineBootstrap;

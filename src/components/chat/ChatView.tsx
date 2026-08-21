@@ -8,10 +8,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAutoUpdate } from "@/hooks/useAutoUpdate";
 import { useLocale } from "@/hooks/useLocale";
 import { removeRecentChannel } from "@/lib/recent-channels";
-import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { readChannelAppearance, readChannelBackground } from "@/lib/channel-background-cache";
-import type { OwnerPlanState } from "@/lib/owner-plan";
+import type { OwnerPlanState, ViewerPlanState } from "@/lib/owner-plan";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import type { Message, MessagePageCursor } from "./chatTypes";
@@ -157,13 +156,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [dmEnabled, setDmEnabled] = useState(true);
   const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
   const [ownerPlan, setOwnerPlan] = useState<OwnerPlanState | null>(null);
+  const [viewerPlan, setViewerPlan] = useState<ViewerPlanState | null>(null);
   const [viewerModerationStatus, setViewerModerationStatus] = useState<InitData["viewerModerationStatus"]>(null);
   const [viewerAccess, setViewerAccess] = useState<InitData["viewerAccess"]>("standard");
-  const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const storedColor = localStorage.getItem(`bubbleColor_${channelId}`);
-    return storedColor ? normalizeBubbleColor(storedColor) : null;
-  });
+  const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(null);
   const [plusMenu, setPlusMenu] = useState<DOMRect | null>(null);
   const [dmMode, setDmMode] = useState(false);
   const [banner, setBanner] = useState<{
@@ -484,6 +480,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setDmEnabled,
     setOwnerModeration,
     setOwnerPlan,
+    setViewerPlan,
     setLocalBubbleColor,
     setBanner,
     setPasscodeGate,
@@ -504,6 +501,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     bubbleColor,
     inLiveMode,
     isLoggedIn,
+    personalBubbleColorEnabled: viewerPlan?.features.personalBubbleColor === true,
     petitionEnabled,
     dmEnabled,
     setAdminViewAsUser,
@@ -1182,6 +1180,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         liveActive={liveActive}
         inLiveMode={inLiveMode}
         ownerPlan={ownerPlan}
+        personalBubbleColorEnabled={viewerPlan?.features.personalBubbleColor === true}
         reportsOwnerFilter={reportsOwnerFilter}
         isReportsOwnerView={isReportsOwnerView}
         showModerationPetitionDialog={showModerationPetitionDialog}

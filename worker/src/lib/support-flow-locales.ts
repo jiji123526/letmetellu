@@ -152,12 +152,12 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
           {
             id: "change-bubble-color",
             label: "How do I change my bubble color?",
-            answer: "Open the top-right ⋮ menu, choose Settings, and select your bubble color.",
+            answer: "Personal bubble colors require Plus. Open the top-right ⋮ menu, choose Settings, and select your color.",
           },
           {
             id: "personal-settings-scope",
             label: "Do these settings affect everyone or only me?",
-            answer: "Language, font size, and your bubble color affect only your view.",
+            answer: "Language and font size affect only your view. With Plus, your personal bubble color also applies only to your view.",
           },
           {
             id: "reopen-guide",
@@ -809,12 +809,12 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
           {
             id: "change-bubble-color",
             label: "내 말풍선 색은 어떻게 바꾸나요?",
-            answer: "오른쪽 위의 ⋮ 메뉴에서 설정을 열고 내 말풍선 색을 선택하세요.",
+            answer: "개인 말풍선 색상은 Plus에서 사용할 수 있어요. 오른쪽 위의 ⋮ 메뉴에서 설정을 열고 색상을 선택하세요.",
           },
           {
             id: "personal-settings-scope",
             label: "이 설정은 모두에게 적용되나요?",
-            answer: "언어, 글자 크기, 내 말풍선 색은 내 화면에만 적용됩니다.",
+            answer: "언어와 글자 크기는 내 화면에만 적용돼요. Plus에서 선택한 개인 말풍선 색상도 내 화면에만 적용됩니다.",
           },
           {
             id: "reopen-guide",

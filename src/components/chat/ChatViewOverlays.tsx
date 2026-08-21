@@ -84,6 +84,7 @@ interface ChatViewOverlaysProps {
   liveActive: boolean;
   inLiveMode: boolean;
   ownerPlan: OwnerPlanState | null;
+  personalBubbleColorEnabled: boolean;
   reportsOwnerFilter: "open" | "warned" | "frozen" | null;
   isReportsOwnerView: boolean;
   showLiveTitlePrompt: boolean;
@@ -228,6 +229,7 @@ export function ChatViewOverlays({
   liveActive,
   inLiveMode,
   ownerPlan,
+  personalBubbleColorEnabled,
   reportsOwnerFilter,
   isReportsOwnerView,
   showLiveTitlePrompt,
@@ -354,6 +356,7 @@ export function ChatViewOverlays({
         <SettingsPanel
           channelId={channelId}
           currentColor={currentColor}
+          personalBubbleColorEnabled={personalBubbleColorEnabled}
           onColorChange={onViewerColorChange}
           onAdmin={onSettingsAdmin}
           onClose={onCloseSettings}

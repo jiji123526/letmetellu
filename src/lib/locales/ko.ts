@@ -336,7 +336,7 @@ export const ko = {
   guideTip: "채널 주소를 공유하면 링크를 받은 사람이 익명으로 참여할 수 있어요.",
   userGuideMenuTitle: "기본 사용",
   userGuideMenu: "채널 메뉴 — 오른쪽 위의 ⋮ 메뉴에서 설정, 갤러리, 링크를 열 수 있어요.",
-  userGuideSettings: "설정 — 글자 크기, 언어, 내 말풍선 색상을 내 화면 기준으로 바꿀 수 있어요.",
+  userGuideSettings: "설정 — 글자 크기와 언어를 바꿀 수 있어요. Plus 이용자는 내 화면에 보이는 내 말풍선 색상도 바꿀 수 있어요.",
   userGuideAccess: "가이드 열기 — 이 가이드는 대시보드 왼쪽 아래 도움말 버튼에서 언제든 다시 열 수 있고, 처음 방문 때는 온보딩 팝업 마지막 화면에서도 바로 열 수 있어요.",
   userGuidePasscode: "비밀번호 채널 — 비밀번호가 있는 채널은 입장 전에 인증이 필요하고, 만료되면 다시 입력해야 할 수 있어요.",
   userGuideChatTitle: "채팅 사용",

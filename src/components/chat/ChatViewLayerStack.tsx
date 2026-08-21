@@ -46,6 +46,7 @@ interface ChatViewLayerStackProps {
   liveActive: boolean;
   inLiveMode: boolean;
   ownerPlan: OwnerPlanState | null;
+  personalBubbleColorEnabled: boolean;
   reportsOwnerFilter: "open" | "warned" | "frozen" | null;
   isReportsOwnerView: boolean;
   showModerationPetitionDialog: boolean;
@@ -97,6 +98,7 @@ export function ChatViewLayerStack({
   liveActive,
   inLiveMode,
   ownerPlan,
+  personalBubbleColorEnabled,
   reportsOwnerFilter,
   isReportsOwnerView,
   showModerationPetitionDialog,
@@ -188,6 +190,7 @@ export function ChatViewLayerStack({
         liveActive={liveActive}
         inLiveMode={inLiveMode}
         ownerPlan={ownerPlan}
+        personalBubbleColorEnabled={personalBubbleColorEnabled}
         reportsOwnerFilter={reportsOwnerFilter}
         isReportsOwnerView={isReportsOwnerView}
         showLiveTitlePrompt={showLiveTitlePrompt}

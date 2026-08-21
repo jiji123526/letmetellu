@@ -21,7 +21,10 @@ import {
   hasPremiumChannelAppearance,
   resetPersistedChannelAppearanceIfNeeded,
 } from "../lib/channel-appearance";
-import { ensureBetaGrandfatheredPlusEntitlement } from "../lib/plan-entitlements";
+import {
+  ensureBetaGrandfatheredPlusEntitlement,
+  type ActiveUserEntitlement,
+} from "../lib/plan-entitlements";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
 import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
 import {
@@ -102,12 +105,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "channel not found" }, { status: 404 });
     }
 
+    let channelOwnerPlusEntitlement: ActiveUserEntitlement | null = null;
     if (!reportsChannel) {
-      const activePlusEntitlement = await ensureBetaGrandfatheredPlusEntitlement(
+      channelOwnerPlusEntitlement = await ensureBetaGrandfatheredPlusEntitlement(
         env,
         (channel as { owner_uid?: string | null }).owner_uid,
       );
-      if (!activePlusEntitlement && hasPremiumChannelAppearance(channel as any)) {
+      if (!channelOwnerPlusEntitlement && hasPremiumChannelAppearance(channel as any)) {
         await resetPersistedChannelAppearanceIfNeeded(env, parentChannelId, channel);
         channel = applyFreeChannelAppearance(channel);
       }
@@ -121,6 +125,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const internalToken = request.headers.get("X-Internal-Token");
     const userId = request.headers.get("X-User-Id");
     const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
+    const channelOwnerId = (channel as { owner_uid?: string | null }).owner_uid || "";
+    const viewerPlusEntitlement = trustedUserId
+      ? trustedUserId === channelOwnerId && !reportsChannel
+        ? channelOwnerPlusEntitlement
+        : await ensureBetaGrandfatheredPlusEntitlement(env, trustedUserId)
+      : null;
     const isOwner = trustedUserId === (channel as any).owner_uid;
     const isPlatformAdminViewer = !isOwner
       && Boolean((channel as any).passcode)
@@ -441,6 +451,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       viewerModerationStatus,
       adminDataStatus,
       viewerAccess: isOwner ? "owner" : "standard",
+      viewerPlan: {
+        hasPlus: Boolean(viewerPlusEntitlement),
+        features: {
+          personalBubbleColor: Boolean(viewerPlusEntitlement),
+        },
+      },
       isReportsChannel: reportsChannel,
       unifiedTimelineEnabled: responseUnifiedTimelineEnabled,
       bannerNotice: config.get(`notice_${channelId}`) || "",

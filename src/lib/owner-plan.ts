@@ -16,3 +16,10 @@ export interface OwnerPlanState {
     liveSessions: boolean;
   };
 }
+
+export interface ViewerPlanState {
+  hasPlus: boolean;
+  features: {
+    personalBubbleColor: boolean;
+  };
+}

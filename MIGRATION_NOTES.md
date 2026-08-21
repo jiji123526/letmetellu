@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Personal bubble colors require viewer Plus — 2026-08-21
+
+- Chat initialization now returns a viewer-specific Plus capability independently from the channel owner's plan. This lets a paid non-owner personalize outgoing bubbles without granting channel administration.
+- Settings keeps the personal bubble color row visible with a `Plus` badge, but disables all presets and the custom picker for anonymous and Free viewers.
+- Free viewers no longer apply retained browser or account color overrides. The values are retained so they can become active again after Plus is restored.
+- Authenticated color writes are rejected by the Worker without an active Plus entitlement, preventing direct API bypass.
+
+Trade-off: chat initialization performs one entitlement read for an authenticated non-owner. Owners reuse the entitlement already read for channel appearance, and anonymous viewers add no entitlement query.
+
+Deployment note: deploy the Worker and frontend together. No D1 migration is required.
+
 ### Paid capabilities are identified in onboarding and guides — 2026-08-21
 
 - First-channel onboarding now marks bubble color, chat background, chat freeze and live-session controls with the existing paid-plan badge. The channel-count explanation now accurately distinguishes one free channel from five paid channels.

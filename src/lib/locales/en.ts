@@ -338,7 +338,7 @@ export const en: Record<LocaleKeys, string> = {
   guideTip: "Share the channel address to let anyone with the link join anonymously.",
   userGuideMenuTitle: "Basics",
   userGuideMenu: "Channel menu — Open Settings, Gallery, and Links from the top-right ⋮ menu.",
-  userGuideSettings: "Settings — Adjust font size, language, and your personal bubble color for your own view.",
+  userGuideSettings: "Settings — Adjust font size and language. Plus users can also change their personal bubble color for their own view.",
   userGuideAccess: "Open this guide — You can reopen this guide anytime from the help button at the bottom-left of the dashboard, and on your first visit you can also open it from the last page of the onboarding popup.",
   userGuidePasscode: "Passcode rooms — Protected channels require room access before entry, and you may need to enter the passcode again if access expires.",
   userGuideChatTitle: "Using Chat",

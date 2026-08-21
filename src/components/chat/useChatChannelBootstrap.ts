@@ -17,7 +17,7 @@ import {
   storeChannelAppearance,
 } from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
-import type { OwnerPlanState } from "@/lib/owner-plan";
+import type { OwnerPlanState, ViewerPlanState } from "@/lib/owner-plan";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import type { Message, MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
@@ -73,6 +73,7 @@ interface UseChatChannelBootstrapArgs {
   setDmEnabled: Dispatch<SetStateAction<boolean>>;
   setOwnerModeration: Dispatch<SetStateAction<InitData["ownerModeration"] | undefined>>;
   setOwnerPlan: Dispatch<SetStateAction<OwnerPlanState | null>>;
+  setViewerPlan: Dispatch<SetStateAction<ViewerPlanState | null>>;
   setLocalBubbleColor: Dispatch<SetStateAction<string | null>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   setPasscodeGate: Dispatch<SetStateAction<PasscodeGateState | null>>;
@@ -102,10 +103,15 @@ function reconcileBubbleOverride(
     previousBubbleColor?: string | null;
     nextAppearanceVersion?: string | null;
     nextBubbleColor?: string | null;
+    personalBubbleColorEnabled: boolean;
   },
   setLocalBubbleColor: Dispatch<SetStateAction<string | null>>,
 ): { bubbleColor: string | null; clearedStaleOverride: boolean } {
   if (typeof window === "undefined") {
+    return { bubbleColor: null, clearedStaleOverride: false };
+  }
+  if (!input.personalBubbleColorEnabled) {
+    setLocalBubbleColor(null);
     return { bubbleColor: null, clearedStaleOverride: false };
   }
 
@@ -172,6 +178,7 @@ export function useChatChannelBootstrap({
   setDmEnabled,
   setOwnerModeration,
   setOwnerPlan,
+  setViewerPlan,
   setLocalBubbleColor,
   setBanner,
   setPasscodeGate,
@@ -216,6 +223,7 @@ export function useChatChannelBootstrap({
       previousBubbleColor,
       nextAppearanceVersion: data.channel.appearance_version,
       nextBubbleColor: data.channel.bubble_color,
+      personalBubbleColorEnabled: data.viewerPlan?.features.personalBubbleColor === true,
     }, setLocalBubbleColor);
     if (
       !cachedAppearance
@@ -225,7 +233,7 @@ export function useChatChannelBootstrap({
       storeChannelAppearance(channelId, data.channel);
     }
     setChannel({ ...data.channel, bubble_color: channelBubbleColor });
-    if (clearedStaleOverride) {
+    if (clearedStaleOverride || data.viewerPlan?.features.personalBubbleColor !== true) {
       document.documentElement.style.setProperty("--bubble-sent", channelBubbleColor);
     }
 
@@ -243,6 +251,7 @@ export function useChatChannelBootstrap({
       }
       void recordAccountRecentChannel(channelId)
         .then(({ record }) => {
+          if (data.viewerPlan?.features.personalBubbleColor !== true) return;
           if (!record?.bubble_color) return;
           const accountBubbleColor = normalizeBubbleColor(record.bubble_color);
           if (
@@ -310,6 +319,7 @@ export function useChatChannelBootstrap({
     setPetitionEnabled(data.petitionEnabled ?? true);
     setDmEnabled(data.dmEnabled ?? true);
     setOwnerModeration(data.ownerModeration);
+    setViewerPlan(data.viewerPlan || null);
 
     if (data.adminDataStatus === "unauthorized") {
       setBanner({ text: text.adminDataAuthFailed, color: "#d32f2f" });
@@ -338,6 +348,7 @@ export function useChatChannelBootstrap({
     setMessages,
     setNewerMessageCount,
     setOwnerModeration,
+    setViewerPlan,
     setPetitionEnabled,
     setReportsChannelView,
     setUid,
@@ -380,6 +391,7 @@ export function useChatChannelBootstrap({
           previousBubbleColor: previousChannel?.bubble_color,
           nextAppearanceVersion: data.channel?.appearance_version,
           nextBubbleColor: data.channel?.bubble_color,
+          personalBubbleColorEnabled: data.ownerPlan?.hasPlus === true,
         }, setLocalBubbleColor);
         const nextChannel = previousChannel ? {
           ...previousChannel,

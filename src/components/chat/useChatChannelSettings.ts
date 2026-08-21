@@ -42,6 +42,7 @@ interface UseChatChannelSettingsArgs<TChannel extends ChannelSettingsState> {
   bubbleColor: string;
   inLiveMode: boolean;
   isLoggedIn: boolean;
+  personalBubbleColorEnabled: boolean;
   petitionEnabled: boolean;
   dmEnabled: boolean;
   setAdminViewAsUser: Dispatch<SetStateAction<boolean>>;
@@ -94,6 +95,7 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
   bubbleColor,
   inLiveMode,
   isLoggedIn,
+  personalBubbleColorEnabled,
   petitionEnabled,
   dmEnabled,
   setAdminViewAsUser,
@@ -117,6 +119,7 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
   }, [setAdminViewAsUser]);
 
   const handleViewerColorChange = useCallback((color: string) => {
+    if (!personalBubbleColorEnabled) return;
     setLocalBubbleColor(color);
     localStorage.setItem(`bubbleColor_${channelId}`, color);
     if (isLoggedIn) {
@@ -126,7 +129,7 @@ export function useChatChannelSettings<TChannel extends ChannelSettingsState>({
     } else {
       updateRecentChannelAppearance(channelId, { bubbleColor: color });
     }
-  }, [channelId, isLoggedIn, setLocalBubbleColor]);
+  }, [channelId, isLoggedIn, personalBubbleColorEnabled, setLocalBubbleColor]);
 
   const handlePetitionToggle = useCallback(() => {
     const nextValue = !petitionEnabled;

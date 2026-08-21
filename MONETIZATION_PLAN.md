@@ -96,7 +96,7 @@ Phase 6: migration and rollout
 
 - Own one channel without watching an advertisement.
 - Send up to five successful image messages per calendar day without Plus.
-- Use the default bubble color and default channel background.
+- Use the default personal bubble color and default channel background.
 - Do not create live sessions.
 - Do not freeze or unfreeze channel chat.
 - See advertisements in free-owned channels according to the final ad placement policy.
@@ -118,8 +118,8 @@ Benefits:
 - Own up to five channels.
 - Remove advertisements from channels owned by the subscriber.
 - Bypass the Free daily image quota in any supported channel while entitled, subject to the normal file-count, file-size and abuse-control limits.
-- Customize the outgoing bubble color.
-- Select a channel background color or upload a background image, including the existing blur option.
+- Customize the subscriber's outgoing bubble color for their own view in any channel.
+- When the subscriber owns a channel, customize its default bubble color and select or upload a channel background, including the existing blur option.
 - Create and operate live sessions.
 - Freeze and unfreeze channel chat.
 - Use the same functional moderation, reporting and security limits as Free; payment does not bypass abuse controls.

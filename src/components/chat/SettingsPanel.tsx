@@ -20,12 +20,20 @@ function darkenColor(hex: string, amount: number): string {
 interface SettingsPanelProps {
   channelId: string;
   currentColor: string;
+  personalBubbleColorEnabled: boolean;
   onColorChange: (color: string) => void;
   onAdmin?: () => void;
   onClose: () => void;
 }
 
-export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin, onClose }: SettingsPanelProps) {
+export function SettingsPanel({
+  channelId,
+  currentColor,
+  personalBubbleColorEnabled,
+  onColorChange,
+  onAdmin,
+  onClose,
+}: SettingsPanelProps) {
   const { locale, setLocale, t } = useLocale();
   const { status } = useSession();
   const [fontSize, setFontSize] = useState(() => {
@@ -51,6 +59,7 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
   };
 
   const changeColor = (color: string) => {
+    if (!personalBubbleColorEnabled) return;
     const normalizedColor = normalizeBubbleColor(color);
     setSelectedColor(normalizedColor);
     localStorage.setItem(`bubbleColor_${channelId}`, normalizedColor);
@@ -130,12 +139,31 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
 
           {/* Bubble color */}
           <div className="flex items-start justify-between" style={{ padding: "12px 0" }}>
-            <span style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>{t("bubbleColor")}</span>
-            <div className="grid justify-items-center" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", width: "140px", padding: "2px" }}>
+            <span className="flex items-center gap-1.5" style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>
+              {t("bubbleColor")}
+              <span
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                style={{ background: "#fff5d6", color: "#9a6700", lineHeight: 1.2 }}
+              >
+                {t("plusBadge")}
+              </span>
+            </span>
+            <div
+              className="grid justify-items-center"
+              style={{
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "6px",
+                width: "140px",
+                padding: "2px",
+                opacity: personalBubbleColorEnabled ? 1 : 0.42,
+              }}
+            >
               {BUBBLE_COLORS.map((color) => (
                 <button
                   key={color}
-                  className="cursor-pointer"
+                  type="button"
+                  disabled={!personalBubbleColorEnabled}
+                  className={personalBubbleColorEnabled ? "cursor-pointer" : "cursor-default"}
                   style={{
                     width: "calc(var(--bubble-font-size, 17px) + 9px)",
                     height: "calc(var(--bubble-font-size, 17px) + 9px)",
@@ -150,7 +178,9 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
               ))}
               {/* Custom color picker */}
               <button
-                className="cursor-pointer relative overflow-hidden"
+                type="button"
+                disabled={!personalBubbleColorEnabled}
+                className={`${personalBubbleColorEnabled ? "cursor-pointer" : "cursor-default"} relative overflow-hidden`}
                 style={{
                   width: "calc(var(--bubble-font-size, 17px) + 9px)",
                   height: "calc(var(--bubble-font-size, 17px) + 9px)",
@@ -165,7 +195,8 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
                   ref={colorInputRef}
                   type="color"
                   value={selectedColor}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={!personalBubbleColorEnabled}
+                  className={`absolute inset-0 w-full h-full opacity-0 ${personalBubbleColorEnabled ? "cursor-pointer" : "cursor-default"}`}
                   onChange={(e) => changeColor(e.target.value)}
                 />
               </button>
