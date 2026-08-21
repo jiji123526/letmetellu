@@ -141,12 +141,14 @@ export function SettingsPanel({
           <div className="flex items-start justify-between" style={{ padding: "12px 0" }}>
             <span className="flex items-center gap-1.5" style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>
               {t("bubbleColor")}
-              <span
-                className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{ background: "#fff5d6", color: "#9a6700", lineHeight: 1.2 }}
-              >
-                {t("plusBadge")}
-              </span>
+              {!personalBubbleColorEnabled ? (
+                <span
+                  className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: "#fff5d6", color: "#9a6700", lineHeight: 1.2 }}
+                >
+                  {t("plusBadge")}
+                </span>
+              ) : null}
             </span>
             <div
               className="grid justify-items-center"

@@ -7,7 +7,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 ### Personal bubble colors require viewer Plus — 2026-08-21
 
 - Chat initialization now returns a viewer-specific Plus capability independently from the channel owner's plan. This lets a paid non-owner personalize outgoing bubbles without granting channel administration.
-- Settings keeps the personal bubble color row visible with a `Plus` badge, but disables all presets and the custom picker for anonymous and Free viewers.
+- Settings keeps the personal bubble color row visible, shows a `Plus` badge only while locked, and disables all presets and the custom picker for anonymous and Free viewers.
 - Free viewers no longer apply retained browser or account color overrides. The values are retained so they can become active again after Plus is restored.
 - Authenticated color writes are rejected by the Worker without an active Plus entitlement, preventing direct API bypass.
 

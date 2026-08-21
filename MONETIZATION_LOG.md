@@ -12,7 +12,7 @@ the newest entry is always first. Product decisions and future work belong in
 #### Personal bubble colors require Plus
 
 - Added a viewer-specific entitlement snapshot to chat initialization so a paid participant does not depend on the channel owner's plan.
-- Disabled personal bubble color controls for anonymous and Free users while keeping a visible `Plus` badge in Settings.
+- Disabled personal bubble color controls for anonymous and Free users while showing the `Plus` badge only in the locked state.
 - Enforced the same entitlement on account color writes and ignored retained local or account color overrides until the viewer has Plus again.
 - Kept personal colors scoped to the subscriber's own view; channel-wide defaults remain an owner customization.
 

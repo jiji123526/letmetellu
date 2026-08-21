@@ -88,7 +88,7 @@ test("personal bubble colors require the viewer's Plus entitlement", () => {
 });
 
 test("personal bubble color controls remain visible but disabled without Plus", () => {
-  assert.match(settingsPanelSource, /t\("bubbleColor"\)[\s\S]*t\("plusBadge"\)/);
+  assert.match(settingsPanelSource, /t\("bubbleColor"\)[\s\S]*!personalBubbleColorEnabled[\s\S]*t\("plusBadge"\)/);
   assert.match(settingsPanelSource, /disabled=\{!personalBubbleColorEnabled\}/);
   assert.match(settingsPanelSource, /if \(!personalBubbleColorEnabled\) return/);
 });
