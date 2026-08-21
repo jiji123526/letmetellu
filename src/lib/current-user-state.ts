@@ -1,9 +1,12 @@
+import type { OwnerPlanState } from "./owner-plan";
+
 export interface CurrentUserState<TChannel = unknown> {
   user_id?: string;
   channels?: TChannel[];
   font_size?: number | null;
   locale?: string | null;
   is_platform_admin?: boolean;
+  owner_plan?: OwnerPlanState;
 }
 
 export interface CurrentUserStateResult<TChannel = unknown> {

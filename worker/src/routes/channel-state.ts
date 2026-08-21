@@ -1,4 +1,6 @@
 import { getChannelModeration } from "../lib/channel-moderation";
+import { buildOwnerPlanState } from "../lib/plan-feature-gates";
+import { hasActivePlusEntitlement } from "../lib/plan-entitlements";
 import { getParentChannelId } from "../lib/special-channels";
 import type { Env } from "../types";
 
@@ -44,7 +46,10 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
       LIMIT 1
     `).bind(channelId).first<{ is_frozen: number }>()
     : null;
-  const moderation = await getChannelModeration(parentChannelId, env);
+  const [moderation, hasPlus] = await Promise.all([
+    getChannelModeration(parentChannelId, env),
+    hasActivePlusEntitlement(env, userId),
+  ]);
 
   return Response.json({
     channel: {
@@ -57,5 +62,6 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
       status: moderation.status,
       petitionStatus: moderation.petition_status,
     },
+    ownerPlan: buildOwnerPlanState(hasPlus),
   });
 }

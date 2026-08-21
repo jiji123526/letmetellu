@@ -1,6 +1,7 @@
 "use client";
 
 import { chatDateLabel } from "@/lib/chat-date";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 import dynamic from "next/dynamic";
 import { LiveEndedPopup, LivePopup, LiveTitlePrompt } from "./LiveMode";
 import { WelcomePopup } from "./WelcomePopup";
@@ -82,6 +83,7 @@ interface ChatViewOverlaysProps {
   isFrozen: boolean;
   liveActive: boolean;
   inLiveMode: boolean;
+  ownerPlan: OwnerPlanState | null;
   reportsOwnerFilter: "open" | "warned" | "frozen" | null;
   isReportsOwnerView: boolean;
   showLiveTitlePrompt: boolean;
@@ -225,6 +227,7 @@ export function ChatViewOverlays({
   isFrozen,
   liveActive,
   inLiveMode,
+  ownerPlan,
   reportsOwnerFilter,
   isReportsOwnerView,
   showLiveTitlePrompt,
@@ -379,6 +382,7 @@ export function ChatViewOverlays({
           channelId={channelId}
           channelName={channelName}
           profileImage={channelProfileImage}
+          ownerPlan={ownerPlan}
           currentColor={currentColor}
           backgroundType={backgroundType}
           backgroundColor={backgroundColor}
@@ -425,6 +429,7 @@ export function ChatViewOverlays({
           isFrozen={isFrozen}
           liveActive={liveActive}
           inLiveMode={inLiveMode}
+          ownerPlan={ownerPlan}
           onPhoto={onPlusPhoto}
           onDmToggle={onPlusDmToggle}
           onFreezeToggle={onFreezeToggle}

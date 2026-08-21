@@ -53,6 +53,7 @@ import {
   startDashboardRequest,
 } from "@/lib/dashboard-performance";
 import { fetchCurrentUserState } from "@/lib/current-user-state";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 
 interface Channel {
   id: string;
@@ -347,6 +348,7 @@ function DashboardPageContent() {
     userId: string;
     isAdmin: boolean;
   } | null>(null);
+  const [ownerPlan, setOwnerPlan] = useState<OwnerPlanState | null>(null);
   const [operationalHealth, setOperationalHealth] = useState<PlatformOperationalHealthResponse | null>(null);
   const [operationalHealthLoading, setOperationalHealthLoading] = useState(false);
   const [operationalHealthError, setOperationalHealthError] = useState(false);
@@ -471,6 +473,7 @@ function DashboardPageContent() {
         userId: data.user_id || authenticatedUserId || "",
         isAdmin,
       });
+      setOwnerPlan(data.owner_plan || null);
       setChannels((data.channels || []).map((channel) => ({
         ...channel,
         profile_image: decorateMediaUrl(channel.profile_image),
@@ -486,6 +489,10 @@ function DashboardPageContent() {
     loadChannelsInFlightRef.current = request;
     return request;
   }, [authenticatedUserId]);
+
+  const ownedChannelLimit = ownerPlan?.ownedChannelLimit || 1;
+  const ownedChannelCount = channels.length;
+  const createLimitReached = ownedChannelCount >= ownedChannelLimit;
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -1396,9 +1403,15 @@ function DashboardPageContent() {
     } finally {
       setCheckingChannelCapacity(false);
     }
+    if (createLimitReached) {
+      setCreateError(t("dashboardChannelLimit"));
+      setShowCreate(ownedChannelIds.size > 0);
+      setShowFirstOnboarding(false);
+      return;
+    }
     setShowCreate(ownedChannelIds.size > 0);
     setShowFirstOnboarding(ownedChannelIds.size === 0);
-  }, [checkingChannelCapacity, ownedChannelIds]);
+  }, [checkingChannelCapacity, createLimitReached, ownedChannelIds, t]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2254,14 +2267,23 @@ function DashboardPageContent() {
               {createFieldsValid && (
                 <button
                   type="button"
-                  disabled={creating}
+                  disabled={creating || createLimitReached}
                   className="border-none bg-transparent p-0 text-[15px] font-medium"
-                  style={{ color: "#007aff", cursor: creating ? "wait" : "pointer", opacity: creating ? 0.6 : 1 }}
+                  style={{ color: "#007aff", cursor: creating ? "wait" : createLimitReached ? "default" : "pointer", opacity: creating || createLimitReached ? 0.6 : 1 }}
                   onClick={() => void handleCreate()}
                 >
                   {creating ? t("loading") : t("create")}
                 </button>
               )}
+            </div>
+            <div className="mb-4 rounded-[12px] px-3 py-2 text-[12px]" style={{ background: "var(--card)", color: "var(--meta)" }}>
+              <span style={{ color: "var(--gray-text)", fontWeight: 600 }}>
+                {ownerPlan?.hasPlus ? t("planPlus") : t("planFree")}
+              </span>
+              {" · "}
+              {t("dashboardChannelSlots")
+                .replace("{count}", String(ownedChannelCount))
+                .replace("{limit}", String(ownedChannelLimit))}
             </div>
             <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
             <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />
@@ -2271,8 +2293,10 @@ function DashboardPageContent() {
               <input value={newSlug} onChange={(event) => setNewSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} maxLength={30} placeholder="my-channel" className="min-w-0 flex-1 border-none outline-none text-[15px]" style={{ padding: "11px 12px 11px 2px", background: "transparent" }} onKeyDown={(event) => { if (event.key === "Enter" && !creating && createFieldsValid) void handleCreate(); }} />
             </div>
             <div className="mt-1.5 text-[11px]" style={{ color: "var(--meta)" }}>{t("onboardingSlugHint")}</div>
-            {createError && (
-              <div className="mt-2 text-[12px]" style={{ color: "#ff3b30" }}>{createError}</div>
+            {(createError || createLimitReached) && (
+              <div className="mt-2 text-[12px]" style={{ color: "#ff3b30" }}>
+                {createError || t("dashboardChannelLimit")}
+              </div>
             )}
           </div>
         </div>

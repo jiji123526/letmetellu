@@ -17,6 +17,7 @@ import {
   storeChannelAppearance,
 } from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import type { Message, MessagePageCursor } from "./chatTypes";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
@@ -71,6 +72,7 @@ interface UseChatChannelBootstrapArgs {
   setPetitionEnabled: Dispatch<SetStateAction<boolean>>;
   setDmEnabled: Dispatch<SetStateAction<boolean>>;
   setOwnerModeration: Dispatch<SetStateAction<InitData["ownerModeration"] | undefined>>;
+  setOwnerPlan: Dispatch<SetStateAction<OwnerPlanState | null>>;
   setLocalBubbleColor: Dispatch<SetStateAction<string | null>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   setPasscodeGate: Dispatch<SetStateAction<PasscodeGateState | null>>;
@@ -123,6 +125,7 @@ export function useChatChannelBootstrap({
   setPetitionEnabled,
   setDmEnabled,
   setOwnerModeration,
+  setOwnerPlan,
   setLocalBubbleColor,
   setBanner,
   setPasscodeGate,
@@ -309,8 +312,17 @@ export function useChatChannelBootstrap({
         setChannel((previous) => previous ? { ...previous, is_frozen: frozenState } : previous);
       }
       setOwnerModeration(data.ownerModeration);
+      setOwnerPlan(data.ownerPlan || null);
     }).catch(() => {});
-  }, [channelId, inLiveModeRef, isOwner, setChannel, setOwnerModeration]);
+  }, [channelId, inLiveModeRef, isOwner, setChannel, setOwnerModeration, setOwnerPlan]);
+
+  useEffect(() => {
+    if (!isOwner) {
+      setOwnerPlan(null);
+      return;
+    }
+    refreshOwnerModeration();
+  }, [isOwner, refreshOwnerModeration, setOwnerPlan]);
 
   useEffect(() => {
     const shouldResumeLive =

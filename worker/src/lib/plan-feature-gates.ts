@@ -3,8 +3,30 @@ export const PLUS_OWNED_CHANNEL_LIMIT = 5;
 export const DEFAULT_BUBBLE_COLOR = "#3598fe";
 export const DEFAULT_BACKGROUND_OVERLAY = 14;
 
+export interface OwnerPlanState {
+  hasPlus: boolean;
+  ownedChannelLimit: number;
+  features: {
+    channelCustomization: boolean;
+    channelFreeze: boolean;
+    liveSessions: boolean;
+  };
+}
+
 export function getOwnedChannelLimit(hasPlus: boolean): number {
   return hasPlus ? PLUS_OWNED_CHANNEL_LIMIT : FREE_OWNED_CHANNEL_LIMIT;
+}
+
+export function buildOwnerPlanState(hasPlus: boolean): OwnerPlanState {
+  return {
+    hasPlus,
+    ownedChannelLimit: getOwnedChannelLimit(hasPlus),
+    features: {
+      channelCustomization: hasPlus,
+      channelFreeze: hasPlus,
+      liveSessions: hasPlus,
+    },
+  };
 }
 
 export function isPremiumAppearanceWrite(input: {

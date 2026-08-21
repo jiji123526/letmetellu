@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 import { ChatViewOverlays } from "./ChatViewOverlays";
 import type { Channel } from "./chatViewTypes";
 import type { UseChatAdminChannelActionsResult } from "./useChatAdminChannelActions";
@@ -44,6 +45,7 @@ interface ChatViewLayerStackProps {
   dmMode: boolean;
   liveActive: boolean;
   inLiveMode: boolean;
+  ownerPlan: OwnerPlanState | null;
   reportsOwnerFilter: "open" | "warned" | "frozen" | null;
   isReportsOwnerView: boolean;
   showModerationPetitionDialog: boolean;
@@ -94,6 +96,7 @@ export function ChatViewLayerStack({
   dmMode,
   liveActive,
   inLiveMode,
+  ownerPlan,
   reportsOwnerFilter,
   isReportsOwnerView,
   showModerationPetitionDialog,
@@ -184,6 +187,7 @@ export function ChatViewLayerStack({
         isFrozen={!!channel?.is_frozen}
         liveActive={liveActive}
         inLiveMode={inLiveMode}
+        ownerPlan={ownerPlan}
         reportsOwnerFilter={reportsOwnerFilter}
         isReportsOwnerView={isReportsOwnerView}
         showLiveTitlePrompt={showLiveTitlePrompt}

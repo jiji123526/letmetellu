@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useLocale } from "@/hooks/useLocale";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 
 interface PlusMenuProps {
   anchorRect: DOMRect;
@@ -11,6 +12,7 @@ interface PlusMenuProps {
   isFrozen?: boolean;
   liveActive?: boolean;
   inLiveMode?: boolean;
+  ownerPlan?: OwnerPlanState | null;
   onPhoto: () => void;
   onDmToggle: () => void;
   onFreezeToggle?: () => void;
@@ -41,6 +43,7 @@ export function PlusMenu({
   isFrozen,
   liveActive,
   inLiveMode,
+  ownerPlan,
   onPhoto,
   onDmToggle,
   onFreezeToggle,
@@ -53,6 +56,8 @@ export function PlusMenu({
 }: PlusMenuProps) {
   const { t } = useLocale();
   const menuRef = useRef<HTMLDivElement>(null);
+  const freezeLocked = isAdmin && ownerPlan ? !ownerPlan.features.channelFreeze : false;
+  const liveLocked = isAdmin && ownerPlan ? !ownerPlan.features.liveSessions : false;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -79,6 +84,17 @@ export function PlusMenu({
     cursor: "pointer",
     borderBottom: "0.5px solid var(--hairline)",
     whiteSpace: "nowrap",
+    lineHeight: 1,
+  };
+
+  const badgeStyle: React.CSSProperties = {
+    marginLeft: "auto",
+    padding: "3px 7px",
+    borderRadius: "999px",
+    background: "#fff5d6",
+    color: "#9a6700",
+    fontSize: "11px",
+    fontWeight: 700,
     lineHeight: 1,
   };
 
@@ -146,15 +162,31 @@ export function PlusMenu({
         {t("photoBtn")}
       </button>
       {isAdmin && onFreezeToggle && (
-        <button style={{ ...itemStyle, borderBottom: "0.5px solid var(--hairline)" }} onClick={() => { onFreezeToggle(); onClose(); }}>
+        <button
+          style={{
+            ...itemStyle,
+            borderBottom: "0.5px solid var(--hairline)",
+            opacity: freezeLocked ? 0.72 : 1,
+          }}
+          onClick={() => { onFreezeToggle(); onClose(); }}
+        >
           <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M17 7l-10 10M2 12h20M7 7l10 10"/></svg>` }} />
-          {isFrozen ? t("unfreezeChat") : t("freezeChat")}
+          <span>{isFrozen ? t("unfreezeChat") : t("freezeChat")}</span>
+          {freezeLocked ? <span style={badgeStyle}>{t("plusBadge")}</span> : null}
         </button>
       )}
       {isAdmin && onLiveToggle && (
-        <button style={{ ...itemStyle, borderBottom: (onNotice || (inLiveMode && onEmojiPreset)) ? "0.5px solid var(--hairline)" : "none" }} onClick={() => { onLiveToggle(); onClose(); }}>
+        <button
+          style={{
+            ...itemStyle,
+            borderBottom: (onNotice || (inLiveMode && onEmojiPreset)) ? "0.5px solid var(--hairline)" : "none",
+            opacity: liveLocked ? 0.72 : 1,
+          }}
+          onClick={() => { onLiveToggle(); onClose(); }}
+        >
           <span className="flex-shrink-0" dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93a10 10 0 0 1 14.14 0"/><path d="M7.76 7.76a6 6 0 0 1 8.48 0"/></svg>` }} />
-          {liveActive ? t("liveStop") : t("liveStart")}
+          <span>{liveActive ? t("liveStop") : t("liveStart")}</span>
+          {liveLocked ? <span style={badgeStyle}>{t("plusBadge")}</span> : null}
         </button>
       )}
       {isAdmin && onNotice && (

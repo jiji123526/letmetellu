@@ -13,6 +13,7 @@ import {
   type UploadPurpose,
   type UploadResult,
 } from "./api-core";
+import type { OwnerPlanState } from "./owner-plan";
 
 let mockApiPromise: Promise<typeof import("./mock-api")> | null = null;
 const initRequests = new Map<string, Promise<unknown>>();
@@ -46,6 +47,7 @@ export interface OwnerModerationStateResponse {
     status: "active" | "warned" | "suspended" | "frozen";
     petitionStatus: "none" | "open" | "accepted" | "rejected";
   };
+  ownerPlan?: OwnerPlanState;
 }
 
 export class MediaUploadTooLargeError extends Error {

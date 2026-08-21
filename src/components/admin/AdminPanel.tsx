@@ -5,12 +5,14 @@ import { useEffect, useState, useRef } from "react";
 import { adminAction, uploadAdminImage } from "@/lib/api-chat";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { useLocale } from "@/hooks/useLocale";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 import { ProfileImageCropper } from "./ProfileImageCropper";
 
 interface AdminPanelProps {
   channelId: string;
   channelName: string;
   profileImage: string | null;
+  ownerPlan: OwnerPlanState | null;
   currentColor: string;
   backgroundType: "default" | "color" | "image";
   backgroundColor: string | null;
@@ -96,8 +98,9 @@ function darkenColor(hex: string, amount: number): string {
 interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; }
 
 export function AdminPanel(props: AdminPanelProps) {
-  const { channelId, channelName, profileImage, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onPasscodeChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
+  const { channelId, channelName, profileImage, ownerPlan, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onPasscodeChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
   const { t } = useLocale();
+  const appearanceLocked = ownerPlan ? !ownerPlan.features.channelCustomization : false;
   const [view, setView] = useState<PanelView>("main");
   const [nameInput, setNameInput] = useState(channelName);
   const [selectedColor, setSelectedColor] = useState(currentColor);
@@ -180,8 +183,8 @@ export function AdminPanel(props: AdminPanelProps) {
 
   const channelItems: MenuItem[] = [
     { key: "profile", label: t("profile"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`, arrow: "›" },
-    { key: "color", label: t("color"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: "›" },
-    { key: "background", label: t("chatBackground"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>`, arrow: "›" },
+    { key: "color", label: t("color"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: appearanceLocked ? t("plusBadge") : "›", arrowColor: appearanceLocked ? "#9a6700" : undefined },
+    { key: "background", label: t("chatBackground"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>`, arrow: appearanceLocked ? t("plusBadge") : "›", arrowColor: appearanceLocked ? "#9a6700" : undefined },
     { key: "passcode", label: t("passcode"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "›" },
     { key: "rules", label: t("rules"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>`, arrow: "›" },
     { key: "welcome", label: t("welcomePopup"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "›" },
@@ -267,7 +270,16 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {/* Content */}
         {view === "main" && renderMenuList(mainItems)}
-        {view === "channel" && renderMenuList(channelItems)}
+        {view === "channel" && (
+          <>
+            {appearanceLocked && (
+              <div style={{ margin: "12px 18px 4px", padding: "10px 12px", borderRadius: "12px", background: "#fff7df", color: "#7c5b00", fontSize: "12px", lineHeight: 1.45 }}>
+                {t("plusCustomizationLockedNote")}
+              </div>
+            )}
+            {renderMenuList(channelItems)}
+          </>
+        )}
         {view === "manage" && renderMenuList(manageItems)}
 
         {/* Profile panel */}
@@ -363,6 +375,11 @@ export function AdminPanel(props: AdminPanelProps) {
         {/* Color panel */}
         {view === "color" && (
           <div style={{ padding: "12px 18px" }}>
+            {appearanceLocked && (
+              <div style={{ marginBottom: "14px", padding: "10px 12px", borderRadius: "12px", background: "#fff7df", color: "#7c5b00", fontSize: "12px", lineHeight: 1.45 }}>
+                {t("plusCustomizationLockedNote")}
+              </div>
+            )}
             <div style={{ fontSize: "13px", color: "var(--meta)", textAlign: "center", marginBottom: "16px" }}>{t("colorDesc")}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px", width: "200px", margin: "0 auto", justifyItems: "center", padding: "2px" }}>
               {BUBBLE_COLORS.map((color) => (
@@ -387,6 +404,11 @@ export function AdminPanel(props: AdminPanelProps) {
 
         {view === "background" && (
           <div style={{ padding: "14px 18px 18px" }}>
+            {appearanceLocked && (
+              <div style={{ marginBottom: "14px", padding: "10px 12px", borderRadius: "12px", background: "#fff7df", color: "#7c5b00", fontSize: "12px", lineHeight: 1.45 }}>
+                {t("plusCustomizationLockedNote")}
+              </div>
+            )}
             <div
               style={{
                 height: "150px",

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  buildOwnerPlanState,
   DEFAULT_BACKGROUND_OVERLAY,
   DEFAULT_BUBBLE_COLOR,
   FREE_OWNED_CHANNEL_LIMIT,
@@ -15,12 +16,38 @@ const adminSource = readFileSync(
   new URL("../src/routes/admin.ts", import.meta.url),
   "utf8",
 );
+const userSource = readFileSync(
+  new URL("../src/routes/user.ts", import.meta.url),
+  "utf8",
+);
+const channelStateSource = readFileSync(
+  new URL("../src/routes/channel-state.ts", import.meta.url),
+  "utf8",
+);
 
 test("plan feature gates expose the chosen free and plus ownership limits", () => {
   assert.equal(FREE_OWNED_CHANNEL_LIMIT, 1);
   assert.equal(PLUS_OWNED_CHANNEL_LIMIT, 5);
   assert.equal(getOwnedChannelLimit(false), 1);
   assert.equal(getOwnedChannelLimit(true), 5);
+  assert.deepEqual(buildOwnerPlanState(false), {
+    hasPlus: false,
+    ownedChannelLimit: 1,
+    features: {
+      channelCustomization: false,
+      channelFreeze: false,
+      liveSessions: false,
+    },
+  });
+  assert.deepEqual(buildOwnerPlanState(true), {
+    hasPlus: true,
+    ownedChannelLimit: 5,
+    features: {
+      channelCustomization: true,
+      channelFreeze: true,
+      liveSessions: true,
+    },
+  });
 });
 
 test("premium appearance gate ignores default resets but catches paid-only customization writes", () => {
@@ -61,4 +88,11 @@ test("admin route applies plus gates to ownership, freeze, live and customizatio
   assert.match(adminSource, /feature: "channel_customization"/);
   assert.match(adminSource, /owned_channel_limit: ownedChannelLimit/);
   assert.match(adminSource, /requires_plus: !hasPlus/);
+});
+
+test("owner plan snapshots are exposed through user and channel-state reads", () => {
+  assert.match(userSource, /hasActivePlusEntitlement\(env, userId\)/);
+  assert.match(userSource, /owner_plan: buildOwnerPlanState\(hasPlus\)/);
+  assert.match(channelStateSource, /hasActivePlusEntitlement\(env, userId\)/);
+  assert.match(channelStateSource, /ownerPlan: buildOwnerPlanState\(hasPlus\)/);
 });

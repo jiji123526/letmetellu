@@ -11,6 +11,7 @@ import { removeRecentChannel } from "@/lib/recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
 import { readChannelAppearance, readChannelBackground } from "@/lib/channel-background-cache";
+import type { OwnerPlanState } from "@/lib/owner-plan";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import type { Message, MessagePageCursor } from "./chatTypes";
@@ -155,6 +156,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [petitionEnabled, setPetitionEnabled] = useState(true);
   const [dmEnabled, setDmEnabled] = useState(true);
   const [ownerModeration, setOwnerModeration] = useState<InitData["ownerModeration"]>();
+  const [ownerPlan, setOwnerPlan] = useState<OwnerPlanState | null>(null);
   const [viewerModerationStatus, setViewerModerationStatus] = useState<InitData["viewerModerationStatus"]>(null);
   const [viewerAccess, setViewerAccess] = useState<InitData["viewerAccess"]>("standard");
   const [localBubbleColor, setLocalBubbleColor] = useState<string | null>(() => {
@@ -481,6 +483,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setPetitionEnabled,
     setDmEnabled,
     setOwnerModeration,
+    setOwnerPlan,
     setLocalBubbleColor,
     setBanner,
     setPasscodeGate,
@@ -1177,6 +1180,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         dmMode={dmMode}
         liveActive={liveActive}
         inLiveMode={inLiveMode}
+        ownerPlan={ownerPlan}
         reportsOwnerFilter={reportsOwnerFilter}
         isReportsOwnerView={isReportsOwnerView}
         showModerationPetitionDialog={showModerationPetitionDialog}
