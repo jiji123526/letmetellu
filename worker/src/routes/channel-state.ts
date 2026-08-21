@@ -1,6 +1,10 @@
 import { getChannelModeration } from "../lib/channel-moderation";
 import { buildOwnerPlanState } from "../lib/plan-feature-gates";
-import { ensureBetaGrandfatheredPlusEntitlement, hasActivePlusEntitlement } from "../lib/plan-entitlements";
+import {
+  buildOwnerPlanBillingSummary,
+  ensureBetaGrandfatheredPlusEntitlement,
+  readActivePlusEntitlement,
+} from "../lib/plan-entitlements";
 import { getParentChannelId } from "../lib/special-channels";
 import type { Env } from "../types";
 
@@ -48,9 +52,9 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
       LIMIT 1
     `).bind(channelId).first<{ is_frozen: number }>()
     : null;
-  const [moderation, hasPlus] = await Promise.all([
+  const [moderation, activePlusEntitlement] = await Promise.all([
     getChannelModeration(parentChannelId, env),
-    hasActivePlusEntitlement(env, userId),
+    readActivePlusEntitlement(env, userId),
   ]);
 
   return Response.json({
@@ -64,6 +68,9 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
       status: moderation.status,
       petitionStatus: moderation.petition_status,
     },
-    ownerPlan: buildOwnerPlanState(hasPlus),
+    ownerPlan: {
+      ...buildOwnerPlanState(Boolean(activePlusEntitlement)),
+      billingSummary: buildOwnerPlanBillingSummary(activePlusEntitlement),
+    },
   });
 }

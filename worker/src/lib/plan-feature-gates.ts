@@ -3,9 +3,18 @@ export const PLUS_OWNED_CHANNEL_LIMIT = 5;
 export const DEFAULT_BUBBLE_COLOR = "#3598fe";
 export const DEFAULT_BACKGROUND_OVERLAY = 14;
 
+export interface OwnerPlanBillingSummary {
+  sourceType: string;
+  provider: string | null;
+  currentPeriodEndsAt: string | null;
+  autoRenews: boolean;
+  isGrandfathered: boolean;
+}
+
 export interface OwnerPlanState {
   hasPlus: boolean;
   ownedChannelLimit: number;
+  billingSummary?: OwnerPlanBillingSummary | null;
   features: {
     channelCustomization: boolean;
     channelFreeze: boolean;

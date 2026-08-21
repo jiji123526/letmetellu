@@ -2,7 +2,11 @@ import { Env } from "../types";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { deleteChannel } from "../lib/channel-cleanup";
 import { buildOwnerPlanState } from "../lib/plan-feature-gates";
-import { ensureBetaGrandfatheredPlusEntitlement, hasActivePlusEntitlement } from "../lib/plan-entitlements";
+import {
+  buildOwnerPlanBillingSummary,
+  ensureBetaGrandfatheredPlusEntitlement,
+  readActivePlusEntitlement,
+} from "../lib/plan-entitlements";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -29,7 +33,7 @@ async function readUserState(
   userId: string,
   reportsChannelId: string | null,
 ) {
-  const [channelsResult, preferences, isPlatformAdmin, hasPlus] = await Promise.all([
+  const [channelsResult, preferences, isPlatformAdmin, activePlusEntitlement] = await Promise.all([
     env.DB.prepare(
       `WITH owner_channels AS (
          SELECT channels.id, channels.owner_uid, channels.name, channels.profile_image,
@@ -71,7 +75,7 @@ async function readUserState(
     env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
       .bind(userId).first<{ font_size: number | null; locale: string | null }>(),
     isReportsChannelOwner(userId, env),
-    hasActivePlusEntitlement(env, userId),
+    readActivePlusEntitlement(env, userId),
   ]);
 
   return {
@@ -79,7 +83,10 @@ async function readUserState(
     font_size: preferences?.font_size ?? null,
     locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
     is_platform_admin: isPlatformAdmin,
-    owner_plan: buildOwnerPlanState(hasPlus),
+    owner_plan: {
+      ...buildOwnerPlanState(Boolean(activePlusEntitlement)),
+      billingSummary: buildOwnerPlanBillingSummary(activePlusEntitlement),
+    },
   };
 }
 

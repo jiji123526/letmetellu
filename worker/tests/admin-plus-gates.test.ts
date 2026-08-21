@@ -24,6 +24,10 @@ const channelStateSource = readFileSync(
   new URL("../src/routes/channel-state.ts", import.meta.url),
   "utf8",
 );
+const dashboardSource = readFileSync(
+  new URL("../../src/app/dashboard/page.tsx", import.meta.url),
+  "utf8",
+);
 const plusMenuSource = readFileSync(
   new URL("../../src/components/chat/PlusMenu.tsx", import.meta.url),
   "utf8",
@@ -101,11 +105,11 @@ test("admin route applies plus gates to ownership, freeze, live and customizatio
 test("owner plan snapshots are exposed through user and channel-state reads", () => {
   assert.match(userSource, /ensureBetaGrandfatheredPlusEntitlement\(env, user\.id\)/);
   assert.match(userSource, /ensureBetaGrandfatheredPlusEntitlement\(env, canonicalUserId\)/);
-  assert.match(userSource, /hasActivePlusEntitlement\(env, userId\)/);
-  assert.match(userSource, /owner_plan: buildOwnerPlanState\(hasPlus\)/);
+  assert.match(userSource, /readActivePlusEntitlement\(env, userId\)/);
+  assert.match(userSource, /billingSummary: buildOwnerPlanBillingSummary\(activePlusEntitlement\)/);
   assert.match(channelStateSource, /ensureBetaGrandfatheredPlusEntitlement\(env, userId\)/);
-  assert.match(channelStateSource, /hasActivePlusEntitlement\(env, userId\)/);
-  assert.match(channelStateSource, /ownerPlan: buildOwnerPlanState\(hasPlus\)/);
+  assert.match(channelStateSource, /readActivePlusEntitlement\(env, userId\)/);
+  assert.match(channelStateSource, /billingSummary: buildOwnerPlanBillingSummary\(activePlusEntitlement\)/);
 });
 
 test("plus-locked owner UI disables freeze, live and customization controls before mutation", () => {
@@ -115,4 +119,7 @@ test("plus-locked owner UI disables freeze, live and customization controls befo
   assert.match(adminPanelSource, /disabled=\{item\.disabled === true\}/);
   assert.match(adminPanelSource, /if \(appearanceLocked && \(key === "color" \|\| key === "background"\)\) return;/);
   assert.match(adminPanelSource, /disabled=\{appearanceLocked\}/);
+  assert.match(dashboardSource, /ownerPlan\.billingSummary/);
+  assert.match(dashboardSource, /dashboardPlanGrandfatheredNote/);
+  assert.match(dashboardSource, /dashboardPlanRenewsOn/);
 });

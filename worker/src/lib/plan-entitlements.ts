@@ -1,4 +1,5 @@
 import type { Env } from "../types.ts";
+import type { OwnerPlanBillingSummary } from "./plan-feature-gates.ts";
 
 export interface ActiveUserEntitlement {
   id: string;
@@ -127,5 +128,18 @@ export function buildImageQuotaActorIdentity(input: {
     primaryType: "anonymous",
     secondaryKey: deviceId ? `device:${deviceId}` : null,
     secondaryType: deviceId ? "device" : null,
+  };
+}
+
+export function buildOwnerPlanBillingSummary(
+  entitlement: ActiveUserEntitlement | null | undefined,
+): OwnerPlanBillingSummary | null {
+  if (!entitlement) return null;
+  return {
+    sourceType: entitlement.source_type,
+    provider: entitlement.provider,
+    currentPeriodEndsAt: entitlement.ends_at,
+    autoRenews: Number(entitlement.auto_renews) === 1,
+    isGrandfathered: entitlement.source_type === "grandfathered_beta",
   };
 }

@@ -54,6 +54,7 @@ import {
 } from "@/lib/dashboard-performance";
 import { fetchCurrentUserState } from "@/lib/current-user-state";
 import type { OwnerPlanState } from "@/lib/owner-plan";
+import type { LocaleKeys } from "@/lib/locales/ko";
 
 interface Channel {
   id: string;
@@ -159,6 +160,39 @@ function formatDurationMinutes(minutes: number, locale: "ko" | "en") {
   if (hours < 24) return locale === "ko" ? `${hours}시간` : `${hours}h`;
   const days = Math.floor(hours / 24);
   return locale === "ko" ? `${days}일` : `${days}d`;
+}
+
+function getOwnerPlanStatusNote(
+  ownerPlan: OwnerPlanState | null,
+  locale: "ko" | "en",
+  t: (key: Extract<
+    LocaleKeys,
+    | "dashboardPlanActiveNote"
+    | "dashboardPlanFreeNote"
+    | "dashboardPlanGrandfatheredNote"
+    | "dashboardPlanRenewsOn"
+    | "dashboardPlanEndsOn"
+  >) => string,
+): string {
+  if (!ownerPlan?.hasPlus || !ownerPlan.billingSummary) {
+    return t("dashboardPlanFreeNote");
+  }
+  if (ownerPlan.billingSummary.isGrandfathered) {
+    return t("dashboardPlanGrandfatheredNote");
+  }
+  if (ownerPlan.billingSummary.autoRenews && ownerPlan.billingSummary.currentPeriodEndsAt) {
+    return t("dashboardPlanRenewsOn").replace(
+      "{date}",
+      formatDate(ownerPlan.billingSummary.currentPeriodEndsAt, locale),
+    );
+  }
+  if (ownerPlan.billingSummary.currentPeriodEndsAt) {
+    return t("dashboardPlanEndsOn").replace(
+      "{date}",
+      formatDate(ownerPlan.billingSummary.currentPeriodEndsAt, locale),
+    );
+  }
+  return t("dashboardPlanActiveNote");
 }
 
 function getChannelPreviewColor(channelId: string, fallback: string) {
@@ -493,6 +527,14 @@ function DashboardPageContent() {
   const ownedChannelLimit = ownerPlan?.ownedChannelLimit || 1;
   const ownedChannelCount = channels.length;
   const createLimitReached = ownedChannelCount >= ownedChannelLimit;
+  const ownerPlanStatusNote = getOwnerPlanStatusNote(ownerPlan, locale, t);
+  const ownerPlanStatusBadge = ownerPlan?.hasPlus && ownerPlan.billingSummary
+    ? ownerPlan.billingSummary.isGrandfathered
+      ? t("dashboardPlanGrandfatheredBadge")
+      : ownerPlan.billingSummary.autoRenews
+        ? t("dashboardPlanAutorenewBadge")
+        : t("dashboardPlanExpiresBadge")
+    : null;
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -1917,6 +1959,43 @@ function DashboardPageContent() {
           />
         )}
 
+        {isLoggedIn && ownerPlan && (
+          <section className="px-4 pt-3 pb-1">
+            <div className="rounded-[16px] p-3" style={{ background: "var(--card)" }}>
+              <div className="flex items-center gap-2">
+                <span
+                  className="rounded-full px-2 py-1 text-[11px] font-semibold"
+                  style={{
+                    background: ownerPlan.hasPlus ? "#fff5d6" : "var(--bg)",
+                    color: ownerPlan.hasPlus ? "#9a6700" : "var(--meta)",
+                  }}
+                >
+                  {ownerPlan.hasPlus ? t("planPlus") : t("planFree")}
+                </span>
+                {ownerPlanStatusBadge ? (
+                  <span
+                    className="rounded-full px-2 py-1 text-[11px] font-semibold"
+                    style={{
+                      background: ownerPlan.billingSummary?.isGrandfathered ? "#e8f6ee" : "#eef2ff",
+                      color: ownerPlan.billingSummary?.isGrandfathered ? "#166534" : "#3730a3",
+                    }}
+                  >
+                    {ownerPlanStatusBadge}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-2 text-[14px] font-medium" style={{ color: "var(--gray-text)" }}>
+                {t("dashboardChannelSlots")
+                  .replace("{count}", String(ownedChannelCount))
+                  .replace("{limit}", String(ownedChannelLimit))}
+              </div>
+              <div className="mt-1 text-[12px]" style={{ color: "var(--meta)" }}>
+                {ownerPlanStatusNote}
+              </div>
+            </div>
+          </section>
+        )}
+
         {isPlatformAdmin && platformDashboard?.support_stats && (
           <section className="px-4 pt-3 pb-1">
             <div className="rounded-[16px] p-3 flex flex-wrap gap-2" style={{ background: "var(--card)" }}>
@@ -2280,10 +2359,19 @@ function DashboardPageContent() {
               <span style={{ color: "var(--gray-text)", fontWeight: 600 }}>
                 {ownerPlan?.hasPlus ? t("planPlus") : t("planFree")}
               </span>
+              {ownerPlanStatusBadge ? (
+                <>
+                  {" · "}
+                  <span style={{ fontWeight: 600 }}>{ownerPlanStatusBadge}</span>
+                </>
+              ) : null}
               {" · "}
               {t("dashboardChannelSlots")
                 .replace("{count}", String(ownedChannelCount))
                 .replace("{limit}", String(ownedChannelLimit))}
+              <div className="mt-1" style={{ color: "var(--meta)" }}>
+                {ownerPlanStatusNote}
+              </div>
             </div>
             <label className="block text-[12px] font-medium mb-1.5">{t("channelName")}</label>
             <input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={30} className="w-full rounded-[11px] outline-none text-[15px] mb-4" style={{ border: "1px solid var(--input-border)", padding: "11px 12px", boxSizing: "border-box", background: "var(--input-bg)", color: "var(--gray-text)" }} />

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  buildOwnerPlanBillingSummary,
   buildImageQuotaActorIdentity,
   ensureBetaGrandfatheredPlusEntitlement,
   hasActivePlusEntitlement,
@@ -69,6 +70,32 @@ test("image quota actor identity falls back to anonymous and device keys", () =>
 
 test("image quota actor identity returns null without usable identifiers", () => {
   assert.equal(buildImageQuotaActorIdentity({}), null);
+});
+
+test("owner plan billing summary exposes grandfathered and renewal state", () => {
+  assert.deepEqual(buildOwnerPlanBillingSummary({
+    id: "entitlement-1",
+    user_id: "user-1",
+    provider: null,
+    plan: "plus",
+    status: "active",
+    starts_at: "2026-08-01T00:00:00.000Z",
+    ends_at: null,
+    source_order_id: null,
+    source_type: "grandfathered_beta",
+    provider_customer_id: null,
+    provider_subscription_id: null,
+    auto_renews: 0,
+    grandfathered_channel_id: null,
+    created_at: "2026-08-01T00:00:00.000Z",
+    updated_at: "2026-08-01T00:00:00.000Z",
+  }), {
+    sourceType: "grandfathered_beta",
+    provider: null,
+    currentPeriodEndsAt: null,
+    autoRenews: false,
+    isGrandfathered: true,
+  });
 });
 
 test("active plus entitlement lookup reads current active rows only", async () => {

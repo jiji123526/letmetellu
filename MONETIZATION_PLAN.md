@@ -27,6 +27,7 @@ Uncommitted in progress after `5df0016`:
 - Active Plus users, including `grandfathered_beta`, are blocked from creating redundant checkout orders so beta users cannot accidentally enter a paid flow.
 - Extended the skeleton with a first confirmation path that validates provider success payloads against the stored order before writing `payments` and `user_entitlements`.
 - Added the first idempotent webhook reconciliation path so cancellation and refund events are durably recorded in `billing_webhook_events` and reflected back into orders, payments and entitlements.
+- Extended the owner plan snapshot so dashboard and owner reads can show whether Plus is grandfathered, auto-renewing or time-bounded, instead of exposing only a bare `hasPlus` flag.
 
 `0dfdb7d` Add monetization foundation and plus owner gates
 
