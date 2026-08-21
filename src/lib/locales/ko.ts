@@ -40,6 +40,7 @@ export const ko = {
   sendFailed: "전송 실패",
   deleteFailed: "삭제 실패",
   mediaTooLarge: "미디어 용량이 너무 큽니다 (파일당 최대 10MB)",
+  imageQuotaExceeded: "오늘 무료 이미지 5개를 모두 사용했습니다",
   plusRequiredFreeze: "채팅 동결은 Plus에서 사용할 수 있습니다",
   plusRequiredCustomization: "채널 꾸미기는 Plus에서 사용할 수 있습니다",
   plusRequiredLive: "라이브 시작은 Plus에서 사용할 수 있습니다",

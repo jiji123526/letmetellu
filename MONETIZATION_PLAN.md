@@ -38,6 +38,9 @@ Uncommitted in progress after `12a04fb`:
 - Added regression coverage for subscription state reads, self-serve cancellation and the three-strike renewal-failure cap.
 - Started the Phase 4 participant-identity extension by forwarding authenticated account identity through ordinary anonymous message and upload proxies in a dedicated trusted header, while keeping the public sender UID anonymous.
 - The Worker now preserves that authenticated participant identity on message and DM upload tickets so later image-quota and entitlement checks can key off the account without rewriting the visible anonymous message model.
+- Started Phase 5 by adding a shared accepted-image quota helper with Plus bypass, authenticated-account preference and anonymous-device secondary enforcement.
+- Enforced the free daily image quota at message acceptance time for public messages, live messages, DM sends and owner DM replies instead of charging at upload-ticket creation time.
+- Added client-facing quota-reached messaging and regression coverage for Plus bypass, anonymous secondary checks and route wiring.
 
 `0dfdb7d` Add monetization foundation and plus owner gates
 
@@ -63,7 +66,7 @@ Chosen direction as of 2026-08-21:
 
 - Launch Plus with advertisement removal, customization controls, image-quota exceptions and automatic renewal.
 - Make live-session creation and channel freezing Plus-only owner features.
-- Free image policy: five successful image messages per user per calendar day, resetting at server-defined midnight.
+- Free image policy: five successful image messages per user per calendar day, resetting at midnight KST.
 - Count successful accepted image messages, not upload attempts. Failed uploads, rejected sends and ambiguous retries must not consume the daily allowance.
 - Plus image exception scope: all supported image surfaces while the user is entitled, including public channel messages, live-channel messages and owner DMs.
 - Entitlement scope: the paying user keeps the Plus image exception in any channel, not only in channels they own.
@@ -403,7 +406,6 @@ Do not optimize for ad views alone. The primary health measures are successful c
 ## Remaining implementation clarifications
 
 - Which provider and payment-method scope will back automatic renewal at launch if recurring Korean wallets are required.
-- Which timezone defines the “daily” reset for the five-image Free quota.
 - Whether image-quota bypass in “all channels” also includes every DM and live-message surface from day one or rolls out in phases.
 - Final VAT-exclusive price points, public storefront wording and refund calculations after tax and PG review.
 - The exact placement and maximum frequency of non-rewarded advertisements in free-owned channels.

@@ -42,6 +42,7 @@ export const en: Record<LocaleKeys, string> = {
   sendFailed: "Failed to send",
   deleteFailed: "Failed to delete",
   mediaTooLarge: "Media is too large (10MB max per file)",
+  imageQuotaExceeded: "You have used all 5 free image messages for today.",
   plusRequiredFreeze: "Chat freezing is available with Plus.",
   plusRequiredCustomization: "Channel customization is available with Plus.",
   plusRequiredLive: "Starting live is available with Plus.",

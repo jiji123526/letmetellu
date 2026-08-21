@@ -1,6 +1,7 @@
 import type { Env } from "../types.ts";
 import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity.ts";
 import { getReportsChannelOwnerId, isReportsChannel } from "../lib/special-channels.ts";
+import { prepareAcceptedImageQuotaConsumption } from "../lib/image-quota.ts";
 import { attachUploadTicket } from "../lib/upload-tickets.ts";
 import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation.ts";
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
@@ -232,6 +233,19 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
 
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
+    const imageQuotaConsumption = image
+      ? await prepareAcceptedImageQuotaConsumption(env, {
+          authenticatedUserId: trustedUserId,
+          channelId: dm.channel_id,
+          recordType: "dm_reply",
+          recordId: id,
+          now: createdAt,
+        })
+      : null;
+    if (imageQuotaConsumption && !imageQuotaConsumption.ok) {
+      const status = imageQuotaConsumption.error === "image_quota_identity_missing" ? 401 : 403;
+      return Response.json({ error: imageQuotaConsumption.error }, { status });
+    }
     let result: D1Result;
     try {
       result = await env.DB.prepare(`
@@ -299,6 +313,9 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
         await env.DB.prepare("DELETE FROM dm_replies WHERE id = ?").bind(id).run();
         return Response.json({ error: attachment.error }, { status: 400 });
       }
+    }
+    if (imageQuotaConsumption?.statement) {
+      await imageQuotaConsumption.statement.run();
     }
 
     await chatRoom.fetch(new Request("http://internal/broadcast", {
@@ -523,6 +540,20 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     }
 
     const id = crypto.randomUUID();
+    const imageQuotaConsumption = image
+      ? await prepareAcceptedImageQuotaConsumption(env, {
+          authenticatedUserId: trustedAuthenticatedUserId,
+          anonymousUid: requesterUid,
+          deviceId: requesterDeviceId,
+          channelId: channel_id as string,
+          recordType: "dm",
+          recordId: id,
+        })
+      : null;
+    if (imageQuotaConsumption && !imageQuotaConsumption.ok) {
+      const status = imageQuotaConsumption.error === "image_quota_identity_missing" ? 401 : 403;
+      return Response.json({ error: imageQuotaConsumption.error }, { status });
+    }
     if (image) {
       if (typeof upload_id !== "string" || !upload_id) {
         return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
@@ -565,6 +596,7 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
             (record_id, record_type, channel_id, uid, device_id_hash, created_at)
            VALUES (?, 'dm', ?, ?, ?, ?)`
         ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
+        ...(imageQuotaConsumption?.statement ? [imageQuotaConsumption.statement] : []),
       ]);
     } catch (error) {
       const duplicate = await env.DB.prepare(

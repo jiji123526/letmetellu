@@ -821,6 +821,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       dmDisabledMessage: t("dmDisabledMessage"),
       sendFailed: t("sendFailed"),
       mediaTooLarge: t("mediaTooLarge"),
+      imageQuotaExceeded: t("imageQuotaExceeded"),
       blockReason: t("blockReason"),
       petitionPrefix: t("petitionPrefix"),
       petitionSent: t("petitionSent"),

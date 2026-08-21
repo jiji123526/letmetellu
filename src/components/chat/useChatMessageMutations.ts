@@ -56,6 +56,7 @@ interface MutationText {
   dmDisabledMessage: string;
   sendFailed: string;
   mediaTooLarge: string;
+  imageQuotaExceeded: string;
   blockReason: string;
   petitionPrefix: string;
   petitionSent: string;
@@ -248,6 +249,8 @@ export function useChatMessageMutations({
       setBanner({ text: text.dmReplyMediaLimit, color: "#d32f2f" });
     } else if (error === "media_too_large") {
       setBanner({ text: text.mediaTooLarge, color: "#d32f2f" });
+    } else if (error === "image_quota_exceeded") {
+      setBanner({ text: text.imageQuotaExceeded, color: "#d32f2f" });
     } else {
       setBanner({ text: text.sendFailed, color: "#d32f2f" });
     }
@@ -264,6 +267,7 @@ export function useChatMessageMutations({
     text.dmReplyMediaLimit,
     text.messageTooLong,
     text.mediaTooLarge,
+    text.imageQuotaExceeded,
     text.moderationFrozenBanner,
     text.ownerSuspendedBanner,
     text.petitionExists,

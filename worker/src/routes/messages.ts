@@ -7,6 +7,7 @@ import { deleteMediaByUrl } from "../lib/media.ts";
 import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
+import { prepareAcceptedImageQuotaConsumption } from "../lib/image-quota.ts";
 import { syncMessageLink, syncNewMessageLink } from "../lib/message-links.ts";
 import { recordOperationalEvent, withOperationalErrorContext } from "../lib/operational-events.ts";
 import { getTrustedAuthenticatedUserId } from "../lib/trusted-identity.ts";
@@ -322,6 +323,20 @@ export async function handleMessages(
       // The gallery consistency trigger mirrors image messages in the same D1
       // transaction, including later delete and undo state changes.
       const id = crypto.randomUUID();
+      const imageQuotaConsumption = image
+        ? await prepareAcceptedImageQuotaConsumption(env, {
+            authenticatedUserId: trustedAuthenticatedUserId,
+            anonymousUid: isChannelOwner ? null : requesterUid,
+            deviceId: isChannelOwner ? null : requesterDeviceId,
+            channelId: requestChannelId,
+            recordType: "message",
+            recordId: id,
+          })
+        : null;
+      if (imageQuotaConsumption && !imageQuotaConsumption.ok) {
+        const status = imageQuotaConsumption.error === "image_quota_identity_missing" ? 401 : 403;
+        return Response.json({ error: imageQuotaConsumption.error }, { status });
+      }
       if (image) {
         routeStage = "attach_upload_ticket";
         if (typeof upload_id !== "string" || !upload_id) {
@@ -382,6 +397,9 @@ export async function handleMessages(
              VALUES (?, 'message', ?, ?, ?, ?)`
           ).bind(id, parentChannelId, senderUid, deviceIdHash, created_at)
         );
+      }
+      if (imageQuotaConsumption?.statement) {
+        stmts.push(imageQuotaConsumption.statement);
       }
       routeStage = "persist_message_batch";
       try {
