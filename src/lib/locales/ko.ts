@@ -394,7 +394,7 @@ export const ko = {
   emojiPresetBtn: "이모지 프리셋",
 
   // Login
-  appName: "렛츠플레이",
+  appName: "yap.",
   appDesc: "나만의 익명 채팅방 만들기",
   loginTab: "로그인",
   signupTab: "가입하기",

@@ -396,7 +396,7 @@ export const en: Record<LocaleKeys, string> = {
   emojiPresetBtn: "Emoji Presets",
 
   // Login
-  appName: "letsplay",
+  appName: "yap.",
   appDesc: "Create your own anonymous chat room",
   loginTab: "Log In",
   signupTab: "Sign Up",
