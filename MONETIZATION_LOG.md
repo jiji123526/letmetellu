@@ -9,6 +9,11 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Frontend CSP allows the official Toss SDK
+
+- Added the exact `https://js.tosspayments.com` origin to `script-src` so SDK v2 can load its standard payment script.
+- Kept the existing restrictive policy for frames and outbound connections instead of allowing broad Toss wildcards.
+
 #### Yearly Plus pricing highlights its discount
 
 - Compare the 365-day price against twelve 30-day payments using the server-returned catalog amounts.

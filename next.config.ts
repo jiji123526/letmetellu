@@ -23,6 +23,7 @@ function buildContentSecurityPolicy() {
   const scriptSrc = [
     "'self'",
     "'unsafe-inline'",
+    "https://js.tosspayments.com",
     ...(process.env.NODE_ENV === "production" ? [] : ["'unsafe-eval'"]),
   ];
   const connectSrc = [
