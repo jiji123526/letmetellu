@@ -62,25 +62,21 @@ const featureIcons = [
   { icon: <FreezeIcon />, color: "#edf7ff" },
 ];
 
-const guideIcons = [
-  "↗",
-  "5",
-  (
-    <svg key="profile" viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" />
-    </svg>
-  ),
-  <BackgroundIcon key="background" />,
-  <WelcomeIcon key="welcome" />,
-  <PasscodeIcon key="passcode" />,
-  <DmIcon key="dm" />,
-  <FreezeIcon key="freeze" size={17} />,
-  "◉",
-  "!",
-  "⊘",
-  "⚑",
-];
+const ProfileIcon = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="8" r="3.5" />
+    <path d="M5.5 20c.5-4 2.7-6 6.5-6s6 2 6.5 6" />
+  </svg>
+);
+
+const ColorIcon = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" className="block" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="8.5" cy="14" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="15.5" cy="14" r="1.2" fill="currentColor" stroke="none" />
+  </svg>
+);
 
 export function FirstChannelOnboarding({ onCreated, onClose, onBetaCapacityReached }: FirstChannelOnboardingProps) {
   const { t } = useLocale();
@@ -101,24 +97,25 @@ export function FirstChannelOnboarding({ onCreated, onClose, onBetaCapacityReach
   const stepIndex = step === "features" ? 0 : step === "create" ? 1 : 2;
   const createFieldsValid = Boolean(name.trim()) && /^[a-z0-9-]{3,30}$/.test(slug.trim());
   const features = [
-    [t("firstOnboardingPrivateTitle"), t("firstOnboardingPrivateDesc")],
-    [t("firstOnboardingDmTitle"), t("firstOnboardingDmDesc")],
-    [t("firstOnboardingLiveTitle"), t("firstOnboardingLiveDesc")],
-    [t("firstOnboardingControlTitle"), t("firstOnboardingControlDesc")],
+    { title: t("firstOnboardingPrivateTitle"), description: t("firstOnboardingPrivateDesc"), premium: false },
+    { title: t("firstOnboardingDmTitle"), description: t("firstOnboardingDmDesc"), premium: false },
+    { title: t("firstOnboardingLiveTitle"), description: t("firstOnboardingLiveDesc"), premium: true },
+    { title: t("firstOnboardingControlTitle"), description: t("firstOnboardingControlDesc"), premium: true },
   ];
   const guides = [
-    [t("firstGuideInviteTitle"), t("firstGuideInviteDesc")],
-    [t("firstGuideLimitTitle"), t("firstGuideLimitDesc")],
-    [t("firstGuideProfileTitle"), t("firstGuideProfileDesc")],
-    [t("firstGuideBackgroundTitle"), t("firstGuideBackgroundDesc")],
-    [t("firstGuideWelcomeTitle"), t("firstGuideWelcomeDesc")],
-    [t("firstGuidePasscodeTitle"), t("firstGuidePasscodeDesc")],
-    [t("firstGuideDmTitle"), t("firstGuideDmDesc")],
-    [t("firstGuideFreezeTitle"), t("firstGuideFreezeDesc")],
-    [t("firstGuideLiveTitle"), t("firstGuideLiveDesc")],
-    [t("firstGuideNoticeTitle"), t("firstGuideNoticeDesc")],
-    [t("firstGuideBlockTitle"), t("firstGuideBlockDesc")],
-    [t("firstGuideSafetyTitle"), t("firstGuideSafetyDesc")],
+    { title: t("firstGuideInviteTitle"), description: t("firstGuideInviteDesc"), icon: "↗", premium: false },
+    { title: t("firstGuideLimitTitle"), description: t("firstGuideLimitDesc"), icon: "5", premium: false },
+    { title: t("firstGuideProfileTitle"), description: t("firstGuideProfileDesc"), icon: <ProfileIcon />, premium: false },
+    { title: t("firstGuideColorTitle"), description: t("firstGuideColorDesc"), icon: <ColorIcon />, premium: true },
+    { title: t("firstGuideBackgroundTitle"), description: t("firstGuideBackgroundDesc"), icon: <BackgroundIcon />, premium: true },
+    { title: t("firstGuideWelcomeTitle"), description: t("firstGuideWelcomeDesc"), icon: <WelcomeIcon />, premium: false },
+    { title: t("firstGuidePasscodeTitle"), description: t("firstGuidePasscodeDesc"), icon: <PasscodeIcon />, premium: false },
+    { title: t("firstGuideDmTitle"), description: t("firstGuideDmDesc"), icon: <DmIcon />, premium: false },
+    { title: t("firstGuideFreezeTitle"), description: t("firstGuideFreezeDesc"), icon: <FreezeIcon size={17} />, premium: true },
+    { title: t("firstGuideLiveTitle"), description: t("firstGuideLiveDesc"), icon: "◉", premium: true },
+    { title: t("firstGuideNoticeTitle"), description: t("firstGuideNoticeDesc"), icon: "!", premium: false },
+    { title: t("firstGuideBlockTitle"), description: t("firstGuideBlockDesc"), icon: "⊘", premium: false },
+    { title: t("firstGuideSafetyTitle"), description: t("firstGuideSafetyDesc"), icon: "⚑", premium: false },
   ];
 
   useEffect(() => {
@@ -293,12 +290,17 @@ export function FirstChannelOnboarding({ onCreated, onClose, onBetaCapacityReach
                 <p className="mt-2 mb-0 text-[14px] leading-[1.5]" style={{ color: "var(--meta)" }}>{t("firstOnboardingDesc")}</p>
               </div>
               <div className="rounded-[16px] overflow-hidden" style={{ background: "var(--card)" }}>
-                {features.map(([title, description], index) => (
-                  <div key={title} className="flex gap-3 px-4 py-4" style={{ borderBottom: index < features.length - 1 ? "0.5px solid #dedee3" : "none" }}>
+                {features.map((feature, index) => (
+                  <div key={feature.title} className="flex gap-3 px-4 py-4" style={{ borderBottom: index < features.length - 1 ? "0.5px solid #dedee3" : "none" }}>
                     <span className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-[18px] font-semibold" style={{ background: featureIcons[index].color, color: "#007aff" }}>{featureIcons[index].icon}</span>
                     <div className="min-w-0">
-                      <h3 className="m-0 text-[15px] font-semibold">{title}</h3>
-                      <p className="mt-1 mb-0 text-[13px] leading-[1.45]" style={{ color: "var(--secondary-text)" }}>{description}</p>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="m-0 text-[15px] font-semibold">{feature.title}</h3>
+                        {feature.premium && (
+                          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#fff5d6", color: "#9a6700" }}>{t("plusBadge")}</span>
+                        )}
+                      </div>
+                      <p className="mt-1 mb-0 text-[13px] leading-[1.45]" style={{ color: "var(--secondary-text)" }}>{feature.description}</p>
                     </div>
                   </div>
                 ))}
@@ -337,12 +339,17 @@ export function FirstChannelOnboarding({ onCreated, onClose, onBetaCapacityReach
                 <p className="mt-2 mb-0 text-[14px]" style={{ color: "var(--meta)" }}>{t("firstGuideDesc")}</p>
               </div>
               <div className="rounded-[16px] overflow-hidden" style={{ background: "var(--card)" }}>
-                {guides.map(([title, description], index) => (
-                  <div key={title} className="flex gap-3 px-4 py-3.5" style={{ borderBottom: index < guides.length - 1 ? "0.5px solid #dedee3" : "none" }}>
-                    <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[15px] font-semibold" style={{ background: "#eaf3ff", color: "#007aff" }}>{guideIcons[index]}</span>
+                {guides.map((guide, index) => (
+                  <div key={guide.title} className="flex gap-3 px-4 py-3.5" style={{ borderBottom: index < guides.length - 1 ? "0.5px solid #dedee3" : "none" }}>
+                    <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[15px] font-semibold" style={{ background: "#eaf3ff", color: "#007aff" }}>{guide.icon}</span>
                     <div>
-                      <h3 className="m-0 text-[14px] font-semibold">{title}</h3>
-                      <p className="mt-0.5 mb-0 text-[12px] leading-[1.45]" style={{ color: "var(--secondary-text)" }}>{description}</p>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="m-0 text-[14px] font-semibold">{guide.title}</h3>
+                        {guide.premium && (
+                          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "#fff5d6", color: "#9a6700" }}>{t("plusBadge")}</span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 mb-0 text-[12px] leading-[1.45]" style={{ color: "var(--secondary-text)" }}>{guide.description}</p>
                     </div>
                   </div>
                 ))}

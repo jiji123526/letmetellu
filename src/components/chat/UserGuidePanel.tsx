@@ -36,6 +36,12 @@ export function UserGuidePanel({ onClose }: { onClose: () => void }) {
         { ...guideParts(t("userGuideLive")), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>` },
       ],
     },
+    {
+      title: t("userGuideImagesTitle"),
+      entries: [
+        { ...guideParts(t("userGuideImageQuota")), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>` },
+      ],
+    },
   ];
 
   return (

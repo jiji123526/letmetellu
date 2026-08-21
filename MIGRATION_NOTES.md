@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Paid capabilities are identified in onboarding and guides — 2026-08-21
+
+- First-channel onboarding now marks bubble color, chat background, chat freeze and live-session controls with the existing paid-plan badge. The channel-count explanation now accurately distinguishes one free channel from five paid channels.
+- The reusable admin guide marks the same four owner controls without duplicating the guide into a separate paid-only document.
+- The general user guide adds one short image section: free users can send five images per Korean calendar day, while signed-in paid users are exempt from the daily count limit in supported channels.
+- A successfully confirmed Toss checkout now presents a compact activation card with the five unlocked benefit groups and two actions: create another channel or open the existing admin guide. It appears only in the payment-completion flow and adds no recurring dashboard modal or seen-state storage.
+- Korean user-facing plan terminology is consistently rendered as `플러스`, `무료`, `이미지 전송 한도`, `라이브`, `채팅 얼리기` and `비밀 메시지`; untranslated English plan terms are excluded from Korean locale values.
+
+Trade-off: paid badges explain availability but do not deep-link each individual guide row into its corresponding setting. The activation card intentionally reuses the admin guide rather than introducing a second guide whose content could drift.
+
+Deployment note: frontend-only. No Worker deployment or D1 migration is required for these guide and activation-card changes.
+
 ### Abandoned checkout clears pending billing state — 2026-08-21
 
 - The Plus details panel no longer displays or resumes a previously prepared order. Billing-state reads now return only the plan catalog, active entitlement and subscription snapshot, removing the pending-order query from every panel load.
