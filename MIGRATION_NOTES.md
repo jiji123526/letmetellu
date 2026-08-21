@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Plus expiry retains one writable channel — 2026-08-21
+
+- Migration `0058_channel_retention_choices.sql` stores one owner-scoped retained-channel choice and its effective date. It does not store lock flags on channels.
+- Owners with a finite, non-renewing Plus period and more than one channel can choose the channel that remains active. Cancellation and a terminal third renewal failure create a default choice from the most recently active owned channel.
+- After entitlement expiry, lock state is derived from the current entitlement, owned-channel count and retained choice. The retained channel stays writable; other owned channels remain readable but reject messages, private messages, reactions, edits, uploads and owner settings with `channel_plan_locked`.
+- Channel deletion remains available so an owner can reduce the account to one channel. Reports channels, support flows, account preferences, channel visits and report submission are outside the lock.
+- Chat initialization and dashboard state expose the derived lock. The dashboard marks read-only channels, while chat disables the composer, attachments and owner mutation controls without blocking history or realtime reads.
+- Locked-channel messages, media and premium appearance values remain stored. Their paid appearance is hidden while locked; the retained Free channel is reset to default appearance. Renewal removes all locks immediately and restores retained appearance on formerly locked channels.
+- Active live sessions are ended on locked-channel initialization or scheduled maintenance. Manual live ending remains available as a cleanup exception.
+
+Trade-off: mutation paths perform one indexed lock-state query before channel writes. Retaining locked channels and premium media uses storage, but avoids destructive downgrade behavior and makes renewal restoration immediate. The retained-channel activity lookup runs only for owner billing/dashboard state and selection, not on every mutation.
+
+Deployment note: apply migration `0058` before deploying the Worker, then deploy the frontend. For preview:
+
+```bash
+cd worker
+npx wrangler d1 migrations apply letsplay-db-preview --env preview --remote
+npx wrangler deploy --env preview
+```
+
+No R2 migration is required.
+
 ### Personal bubble colors require viewer Plus — 2026-08-21
 
 - Chat initialization now returns a viewer-specific Plus capability independently from the channel owner's plan. This lets a paid non-owner personalize outgoing bubbles without granting channel administration.

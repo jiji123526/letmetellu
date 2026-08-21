@@ -21,6 +21,7 @@ import {
   stageMessageDeletion,
   undoPendingDeletion,
 } from "../lib/pending-admin-deletions";
+import { readChannelPlanLockState } from "../lib/channel-plan-locks";
 
 function normalizeBubbleColor(value: unknown): unknown {
   return typeof value === "string" && value.toLowerCase() === "#3b8df0"
@@ -118,6 +119,16 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       .bind(channel_id).first();
     if (!channel || channel.owner_uid !== userId) {
       return Response.json({ error: "not owner" }, { status: 403 });
+    }
+    const planLockChannelId = channel_id.endsWith("_live")
+      ? channel_id.replace(/_live$/, "")
+      : channel_id;
+    if (
+      action !== "delete-channel"
+      && action !== "end-live"
+      && (await readChannelPlanLockState(env, planLockChannelId)).locked
+    ) {
+      return Response.json({ error: "channel_plan_locked" }, { status: 403 });
     }
 
     const moderation = await getChannelModeration(channel_id, env);

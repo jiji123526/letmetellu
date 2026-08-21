@@ -95,6 +95,9 @@ interface ChatViewBottomShellProps {
   onOpenModerationPetition: () => void;
   viewerModerationBlocked: boolean;
   moderationFrozenBannerLabel: string;
+  planLocked: boolean;
+  planLockedInputLabel: string;
+  planLockedBannerLabel: string;
   photoInputRef: RefObject<HTMLInputElement | null>;
   onPhotoSelect: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   onOpenPlusMenu: (rect: DOMRect) => void;
@@ -144,6 +147,9 @@ export function ChatViewBottomShell({
   onOpenModerationPetition,
   viewerModerationBlocked,
   moderationFrozenBannerLabel,
+  planLocked,
+  planLockedInputLabel,
+  planLockedBannerLabel,
   photoInputRef,
   onPhotoSelect,
   onOpenPlusMenu,
@@ -173,9 +179,11 @@ export function ChatViewBottomShell({
 }: ChatViewBottomShellProps) {
   const viewerInputBlocked = isUserBlocked && (hasPetitioned || !petitionEnabled);
   const composerFrozenForViewer = isFrozen && !effectiveAdmin && !dmMode;
-  const plusDisabled = viewerInputBlocked || ownerModerationBlocked;
-  const inputDisabled = ownerModerationBlocked || composerFrozenForViewer || viewerInputBlocked;
-  const composerBackground = ownerModerationBlocked
+  const plusDisabled = viewerInputBlocked || ownerModerationBlocked || planLocked;
+  const inputDisabled = ownerModerationBlocked || composerFrozenForViewer || viewerInputBlocked || planLocked;
+  const composerBackground = planLocked
+    ? "rgba(0,0,0,.03)"
+    : ownerModerationBlocked
     ? "rgba(139,92,246,.06)"
     : composerFrozenForViewer
     ? "rgba(0,0,0,.03)"
@@ -184,7 +192,9 @@ export function ChatViewBottomShell({
     : dmMode
     ? "rgba(155,89,182,.05)"
     : "var(--input-bg)";
-  const composerBorder = ownerModerationBlocked
+  const composerBorder = planLocked
+    ? "1px solid #d1d5db"
+    : ownerModerationBlocked
     ? "1px solid rgba(139,92,246,.28)"
     : composerFrozenForViewer
     ? "1px solid #ccc"
@@ -193,7 +203,9 @@ export function ChatViewBottomShell({
     : dmMode
     ? "1px solid #7b3fa0"
     : "1px solid var(--input-border)";
-  const inputPlaceholder = ownerModerationBlocked
+  const inputPlaceholder = planLocked
+    ? planLockedInputLabel
+    : ownerModerationBlocked
     ? ownerSuspendedInputLabel
     : viewerModerationBlocked
     ? moderationFrozenInputLabel
@@ -206,8 +218,11 @@ export function ChatViewBottomShell({
     : dmMode
     ? sentToAdminLabel
     : messageInputLabel;
-  const inputColor = ownerModerationBlocked || composerFrozenForViewer ? "#999" : "var(--gray-text)";
-  const canSend = !!(input.trim() || pendingPhotos.length > 0) && !ownerModerationBlocked && !composerFrozenForViewer;
+  const inputColor = ownerModerationBlocked || composerFrozenForViewer || planLocked ? "#999" : "var(--gray-text)";
+  const canSend = !!(input.trim() || pendingPhotos.length > 0)
+    && !ownerModerationBlocked
+    && !composerFrozenForViewer
+    && !planLocked;
 
   return (
     <>
@@ -312,6 +327,22 @@ export function ChatViewBottomShell({
         </div>
       )}
 
+      {planLocked && (
+        <div
+          className="flex-none"
+          style={{
+            padding: "10px 14px",
+            background: "rgba(107,114,128,.08)",
+            borderTop: "0.5px solid rgba(107,114,128,.18)",
+            color: "#4b5563",
+            fontSize: "calc(var(--bubble-font-size) - 4px)",
+            lineHeight: 1.45,
+          }}
+        >
+          {planLockedBannerLabel}
+        </div>
+      )}
+
       <footer
         className="flex-none flex items-end gap-2"
         style={{
@@ -381,7 +412,7 @@ export function ChatViewBottomShell({
               overflowY: "auto",
             }}
           />
-          {inLiveMode && !isUserBlocked && !ownerModerationBlocked && (
+          {inLiveMode && !isUserBlocked && !ownerModerationBlocked && !planLocked && (
             <EmojiBar channelId={channelId} presets={emojiPresets} onBroadcast={onBroadcastEmoji} />
           )}
           {(canSend || isSending) && (

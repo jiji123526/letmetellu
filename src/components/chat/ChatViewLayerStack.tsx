@@ -224,7 +224,7 @@ export function ChatViewLayerStack({
         onCloseModerationPetitionDialog={overlayCallbacks.closeModerationPetitionDialog}
         onCloseOwnerChannels={adminUi.closeOwnerChannels}
         onViewerColorChange={settingsActions.handleViewerColorChange}
-        onSettingsAdmin={effectiveAdmin && !ownerModerationBlocked ? adminUi.openAdminPanel : undefined}
+        onSettingsAdmin={canUseAdminMutations ? adminUi.openAdminPanel : undefined}
         onCloseSettings={adminUi.closeSettings}
         onLoadMoreGallery={adminUi.loadMoreGallery}
         onViewGalleryImage={overlayCallbacks.viewGalleryImage}
@@ -250,7 +250,7 @@ export function ChatViewLayerStack({
         onFreezeToggle={canUseAdminMutations ? adminUi.handleAdminFreezeToggle : undefined}
         onLiveToggle={canUseAdminMutations ? adminUi.handleAdminLiveToggle : undefined}
         onPlusNotice={canUseAdminMutations ? adminUi.openNoticeEdit : undefined}
-        onPlusEmojiPreset={adminUi.openEmojiPreset}
+        onPlusEmojiPreset={canUseAdminMutations ? adminUi.openEmojiPreset : undefined}
         onReportFilterSelect={onReportFilterSelect}
         onClosePlusMenu={overlayCallbacks.closePlusMenu}
         onLiveStart={overlayCallbacks.startLiveFromPrompt}

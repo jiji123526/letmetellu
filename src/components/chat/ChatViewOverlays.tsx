@@ -150,7 +150,7 @@ interface ChatViewOverlaysProps {
   onFreezeToggle?: () => void;
   onLiveToggle?: () => void;
   onPlusNotice?: () => void;
-  onPlusEmojiPreset: () => void;
+  onPlusEmojiPreset?: () => void;
   onReportFilterSelect?: (filter: "open" | "warned" | "frozen") => void;
   onClosePlusMenu: () => void;
   onLiveStart: (title: string) => Promise<void>;

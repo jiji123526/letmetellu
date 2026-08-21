@@ -81,7 +81,7 @@ test("persisted appearance reset clears premium fields without deleting media ob
   assert.doesNotMatch(queries[0], /DELETE/i);
 });
 
-test("downgrade wiring resets stored appearance on public and owner read paths", () => {
+test("downgrade wiring preserves locked appearance and resets only the retained channel", () => {
   const initRouteSource = readFileSync(
     new URL("../src/routes/init.ts", import.meta.url),
     "utf8",
@@ -101,8 +101,12 @@ test("downgrade wiring resets stored appearance on public and owner read paths",
 
   assert.match(initRouteSource, /resetPersistedChannelAppearanceIfNeeded\(env, parentChannelId, channel\)/);
   assert.match(initRouteSource, /channel = applyFreeChannelAppearance\(channel\)/);
-  assert.match(userRouteSource, /await resetOwnedChannelAppearancesIfNeeded\(env, userId\)/);
-  assert.match(userRouteSource, /await resetOwnedChannelAppearancesIfNeeded\(env, profileOwnerUid\)/);
+  assert.match(
+    userRouteSource,
+    /resetPersistedChannelAppearanceIfNeeded\(env, channelRetention\.retainedChannelId\)/,
+  );
+  assert.doesNotMatch(userRouteSource, /resetOwnedChannelAppearancesIfNeeded/);
+  assert.match(userRouteSource, /activePlusEntitlement \? channel : applyFreeChannelAppearance\(channel\)/);
   assert.match(channelStateSource, /appearance_version: getChannelAppearanceVersion\(responseAppearance\)/);
   assert.match(bootstrapSource, /function reconcileBubbleOverride/);
   assert.match(bootstrapSource, /localStorage\.removeItem\(`bubbleColor_\$\{channelId\}`\)/);

@@ -29,9 +29,11 @@ Chosen direction as of 2026-08-21:
 - Entitlement scope: the paying user keeps the Plus image exception in any channel, not only in channels they own.
 - Quota identity: use authenticated account ID when available; otherwise use anonymous UID with device-based checks as a secondary anti-abuse backstop.
 - Free plan ownership is limited to one channel. Owning more than one channel is a Plus benefit rather than an ad-gated Free action.
+- When a finite Plus entitlement becomes non-renewing, let the owner choose one channel to retain. After expiry, other owned channels remain readable but become read-only until Plus returns.
+- Default the retained choice to the most recently active owned channel on cancellation or terminal renewal failure. Keep channel deletion available during the lock.
 - Beta users should receive permanent account-level Plus benefits through a non-billable `grandfathered_beta` entitlement, not through coupons.
 - Current authenticated beta accounts should be backfilled into that permanent Plus cohort, and new authenticated accounts created during the beta should receive the same entitlement automatically while the beta-grandfathering flag is enabled.
-- Downgrade behavior: reset premium customization values to defaults, lock premium rendering and controls, retain uploaded premium background media for later cleanup rather than deleting it immediately.
+- Downgrade behavior: reset the retained Free channel to default appearance. Preserve premium appearance values and media on read-only channels but render Free defaults until renewal.
 - Pricing should be stored and modeled as VAT-exclusive until tax and storefront display rules are finalized.
 
 Implementation consequences:
@@ -39,6 +41,7 @@ Implementation consequences:
 - Account-wide sender entitlements require the message-send and upload flows to recognize a paid authenticated user even when that person is participating as an ordinary non-owner visitor.
 - Automatic renewal narrows the viable Korean payment-method set if Toss automatic billing is used; domestic easy-pay wallets are not automatically covered by that product.
 - Granting automatic Plus to beta users requires one permanent, non-billable entitlement source that remains distinguishable from paid subscriptions in analytics and support tooling.
+- Deriving channel locks from live entitlements instead of persisted flags makes renewal unlock immediate and avoids a reconciliation job, at the cost of one lock-state query on protected mutation paths.
 
 ## Recommended beta implementation order
 

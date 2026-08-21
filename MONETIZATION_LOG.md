@@ -9,6 +9,14 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Expired Plus retains one active channel
+
+- Added an owner-selected retained channel for accounts that will end Plus with more than one owned channel. Cancellation and the third renewal failure choose the most recently active channel by default.
+- Made every other owned channel read-only after expiry while preserving its messages and media. Message, private-message, upload and owner-setting writes are rejected by the Worker; channel reads and deletion remain available.
+- Added the channel chooser and lock status to the dashboard and a dedicated read-only state to chat. Renewing Plus removes all derived locks immediately.
+- Preserved paid appearance data on read-only channels for renewal, while the one retained Free channel is reset to default appearance. Active live sessions are ended when their parent channel locks.
+- Added migration `0058_channel_retention_choices.sql`, route wiring and regression coverage.
+
 #### Personal bubble colors require Plus
 
 - Added a viewer-specific entitlement snapshot to chat initialization so a paid participant does not depend on the channel owner's plan.

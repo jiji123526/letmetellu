@@ -56,6 +56,7 @@ import {
   cancelBillingSubscription,
   createBillingOrder,
   fetchBillingState,
+  selectBillingRetentionChannel,
   type BillingStateResponse,
 } from "@/lib/api-billing";
 import { fetchCurrentUserState } from "@/lib/current-user-state";
@@ -72,6 +73,7 @@ interface Channel {
   has_passcode: number;
   owner_name: string | null;
   live_active: number;
+  plan_locked?: boolean;
 }
 
 async function fetchPublicChannelStates(channelIds: string[]): Promise<Channel[]> {
@@ -128,6 +130,7 @@ interface DashboardListItem {
   pinned: boolean;
   activityAt: string;
   liveActive: boolean;
+  planLocked?: boolean;
 }
 
 const ADMIN_DASHBOARD_POLL_MS = 60000;
@@ -426,6 +429,8 @@ function DashboardPageContent() {
   const [checkoutStartError, setCheckoutStartError] = useState("");
   const [billingCancelLoading, setBillingCancelLoading] = useState(false);
   const [billingCancelError, setBillingCancelError] = useState("");
+  const [retentionSelectionLoading, setRetentionSelectionLoading] = useState<string | null>(null);
+  const [retentionSelectionError, setRetentionSelectionError] = useState("");
   const [loadingMorePlatformTickets, setLoadingMorePlatformTickets] = useState(false);
   const [platformTicketFilter, setPlatformTicketFilter] = useState<PlatformTicketFilter>(null);
   const [supportPreview, setSupportPreview] = useState<SupportDashboardPreview | null>(() => readStoredSupportTicketPreview());
@@ -578,6 +583,13 @@ function DashboardPageContent() {
   const billingSubscriptionStatusLabel = billingSubscription
     ? getBillingSubscriptionStatusLabel(billingSubscription.status, t)
     : null;
+  const channelRetention = billingState?.channel_retention || (ownerPlan?.channelRetention ? {
+    owned_channel_count: ownerPlan.channelRetention.ownedChannelCount,
+    retained_channel_id: ownerPlan.channelRetention.retainedChannelId,
+    effective_at: ownerPlan.channelRetention.effectiveAt,
+    selection_required: ownerPlan.channelRetention.selectionRequired,
+    locks_active: ownerPlan.channelRetention.locksActive,
+  } : null);
 
   const loadBillingState = useCallback(async () => {
     if (!authenticatedUserId) return;
@@ -649,6 +661,27 @@ function DashboardPageContent() {
       setBillingCancelLoading(false);
     }
   }, [billingCancelLoading, loadBillingState, loadChannels, t]);
+
+  const selectRetainedChannel = useCallback(async (channelId: string) => {
+    if (retentionSelectionLoading) return;
+    setRetentionSelectionLoading(channelId);
+    setRetentionSelectionError("");
+    try {
+      const response = await selectBillingRetentionChannel(channelId);
+      if (!response.ok || !response.channel_retention) {
+        throw new Error(response.error || "selection_failed");
+      }
+      setBillingState((current) => current ? {
+        ...current,
+        channel_retention: response.channel_retention,
+      } : current);
+      await loadChannels();
+    } catch {
+      setRetentionSelectionError(t("dashboardRetentionSelectionFailed"));
+    } finally {
+      setRetentionSelectionLoading(null);
+    }
+  }, [loadChannels, retentionSelectionLoading, t]);
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -1276,6 +1309,7 @@ function DashboardPageContent() {
           pinned: channel.id === prioritizedOwnedId,
           activityAt: channel.last_message_at || channel.created_at,
           liveActive: channel.live_active === 1,
+          planLocked: channel.plan_locked === true,
         }))
       .sort((left, right) =>
         Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId)
@@ -1299,6 +1333,7 @@ function DashboardPageContent() {
         pinned: channel.id === prioritizedOwnedId,
         activityAt: new Date(channel.lastVisitedAt).toISOString(),
         liveActive: channel.liveActive === true,
+        planLocked: false,
       }))
       .sort((left, right) => Number(right.id === prioritizedOwnedId) - Number(left.id === prioritizedOwnedId));
     const recentItems: DashboardListItem[] = recentChannels
@@ -1319,6 +1354,7 @@ function DashboardPageContent() {
           pinned: channel.pinned,
           activityAt: new Date(channel.lastVisitedAt).toISOString(),
           liveActive: channel.liveActive === true,
+          planLocked: false,
         }))
       .sort((left, right) => Number(right.pinned) - Number(left.pinned));
     const items: DashboardListItem[] = isPlatformAdmin
@@ -1341,6 +1377,7 @@ function DashboardPageContent() {
         pinned: false,
         activityAt: linkedChannel.created_at,
         liveActive: linkedChannel.live_active === 1,
+        planLocked: false,
       });
     }
     const platformItems: DashboardListItem[] = [];
@@ -2426,6 +2463,14 @@ function DashboardPageContent() {
                             <span className="text-[10px] font-semibold" style={{ color: "#c0392b" }}>LIVE</span>
                           </span>
                         )}
+                        {item.planLocked && (
+                          <span
+                            className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ background: "#f2f2f7", color: "#6b7280" }}
+                          >
+                            {t("dashboardRetentionLockedBadge")}
+                          </span>
+                        )}
                       </div>
                       <span className="ml-3 text-[13px] whitespace-nowrap" style={{ color: "var(--meta)" }}>{item.time}</span>
                       <span className="ml-2 text-[19px] font-light leading-none" style={{ color: "#c7c7cc" }}>›</span>
@@ -2549,7 +2594,13 @@ function DashboardPageContent() {
         >
           <div
             className="w-full max-w-[410px] rounded-[20px] p-6"
-            style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 24px 70px rgba(0,0,0,.22)" }}
+            style={{
+              maxHeight: "calc(100dvh - 40px)",
+              overflowY: "auto",
+              background: "var(--bg)",
+              color: "var(--gray-text)",
+              boxShadow: "0 24px 70px rgba(0,0,0,.22)",
+            }}
           >
             <div className="mb-2 flex items-center justify-between">
               <h2 className="m-0 text-[19px] font-semibold">{t("dashboardPlanDetailsTitle")}</h2>
@@ -2613,6 +2664,65 @@ function DashboardPageContent() {
                   {billingSubscription.status === "non_renewing" ? (
                     <div className="mt-1">
                       {t("dashboardPlanCancelPending")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {channelRetention && channelRetention.owned_channel_count > 1
+                && (channelRetention.selection_required || channelRetention.locks_active) ? (
+                <div className="mt-3 rounded-[12px] px-3 py-3" style={{ background: "var(--bg)" }}>
+                  <div className="text-[13px] font-semibold" style={{ color: "var(--gray-text)" }}>
+                    {channelRetention.locks_active
+                      ? t("dashboardRetentionLockedTitle")
+                      : t("dashboardRetentionTitle")}
+                  </div>
+                  <div className="mt-1 text-[12px] leading-[1.45]" style={{ color: "var(--meta)" }}>
+                    {(channelRetention.locks_active
+                      ? t("dashboardRetentionLockedDescription")
+                      : t("dashboardRetentionDescription"))
+                      .replace(
+                        "{date}",
+                        channelRetention.effective_at
+                          ? formatDate(channelRetention.effective_at, locale)
+                          : "",
+                      )}
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {channels.map((channel) => {
+                      const selected = channel.id === channelRetention.retained_channel_id;
+                      const disabled = channelRetention.locks_active
+                        || retentionSelectionLoading !== null;
+                      return (
+                        <button
+                          key={channel.id}
+                          type="button"
+                          disabled={disabled}
+                          className="flex w-full items-center justify-between rounded-[10px] border-none px-3 py-2 text-left"
+                          style={{
+                            background: selected ? "#eaf3ff" : "var(--card)",
+                            color: selected ? "#0066cc" : "var(--gray-text)",
+                            cursor: disabled ? "default" : "pointer",
+                            opacity: retentionSelectionLoading && retentionSelectionLoading !== channel.id ? 0.6 : 1,
+                          }}
+                          onClick={() => void selectRetainedChannel(channel.id)}
+                        >
+                          <span className="truncate text-[13px] font-medium">{channel.name}</span>
+                          <span className="ml-3 flex-shrink-0 text-[11px] font-semibold">
+                            {retentionSelectionLoading === channel.id
+                              ? t("loading")
+                              : selected
+                                ? t("dashboardRetentionKeep")
+                                : channelRetention.locks_active
+                                  ? t("dashboardRetentionLockedBadge")
+                                  : t("dashboardRetentionWillLock")}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {retentionSelectionError ? (
+                    <div className="mt-2 text-[12px]" style={{ color: "#ff3b30" }}>
+                      {retentionSelectionError}
                     </div>
                   ) : null}
                 </div>

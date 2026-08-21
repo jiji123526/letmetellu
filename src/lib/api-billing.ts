@@ -42,6 +42,15 @@ export interface BillingStateResponse {
   plans?: BillingPlanCatalogEntry[];
   active_entitlement?: BillingActiveEntitlement | null;
   subscription?: BillingSubscriptionSnapshot | null;
+  channel_retention?: BillingChannelRetentionSnapshot;
+}
+
+export interface BillingChannelRetentionSnapshot {
+  owned_channel_count: number;
+  retained_channel_id: string | null;
+  effective_at: string | null;
+  selection_required: boolean;
+  locks_active: boolean;
 }
 
 export interface BillingSubscriptionSnapshot {
@@ -112,6 +121,13 @@ export interface BillingCancelResponse {
   error?: string;
   reused?: boolean;
   subscription?: BillingSubscriptionSnapshot | null;
+  channel_retention?: Partial<BillingChannelRetentionSnapshot>;
+}
+
+export interface BillingChannelRetentionResponse {
+  ok?: boolean;
+  error?: string;
+  channel_retention?: BillingChannelRetentionSnapshot;
 }
 
 export interface BillingOrderCancelResponse {
@@ -184,4 +200,16 @@ export async function cancelBillingSubscription(): Promise<BillingCancelResponse
     cache: "no-store",
   });
   return response.json() as Promise<BillingCancelResponse>;
+}
+
+export async function selectBillingRetentionChannel(
+  channelId: string,
+): Promise<BillingChannelRetentionResponse> {
+  const response = await fetch("/api/billing/channel-retention", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel_id: channelId }),
+    cache: "no-store",
+  });
+  return response.json() as Promise<BillingChannelRetentionResponse>;
 }

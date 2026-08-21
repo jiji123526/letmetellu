@@ -2,11 +2,15 @@ import { Env } from "../types";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { deleteChannel } from "../lib/channel-cleanup";
 import { buildOwnerPlanState } from "../lib/plan-feature-gates";
-import { applyFreeChannelAppearance, resetOwnedChannelAppearancesIfNeeded } from "../lib/channel-appearance";
+import {
+  applyFreeChannelAppearance,
+  resetPersistedChannelAppearanceIfNeeded,
+} from "../lib/channel-appearance";
 import {
   buildOwnerPlanBillingSummary,
   ensureBetaGrandfatheredPlusEntitlement,
 } from "../lib/plan-entitlements";
+import { readOwnerChannelRetentionState } from "../lib/channel-plan-locks";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -77,21 +81,35 @@ async function readUserState(
     isReportsChannelOwner(userId, env),
     ensureBetaGrandfatheredPlusEntitlement(env, userId),
   ]);
+  const channelRetention = await readOwnerChannelRetentionState(env, userId);
 
-  if (!activePlusEntitlement) {
-    await resetOwnedChannelAppearancesIfNeeded(env, userId);
+  if (!activePlusEntitlement && channelRetention.retainedChannelId) {
+    await resetPersistedChannelAppearanceIfNeeded(env, channelRetention.retainedChannelId);
   }
 
+  const channels = channelsResult.results.map((channel) => {
+    const planLocked = channelRetention.locksActive
+      && channel.id !== channelRetention.retainedChannelId;
+    return {
+      ...(activePlusEntitlement ? channel : applyFreeChannelAppearance(channel)),
+      plan_locked: planLocked,
+    };
+  });
   return {
-    channels: activePlusEntitlement
-      ? channelsResult.results
-      : channelsResult.results.map((channel) => applyFreeChannelAppearance(channel)),
+    channels,
     font_size: preferences?.font_size ?? null,
     locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
     is_platform_admin: isPlatformAdmin,
     owner_plan: {
       ...buildOwnerPlanState(Boolean(activePlusEntitlement)),
       billingSummary: buildOwnerPlanBillingSummary(activePlusEntitlement),
+      channelRetention: {
+        ownedChannelCount: channelRetention.ownedChannelCount,
+        retainedChannelId: channelRetention.retainedChannelId,
+        effectiveAt: channelRetention.effectiveAt,
+        selectionRequired: channelRetention.selectionRequired,
+        locksActive: channelRetention.locksActive,
+      },
     },
   };
 }
@@ -164,10 +182,6 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
     }
 
     const activePlusEntitlement = await ensureBetaGrandfatheredPlusEntitlement(env, profileOwnerUid);
-    if (!activePlusEntitlement) {
-      await resetOwnedChannelAppearancesIfNeeded(env, profileOwnerUid);
-    }
-
     const { results: channels } = await env.DB.prepare(
       `SELECT id, name, profile_image, bubble_color,
               passcode IS NOT NULL AS has_passcode

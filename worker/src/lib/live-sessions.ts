@@ -110,7 +110,7 @@ export async function resolveActiveLiveSession(
 export async function endLiveSession(
   env: Env,
   channelId: string,
-  reason: "manual" | "expired" = "manual",
+  reason: "manual" | "expired" | "plan_locked" = "manual",
   expectedSessionId: string,
 ): Promise<LiveSessionEndResult> {
   const liveChannelId = `${channelId}_live`;

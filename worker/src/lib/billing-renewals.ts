@@ -2,12 +2,14 @@ import type { Env } from "../types.ts";
 import { calculateBillingEntitlementEndsAt, resolveBillingPlanSelection } from "./billing-plans.ts";
 import {
   BILLING_RENEWAL_BATCH_LIMIT,
+  BILLING_RENEWAL_MAX_FAILURES,
   markBillingSubscriptionRenewalFailed,
   markBillingSubscriptionRenewed,
   readDueBillingSubscriptions,
   type BillingSubscriptionRow,
 } from "./billing-subscriptions.ts";
 import { persistBillingConfirmation, type PendingBillingOrderRow } from "./billing-persistence.ts";
+import { ensureDefaultChannelRetentionChoice } from "./channel-plan-locks.ts";
 
 function getTossApiAuthorizationHeader(secretKey: string): string {
   return `Basic ${btoa(`${secretKey}:`)}`;
@@ -65,6 +67,41 @@ async function markRenewalOrderFailed(env: Env, orderId: string, now: string): P
   `).bind(now, orderId).run();
 }
 
+async function recordRenewalFailure(
+  env: Env,
+  subscription: BillingSubscriptionRow,
+  now: string,
+): Promise<void> {
+  await markBillingSubscriptionRenewalFailed(env, {
+    subscriptionId: subscription.id,
+    failedAt: now,
+    now,
+  });
+  if (Number(subscription.failure_count) + 1 < BILLING_RENEWAL_MAX_FAILURES) {
+    return;
+  }
+
+  await env.DB.prepare(`
+    UPDATE user_entitlements
+    SET auto_renews = 0,
+        updated_at = ?
+    WHERE user_id = ?
+      AND plan = ?
+      AND status = 'active'
+      AND ends_at = ?
+  `).bind(
+    now,
+    subscription.user_id,
+    subscription.plan,
+    subscription.current_period_ends_at,
+  ).run();
+  await ensureDefaultChannelRetentionChoice(
+    env,
+    subscription.user_id,
+    subscription.current_period_ends_at,
+  );
+}
+
 export async function runBillingSubscriptionRenewals(
   env: Env,
   now = new Date().toISOString(),
@@ -91,11 +128,7 @@ export async function runBillingSubscriptionRenewals(
     });
     if (!selection) {
       failed += 1;
-      await markBillingSubscriptionRenewalFailed(env, {
-        subscriptionId: subscription.id,
-        failedAt: now,
-        now,
-      });
+      await recordRenewalFailure(env, subscription, now);
       continue;
     }
 
@@ -132,11 +165,7 @@ export async function runBillingSubscriptionRenewals(
     if (!chargeResponse.ok || !chargeData.paymentKey || !Number.isInteger(chargeData.totalAmount)) {
       failed += 1;
       await markRenewalOrderFailed(env, order.order_id, now);
-      await markBillingSubscriptionRenewalFailed(env, {
-        subscriptionId: subscription.id,
-        failedAt: now,
-        now,
-      });
+      await recordRenewalFailure(env, subscription, now);
       continue;
     }
 
@@ -162,11 +191,7 @@ export async function runBillingSubscriptionRenewals(
     if (!persisted.ok) {
       failed += 1;
       await markRenewalOrderFailed(env, order.order_id, now);
-      await markBillingSubscriptionRenewalFailed(env, {
-        subscriptionId: subscription.id,
-        failedAt: now,
-        now,
-      });
+      await recordRenewalFailure(env, subscription, now);
       continue;
     }
 

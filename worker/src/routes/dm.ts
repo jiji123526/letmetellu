@@ -14,6 +14,7 @@ import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-m
 import { deleteMediaByUrl } from "../lib/media.ts";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
+import { readChannelPlanLockState } from "../lib/channel-plan-locks.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -177,6 +178,9 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     const parentChannelId = dm.channel_id.endsWith("_live")
       ? dm.channel_id.replace(/_live$/, "")
       : dm.channel_id;
+    if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+      return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+    }
     const moderation = await getChannelModeration(parentChannelId, env);
     if (isOwnerModerationBlocked(moderation)) {
       return Response.json({ error: "owner_suspended" }, { status: 403 });
@@ -350,6 +354,9 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     const parentChannelId = channelId.endsWith("_live")
       ? channelId.replace(/_live$/, "")
       : channelId;
+    if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+      return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+    }
     const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
     if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     if (isReportsChannel(parentChannelId, env)) {
@@ -436,6 +443,9 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
     // Passcode gate
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+      return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+    }
     if (isLiveChannel) {
       if (!await ensureActiveLiveSession(env, parentChannelId)) {
         return Response.json({ error: "live_session_ended" }, { status: 403 });

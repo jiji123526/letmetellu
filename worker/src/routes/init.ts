@@ -34,6 +34,7 @@ import {
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
+import { readChannelPlanLockState } from "../lib/channel-plan-locks";
 
 function markProtectedSenders<T extends Record<string, unknown>>(
   rows: T[],
@@ -111,10 +112,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         env,
         (channel as { owner_uid?: string | null }).owner_uid,
       );
-      if (!channelOwnerPlusEntitlement && hasPremiumChannelAppearance(channel as any)) {
+    }
+    const channelPlanLock = await readChannelPlanLockState(env, parentChannelId);
+    if (!reportsChannel && !channelOwnerPlusEntitlement && hasPremiumChannelAppearance(channel as any)) {
+      if (!channelPlanLock.locked) {
         await resetPersistedChannelAppearanceIfNeeded(env, parentChannelId, channel);
-        channel = applyFreeChannelAppearance(channel);
       }
+      channel = applyFreeChannelAppearance(channel);
     }
 
     routeStage = "resolve_viewer_identity";
@@ -363,6 +367,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     if (liveTimelineSessionAfterRead !== undefined) {
       liveStatus = liveTimelineSessionAfterRead;
     }
+    if (channelPlanLock.locked && liveStatus) {
+      routeStage = "end_plan_locked_live_state";
+      await endLiveSession(env, parentChannelId, "plan_locked", liveStatus.sessionId);
+      liveStatus = null;
+    }
 
     routeStage = "finalize_channel_state";
 
@@ -383,6 +392,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     // need to know whether a gate exists, never the hash itself.
     const safeChannel = { ...(responseChannel as Record<string, unknown>) };
     delete safeChannel.passcode;
+    safeChannel.plan_locked = channelPlanLock.locked;
     safeChannel.owner_channel_count = Math.min(
       Number((channel as { owner_channel_count?: unknown }).owner_channel_count) || 0,
       2,

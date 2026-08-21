@@ -103,12 +103,10 @@ test("admin route applies plus gates to ownership, freeze, live and customizatio
 });
 
 test("owner plan snapshots are exposed through user and channel-state reads", () => {
-  assert.match(userSource, /ensureBetaGrandfatheredPlusEntitlement\(env, user\.id\)/);
+  assert.match(userSource, /ensureBetaGrandfatheredPlusEntitlement\(env, userId\)/);
   assert.match(userSource, /ensureBetaGrandfatheredPlusEntitlement\(env, canonicalUserId\)/);
-  assert.match(userSource, /readActivePlusEntitlement\(env, userId\)/);
   assert.match(userSource, /billingSummary: buildOwnerPlanBillingSummary\(activePlusEntitlement\)/);
   assert.match(channelStateSource, /ensureBetaGrandfatheredPlusEntitlement\(env, userId\)/);
-  assert.match(channelStateSource, /readActivePlusEntitlement\(env, userId\)/);
   assert.match(channelStateSource, /billingSummary: buildOwnerPlanBillingSummary\(activePlusEntitlement\)/);
 });
 

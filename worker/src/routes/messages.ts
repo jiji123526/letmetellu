@@ -15,6 +15,7 @@ import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
+import { readChannelPlanLockState } from "../lib/channel-plan-locks.ts";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -180,6 +181,9 @@ export async function handleMessages(
       // Passcode gate — check if channel requires passcode for writing
       liveChannel = requestChannelId.endsWith("_live");
       parentChannelId = liveChannel ? requestChannelId.replace(/_live$/, "") : requestChannelId;
+      if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+        return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+      }
       if (liveChannel) {
         routeStage = "load_live_state";
         if (!await ensureActiveLiveSession(env, parentChannelId)) {
@@ -465,6 +469,9 @@ export async function handleMessages(
       requestChannelId = String(channel_id);
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+        return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+      }
       if (liveChannel) {
         routeStage = "load_live_state";
         if (!await ensureActiveLiveSession(env, parentChannelId)) {
@@ -563,6 +570,9 @@ export async function handleMessages(
       // Passcode gate
       liveChannel = requestChannelId.endsWith("_live");
       parentChannelId = liveChannel ? requestChannelId.replace(/_live$/, "") : requestChannelId;
+      if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+        return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+      }
       if (liveChannel) {
         routeStage = "load_live_state";
         if (!await ensureActiveLiveSession(env, parentChannelId)) {
@@ -693,6 +703,9 @@ export async function handleMessages(
 
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+        return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+      }
       if (liveChannel) {
         routeStage = "load_live_state";
         if (!await ensureActiveLiveSession(env, parentChannelId)) {

@@ -4,6 +4,7 @@ import { endLiveSession, isLiveSessionExpired, parseLiveSessionState } from "./l
 import { cleanupExpiredUploadTickets } from "./upload-tickets";
 import { finalizeExpiredAdminDeletions } from "./pending-admin-deletions";
 import { runBillingSubscriptionRenewals } from "./billing-renewals";
+import { readChannelPlanLockState } from "./channel-plan-locks";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DURABLE_RATE_LIMIT_RETENTION_MS = 7 * DAY_MS;
@@ -85,8 +86,19 @@ async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<numb
   let expiredCount = 0;
   for (const row of results || []) {
     const liveSession = parseLiveSessionState(row.text, row.updated_at);
-    if (!isLiveSessionExpired(liveSession, nowMs)) continue;
-    const result = await endLiveSession(env, row.channel_id, "expired", liveSession!.sessionId);
+    if (!liveSession) continue;
+    const planLocked = (await readChannelPlanLockState(
+      env,
+      row.channel_id,
+      new Date(nowMs).toISOString(),
+    )).locked;
+    if (!planLocked && !isLiveSessionExpired(liveSession, nowMs)) continue;
+    const result = await endLiveSession(
+      env,
+      row.channel_id,
+      planLocked ? "plan_locked" : "expired",
+      liveSession.sessionId,
+    );
     if (result.status === "ended") {
       expiredCount += 1;
     }

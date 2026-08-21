@@ -53,6 +53,7 @@ interface MutationText {
   ownerSuspendedBanner: string;
   moderationFrozenBanner: string;
   chatFrozen: string;
+  channelPlanLocked: string;
   dmDisabledMessage: string;
   sendFailed: string;
   mediaTooLarge: string;
@@ -87,6 +88,7 @@ interface UseChatMessageMutationsArgs {
   ownerModerationBlocked: boolean;
   viewerModerationStatus: "frozen" | null | undefined;
   channelFrozen: boolean;
+  channelPlanLocked: boolean;
   isUserBlocked: boolean;
   setDmMode: Dispatch<SetStateAction<boolean>>;
   setPendingPhotos: Dispatch<SetStateAction<PendingPhoto[]>>;
@@ -139,6 +141,7 @@ export function useChatMessageMutations({
   ownerModerationBlocked,
   viewerModerationStatus,
   channelFrozen,
+  channelPlanLocked,
   isUserBlocked,
   setDmMode,
   setPendingPhotos,
@@ -241,6 +244,8 @@ export function useChatMessageMutations({
         text: viewerModerationStatus === "frozen" ? text.moderationFrozenBanner : text.chatFrozen,
         color: "#4a4d8f",
       });
+    } else if (error === "channel_plan_locked") {
+      setBanner({ text: text.channelPlanLocked, color: "#6b7280" });
     } else if (error === "dm_disabled") {
       setBanner({ text: text.dmDisabledMessage, color: "#d32f2f" });
     } else if (error === "dm_reply_limit") {
@@ -262,6 +267,7 @@ export function useChatMessageMutations({
     text.bannedWord,
     text.blocked,
     text.chatFrozen,
+    text.channelPlanLocked,
     text.dmDisabledMessage,
     text.dmReplyLimit,
     text.dmReplyMediaLimit,
@@ -280,7 +286,12 @@ export function useChatMessageMutations({
 
   const handleSend = useCallback(async () => {
     const nextText = input.trim();
-    if ((!nextText && pendingPhotos.length === 0) || ownerModerationBlocked || (channelFrozen && !effectiveAdmin && !dmMode)) {
+    if (
+      (!nextText && pendingPhotos.length === 0)
+      || ownerModerationBlocked
+      || channelPlanLocked
+      || (channelFrozen && !effectiveAdmin && !dmMode)
+    ) {
       return;
     }
 
@@ -525,6 +536,7 @@ export function useChatMessageMutations({
     authUserId,
     blockedUsers,
     channelFrozen,
+    channelPlanLocked,
     channelId,
     clearReplyingTo,
     clearStoredSendAttempt,

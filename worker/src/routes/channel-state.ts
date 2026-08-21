@@ -11,6 +11,7 @@ import {
 } from "../lib/plan-entitlements";
 import { getParentChannelId, isReportsChannel } from "../lib/special-channels";
 import type { Env } from "../types";
+import { readChannelPlanLockState } from "../lib/channel-plan-locks";
 
 export async function handleChannelState(request: Request, env: Env): Promise<Response> {
   if (request.method !== "GET") {
@@ -66,11 +67,12 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
       LIMIT 1
     `).bind(channelId).first<{ is_frozen: number }>()
     : null;
-  const [moderation, activePlusEntitlement] = await Promise.all([
+  const [moderation, activePlusEntitlement, channelPlanLock] = await Promise.all([
     getChannelModeration(parentChannelId, env),
     ensureBetaGrandfatheredPlusEntitlement(env, userId),
+    readChannelPlanLockState(env, parentChannelId),
   ]);
-  if (!activePlusEntitlement && !isReportsChannel(parentChannelId, env)) {
+  if (!activePlusEntitlement && !isReportsChannel(parentChannelId, env) && !channelPlanLock.locked) {
     await resetPersistedChannelAppearanceIfNeeded(env, parentChannelId, parentChannel);
   }
   const responseAppearance = activePlusEntitlement || isReportsChannel(parentChannelId, env)
@@ -84,6 +86,7 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
       is_frozen: channelId === parentChannelId
         ? parentChannel.is_frozen
         : liveChannel?.is_frozen ?? 0,
+      plan_locked: channelPlanLock.locked,
       bubble_color: responseAppearance.bubble_color,
       appearance_version: getChannelAppearanceVersion(responseAppearance),
       background_type: responseAppearance.background_type,

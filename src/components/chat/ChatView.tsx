@@ -790,6 +790,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     ownerModerationBlocked,
     viewerModerationStatus,
     channelFrozen: !!channel?.is_frozen,
+    channelPlanLocked: channel?.plan_locked === true,
     isUserBlocked,
     setDmMode,
     setPendingPhotos,
@@ -816,6 +817,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       ownerSuspendedBanner: t("ownerSuspendedBanner"),
       moderationFrozenBanner: t("moderationFrozenBanner"),
       chatFrozen: t("chatFrozen"),
+      channelPlanLocked: t("channelPlanLockedBanner"),
       dmDisabledMessage: t("dmDisabledMessage"),
       sendFailed: t("sendFailed"),
       mediaTooLarge: t("mediaTooLarge"),
@@ -833,13 +835,14 @@ export function ChatView({ channelId }: { channelId: string }) {
       undo: t("undo"),
     },
   });
+  const canUsePlanAwareAdminMutations = canUseAdminMutations && channel?.plan_locked !== true;
 
   const contextMenuActions = useChatContextMenuActions({
     channelId,
     inLiveMode,
     effectiveAdmin,
     ownerModerationBlocked,
-    canUseAdminMutations,
+    canUseAdminMutations: canUsePlanAwareAdminMutations,
     contextMenu,
     messages,
     dmMessages,
@@ -1127,6 +1130,9 @@ export function ChatView({ channelId }: { channelId: string }) {
         onOpenModerationPetition={() => setShowModerationPetitionDialog(true)}
         viewerModerationBlocked={viewerModerationBlocked}
         moderationFrozenBannerLabel={t("moderationFrozenBanner")}
+        planLocked={channel?.plan_locked === true}
+        planLockedInputLabel={t("channelPlanLockedInput")}
+        planLockedBannerLabel={t("channelPlanLockedBanner")}
         photoInputRef={photoInputRef}
         onPhotoSelect={handlePhotoSelect}
         onOpenPlusMenu={setPlusMenu}
@@ -1168,7 +1174,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         effectiveAdmin={effectiveAdmin}
         isAdmin={isAdmin}
         ownerModerationBlocked={ownerModerationBlocked}
-        canUseAdminMutations={canUseAdminMutations}
+        canUseAdminMutations={canUsePlanAwareAdminMutations}
         petitionEnabled={petitionEnabled}
         dmEnabled={dmEnabled}
         blockedUsers={blockedUsers}

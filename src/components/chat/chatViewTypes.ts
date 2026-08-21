@@ -20,6 +20,7 @@ export interface Channel {
   profile_image: string | null;
   bubble_color: string;
   is_frozen: number;
+  plan_locked?: boolean;
   notice: string;
   passcode_hint?: string | null;
   owner_name?: string | null;

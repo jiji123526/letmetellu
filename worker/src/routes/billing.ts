@@ -22,6 +22,11 @@ import {
   type PaymentRow,
   type PendingBillingOrderRow,
 } from "../lib/billing-persistence.ts";
+import {
+  ensureDefaultChannelRetentionChoice,
+  readOwnerChannelRetentionState,
+  selectChannelRetentionChoice,
+} from "../lib/channel-plan-locks.ts";
 import { isTrustedInternalRequest } from "../lib/trusted-identity.ts";
 
 interface BillingWebhookEventRow {
@@ -338,9 +343,10 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
   await ensureBetaGrandfatheredPlusEntitlement(env, userId);
 
   const now = new Date().toISOString();
-  const [activeEntitlement, billingSubscription] = await Promise.all([
+  const [activeEntitlement, billingSubscription, channelRetention] = await Promise.all([
     readActivePlusEntitlement(env, userId, now),
     readBillingSubscriptionForUser(env, userId),
+    readOwnerChannelRetentionState(env, userId, now),
   ]);
 
   return Response.json({
@@ -377,6 +383,13 @@ async function handleBillingState(env: Env, userId: string): Promise<Response> {
           canceled_at: billingSubscription.canceled_at,
         } satisfies BillingStateSubscriptionResponse
       : null,
+    channel_retention: {
+      owned_channel_count: channelRetention.ownedChannelCount,
+      retained_channel_id: channelRetention.retainedChannelId,
+      effective_at: channelRetention.effectiveAt,
+      selection_required: channelRetention.selectionRequired,
+      locks_active: channelRetention.locksActive,
+    },
   });
 }
 
@@ -418,6 +431,11 @@ async function handleBillingCancel(env: Env, userId: string): Promise<Response> 
     return Response.json({ error: "subscription_not_found" }, { status: 404 });
   }
   if (subscription.status === "non_renewing" || subscription.status === "canceled") {
+    const channelRetention = await ensureDefaultChannelRetentionChoice(
+      env,
+      userId,
+      subscription.current_period_ends_at,
+    );
     return Response.json({
       ok: true,
       reused: true,
@@ -435,6 +453,11 @@ async function handleBillingCancel(env: Env, userId: string): Promise<Response> 
         failure_count: Number(subscription.failure_count || 0),
         cancel_requested_at: subscription.cancel_requested_at,
         canceled_at: subscription.canceled_at,
+      },
+      channel_retention: {
+        retained_channel_id: channelRetention.retainedChannelId,
+        effective_at: channelRetention.effectiveAt,
+        selection_required: channelRetention.selectionRequired,
       },
     });
   }
@@ -467,6 +490,11 @@ async function handleBillingCancel(env: Env, userId: string): Promise<Response> 
     now,
     subscription.current_period_order_id,
   ).run();
+  const channelRetention = await ensureDefaultChannelRetentionChoice(
+    env,
+    userId,
+    subscription.current_period_ends_at,
+  );
 
   const refreshed = await readBillingSubscriptionForUser(env, userId);
   return Response.json({
@@ -489,6 +517,37 @@ async function handleBillingCancel(env: Env, userId: string): Promise<Response> 
           canceled_at: refreshed.canceled_at,
         } satisfies BillingStateSubscriptionResponse
       : null,
+    channel_retention: {
+      retained_channel_id: channelRetention.retainedChannelId,
+      effective_at: channelRetention.effectiveAt,
+      selection_required: channelRetention.selectionRequired,
+    },
+  });
+}
+
+async function handleChannelRetentionSelection(
+  request: Request,
+  env: Env,
+  userId: string,
+): Promise<Response> {
+  const body = await request.json() as { channel_id?: unknown };
+  const channelId = typeof body.channel_id === "string" ? body.channel_id.trim() : "";
+  if (!/^[a-z0-9-]{3,30}$/.test(channelId)) {
+    return Response.json({ error: "invalid_channel" }, { status: 400 });
+  }
+  const result = await selectChannelRetentionChoice(env, userId, channelId);
+  if (!result.ok) {
+    return Response.json({ error: result.error }, { status: result.status });
+  }
+  return Response.json({
+    ok: true,
+    channel_retention: {
+      owned_channel_count: result.state.ownedChannelCount,
+      retained_channel_id: result.state.retainedChannelId,
+      effective_at: result.state.effectiveAt,
+      selection_required: result.state.selectionRequired,
+      locks_active: result.state.locksActive,
+    },
   });
 }
 
@@ -1028,6 +1087,20 @@ export async function handleBilling(request: Request, env: Env): Promise<Respons
       return Response.json({ error: "missing user id" }, { status: 400 });
     }
     return handleBillingOrderCancel(request, env, userId);
+  }
+
+  if (url.pathname === "/api/billing/channel-retention") {
+    if (request.method !== "POST") {
+      return Response.json({ error: "method not allowed" }, { status: 405 });
+    }
+    if (!isTrustedInternalRequest(request, env)) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const userId = request.headers.get("X-User-Id")?.trim() || "";
+    if (!userId) {
+      return Response.json({ error: "missing user id" }, { status: 400 });
+    }
+    return handleChannelRetentionSelection(request, env, userId);
   }
 
   if (request.method !== "POST") {

@@ -15,6 +15,13 @@ export interface OwnerPlanState {
     channelFreeze: boolean;
     liveSessions: boolean;
   };
+  channelRetention?: {
+    ownedChannelCount: number;
+    retainedChannelId: string | null;
+    effectiveAt: string | null;
+    selectionRequired: boolean;
+    locksActive: boolean;
+  };
 }
 
 export interface ViewerPlanState {

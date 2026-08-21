@@ -12,6 +12,7 @@ import {
 import { getTrustedAuthenticatedUserId, getTrustedUserId } from "../lib/trusted-identity.ts";
 import { authorizeRoomToken, isCurrentRoomTokenBinding } from "./passcode.ts";
 import { getChannelPasscodeInfo } from "../lib/validation.ts";
+import { readChannelPlanLockState } from "../lib/channel-plan-locks.ts";
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -103,6 +104,9 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   // Passcode gate
   const parentChannelId = getParentChannelId(channelId);
+  if ((await readChannelPlanLockState(env, parentChannelId)).locked) {
+    return Response.json({ error: "channel_plan_locked" }, { status: 403 });
+  }
   if (channelId.endsWith("_live") && purpose !== "channel-asset") {
     if (!await ensureActiveLiveSession(env, parentChannelId)) {
       return Response.json({ error: "live_session_ended" }, { status: 403 });
