@@ -328,5 +328,7 @@ After production changes, run the relevant smoke tests in [LAUNCH_CHECKLIST.md](
 
 - [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md): release gates, production checks, and rollback readiness
 - [MIGRATION_NOTES.md](./MIGRATION_NOTES.md): schema inventory, implementation history, and deployment notes
+- [MONETIZATION_PLAN.md](./MONETIZATION_PLAN.md): monetization product decisions, architecture, and remaining work
+- [MONETIZATION_LOG.md](./MONETIZATION_LOG.md): newest-first implementation history for the monetization branch
 - [FUTURE_PLANS.md](./FUTURE_PLANS.md): planned product and platform work
 - [SECURITY_AUTHORIZATION_MATRIX.md](./SECURITY_AUTHORIZATION_MATRIX.md): identity evidence and privileged route boundaries

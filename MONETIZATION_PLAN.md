@@ -1,6 +1,6 @@
 # yap. Monetization Plan
 
-Status: product proposal; not yet implemented  
+Status: active beta implementation; rewarded advertising remains proposed
 Last updated: 2026-08-21
 
 ## Goals
@@ -11,54 +11,11 @@ Last updated: 2026-08-21
 - Validate willingness to pay before building complex usage-based billing.
 - Keep billing and rewarded-ad authorization enforceable by the server rather than trusting browser state.
 
-## Progress log
+## Implementation history
 
-### 2026-08-21
-
-`27f3fb8` Add Toss checkout flow skeleton
-
-- Added the first Toss automatic-billing checkout skeleton with authenticated prepare and confirm routes, a dashboard checkout entry point, and success and failure callback pages.
-- Kept the Worker authoritative for order ownership and plan validation instead of trusting browser-side redirect parameters.
-
-`12a04fb` Add billing key storage and renewals
-
-- Added durable `billing_subscriptions` storage for the billing key, current period and next scheduled charge state.
-- Wired scheduled renewal attempts into maintenance and added the first 24-hour retry behavior for failed recurring charges.
-
-`2e3b41d` Optimize visible message reads and document monetization beta plan
-
-- Updated this document to reflect the current Plus direction, implementation order and phased work plan.
-- Landed the visible-message read optimization that reduced the main remaining steady-state read-volume path before monetization work continued.
-
-Uncommitted in progress after `12a04fb`:
-
-- Extended the billing state read so the dashboard can see the current subscription status, retry count and cancellation state rather than only the entitlement snapshot.
-- Added a self-serve dashboard cancellation path backed by `POST /api/billing/cancel`, which flips the current subscription and current billing order to `non_renewing` and clears `user_entitlements.auto_renews`.
-- Tightened renewal failure handling so the third failed recurring charge stops future renewal scheduling by moving the subscription to `non_renewing` instead of leaving it indefinitely `past_due`.
-- Added regression coverage for subscription state reads, self-serve cancellation and the three-strike renewal-failure cap.
-- Started the Phase 4 participant-identity extension by forwarding authenticated account identity through ordinary anonymous message and upload proxies in a dedicated trusted header, while keeping the public sender UID anonymous.
-- The Worker now preserves that authenticated participant identity on message and DM upload tickets so later image-quota and entitlement checks can key off the account without rewriting the visible anonymous message model.
-- Started Phase 5 by adding a shared accepted-image quota helper with Plus bypass, authenticated-account preference and anonymous-device secondary enforcement.
-- Enforced the free daily image quota at message acceptance time for public messages, live messages, DM sends and owner DM replies instead of charging at upload-ticket creation time.
-- Added client-facing quota-reached messaging and regression coverage for Plus bypass, anonymous secondary checks and route wiring.
-
-`0dfdb7d` Add monetization foundation and plus owner gates
-
-- Added D1 monetization foundation schema for billing orders, payments, entitlements, webhook events and daily image quota events.
-- Added Worker entitlement helpers and owner plan gate helpers.
-- Enforced the first owner-side Plus rules on the server: Free 1 channel, Plus 5 channels, Plus-only freeze, Plus-only live start and Plus-only premium customization writes.
-- Added regression tests for the foundation and server-side Plus gates.
-
-`9ea7771` Expose owner plus plan state in dashboard and chat
-
-- Exposed owner plan state from the Worker through `user` and `channel-state` reads.
-- Reflected the plan snapshot in the dashboard create flow so channel-slot limits are visible before create attempts.
-- Reflected the same snapshot in chat owner UI so live, freeze and customization entry points show Plus-locked state before mutation attempts.
-
-Uncommitted in progress after `9ea7771`:
-
-- Added the decision that beta users should receive permanent grandfathered Plus entitlements rather than coupons or temporary discounts.
-- Started implementing a permanent `grandfathered_beta` entitlement path with a backfill migration for current users and an automatic server-side grant path for new beta accounts while the flag is enabled.
+Completed work and branch progress are recorded in
+[MONETIZATION_LOG.md](./MONETIZATION_LOG.md). New fixes are always added at the
+top of that document.
 
 ## Current working decisions
 

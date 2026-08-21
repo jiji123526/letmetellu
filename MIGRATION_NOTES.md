@@ -10,7 +10,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - The reusable admin guide marks the same four owner controls without duplicating the guide into a separate paid-only document.
 - The general user guide adds one short image section: free users can send five images per Korean calendar day, while signed-in paid users are exempt from the daily count limit in supported channels.
 - A successfully confirmed Toss checkout now presents a compact activation card with the five unlocked benefit groups and two actions: create another channel or open the existing admin guide. It appears only in the payment-completion flow and adds no recurring dashboard modal or seen-state storage.
-- Korean user-facing plan terminology is consistently rendered as `플러스`, `무료`, `이미지 전송 한도`, `라이브`, `채팅 얼리기` and `비밀 메시지`; untranslated English plan terms are excluded from Korean locale values.
+- Korean user-facing copy keeps the paid plan's proper name as `Plus` while localizing surrounding terms such as `무료`, `이미지 전송 한도`, `라이브`, `채팅 얼리기` and `비밀 메시지`.
 
 Trade-off: paid badges explain availability but do not deep-link each individual guide row into its corresponding setting. The activation card intentionally reuses the admin guide rather than introducing a second guide whose content could drift.
 
