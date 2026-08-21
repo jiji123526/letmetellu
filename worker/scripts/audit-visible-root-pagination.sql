@@ -1,4 +1,5 @@
 PRAGMA index_info('messages_active_root_page_idx');
+PRAGMA index_info('messages_deleted_root_page_idx');
 
 -- Shows whether deleted roots are common enough to affect the fallback branch.
 SELECT
@@ -24,8 +25,9 @@ LIMIT 10;
 
 -- Older-page plan. The active branch should use
 -- messages_active_root_page_idx, while the deleted branch should use a
--- bounded range on messages_channel_root_created_id_idx and an indexed child
--- existence probe.
+-- bounded range on messages_deleted_root_page_idx and an indexed child
+-- existence probe. At a sparse edge, that partial index prevents active roots
+-- from being rescanned even when the fallback boundary spans the remainder.
 EXPLAIN QUERY PLAN
 WITH active_roots AS MATERIALIZED (
   SELECT *
@@ -54,7 +56,7 @@ visible_roots AS (
   SELECT * FROM active_roots
   UNION ALL
   SELECT *
-  FROM messages
+  FROM messages INDEXED BY messages_deleted_root_page_idx
   WHERE channel_id = '__index_audit__'
     AND deleted = 1
     AND reply_to IS NULL
@@ -107,7 +109,7 @@ visible_roots AS (
   SELECT * FROM active_roots
   UNION ALL
   SELECT *
-  FROM messages
+  FROM messages INDEXED BY messages_deleted_root_page_idx
   WHERE channel_id = '__index_audit__'
     AND deleted = 1
     AND reply_to IS NULL

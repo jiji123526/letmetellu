@@ -130,7 +130,7 @@ export function buildVisibleRootPageQuery(input: {
       SELECT * FROM active_roots
       UNION ALL
       SELECT *
-      FROM messages
+      FROM messages INDEXED BY messages_deleted_root_page_idx
       WHERE channel_id = ?
         AND deleted = 1
         AND reply_to IS NULL

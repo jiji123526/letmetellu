@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Sparse history edges scan only deleted roots — 2026-08-21
+
+- One `active_roots AS MATERIALIZED` fingerprint ran 18 times at `8.8 ms` p50/p99 and read `43.79k` rows at a `130:1` read/return ratio. This is the sparse-edge case: when fewer than one full active page remains after a cursor, no active boundary exists and correctness requires checking the entire remaining range for deleted roots retained by active replies.
+- Migration `0054_deleted_message_root_pagination.sql` adds a partial `(channel_id, created_at, id)` index containing only deleted root messages. The retained-deleted branch now explicitly reads that index, so a broad fallback range no longer walks active roots or reply rows before applying the indexed active-child existence probe.
+- Full pages keep their existing active-root boundary, cursor order and 51-root limit. Sparse older/newer edges still inspect the complete required range, preserving deleted-parent visibility rather than imposing an artificial boundary that could omit a valid thread.
+- The visible-root audit now verifies both active and deleted partial indexes and checks both cursor directions with `EXPLAIN QUERY PLAN`.
+
+Trade-off: changing a root between active and deleted state now updates a second small partial index. The index contains deleted roots only, so its storage and write amplification are bounded by deleted root count; reply inserts and updates do not enter it. The query still evaluates retained-child existence for deleted roots in the required range, but no longer pays to scan unrelated active roots.
+
+Deployment note: apply migration `0054` before deploying the Worker because the query explicitly names the new index. No frontend deployment is required. Then run `scripts/audit-visible-root-pagination.sql`, confirm both cursor plans use `messages_deleted_root_page_idx`, and compare the sparse fingerprint against the `130:1`, `8.8 ms` baseline.
+
 ### Context target lookup uses canonical roots instead of recursive ancestry — 2026-08-21
 
 - D1 Insights recorded the unified context target query 28 times at `60.2 ms` p50/p99, reading `127.89k` rows at roughly `4.57k` rows per returned root. The message model already persists canonical `root_id`, so recursively walking parent rows repeated broad channel-index work for a relationship known at write time.

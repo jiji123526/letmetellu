@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -8,6 +9,11 @@ import {
   readVisibleFlatThreads,
   VISIBLE_MESSAGE_CONDITION,
 } from "../src/lib/visible-messages.ts";
+
+const deletedRootMigration = readFileSync(
+  new URL("../migrations/0054_deleted_message_root_pagination.sql", import.meta.url),
+  "utf8",
+);
 
 test("deleted parent visibility uses an indexed child existence probe", () => {
   assert.match(VISIBLE_MESSAGE_CONDITION, /EXISTS/);
@@ -24,6 +30,7 @@ test("root pages bound deleted-parent probes to the active page window", () => {
     limit: 51,
   });
   assert.match(before.query, /INDEXED BY messages_active_root_page_idx/);
+  assert.match(before.query, /INDEXED BY messages_deleted_root_page_idx/);
   assert.match(before.query, /active_roots AS MATERIALIZED/);
   assert.match(before.query, /\(created_at, id\) >= \(\s*SELECT created_at, id FROM page_boundary/);
   assert.equal(
@@ -55,6 +62,21 @@ test("root pages bound deleted-parent probes to the active page window", () => {
     "9999-12-31T23:59:59.999Z",
     "~",
   ]);
+});
+
+test("sparse page edges scan only deleted root index entries", () => {
+  assert.match(
+    deletedRootMigration,
+    /CREATE INDEX IF NOT EXISTS messages_deleted_root_page_idx/,
+  );
+  assert.match(
+    deletedRootMigration,
+    /ON messages\(channel_id, created_at DESC, id DESC\)/,
+  );
+  assert.match(
+    deletedRootMigration,
+    /WHERE reply_to IS NULL AND deleted = 1/,
+  );
 });
 
 test("flat thread expansion skips root lookups already present in the page", async () => {
