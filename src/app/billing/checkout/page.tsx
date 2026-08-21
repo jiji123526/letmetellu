@@ -2,52 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 import {
   cancelBillingOrder,
   prepareTossCheckout,
   type TossCheckoutPrepareResponse,
 } from "@/lib/api-billing";
 import { useLocale } from "@/hooks/useLocale";
-
-declare global {
-  interface Window {
-    TossPayments?: (clientKey: string) => {
-      requestBillingAuth: (
-        method: "카드",
-        options: {
-          customerKey: string;
-          successUrl: string;
-          failUrl: string;
-          customerEmail?: string | null;
-          customerName?: string | null;
-        },
-      ) => Promise<void>;
-    };
-  }
-}
-
-function loadTossPaymentsScript(): Promise<void> {
-  if (typeof window !== "undefined" && window.TossPayments) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-toss-payments="true"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("toss_script_failed")), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://js.tosspayments.com/v1/payment";
-    script.async = true;
-    script.dataset.tossPayments = "true";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("toss_script_failed"));
-    document.head.appendChild(script);
-  });
-}
 
 export default function BillingCheckoutPage() {
   const { t } = useLocale();
@@ -127,18 +88,17 @@ export default function BillingCheckoutPage() {
     setStarting(true);
     setError("");
     try {
-      await loadTossPaymentsScript();
-      if (!window.TossPayments) {
-        throw new Error("toss_unavailable");
-      }
-      const tossPayments = window.TossPayments(state.checkout.client_key);
-      checkoutStartedRef.current = true;
-      await tossPayments.requestBillingAuth("카드", {
+      const tossPayments = await loadTossPayments(state.checkout.client_key);
+      const payment = tossPayments.payment({
         customerKey: state.checkout.customer_key,
+      });
+      checkoutStartedRef.current = true;
+      await payment.requestBillingAuth({
+        method: "CARD",
         successUrl: state.checkout.success_url,
         failUrl: state.checkout.fail_url,
-        customerEmail: state.checkout.customer_email,
-        customerName: state.checkout.customer_name,
+        customerEmail: state.checkout.customer_email || undefined,
+        customerName: state.checkout.customer_name || undefined,
       });
     } catch (startError) {
       checkoutStartedRef.current = false;

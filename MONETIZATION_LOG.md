@@ -9,6 +9,12 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Toss checkout uses the official SDK v2 flow
+
+- Replaced the legacy global payment script with the official `@tosspayments/tosspayments-sdk` package.
+- Initialize a customer-scoped payment instance and request card billing authorization through the current SDK v2 API.
+- Kept server-authoritative orders, callback URLs and abandoned-order cancellation behavior unchanged.
+
 #### Billing webhooks claim events before reconciliation
 
 - Added an atomic `processing` claim so concurrent deliveries of one provider event cannot both reconcile billing state.

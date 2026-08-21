@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Toss checkout uses the official SDK v2 flow — 2026-08-21
+
+- The billing checkout now loads `@tosspayments/tosspayments-sdk`, creates a payment instance with the server-issued customer key and calls `requestBillingAuth` with the `CARD` method.
+- The previous global v1 script loader and Korean method argument were removed. Order preparation, callback routes and pending-order cancellation semantics are unchanged.
+
+Trade-off: the frontend bundle gains the official SDK package dependency. No database migration or Worker deployment is required for this stage; deploy the frontend after verification.
+
 ### Billing webhook deliveries use atomic processing claims — 2026-08-21
 
 - Migration `0059_billing_webhook_claims.sql` adds `processing_started_at`, `attempt_count` and a processing-state index to `billing_webhook_events`.
