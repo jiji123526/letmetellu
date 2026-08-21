@@ -95,6 +95,52 @@ interface UseChatChannelBootstrapResult {
   clearRoomAccessBanner: () => void;
 }
 
+function reconcileBubbleOverride(
+  channelId: string,
+  input: {
+    previousAppearanceVersion?: string | null;
+    previousBubbleColor?: string | null;
+    nextAppearanceVersion?: string | null;
+    nextBubbleColor?: string | null;
+  },
+  setLocalBubbleColor: Dispatch<SetStateAction<string | null>>,
+): { bubbleColor: string | null; clearedStaleOverride: boolean } {
+  if (typeof window === "undefined") {
+    return { bubbleColor: null, clearedStaleOverride: false };
+  }
+
+  const storedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
+  const normalizedStoredBubbleColor = storedBubbleColor
+    ? normalizeBubbleColor(storedBubbleColor)
+    : null;
+  if (storedBubbleColor && normalizedStoredBubbleColor && normalizedStoredBubbleColor !== storedBubbleColor) {
+    localStorage.setItem(`bubbleColor_${channelId}`, normalizedStoredBubbleColor);
+  }
+
+  const appearanceChanged = Boolean(
+    input.previousAppearanceVersion
+    && input.nextAppearanceVersion
+    && input.previousAppearanceVersion !== input.nextAppearanceVersion
+  );
+  const previousBubbleColor = normalizeBubbleColor(input.previousBubbleColor);
+  const nextBubbleColor = normalizeBubbleColor(input.nextBubbleColor);
+  if (
+    appearanceChanged
+    && normalizedStoredBubbleColor
+    && normalizedStoredBubbleColor === previousBubbleColor
+    && normalizedStoredBubbleColor !== nextBubbleColor
+  ) {
+    localStorage.removeItem(`bubbleColor_${channelId}`);
+    setLocalBubbleColor(null);
+    return { bubbleColor: null, clearedStaleOverride: true };
+  }
+
+  return {
+    bubbleColor: normalizedStoredBubbleColor,
+    clearedStaleOverride: false,
+  };
+}
+
 export function useChatChannelBootstrap({
   channelId,
   channel,
@@ -160,6 +206,17 @@ export function useChatChannelBootstrap({
 
     const channelBubbleColor = normalizeBubbleColor(data.channel.bubble_color);
     const cachedAppearance = readChannelAppearance(channelId);
+    const previousAppearanceVersion = cachedAppearance?.appearanceVersion || channel?.appearance_version || null;
+    const previousBubbleColor = cachedAppearance?.bubbleColor || channel?.bubble_color || null;
+    const {
+      bubbleColor: savedBubbleColor,
+      clearedStaleOverride,
+    } = reconcileBubbleOverride(channelId, {
+      previousAppearanceVersion,
+      previousBubbleColor,
+      nextAppearanceVersion: data.channel.appearance_version,
+      nextBubbleColor: data.channel.bubble_color,
+    }, setLocalBubbleColor);
     if (
       !cachedAppearance
       || cachedAppearance.instanceId !== data.channel.instance_id
@@ -168,13 +225,10 @@ export function useChatChannelBootstrap({
       storeChannelAppearance(channelId, data.channel);
     }
     setChannel({ ...data.channel, bubble_color: channelBubbleColor });
-
-    const storedBubbleColor = localStorage.getItem(`bubbleColor_${channelId}`);
-    const savedBubbleColor = storedBubbleColor ? normalizeBubbleColor(storedBubbleColor) : null;
-    if (storedBubbleColor && savedBubbleColor && savedBubbleColor !== storedBubbleColor) {
-      setLocalBubbleColor(savedBubbleColor);
-      localStorage.setItem(`bubbleColor_${channelId}`, savedBubbleColor);
+    if (clearedStaleOverride) {
+      document.documentElement.style.setProperty("--bubble-sent", channelBubbleColor);
     }
+
     if (isLoggedIn) {
       if (authUserId) {
         updateCachedAccountRecentChannelVisit(authUserId, {
@@ -191,6 +245,14 @@ export function useChatChannelBootstrap({
         .then(({ record }) => {
           if (!record?.bubble_color) return;
           const accountBubbleColor = normalizeBubbleColor(record.bubble_color);
+          if (
+            clearedStaleOverride
+            && previousBubbleColor
+            && accountBubbleColor === normalizeBubbleColor(previousBubbleColor)
+            && accountBubbleColor !== channelBubbleColor
+          ) {
+            return;
+          }
           setLocalBubbleColor(accountBubbleColor);
           localStorage.setItem(`bubbleColor_${channelId}`, accountBubbleColor);
           document.documentElement.style.setProperty("--bubble-sent", accountBubbleColor);
@@ -260,6 +322,7 @@ export function useChatChannelBootstrap({
     applyUnifiedTimelineBootstrap,
     applyLiveSnapshot,
     authUserId,
+    channel,
     channelId,
     isLoggedIn,
     setActiveNotice,
@@ -308,13 +371,38 @@ export function useChatChannelBootstrap({
     const fetchChannel = inLiveModeRef.current ? `${channelId}_live` : channelId;
     fetchOwnerModerationState(fetchChannel).then((data) => {
       const frozenState = data.channel?.is_frozen;
-      if (frozenState !== undefined) {
+      if (data.channel) {
+        const previousChannel = channel;
+        const {
+          bubbleColor: nextLocalBubbleColor,
+        } = reconcileBubbleOverride(channelId, {
+          previousAppearanceVersion: previousChannel?.appearance_version,
+          previousBubbleColor: previousChannel?.bubble_color,
+          nextAppearanceVersion: data.channel?.appearance_version,
+          nextBubbleColor: data.channel?.bubble_color,
+        }, setLocalBubbleColor);
+        const nextChannel = previousChannel ? {
+          ...previousChannel,
+          ...data.channel,
+          bubble_color: data.channel.bubble_color
+            ? normalizeBubbleColor(data.channel.bubble_color)
+            : previousChannel.bubble_color,
+          is_frozen: frozenState ?? previousChannel.is_frozen,
+        } : null;
+        if (nextChannel) {
+          storeChannelAppearance(channelId, nextChannel);
+          if (!nextLocalBubbleColor && nextChannel.bubble_color) {
+            document.documentElement.style.setProperty("--bubble-sent", nextChannel.bubble_color);
+          }
+          setChannel(nextChannel);
+        }
+      } else if (frozenState !== undefined) {
         setChannel((previous) => previous ? { ...previous, is_frozen: frozenState } : previous);
       }
       setOwnerModeration(data.ownerModeration);
       setOwnerPlan(data.ownerPlan || null);
     }).catch(() => {});
-  }, [channelId, inLiveModeRef, isOwner, setChannel, setOwnerModeration, setOwnerPlan]);
+  }, [channel, channelId, inLiveModeRef, isOwner, setChannel, setLocalBubbleColor, setOwnerModeration, setOwnerPlan]);
 
   useEffect(() => {
     if (!isOwner) {

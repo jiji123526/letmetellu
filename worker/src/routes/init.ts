@@ -15,7 +15,13 @@ import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
 import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout";
 import { readSelectedBootstrap } from "../lib/bootstrap-read-mode";
-import { getChannelAppearanceVersion } from "../lib/channel-appearance";
+import {
+  applyFreeChannelAppearance,
+  getChannelAppearanceVersion,
+  hasPremiumChannelAppearance,
+  resetPersistedChannelAppearanceIfNeeded,
+} from "../lib/channel-appearance";
+import { ensureBetaGrandfatheredPlusEntitlement } from "../lib/plan-entitlements";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
 import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
 import {
@@ -60,7 +66,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   try {
     // Fetch channel config (always from parent)
-    const channel = await env.DB.prepare(
+    let channel = await env.DB.prepare(
       `SELECT
          channels.*,
          users.name AS owner_name,
@@ -94,6 +100,17 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     if (!channel) {
       return Response.json({ error: "channel not found" }, { status: 404 });
+    }
+
+    if (!reportsChannel) {
+      const activePlusEntitlement = await ensureBetaGrandfatheredPlusEntitlement(
+        env,
+        (channel as { owner_uid?: string | null }).owner_uid,
+      );
+      if (!activePlusEntitlement && hasPremiumChannelAppearance(channel as any)) {
+        await resetPersistedChannelAppearanceIfNeeded(env, parentChannelId, channel);
+        channel = applyFreeChannelAppearance(channel);
+      }
     }
 
     routeStage = "resolve_viewer_identity";

@@ -2,10 +2,10 @@ import { Env } from "../types";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { deleteChannel } from "../lib/channel-cleanup";
 import { buildOwnerPlanState } from "../lib/plan-feature-gates";
+import { applyFreeChannelAppearance, resetOwnedChannelAppearancesIfNeeded } from "../lib/channel-appearance";
 import {
   buildOwnerPlanBillingSummary,
   ensureBetaGrandfatheredPlusEntitlement,
-  readActivePlusEntitlement,
 } from "../lib/plan-entitlements";
 
 function normalizeEmail(email: string) {
@@ -75,11 +75,17 @@ async function readUserState(
     env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
       .bind(userId).first<{ font_size: number | null; locale: string | null }>(),
     isReportsChannelOwner(userId, env),
-    readActivePlusEntitlement(env, userId),
+    ensureBetaGrandfatheredPlusEntitlement(env, userId),
   ]);
 
+  if (!activePlusEntitlement) {
+    await resetOwnedChannelAppearancesIfNeeded(env, userId);
+  }
+
   return {
-    channels: channelsResult.results,
+    channels: activePlusEntitlement
+      ? channelsResult.results
+      : channelsResult.results.map((channel) => applyFreeChannelAppearance(channel)),
     font_size: preferences?.font_size ?? null,
     locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
     is_platform_admin: isPlatformAdmin,
@@ -137,7 +143,6 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       }
       const user = await resolveUserIdentity(env, userId, userEmail);
       if (!user) return Response.json({ error: "user_not_found" }, { status: 404 });
-      await ensureBetaGrandfatheredPlusEntitlement(env, user.id);
       const state = await readUserState(env, user.id, reportsChannelId);
       return Response.json({
         ok: true,
@@ -158,6 +163,11 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       profileOwnerUid = channel.owner_uid;
     }
 
+    const activePlusEntitlement = await ensureBetaGrandfatheredPlusEntitlement(env, profileOwnerUid);
+    if (!activePlusEntitlement) {
+      await resetOwnedChannelAppearancesIfNeeded(env, profileOwnerUid);
+    }
+
     const { results: channels } = await env.DB.prepare(
       `SELECT id, name, profile_image, bubble_color,
               passcode IS NOT NULL AS has_passcode
@@ -169,7 +179,11 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
        ORDER BY created_at ASC, id ASC
        LIMIT 5`
     ).bind(profileOwnerUid, ...(reportsChannelId ? [reportsChannelId] : [])).all();
-    return Response.json({ channels });
+    return Response.json({
+      channels: activePlusEntitlement
+        ? channels
+        : channels.map((channel) => applyFreeChannelAppearance(channel)),
+    });
   }
 
   if (request.method === "PATCH") {

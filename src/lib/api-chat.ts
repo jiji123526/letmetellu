@@ -41,7 +41,15 @@ export interface OwnerChannelsResponse {
 export interface OwnerModerationStateResponse {
   channel?: {
     id: string;
+    instance_id?: string | null;
     is_frozen: number;
+    bubble_color?: string;
+    appearance_version?: string | null;
+    background_type?: "default" | "color" | "image";
+    background_color?: string | null;
+    background_image?: string | null;
+    background_overlay?: number;
+    background_blur?: number;
   };
   ownerModeration?: {
     status: "active" | "warned" | "suspended" | "frozen";
@@ -202,7 +210,11 @@ export function fetchOwnerModerationState(channelId: string): Promise<OwnerModer
   })
     .then(async (res) => {
       if (!res.ok) throw new Error(`Channel state failed: ${res.status}`);
-      return res.json() as Promise<OwnerModerationStateResponse>;
+      const data = await res.json() as OwnerModerationStateResponse;
+      if (data.channel) {
+        data.channel = decorateChannelMedia(data.channel);
+      }
+      return data;
     })
     .finally(() => {
       if (ownerModerationStateRequests.get(channelId) === request) {
