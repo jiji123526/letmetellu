@@ -9,6 +9,12 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Toss first charges require an exact provider response
+
+- Validate that billing-key issuance returns the server-expected customer key before charging or storing the key.
+- Accept the first charge only when Toss returns a completed billing payment with the exact order ID, amount and currency.
+- Reject mismatched successful responses before creating a payment, activating Plus or storing a renewable subscription.
+
 #### Toss checkout uses the official SDK v2 flow
 
 - Replaced the legacy global payment script with the official `@tosspayments/tosspayments-sdk` package.

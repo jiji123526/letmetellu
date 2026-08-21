@@ -127,7 +127,8 @@ test("toss checkout wiring exists across worker, next proxies, and callback page
   assert.match(nextTossPrepareProxySource, /client_key/);
   assert.match(nextTossPrepareProxySource, /\/api\/billing\/toss\/prepare/);
   assert.match(nextTossConfirmProxySource, /\/api\/billing\/toss\/confirm/);
-  assert.match(checkoutPageSource, /requestBillingAuth\("카드"/);
+  assert.match(checkoutPageSource, /requestBillingAuth\(\{/);
+  assert.match(checkoutPageSource, /method: "CARD"/);
   assert.match(checkoutPageSource, /prepareTossCheckout/);
   assert.match(successPageSource, /authKey/);
   assert.match(successPageSource, /customerKey/);

@@ -27,6 +27,10 @@ import {
   readOwnerChannelRetentionState,
   selectChannelRetentionChoice,
 } from "../lib/channel-plan-locks.ts";
+import {
+  isValidTossBillingCharge,
+  isValidTossBillingKeyIssue,
+} from "../lib/toss-billing.ts";
 import { isTrustedInternalRequest } from "../lib/trusted-identity.ts";
 
 interface BillingWebhookEventRow {
@@ -701,11 +705,8 @@ async function handleBillingTossConfirm(request: Request, env: Env, userId: stri
       customerKey,
     }),
   });
-  const issueData = await issueResponse.json().catch(() => ({})) as {
-    billingKey?: string;
-    customerKey?: string;
-  };
-  if (!issueResponse.ok || !issueData.billingKey) {
+  const issueData = await issueResponse.json().catch(() => ({})) as Record<string, unknown>;
+  if (!issueResponse.ok || !isValidTossBillingKeyIssue(issueData, customerKey)) {
     return Response.json({
       error: "toss_billing_key_issue_failed",
       provider_status: issueResponse.status,
@@ -727,16 +728,12 @@ async function handleBillingTossConfirm(request: Request, env: Env, userId: stri
       customerName: user.name,
     }),
   });
-  const chargeData = await chargeResponse.json().catch(() => ({})) as {
-    paymentKey?: string;
-    orderId?: string;
-    totalAmount?: number;
-    method?: string;
-    approvedAt?: string;
-    customerKey?: string;
-    mId?: string;
-  };
-  if (!chargeResponse.ok || !chargeData.paymentKey || !Number.isInteger(chargeData.totalAmount)) {
+  const chargeData = await chargeResponse.json().catch(() => ({})) as Record<string, unknown>;
+  if (!chargeResponse.ok || !isValidTossBillingCharge(chargeData, {
+    orderId: order.order_id,
+    amount: Number(order.amount),
+    currency: order.currency,
+  })) {
     return Response.json({
       error: "toss_first_charge_failed",
       provider_status: chargeResponse.status,
@@ -752,12 +749,12 @@ async function handleBillingTossConfirm(request: Request, env: Env, userId: stri
     userId,
     order,
     provider: "toss_autobilling",
-    providerOrderId: chargeData.orderId || order.order_id,
+    providerOrderId: chargeData.orderId,
     providerPaymentId: chargeData.paymentKey,
-    amount: Number(chargeData.totalAmount),
+    amount: chargeData.totalAmount,
     currency: order.currency,
     paymentMethod: chargeData.method || "card",
-    providerCustomerId: chargeData.customerKey || customerKey,
+    providerCustomerId: customerKey,
     providerSubscriptionId: null,
     approvedAt,
   });
@@ -770,7 +767,7 @@ async function handleBillingTossConfirm(request: Request, env: Env, userId: stri
     provider: "toss_autobilling",
     plan: order.plan,
     billingCycle: order.billing_cycle,
-    providerCustomerKey: chargeData.customerKey || customerKey,
+    providerCustomerKey: customerKey,
     billingKey: issueData.billingKey,
     currentPeriodOrderId: order.order_id,
     currentPeriodStartedAt: persistenceResponse.entitlement.starts_at,

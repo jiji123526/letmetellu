@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Toss first-charge responses are strictly validated — 2026-08-21
+
+- Billing-key issuance must return a non-empty key associated with the exact server-generated customer key.
+- A first charge is persisted only when Toss returns `DONE`, `BILLING`, the pending order ID, the server-authoritative amount and the expected currency.
+- A mismatch returns `toss_billing_key_issue_failed` or `toss_first_charge_failed` before payment, entitlement or subscription writes.
+- The Toss payment response does not document `customerKey` as a required returned field, so customer identity is verified at billing-key issuance and the server-requested key is persisted.
+
+Trade-off: a malformed or contract-incompatible successful provider response is treated as failed and requires operator reconciliation. No database migration is required; deploy the Worker after verification.
+
 ### Toss checkout uses the official SDK v2 flow — 2026-08-21
 
 - The billing checkout now loads `@tosspayments/tosspayments-sdk`, creates a payment instance with the server-issued customer key and calls `requestBillingAuth` with the `CARD` method.
