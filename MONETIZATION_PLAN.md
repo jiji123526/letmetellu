@@ -34,7 +34,7 @@ Chosen direction as of 2026-08-21:
 - Beta users should receive permanent account-level Plus benefits through a non-billable `grandfathered_beta` entitlement, not through coupons.
 - Current authenticated beta accounts should be backfilled into that permanent Plus cohort, and new authenticated accounts created during the beta should receive the same entitlement automatically while the beta-grandfathering flag is enabled.
 - Downgrade behavior: reset the retained Free channel to default appearance. Preserve premium appearance values and media on read-only channels but render Free defaults until renewal.
-- Pricing should be stored and modeled as VAT-exclusive until tax and storefront display rules are finalized.
+- The displayed monthly `2,900 KRW` and yearly `17,000 KRW` prices are the final VAT-inclusive charge amounts.
 
 Implementation consequences:
 
@@ -231,7 +231,7 @@ Before applying for live domestic payments:
 - Provide Toss and card reviewers a production-like website and test account.
 - Ask Toss for the exact contracted methods, transaction fee, setup, annual or minimum fee and settlement schedule. Do not infer them from SDK availability.
 
-Domestic PG sales, advertising revenue and related expenses remain part of Korean bookkeeping and tax reporting. Customer-facing KRW pricing should state clearly whether VAT is included or excluded. The current working decision is to model pricing as VAT-exclusive, but public display and legal wording still require professional confirmation.
+Domestic PG sales, advertising revenue and related expenses remain part of Korean bookkeeping and tax reporting. Customer-facing KRW pricing is displayed as VAT-inclusive, while legal wording and the business's tax treatment still require professional confirmation.
 
 ## Server-side source of truth
 
@@ -368,5 +368,5 @@ Do not optimize for ad views alone. The primary health measures are successful c
 
 - Which provider and payment-method scope will back automatic renewal at launch if recurring Korean wallets are required.
 - Whether image-quota bypass in “all channels” also includes every DM and live-message surface from day one or rolls out in phases.
-- Final VAT-exclusive price points, public storefront wording and refund calculations after tax and PG review.
+- Final legal storefront wording and refund calculations for the chosen VAT-inclusive prices after tax and PG review.
 - The exact placement and maximum frequency of non-rewarded advertisements in free-owned channels.

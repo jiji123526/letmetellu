@@ -11,6 +11,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Existing order rows store only amount and currency, so no stored data rewrite is needed. Future first charges and renewals continue charging the unchanged catalog amounts.
 
 Deployment note: no database or R2 migration is required. Deploy the Worker and frontend together so the API contract and client type agree.
+Preview setup and verification commands are documented in `TOSS_BILLING_RUNBOOK.md`.
 
 ### Toss renewal responses use strict payment validation — 2026-08-21
 
