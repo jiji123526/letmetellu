@@ -11,6 +11,34 @@ Last updated: 2026-08-15
 - Validate willingness to pay before building complex usage-based billing.
 - Keep billing and rewarded-ad authorization enforceable by the server rather than trusting browser state.
 
+## Current beta recommendation
+
+Recommended starting point as of 2026-08-21:
+
+- Launch Plus passes before building rewarded advertisements.
+- Replace the initial rewarded-media gate with a simpler Free quota of five successful image messages per rolling 24-hour window.
+- Treat the quota as image-message based, not upload-attempt based. Failed uploads or rejected sends must not consume the daily allowance.
+- Apply the first Plus media exception at the channel-owner level: channels owned by a Plus subscriber may bypass the public channel image quota.
+- Do not initially grant unlimited images to a paying visitor in every channel. The current write path identifies ordinary participants primarily through anonymous and device identities, so account-wide sender entitlements would require a broader identity-model change.
+- Keep owner DMs out of the first Plus media exception unless post-launch data shows a clear need. Public-channel image sends and owner DMs have different spam and cost profiles.
+
+Rationale:
+
+- A daily image quota is materially easier to explain, enforce and measure than rewarded-ad grants.
+- Plus still has a stronger core reason to pay through ad-free owned channels and customization, so media can remain a secondary benefit.
+- Channel-owner-level Plus benefits fit the existing product model better than account-wide sender privileges for anonymous participants.
+
+## Recommended beta implementation order
+
+1. Finalize the paid product decisions needed for Plus passes, pricing and downgrade behavior.
+2. Add provider-neutral billing and entitlement records in D1.
+3. Add one server-side entitlement helper and use it first for channel customization locking.
+4. Implement Toss test-key order creation, confirmation, refund reconciliation and idempotent webhook handling.
+5. Launch Plus passes without rewarded ads.
+6. Add the five-images-per-24-hours Free quota at message acceptance time, not at upload-ticket creation time.
+7. Add the first Plus media exception for public image messages in channels owned by a subscribed owner.
+8. Revisit rewarded advertisements only after billing, expiry, downgrade and image-quota behavior are stable.
+
 ## Proposed plans
 
 ### Free

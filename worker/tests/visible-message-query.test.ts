@@ -7,6 +7,7 @@ import {
   expandVisibleRootThreads,
   readVisibleMessagePage,
   readVisibleFlatThreads,
+  VISIBLE_MESSAGE_SELECT_COLUMNS,
   VISIBLE_MESSAGE_CONDITION,
 } from "../src/lib/visible-messages.ts";
 
@@ -29,6 +30,7 @@ test("root pages bound deleted-parent probes to the active page window", () => {
     direction: "before",
     limit: 51,
   });
+  assert.doesNotMatch(before.query, /SELECT \*/);
   assert.match(before.query, /INDEXED BY messages_active_root_page_idx/);
   assert.match(before.query, /INDEXED BY messages_deleted_root_page_idx/);
   assert.match(before.query, /active_roots AS MATERIALIZED/);
@@ -79,6 +81,18 @@ test("sparse page edges scan only deleted root index entries", () => {
   );
 });
 
+test("visible message reads select the client-facing message columns only", () => {
+  assert.match(VISIBLE_MESSAGE_SELECT_COLUMNS, /client_message_id/);
+  assert.match(VISIBLE_MESSAGE_SELECT_COLUMNS, /auth_uid/);
+  assert.match(VISIBLE_MESSAGE_SELECT_COLUMNS, /image_w/);
+  assert.match(VISIBLE_MESSAGE_SELECT_COLUMNS, /root_id/);
+  assert.match(VISIBLE_MESSAGE_SELECT_COLUMNS, /edited/);
+  assert.match(VISIBLE_MESSAGE_SELECT_COLUMNS, /reactions/);
+  assert.doesNotMatch(VISIBLE_MESSAGE_SELECT_COLUMNS, /\bfingerprint\b/);
+  assert.doesNotMatch(VISIBLE_MESSAGE_SELECT_COLUMNS, /\bdm\b/);
+  assert.doesNotMatch(VISIBLE_MESSAGE_SELECT_COLUMNS, /\breported\b/);
+});
+
 test("flat thread expansion skips root lookups already present in the page", async () => {
   const calls: Array<{ query: string; params: unknown[] }> = [];
   const env = {
@@ -110,6 +124,7 @@ test("flat thread expansion skips root lookups already present in the page", asy
 
   assert.equal(calls.length, 1);
   const [childCall] = calls;
+  assert.doesNotMatch(childCall.query, /SELECT \*/);
   assert.doesNotMatch(childCall.query, /WITH requested_roots|UNION ALL/);
   assert.match(childCall.query, /channel_id = \?[\s\S]*reply_to IN \(\?, \?\)[\s\S]*deleted = 0/);
   assert.deepEqual(childCall.params, ["channel-a", "root-a", "root-d"]);
@@ -144,6 +159,8 @@ test("flat thread expansion fetches only missing roots but all children", async 
 
   assert.equal(calls.length, 2);
   const [rootCall, childCall] = calls;
+  assert.doesNotMatch(rootCall.query, /SELECT \*/);
+  assert.doesNotMatch(childCall.query, /SELECT \*/);
   assert.match(rootCall.query, /channel_id = \?[\s\S]*id IN \(\?\)/);
   assert.deepEqual(rootCall.params, ["channel-a", "root-a"]);
   assert.match(childCall.query, /channel_id = \?[\s\S]*reply_to IN \(\?, \?\)[\s\S]*deleted = 0/);

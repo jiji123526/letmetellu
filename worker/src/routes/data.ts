@@ -5,6 +5,7 @@ import {
   readVisibleTargetRoot,
   readVisibleMessagePage,
   type VisibleMessageRow,
+  VISIBLE_MESSAGE_SELECT_COLUMNS,
   VISIBLE_MESSAGE_CONDITION,
   VISIBLE_ROOT_MESSAGE_CONDITION,
 } from "../lib/visible-messages";
@@ -204,7 +205,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
       const [beforeResult, afterResult] = await Promise.all([
         env.DB.prepare(`
-          SELECT * FROM messages
+          SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM messages
           WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
             AND (created_at, id) <= (?, ?)
           ORDER BY created_at DESC, id DESC
@@ -216,7 +217,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           threadRootId,
         ).all<VisibleMessageRow>(),
         env.DB.prepare(`
-          SELECT * FROM messages
+          SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM messages
           WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
             AND (created_at, id) > (?, ?)
           ORDER BY created_at ASC, id ASC
@@ -270,7 +271,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
       const placeholders = parentIds.map(() => "?").join(", ");
       const parentResult = await env.DB.prepare(`
-        SELECT * FROM messages
+        SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM messages
         WHERE id IN (${placeholders})
           AND ${VISIBLE_MESSAGE_CONDITION}
         ORDER BY created_at ASC, id ASC

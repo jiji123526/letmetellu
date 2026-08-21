@@ -11,6 +11,35 @@ export interface VisibleMessageCursor {
   createdAt: string;
 }
 
+const VISIBLE_MESSAGE_SELECT_COLUMN_NAMES = [
+  "id",
+  "client_message_id",
+  "uid",
+  "auth_uid",
+  "nick",
+  "text",
+  "is_admin",
+  "channel_id",
+  "image",
+  "image_w",
+  "image_h",
+  "reply_to",
+  "root_id",
+  "report",
+  "reported_msg_id",
+  "gallery_id",
+  "deleted",
+  "edited",
+  "reactions",
+  "created_at",
+] as const;
+
+export const VISIBLE_MESSAGE_SELECT_COLUMNS = VISIBLE_MESSAGE_SELECT_COLUMN_NAMES.join(", ");
+
+function qualifyVisibleMessageSelectColumns(alias: string): string {
+  return VISIBLE_MESSAGE_SELECT_COLUMN_NAMES.map((column) => `${alias}.${column}`).join(", ");
+}
+
 export const VISIBLE_MESSAGE_CONDITION = `
   channel_id = ?
   AND (
@@ -39,7 +68,7 @@ export async function readVisibleTargetRoot(
   onResult?: (result: D1Result<VisibleMessageRow>) => void,
 ): Promise<VisibleMessageRow | null> {
   const result = await env.DB.prepare(`
-    SELECT root.*
+    SELECT ${qualifyVisibleMessageSelectColumns("root")}
     FROM messages target
     INNER JOIN messages root
       ON root.id = CASE
@@ -104,7 +133,7 @@ export function buildVisibleRootPageQuery(input: {
   const fallbackId = direction === "after" ? "~" : "";
   const query = `
     WITH active_roots AS MATERIALIZED (
-      SELECT *
+      SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS}
       FROM messages INDEXED BY messages_active_root_page_idx
       WHERE channel_id = ?
         AND deleted = 0
@@ -127,9 +156,9 @@ export function buildVisibleRootPageQuery(input: {
       LIMIT 1
     ),
     visible_roots AS (
-      SELECT * FROM active_roots
+      SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM active_roots
       UNION ALL
-      SELECT *
+      SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS}
       FROM messages INDEXED BY messages_deleted_root_page_idx
       WHERE channel_id = ?
         AND deleted = 1
@@ -146,9 +175,9 @@ export function buildVisibleRootPageQuery(input: {
             AND child.reply_to = messages.id
         )
     )
-    SELECT *
+    SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS}
     FROM (
-      SELECT *
+      SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS}
       FROM visible_roots
       ORDER BY created_at ${pageOrder}, id ${pageOrder}
       LIMIT ?
@@ -228,7 +257,7 @@ export async function readVisibleFlatThreads(
     const normalizedMissingRootIds = normalizeThreadLookupIds(missingRootIds);
     const rootPlaceholders = normalizedMissingRootIds.map(() => "?").join(", ");
     statements.push(env.DB.prepare(`
-      SELECT *
+      SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS}
       FROM messages
       WHERE channel_id = ?
         AND id IN (${rootPlaceholders})
@@ -239,7 +268,7 @@ export async function readVisibleFlatThreads(
   const normalizedRootIds = normalizeThreadLookupIds(rootIds);
   const childPlaceholders = normalizedRootIds.map(() => "?").join(", ");
   statements.push(env.DB.prepare(`
-      SELECT *
+      SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS}
       FROM messages
       WHERE channel_id = ?
         AND reply_to IN (${childPlaceholders})
