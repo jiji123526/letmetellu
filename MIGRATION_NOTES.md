@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Context target lookup uses canonical roots instead of recursive ancestry — 2026-08-21
+
+- D1 Insights recorded the unified context target query 28 times at `60.2 ms` p50/p99, reading `127.89k` rows at roughly `4.57k` rows per returned root. The message model already persists canonical `root_id`, so recursively walking parent rows repeated broad channel-index work for a relationship known at write time.
+- Unified gallery/search/refresh navigation and the legacy message-context endpoint now share one target-root lookup. It reads the target by the messages primary key, resolves `root_id` directly, and reads the root by primary key. Historical replies with a null canonical root fall back to `reply_to`.
+- Target and root deletion visibility checks remain server-side. A deleted root is still returned only when it has an active child, and deleted targets that were previously hidden remain hidden.
+- The old recursive SQL fingerprint is removed from both context readers. Existing authorization-aware unified source selection, DM ownership checks, context radii and thread expansion are unchanged.
+
+Trade-off: context correctness now depends on the canonical `root_id` invariant maintained by current writes and migration `0049`. The null fallback supports pre-backfill rows; an invalid non-null root reference intentionally returns not found rather than traversing arbitrary ancestry. Continue running `scripts/audit-message-root-id.sql` after data repair work.
+
+Deployment note: deploy the Worker only. No new D1 migration or frontend deployment is required. After deployment, context navigation should produce a `SELECT root.* FROM messages target` fingerprint and the old `WITH RECURSIVE ancestors` fingerprint should stop accumulating.
+
 ### Older-history prepend stabilizes only the locked viewport anchor — 2026-08-21
 
 - Production inspection measured older unified-timeline requests at `166-238 ms` and `8-12 KB` while the mounted history was already `286/300` messages. The visible lag continued after the response: each prepend broadcast `chat-history-preload`, activating every deferred link preview in the mounted window, then required a `900 ms` quiet period while repeated preview and media mutations changed scroll geometry.

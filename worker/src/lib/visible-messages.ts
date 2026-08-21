@@ -32,6 +32,55 @@ export const VISIBLE_ROOT_MESSAGE_CONDITION = `
   AND reply_to IS NULL
 `;
 
+export async function readVisibleTargetRoot(
+  env: Env,
+  channelId: string,
+  targetId: string,
+  onResult?: (result: D1Result<VisibleMessageRow>) => void,
+): Promise<VisibleMessageRow | null> {
+  const result = await env.DB.prepare(`
+    SELECT root.*
+    FROM messages target
+    INNER JOIN messages root
+      ON root.id = CASE
+        WHEN target.reply_to IS NULL THEN target.id
+        ELSE COALESCE(target.root_id, target.reply_to)
+      END
+      AND root.channel_id = target.channel_id
+    WHERE target.channel_id = ?
+      AND target.id = ?
+      AND (
+        target.deleted = 0
+        OR (
+          target.deleted = 1
+          AND EXISTS (
+            SELECT 1
+            FROM messages target_child
+            WHERE target_child.channel_id = target.channel_id
+              AND target_child.deleted = 0
+              AND target_child.reply_to = target.id
+          )
+        )
+      )
+      AND (
+        root.deleted = 0
+        OR (
+          root.deleted = 1
+          AND EXISTS (
+            SELECT 1
+            FROM messages root_child
+            WHERE root_child.channel_id = root.channel_id
+              AND root_child.deleted = 0
+              AND root_child.reply_to = root.id
+          )
+        )
+      )
+    LIMIT 1
+  `).bind(channelId, targetId).all<VisibleMessageRow>();
+  onResult?.(result);
+  return result.results?.[0] || null;
+}
+
 export function buildVisibleRootPageQuery(input: {
   channelId: string;
   cursorCondition?: string;

@@ -2,6 +2,7 @@ import { Env } from "../types";
 import { getUserLocale } from "../lib/channel-moderation";
 import {
   expandVisibleRootThreads,
+  readVisibleTargetRoot,
   readVisibleMessagePage,
   type VisibleMessageRow,
   VISIBLE_MESSAGE_CONDITION,
@@ -194,42 +195,12 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         return Response.json({ error: "missing message id" }, { status: 400 });
       }
 
-      const target = await env.DB.prepare(
-        `WITH RECURSIVE ancestors(id, created_at, reply_to) AS (
-           SELECT id, created_at, reply_to
-           FROM messages
-           WHERE id = ? AND channel_id = ?
-             AND (
-               deleted = 0
-               OR (
-                 deleted = 1
-                 AND EXISTS (
-                   SELECT 1 FROM messages child
-                   WHERE child.channel_id = ?
-                     AND child.reply_to = messages.id
-                     AND child.deleted = 0
-                 )
-               )
-             )
-           UNION
-           SELECT parent.id, parent.created_at, parent.reply_to
-           FROM messages parent
-           INNER JOIN ancestors ON ancestors.reply_to = parent.id
-           WHERE parent.channel_id = ?
-         )
-         SELECT
-           id AS thread_root_id,
-           created_at AS thread_root_created_at
-         FROM ancestors
-         WHERE reply_to IS NULL
-         LIMIT 1`
-      ).bind(messageId, channelId, channelId, channelId).first<{
-        thread_root_id: string;
-        thread_root_created_at: string;
-      }>();
+      const target = await readVisibleTargetRoot(env, channelId, messageId);
       if (!target) {
         return Response.json({ error: "message not found" }, { status: 404 });
       }
+      const threadRootId = String(target.id);
+      const threadRootCreatedAt = String(target.created_at || "");
 
       const [beforeResult, afterResult] = await Promise.all([
         env.DB.prepare(`
@@ -241,8 +212,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         `).bind(
           channelId,
           channelId,
-          target.thread_root_created_at,
-          target.thread_root_id,
+          threadRootCreatedAt,
+          threadRootId,
         ).all<VisibleMessageRow>(),
         env.DB.prepare(`
           SELECT * FROM messages
@@ -253,8 +224,8 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         `).bind(
           channelId,
           channelId,
-          target.thread_root_created_at,
-          target.thread_root_id,
+          threadRootCreatedAt,
+          threadRootId,
         ).all<VisibleMessageRow>(),
       ]);
 

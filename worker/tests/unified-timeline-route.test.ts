@@ -131,7 +131,7 @@ function createFixture(input: {
       },
       async all() {
         calls.push({ sql, params });
-        if (sql.includes("WITH RECURSIVE ancestors")) {
+        if (sql.includes("FROM messages target")) {
           return {
             results: messageRoots.filter((row) => row.id === String(params[1] || "")),
           };
@@ -786,7 +786,7 @@ test("gallery context uses a smaller server-controlled root radius", async () =>
   }), fixture.env);
   assert.equal(response.status, 200);
   const candidateCalls = fixture.calls.filter((call) =>
-    !call.sql.includes("WITH RECURSIVE ancestors")
+    !call.sql.includes("FROM messages target")
     && (
       (
         call.sql.includes("active_roots AS MATERIALIZED")

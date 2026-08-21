@@ -41,6 +41,7 @@ function createEnv(input: {
             },
             async all() {
               if (query.includes("SELECT d.* FROM dm d")) return result(input.dmRoots || []);
+              if (query.includes("FROM messages target")) return result(input.messageRoots || []);
               if (query.includes("FROM dm_replies")) return result(input.dmReplies || []);
               if (query.includes("FROM dm WHERE")) return result(input.dmRoots || []);
               if (query.includes("reply_to IN")) return result(input.messageReplies || []);
@@ -196,7 +197,11 @@ test("centered windows resolve one target and keep candidate reads bounded", asy
   );
   assert.equal(candidateCalls.length, 4);
   for (const call of candidateCalls) assert.equal(call.params.at(-1), 26);
-  assert.equal(calls.filter((call) => call.query.includes("WITH RECURSIVE ancestors")).length, 1);
+  const targetCalls = calls.filter((call) => call.query.includes("FROM messages target"));
+  assert.equal(targetCalls.length, 1);
+  assert.deepEqual(targetCalls[0].params, ["channel-a", "target-reply"]);
+  assert.match(targetCalls[0].query, /COALESCE\(target\.root_id, target\.reply_to\)/);
+  assert.doesNotMatch(targetCalls[0].query, /WITH RECURSIVE/);
 });
 
 test("centered DM target resolution applies the signed visitor UID", async () => {

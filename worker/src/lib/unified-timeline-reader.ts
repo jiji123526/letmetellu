@@ -3,6 +3,7 @@ import {
   buildVisibleRootPageQuery,
   VISIBLE_ROOT_MESSAGE_CONDITION,
   readVisibleFlatThreads,
+  readVisibleTargetRoot,
   type VisibleMessageRow,
 } from "./visible-messages.ts";
 import {
@@ -457,32 +458,12 @@ async function resolveTargetRoot(
     return row ? { source, row, cursor: rootCursor(source, row) } : null;
   }
 
-  const result = await env.DB.prepare(`
-    WITH RECURSIVE ancestors(id, reply_to) AS (
-      SELECT id, reply_to FROM messages
-      WHERE channel_id = ? AND id = ?
-      UNION
-      SELECT parent.id, parent.reply_to
-      FROM messages parent
-      INNER JOIN ancestors ON ancestors.reply_to = parent.id
-      WHERE parent.channel_id = ?
-    )
-    SELECT root.*
-    FROM messages root
-    INNER JOIN ancestors ON ancestors.id = root.id
-    WHERE ancestors.reply_to IS NULL
-      AND root.channel_id = ?
-      AND (
-        root.deleted = 0
-        OR (root.deleted = 1 AND EXISTS (
-          SELECT 1 FROM messages child
-          WHERE child.channel_id = ? AND child.reply_to = root.id AND child.deleted = 0
-        ))
-      )
-    LIMIT 1
-  `).bind(channelId, targetId, channelId, channelId, channelId).all<RootRow>();
-  recordQueryResult(metrics, result);
-  const row = result.results?.[0] || null;
+  const row = await readVisibleTargetRoot(
+    env,
+    channelId,
+    targetId,
+    (result) => recordQueryResult(metrics, result),
+  ) as RootRow | null;
   return row ? { source, row, cursor: rootCursor(source, row) } : null;
 }
 
