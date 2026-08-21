@@ -17,6 +17,7 @@ import { handleUnifiedTimeline } from "./routes/unified-timeline";
 import { handleChannelReports } from "./routes/channel-reports";
 import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
+import { handleBilling } from "./routes/billing";
 import {
   getOperationalRouteDetail,
   getOperationalErrorDetail,
@@ -276,6 +277,8 @@ export default {
         response = await handleSupport(request, env);
       } else if (url.pathname.startsWith("/api/survey")) {
         response = await handleSurvey(request, env);
+      } else if (url.pathname.startsWith("/api/billing")) {
+        response = await handleBilling(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key, ctx);

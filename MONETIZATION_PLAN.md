@@ -20,6 +20,12 @@ Last updated: 2026-08-21
 - Updated this document to reflect the current Plus direction, implementation order and phased work plan.
 - Landed the visible-message read optimization that reduced the main remaining steady-state read-volume path before monetization work continued.
 
+Uncommitted in progress after `5df0016`:
+
+- Added the first Phase 3 billing skeleton: a provider-neutral Plus plan catalog, Worker-side billing order creation route and authenticated Next proxy route.
+- Order creation is server-authoritative for plan, billing cycle, amount, currency, provider and auto-renew flags, and reuses still-valid pending orders instead of minting a new row on every retry.
+- Active Plus users, including `grandfathered_beta`, are blocked from creating redundant checkout orders so beta users cannot accidentally enter a paid flow.
+
 `0dfdb7d` Add monetization foundation and plus owner gates
 
 - Added D1 monetization foundation schema for billing orders, payments, entitlements, webhook events and daily image quota events.
