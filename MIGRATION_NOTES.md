@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Plus catalog prices include VAT — 2026-08-21
+
+- Monthly `2,900 KRW` and yearly `17,000 KRW` remain the server-authoritative final charge amounts.
+- Billing catalog and order responses now expose `vat_inclusive`, and both the plan panel and checkout page label displayed prices as VAT-inclusive.
+- Existing order rows store only amount and currency, so no stored data rewrite is needed. Future first charges and renewals continue charging the unchanged catalog amounts.
+
+Deployment note: no database or R2 migration is required. Deploy the Worker and frontend together so the API contract and client type agree.
+
 ### Toss renewal responses use strict payment validation — 2026-08-21
 
 - Scheduled renewal charges now require `DONE`, `BILLING`, the generated renewal order ID, the catalog amount and the configured currency before persistence.

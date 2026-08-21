@@ -158,7 +158,7 @@ test("billing confirmation persists payment and entitlement from a validated ord
     status: "confirmed",
     auto_renews: true,
     expires_at: "2099-08-21T00:30:00.000Z",
-    tax_mode: "vat_exclusive",
+    tax_mode: "vat_inclusive",
   });
   assert.deepEqual(data.payment, {
     provider_payment_id: "payment-1",

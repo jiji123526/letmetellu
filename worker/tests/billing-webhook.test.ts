@@ -281,7 +281,7 @@ test("billing webhook records subscription cancellation without removing current
     status: "non_renewing",
     auto_renews: true,
     expires_at: "2026-09-20T00:00:00.000Z",
-    tax_mode: "vat_exclusive",
+    tax_mode: "vat_inclusive",
   });
   assert.deepEqual(data.entitlement, {
     id: "billing-order:order-1",

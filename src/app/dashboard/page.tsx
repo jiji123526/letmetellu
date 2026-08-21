@@ -2765,6 +2765,8 @@ function DashboardPageContent() {
                     </div>
                     <div className="mt-1 text-[11px]" style={{ color: "var(--meta)" }}>
                       {plan.auto_renews ? t("dashboardPlanAutorenewBadge") : t("dashboardPlanExpiresBadge")}
+                      {" · "}
+                      {t("billingTaxIncluded")}
                     </div>
                     <button
                       type="button"

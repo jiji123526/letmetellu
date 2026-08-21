@@ -5,7 +5,7 @@ export interface BillingPlanCatalogEntry {
   amount: number;
   currency: string;
   auto_renews: boolean;
-  tax_mode: "vat_exclusive";
+  tax_mode: "vat_inclusive";
   duration_days: number;
 }
 

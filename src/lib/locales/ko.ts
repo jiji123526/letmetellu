@@ -88,6 +88,7 @@ export const ko = {
   channelPlanLockedBanner: "이 채널은 Plus를 다시 시작할 때까지 읽기 전용으로 보관됩니다.",
   dashboardPlanDetailsMonthly: "30일",
   dashboardPlanDetailsYearly: "365일",
+  billingTaxIncluded: "부가세 포함",
   dashboardPlanDetailsFeatureAds: "소유한 채널에서 이미지 무제한 전송",
   dashboardPlanDetailsFeatureCustomization: "버블 색상과 배경 커스터마이징",
   dashboardPlanDetailsFeatureImages: "모든 채널에서 이미지 전송 한도 제한 없음",

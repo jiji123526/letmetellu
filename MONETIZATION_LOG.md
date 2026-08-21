@@ -9,6 +9,12 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Plus prices are final VAT-inclusive amounts
+
+- Keep the monthly `2,900 KRW` and yearly `17,000 KRW` catalog prices as the exact amounts charged through Toss.
+- Mark API responses as VAT-inclusive and show that status beside prices in the plan and checkout screens.
+- No existing order amounts or renewal amounts are increased.
+
 #### Toss renewals reject mismatched payment responses
 
 - Apply the same completed billing-payment validation to scheduled renewal charges.

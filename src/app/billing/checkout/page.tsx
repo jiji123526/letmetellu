@@ -146,7 +146,7 @@ export default function BillingCheckoutPage() {
             <div className="text-[13px]" style={{ color: "var(--meta)" }}>Order</div>
             <div className="mt-1 text-[16px] font-semibold">{state.checkout?.order_name}</div>
             <div className="mt-1 text-[13px]" style={{ color: "var(--meta)" }}>
-              {state.order.currency} {state.order.amount.toLocaleString()}
+              {state.order.currency} {state.order.amount.toLocaleString()} · {t("billingTaxIncluded")}
             </div>
           </div>
         ) : null}

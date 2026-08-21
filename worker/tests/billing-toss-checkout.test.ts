@@ -107,7 +107,7 @@ test("toss prepare route returns a billing-auth checkout payload for a pending o
     status: "pending",
     auto_renews: true,
     expires_at: "2099-08-21T00:30:00.000Z",
-    tax_mode: "vat_exclusive",
+    tax_mode: "vat_inclusive",
   });
   assert.deepEqual(data.checkout, {
     provider: "toss_autobilling",

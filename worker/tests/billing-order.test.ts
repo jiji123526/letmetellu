@@ -89,7 +89,7 @@ test("billing plan catalog resolves the chosen plus beta prices", () => {
     amount: 2900,
     currency: "KRW",
     autoRenews: true,
-    taxMode: "vat_exclusive",
+    taxMode: "vat_inclusive",
     durationDays: 30,
   });
   assert.deepEqual(resolveBillingPlanSelection({
@@ -102,7 +102,7 @@ test("billing plan catalog resolves the chosen plus beta prices", () => {
     amount: 17000,
     currency: "KRW",
     autoRenews: true,
-    taxMode: "vat_exclusive",
+    taxMode: "vat_inclusive",
     durationDays: 365,
   });
   assert.equal(resolveBillingPlanSelection({
@@ -144,7 +144,7 @@ test("billing order route creates a pending server-authoritative order", async (
       provider_order_id: null,
       status: "pending",
       auto_renews: true,
-      tax_mode: "vat_exclusive",
+      tax_mode: "vat_inclusive",
     },
   );
   assert.equal(fixture.getInsertRunCount(), 1);
@@ -200,7 +200,7 @@ test("billing order route reuses an unexpired pending order for the same purchas
     status: "pending",
     auto_renews: true,
     expires_at: "2026-08-21T00:30:00.000Z",
-    tax_mode: "vat_exclusive",
+    tax_mode: "vat_inclusive",
   });
   assert.equal(fixture.getInsertRunCount(), 0);
 });

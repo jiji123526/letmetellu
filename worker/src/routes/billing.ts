@@ -71,7 +71,7 @@ interface BillingStateSubscriptionResponse {
 
 function buildOrderResponse(
   order: PendingBillingOrderRow,
-  taxMode: "vat_exclusive",
+  taxMode: "vat_inclusive",
 ) {
   return {
     order_id: order.order_id,
@@ -637,7 +637,7 @@ async function handleBillingTossPrepare(request: Request, env: Env, userId: stri
 
   return Response.json({
     ok: true,
-    order: buildOrderResponse(order, "vat_exclusive"),
+    order: buildOrderResponse(order, "vat_inclusive"),
     checkout: {
       provider: "toss_autobilling",
       customer_key: buildTossCustomerKey(user.id),
@@ -1124,7 +1124,7 @@ async function handleBillingWebhook(request: Request, env: Env): Promise<Respons
     ok: true,
     reused: false,
     event: processedEvent ? buildWebhookEventResponse(processedEvent) : null,
-    order: currentOrder ? buildOrderResponse(currentOrder, "vat_exclusive") : null,
+    order: currentOrder ? buildOrderResponse(currentOrder, "vat_inclusive") : null,
     payment: payment ? buildPaymentResponse(payment) : null,
     entitlement: entitlement ? buildEntitlementResponse(entitlement) : null,
   });

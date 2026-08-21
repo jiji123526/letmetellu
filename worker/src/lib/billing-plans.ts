@@ -2,7 +2,7 @@ export type BillingPlanCode = "plus";
 export type BillingCycle = "monthly" | "yearly";
 export type BillingProvider = "toss_autobilling";
 export type BillingCurrency = "KRW";
-export type BillingTaxMode = "vat_exclusive";
+export type BillingTaxMode = "vat_inclusive";
 
 export interface BillingPlanSelection {
   plan: BillingPlanCode;
@@ -26,7 +26,7 @@ const BILLING_PLAN_CATALOG: readonly BillingPlanSelection[] = [
     amount: 2900,
     currency: "KRW",
     autoRenews: true,
-    taxMode: "vat_exclusive",
+    taxMode: "vat_inclusive",
     durationDays: 30,
   },
   {
@@ -36,7 +36,7 @@ const BILLING_PLAN_CATALOG: readonly BillingPlanSelection[] = [
     amount: 17000,
     currency: "KRW",
     autoRenews: true,
-    taxMode: "vat_exclusive",
+    taxMode: "vat_inclusive",
     durationDays: 365,
   },
 ] as const;

@@ -90,6 +90,7 @@ export const en: Record<LocaleKeys, string> = {
   channelPlanLockedBanner: "This channel stays read-only until you restart Plus.",
   dashboardPlanDetailsMonthly: "30 days",
   dashboardPlanDetailsYearly: "365 days",
+  billingTaxIncluded: "VAT included",
   dashboardPlanDetailsFeatureAds: "Unlimited image sending in channels you own",
   dashboardPlanDetailsFeatureCustomization: "Bubble color and background customization",
   dashboardPlanDetailsFeatureImages: "Image quota exception in any supported channel",
