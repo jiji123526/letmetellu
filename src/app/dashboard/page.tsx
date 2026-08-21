@@ -2755,37 +2755,86 @@ function DashboardPageContent() {
                 {t("dashboardPlanDetailsPrice")}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {(billingState?.plans || []).map((plan) => (
-                  <div key={plan.billing_cycle} className="rounded-[14px] p-3" style={{ background: "var(--card)" }}>
-                    <div className="text-[12px] font-semibold" style={{ color: "var(--meta)" }}>
-                      {plan.billing_cycle === "monthly" ? t("dashboardPlanDetailsMonthly") : t("dashboardPlanDetailsYearly")}
-                    </div>
-                    <div className="mt-1 text-[18px] font-semibold">
-                      {formatCurrency(plan.amount, plan.currency, locale)}
-                    </div>
-                    <div className="mt-1 text-[11px]" style={{ color: "var(--meta)" }}>
-                      {plan.auto_renews ? t("dashboardPlanAutorenewBadge") : t("dashboardPlanExpiresBadge")}
-                      {" · "}
-                      {t("billingTaxIncluded")}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={Boolean(ownerPlan?.hasPlus) || checkoutStartingCycle !== null}
-                      className="mt-3 w-full rounded-[10px] border-none px-3 py-2 text-[12px] font-semibold"
+                {(billingState?.plans || []).map((plan) => {
+                  const monthlyPlan = billingState?.plans?.find((candidate) => candidate.billing_cycle === "monthly");
+                  const referenceAmount = plan.billing_cycle === "yearly"
+                    && monthlyPlan?.currency === plan.currency
+                    ? monthlyPlan.amount * 12
+                    : 0;
+                  const hasYearlyDiscount = referenceAmount > plan.amount;
+                  const discountPercent = hasYearlyDiscount
+                    ? Math.round((1 - plan.amount / referenceAmount) * 100)
+                    : 0;
+                  const savingsAmount = hasYearlyDiscount ? referenceAmount - plan.amount : 0;
+
+                  return (
+                    <div
+                      key={plan.billing_cycle}
+                      className="relative overflow-hidden rounded-[14px] p-3"
                       style={{
-                        background: ownerPlan?.hasPlus ? "var(--bg)" : "#007aff",
-                        color: ownerPlan?.hasPlus ? "var(--meta)" : "#fff",
-                        cursor: ownerPlan?.hasPlus || checkoutStartingCycle !== null ? "default" : "pointer",
-                        opacity: ownerPlan?.hasPlus || checkoutStartingCycle !== null ? 0.7 : 1,
+                        background: hasYearlyDiscount
+                          ? "linear-gradient(145deg, #fff7ed 0%, #fff 72%)"
+                          : "var(--card)",
+                        border: hasYearlyDiscount ? "1px solid #fb923c" : "1px solid transparent",
+                        boxShadow: hasYearlyDiscount ? "0 8px 22px rgba(234, 88, 12, 0.12)" : "none",
                       }}
-                      onClick={() => void startBillingCheckout(plan.billing_cycle)}
                     >
-                      {checkoutStartingCycle === plan.billing_cycle
-                        ? t("dashboardPlanCheckoutProcessing")
-                        : t("dashboardPlanCheckoutStart")}
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex min-h-6 items-start justify-between gap-1">
+                        <div className="text-[12px] font-semibold" style={{ color: "var(--meta)" }}>
+                          {plan.billing_cycle === "monthly" ? t("dashboardPlanDetailsMonthly") : t("dashboardPlanDetailsYearly")}
+                        </div>
+                        {hasYearlyDiscount ? (
+                          <span
+                            className="rounded-full px-2 py-1 text-[10px] font-bold leading-none"
+                            style={{ background: "#ea580c", color: "#fff" }}
+                          >
+                            {t("dashboardPlanYearlyDiscount").replace("{percent}", String(discountPercent))}
+                          </span>
+                        ) : null}
+                      </div>
+                      {hasYearlyDiscount ? (
+                        <div className="mt-1 text-[12px] font-medium line-through" style={{ color: "#9a6b52" }}>
+                          {formatCurrency(referenceAmount, plan.currency, locale)}
+                        </div>
+                      ) : null}
+                      <div
+                        className={`${hasYearlyDiscount ? "mt-0 text-[22px]" : "mt-1 text-[18px]"} font-bold`}
+                        style={{ color: hasYearlyDiscount ? "#c2410c" : "inherit" }}
+                      >
+                        {formatCurrency(plan.amount, plan.currency, locale)}
+                      </div>
+                      {hasYearlyDiscount ? (
+                        <div className="mt-1 text-[11px] font-semibold" style={{ color: "#c2410c" }}>
+                          {t("dashboardPlanYearlySavings").replace(
+                            "{amount}",
+                            formatCurrency(savingsAmount, plan.currency, locale),
+                          )}
+                        </div>
+                      ) : null}
+                      <div className="mt-1 text-[11px]" style={{ color: "var(--meta)" }}>
+                        {plan.auto_renews ? t("dashboardPlanAutorenewBadge") : t("dashboardPlanExpiresBadge")}
+                        {" · "}
+                        {t("billingTaxIncluded")}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={Boolean(ownerPlan?.hasPlus) || checkoutStartingCycle !== null}
+                        className="mt-3 w-full rounded-[10px] border-none px-3 py-2 text-[12px] font-semibold"
+                        style={{
+                          background: ownerPlan?.hasPlus ? "var(--bg)" : hasYearlyDiscount ? "#ea580c" : "#007aff",
+                          color: ownerPlan?.hasPlus ? "var(--meta)" : "#fff",
+                          cursor: ownerPlan?.hasPlus || checkoutStartingCycle !== null ? "default" : "pointer",
+                          opacity: ownerPlan?.hasPlus || checkoutStartingCycle !== null ? 0.7 : 1,
+                        }}
+                        onClick={() => void startBillingCheckout(plan.billing_cycle)}
+                      >
+                        {checkoutStartingCycle === plan.billing_cycle
+                          ? t("dashboardPlanCheckoutProcessing")
+                          : t("dashboardPlanCheckoutStart")}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

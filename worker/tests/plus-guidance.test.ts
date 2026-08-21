@@ -18,6 +18,10 @@ const billingSuccessSource = readFileSync(
   new URL("../../src/app/billing/callback/toss/success/page.tsx", import.meta.url),
   "utf8",
 );
+const dashboardSource = readFileSync(
+  new URL("../../src/app/dashboard/page.tsx", import.meta.url),
+  "utf8",
+);
 const settingsPanelSource = readFileSync(
   new URL("../../src/components/chat/SettingsPanel.tsx", import.meta.url),
   "utf8",
@@ -73,6 +77,14 @@ test("successful checkout offers the activation card actions", () => {
   assert.match(billingSuccessSource, /billingSuccessCreateChannel/);
   assert.match(billingSuccessSource, /billingSuccessOpenAdminGuide/);
   assert.match(billingSuccessSource, /AdminGuidePanel/);
+});
+
+test("yearly Plus pricing visibly explains its monthly-price discount", () => {
+  assert.match(dashboardSource, /monthlyPlan\.amount \* 12/);
+  assert.match(dashboardSource, /dashboardPlanYearlyDiscount/);
+  assert.match(dashboardSource, /dashboardPlanYearlySavings/);
+  assert.match(koreanLocaleSource, /dashboardPlanYearlyDiscount: "\{percent\}% 할인"/);
+  assert.match(koreanLocaleSource, /dashboardPlanYearlySavings: "연간 \{amount\} 절약"/);
 });
 
 test("personal bubble colors require the viewer's Plus entitlement", () => {

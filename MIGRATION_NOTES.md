@@ -4,6 +4,13 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Yearly Plus discount is prominent in the plan panel — 2026-08-21
+
+- The 365-day card compares its amount with twelve 30-day payments and displays the reference price, calculated discount percentage and annual savings.
+- Discount styling is derived from the billing catalog rather than hardcoded to the current amounts. It disappears if the yearly plan is not cheaper or currencies differ.
+
+Deployment note: no database, Worker or R2 change is required. Deploy the frontend.
+
 ### Plus catalog prices include VAT — 2026-08-21
 
 - Monthly `2,900 KRW` and yearly `17,000 KRW` remain the server-authoritative final charge amounts.

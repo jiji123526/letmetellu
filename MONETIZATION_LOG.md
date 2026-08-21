@@ -9,6 +9,12 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Yearly Plus pricing highlights its discount
+
+- Compare the 365-day price against twelve 30-day payments using the server-returned catalog amounts.
+- Give the discounted yearly card a distinct treatment with the reference price, calculated discount percentage and annual savings.
+- Hide all discount treatment automatically when the catalog no longer represents a saving.
+
 #### Plus prices are final VAT-inclusive amounts
 
 - Keep the monthly `2,900 KRW` and yearly `17,000 KRW` catalog prices as the exact amounts charged through Toss.
