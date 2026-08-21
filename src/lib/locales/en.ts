@@ -61,7 +61,6 @@ export const en: Record<LocaleKeys, string> = {
   dashboardPlanDetailsTitle: "Plus plan",
   dashboardPlanDetailsDesc: "View your current status, pricing, and included features.",
   dashboardPlanDetailsCurrent: "Current status",
-  dashboardPlanDetailsCurrentFree: "You are currently on the Free plan.",
   dashboardPlanDetailsPrice: "Pricing",
   dashboardPlanDetailsFeatures: "Included features",
   dashboardPlanDetailsLoadFailed: "Could not load the plan details.",

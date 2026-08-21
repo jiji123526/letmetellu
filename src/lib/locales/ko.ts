@@ -59,7 +59,6 @@ export const ko = {
   dashboardPlanDetailsTitle: "Plus 요금제",
   dashboardPlanDetailsDesc: "현재 상태와 가격, 포함 기능을 확인할 수 있습니다.",
   dashboardPlanDetailsCurrent: "현재 상태",
-  dashboardPlanDetailsCurrentFree: "현재 무료 요금제를 사용 중입니다.",
   dashboardPlanDetailsPrice: "가격",
   dashboardPlanDetailsFeatures: "포함 기능",
   dashboardPlanDetailsLoadFailed: "플랜 정보를 불러오지 못했습니다.",

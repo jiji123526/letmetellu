@@ -9,6 +9,11 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Remove duplicate Free plan status copy
+
+- Kept the Free status badge as the single plan indicator in the details panel and removed the repeated sentence below it.
+- Preserved Plus status details because they communicate renewal, expiry or grandfathered-entitlement state.
+
 #### Monetization history is separated from the plan
 
 - Moved implementation history out of `MONETIZATION_PLAN.md` so the plan contains only product decisions, architecture and remaining work.

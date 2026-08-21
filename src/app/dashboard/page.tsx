@@ -2592,9 +2592,11 @@ function DashboardPageContent() {
                   </span>
                 ) : null}
               </div>
-              <div className="mt-2 text-[13px]" style={{ color: "var(--gray-text)" }}>
-                {ownerPlan?.hasPlus ? ownerPlanStatusNote : t("dashboardPlanDetailsCurrentFree")}
-              </div>
+              {ownerPlan?.hasPlus ? (
+                <div className="mt-2 text-[13px]" style={{ color: "var(--gray-text)" }}>
+                  {ownerPlanStatusNote}
+                </div>
+              ) : null}
               {billingSubscription && billingSubscriptionStatusLabel ? (
                 <div className="mt-3 rounded-[12px] px-3 py-2 text-[12px]" style={{ background: "var(--bg)", color: "var(--meta)" }}>
                   <div style={{ color: "var(--gray-text)", fontWeight: 600 }}>
