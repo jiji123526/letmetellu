@@ -95,7 +95,7 @@ function darkenColor(hex: string, amount: number): string {
   return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, "0")}`;
 }
 
-interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; }
+interface MenuItem { key: string; label: string; icon: string; arrow: string; arrowColor?: string; disabled?: boolean; }
 
 export function AdminPanel(props: AdminPanelProps) {
   const { channelId, channelName, profileImage, ownerPlan, currentColor, backgroundType, backgroundColor, backgroundImage, backgroundOverlay, backgroundBlur, passcodeHint, petitionEnabled, dmEnabled, showOnProfile, notice, welcomeConfig, blockedUsers, onToggleView, onPetitionToggle, onDmToggle, onShowOnProfileToggle, onColorChange, onBackgroundChange, onNameChange, onProfileImageChange, onPasscodeChange, onNoticeChange, onWelcomeChange, onUnblock, onClose } = props;
@@ -183,8 +183,8 @@ export function AdminPanel(props: AdminPanelProps) {
 
   const channelItems: MenuItem[] = [
     { key: "profile", label: t("profile"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`, arrow: "›" },
-    { key: "color", label: t("color"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: appearanceLocked ? t("plusBadge") : "›", arrowColor: appearanceLocked ? "#9a6700" : undefined },
-    { key: "background", label: t("chatBackground"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>`, arrow: appearanceLocked ? t("plusBadge") : "›", arrowColor: appearanceLocked ? "#9a6700" : undefined },
+    { key: "color", label: t("color"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><circle cx="16" cy="14" r="2" fill="currentColor"/></svg>`, arrow: appearanceLocked ? t("plusBadge") : "›", arrowColor: appearanceLocked ? "#9a6700" : undefined, disabled: appearanceLocked },
+    { key: "background", label: t("chatBackground"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>`, arrow: appearanceLocked ? t("plusBadge") : "›", arrowColor: appearanceLocked ? "#9a6700" : undefined, disabled: appearanceLocked },
     { key: "passcode", label: t("passcode"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`, arrow: "›" },
     { key: "rules", label: t("rules"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>`, arrow: "›" },
     { key: "welcome", label: t("welcomePopup"), icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`, arrow: "›" },
@@ -198,6 +198,7 @@ export function AdminPanel(props: AdminPanelProps) {
   ];
 
   const handleClick = (key: string) => {
+    if (appearanceLocked && (key === "color" || key === "background")) return;
     switch (key) {
       case "channel": setView("channel"); break;
       case "manage": setView("manage"); break;
@@ -239,7 +240,8 @@ export function AdminPanel(props: AdminPanelProps) {
       {items.map((item, i) => (
         <button
           key={item.key}
-          style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", background: "none", border: "none", borderBottom: i < items.length - 1 ? "0.5px solid var(--hairline)" : "none", padding: "14px 18px", cursor: "pointer", fontFamily: "inherit", color: "var(--gray-text)" }}
+          disabled={item.disabled === true}
+          style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", background: "none", border: "none", borderBottom: i < items.length - 1 ? "0.5px solid var(--hairline)" : "none", padding: "14px 18px", cursor: item.disabled ? "default" : "pointer", fontFamily: "inherit", color: "var(--gray-text)", opacity: item.disabled ? 0.68 : 1 }}
           onClick={() => handleClick(item.key)}
         >
           <span style={{ width: "calc(var(--bubble-font-size, 17px) + 4px)", height: "calc(var(--bubble-font-size, 17px) + 4px)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--meta)" }} dangerouslySetInnerHTML={{ __html: item.icon.replace(/<svg/, `<svg style="width:calc(var(--bubble-font-size, 17px) + 2px);height:calc(var(--bubble-font-size, 17px) + 2px)"`) }} />
@@ -385,14 +387,16 @@ export function AdminPanel(props: AdminPanelProps) {
               {BUBBLE_COLORS.map((color) => (
                 <button
                   key={color}
-                  style={{ width: "calc(var(--bubble-font-size, 17px) + 9px)", height: "calc(var(--bubble-font-size, 17px) + 9px)", borderRadius: "50%", background: color, border: "3px solid transparent", outline: selectedColor === color ? `3px solid ${darkenColor(color, 50)}` : "3px solid transparent", cursor: "pointer", transition: "outline-color .15s" }}
+                  disabled={appearanceLocked}
+                  style={{ width: "calc(var(--bubble-font-size, 17px) + 9px)", height: "calc(var(--bubble-font-size, 17px) + 9px)", borderRadius: "50%", background: color, border: "3px solid transparent", outline: selectedColor === color ? `3px solid ${darkenColor(color, 50)}` : "3px solid transparent", cursor: appearanceLocked ? "default" : "pointer", transition: "outline-color .15s", opacity: appearanceLocked ? 0.68 : 1 }}
                   onClick={() => { setSelectedColor(color); onColorChange(color); }}
                 />
               ))}
               <button
-                style={{ width: "calc(var(--bubble-font-size, 17px) + 9px)", height: "calc(var(--bubble-font-size, 17px) + 9px)", borderRadius: "50%", background: "conic-gradient(red,orange,yellow,green,cyan,blue,violet,red)", border: "3px solid transparent", outline: !BUBBLE_COLORS.includes(selectedColor) ? `3px solid ${darkenColor(selectedColor, 50)}` : "3px solid transparent", cursor: "pointer", position: "relative", overflow: "hidden" }}
+                disabled={appearanceLocked}
+                style={{ width: "calc(var(--bubble-font-size, 17px) + 9px)", height: "calc(var(--bubble-font-size, 17px) + 9px)", borderRadius: "50%", background: "conic-gradient(red,orange,yellow,green,cyan,blue,violet,red)", border: "3px solid transparent", outline: !BUBBLE_COLORS.includes(selectedColor) ? `3px solid ${darkenColor(selectedColor, 50)}` : "3px solid transparent", cursor: appearanceLocked ? "default" : "pointer", position: "relative", overflow: "hidden", opacity: appearanceLocked ? 0.68 : 1 }}
               >
-                <input ref={colorInputRef} type="color" value={selectedColor} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} onChange={(e) => {
+                <input disabled={appearanceLocked} ref={colorInputRef} type="color" value={selectedColor} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: appearanceLocked ? "default" : "pointer" }} onChange={(e) => {
                   const color = normalizeBubbleColor(e.target.value);
                   setSelectedColor(color);
                   onColorChange(color);
@@ -430,6 +434,7 @@ export function AdminPanel(props: AdminPanelProps) {
                 <button
                   key={type}
                   type="button"
+                  disabled={appearanceLocked}
                   onClick={() => setSelectedBackgroundType(type)}
                   style={{
                     border: selectedBackgroundType === type ? "1.5px solid var(--bubble-sent)" : "1px solid var(--input-border)",
@@ -438,7 +443,8 @@ export function AdminPanel(props: AdminPanelProps) {
                     background: "var(--card)",
                     color: selectedBackgroundType === type ? "var(--bubble-sent)" : "var(--gray-text)",
                     fontFamily: "inherit",
-                    cursor: "pointer",
+                    cursor: appearanceLocked ? "default" : "pointer",
+                    opacity: appearanceLocked ? 0.68 : 1,
                   }}
                 >
                   {t(type === "default" ? "backgroundDefault" : type === "color" ? "backgroundColor" : "backgroundImage")}
@@ -454,6 +460,7 @@ export function AdminPanel(props: AdminPanelProps) {
                       key={color}
                       type="button"
                       aria-label={color}
+                      disabled={appearanceLocked}
                       onClick={() => setSelectedBackgroundColor(color)}
                       style={{
                         width: "calc(var(--bubble-font-size, 17px) + 13px)",
@@ -463,7 +470,8 @@ export function AdminPanel(props: AdminPanelProps) {
                         border: "1px solid var(--hairline)",
                         outline: selectedBackgroundColor.toLowerCase() === color.toLowerCase() ? `3px solid var(--bubble-sent)` : "3px solid transparent",
                         outlineOffset: "1px",
-                        cursor: "pointer",
+                        cursor: appearanceLocked ? "default" : "pointer",
+                        opacity: appearanceLocked ? 0.68 : 1,
                       }}
                     />
                   ))}
@@ -477,16 +485,18 @@ export function AdminPanel(props: AdminPanelProps) {
                       border: "1px solid var(--hairline)",
                       outline: !BACKGROUND_COLORS.some((color) => color.toLowerCase() === selectedBackgroundColor.toLowerCase()) ? "3px solid var(--bubble-sent)" : "3px solid transparent",
                       outlineOffset: "1px",
-                      cursor: "pointer",
+                      cursor: appearanceLocked ? "default" : "pointer",
                       position: "relative",
                       overflow: "hidden",
+                      opacity: appearanceLocked ? 0.68 : 1,
                     }}
                   >
                     <input
+                      disabled={appearanceLocked}
                       type="color"
                       value={selectedBackgroundColor}
                       onChange={(event) => setSelectedBackgroundColor(event.target.value)}
-                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: appearanceLocked ? "default" : "pointer" }}
                     />
                   </label>
                 </div>
@@ -494,13 +504,14 @@ export function AdminPanel(props: AdminPanelProps) {
             )}
             {selectedBackgroundType === "image" && (
               <>
-                <button type="button" style={{ ...saveBtnStyle, background: "var(--card)", color: "var(--gray-text)", border: "1px solid var(--input-border)", marginBottom: "12px" }} onClick={() => document.getElementById("backgroundImageInput")?.click()}>
+                <button type="button" disabled={appearanceLocked} style={{ ...saveBtnStyle, background: "var(--card)", color: "var(--gray-text)", border: "1px solid var(--input-border)", marginBottom: "12px", cursor: appearanceLocked ? "default" : "pointer", opacity: appearanceLocked ? 0.6 : 1 }} onClick={() => document.getElementById("backgroundImageInput")?.click()}>
                   {selectedBackgroundImage ? t("changeBackgroundImage") : t("uploadBackgroundImage")}
                 </button>
                 <input
                   id="backgroundImageInput"
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
+                  disabled={appearanceLocked}
                   hidden
                   onChange={async (event) => {
                     const file = event.target.files?.[0];
@@ -524,7 +535,7 @@ export function AdminPanel(props: AdminPanelProps) {
                   <span style={{ display: "flex", justifyContent: "space-between", marginBottom: "7px" }}>
                     <span>{t("backgroundOverlay")}</span><span>{selectedBackgroundOverlay}%</span>
                   </span>
-                  <input type="range" min="0" max="60" value={selectedBackgroundOverlay} onChange={(event) => setSelectedBackgroundOverlay(Number(event.target.value))} style={{ width: "100%" }} />
+                  <input disabled={appearanceLocked} type="range" min="0" max="60" value={selectedBackgroundOverlay} onChange={(event) => setSelectedBackgroundOverlay(Number(event.target.value))} style={{ width: "100%" }} />
                 </label>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px", marginBottom: "14px" }}>
                   <div>
@@ -534,9 +545,10 @@ export function AdminPanel(props: AdminPanelProps) {
                   <button
                     type="button"
                     role="switch"
+                    disabled={appearanceLocked}
                     aria-checked={selectedBackgroundBlur}
                     onClick={() => setSelectedBackgroundBlur((value) => !value)}
-                    style={{ position: "relative", width: "46px", height: "28px", flexShrink: 0, border: 0, borderRadius: "999px", padding: 0, cursor: "pointer", background: selectedBackgroundBlur ? "#34c759" : "var(--input-border)", transition: "background 180ms ease" }}
+                    style={{ position: "relative", width: "46px", height: "28px", flexShrink: 0, border: 0, borderRadius: "999px", padding: 0, cursor: appearanceLocked ? "default" : "pointer", background: selectedBackgroundBlur ? "#34c759" : "var(--input-border)", transition: "background 180ms ease", opacity: appearanceLocked ? 0.6 : 1 }}
                   >
                     <span style={{ position: "absolute", top: "2px", left: "2px", width: "24px", height: "24px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,.25)", transform: selectedBackgroundBlur ? "translateX(18px)" : "translateX(0)", transition: "transform 180ms ease" }} />
                   </button>
@@ -546,8 +558,8 @@ export function AdminPanel(props: AdminPanelProps) {
             {backgroundError && <div style={{ color: "#ff3b30", textAlign: "center", fontSize: "12px", marginBottom: "10px" }}>{backgroundError}</div>}
             <button
               type="button"
-              disabled={savingBackground || (selectedBackgroundType === "image" && !selectedBackgroundImage)}
-              style={{ ...saveBtnStyle, opacity: savingBackground || (selectedBackgroundType === "image" && !selectedBackgroundImage) ? 0.55 : 1 }}
+              disabled={appearanceLocked || savingBackground || (selectedBackgroundType === "image" && !selectedBackgroundImage)}
+              style={{ ...saveBtnStyle, opacity: appearanceLocked || savingBackground || (selectedBackgroundType === "image" && !selectedBackgroundImage) ? 0.55 : 1, cursor: appearanceLocked ? "default" : "pointer" }}
               onClick={async () => {
                 if (savingBackground) return;
                 setSavingBackground(true);

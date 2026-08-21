@@ -24,6 +24,14 @@ const channelStateSource = readFileSync(
   new URL("../src/routes/channel-state.ts", import.meta.url),
   "utf8",
 );
+const plusMenuSource = readFileSync(
+  new URL("../../src/components/chat/PlusMenu.tsx", import.meta.url),
+  "utf8",
+);
+const adminPanelSource = readFileSync(
+  new URL("../../src/components/admin/AdminPanel.tsx", import.meta.url),
+  "utf8",
+);
 
 test("plan feature gates expose the chosen free and plus ownership limits", () => {
   assert.equal(FREE_OWNED_CHANNEL_LIMIT, 1);
@@ -95,4 +103,13 @@ test("owner plan snapshots are exposed through user and channel-state reads", ()
   assert.match(userSource, /owner_plan: buildOwnerPlanState\(hasPlus\)/);
   assert.match(channelStateSource, /hasActivePlusEntitlement\(env, userId\)/);
   assert.match(channelStateSource, /ownerPlan: buildOwnerPlanState\(hasPlus\)/);
+});
+
+test("plus-locked owner UI disables freeze, live and customization controls before mutation", () => {
+  assert.match(plusMenuSource, /disabled=\{freezeLocked\}/);
+  assert.match(plusMenuSource, /disabled=\{liveLocked\}/);
+  assert.match(adminPanelSource, /disabled\?: boolean;/);
+  assert.match(adminPanelSource, /disabled=\{item\.disabled === true\}/);
+  assert.match(adminPanelSource, /if \(appearanceLocked && \(key === "color" \|\| key === "background"\)\) return;/);
+  assert.match(adminPanelSource, /disabled=\{appearanceLocked\}/);
 });

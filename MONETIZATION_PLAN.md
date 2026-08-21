@@ -11,6 +11,28 @@ Last updated: 2026-08-21
 - Validate willingness to pay before building complex usage-based billing.
 - Keep billing and rewarded-ad authorization enforceable by the server rather than trusting browser state.
 
+## Progress log
+
+### 2026-08-21
+
+`2e3b41d` Optimize visible message reads and document monetization beta plan
+
+- Updated this document to reflect the current Plus direction, implementation order and phased work plan.
+- Landed the visible-message read optimization that reduced the main remaining steady-state read-volume path before monetization work continued.
+
+`0dfdb7d` Add monetization foundation and plus owner gates
+
+- Added D1 monetization foundation schema for billing orders, payments, entitlements, webhook events and daily image quota events.
+- Added Worker entitlement helpers and owner plan gate helpers.
+- Enforced the first owner-side Plus rules on the server: Free 1 channel, Plus 5 channels, Plus-only freeze, Plus-only live start and Plus-only premium customization writes.
+- Added regression tests for the foundation and server-side Plus gates.
+
+`9ea7771` Expose owner plus plan state in dashboard and chat
+
+- Exposed owner plan state from the Worker through `user` and `channel-state` reads.
+- Reflected the plan snapshot in the dashboard create flow so channel-slot limits are visible before create attempts.
+- Reflected the same snapshot in chat owner UI so live, freeze and customization entry points show Plus-locked state before mutation attempts.
+
 ## Current working decisions
 
 Chosen direction as of 2026-08-21:

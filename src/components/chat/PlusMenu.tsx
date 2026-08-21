@@ -163,10 +163,12 @@ export function PlusMenu({
       </button>
       {isAdmin && onFreezeToggle && (
         <button
+          disabled={freezeLocked}
           style={{
             ...itemStyle,
             borderBottom: "0.5px solid var(--hairline)",
             opacity: freezeLocked ? 0.72 : 1,
+            cursor: freezeLocked ? "default" : "pointer",
           }}
           onClick={() => { onFreezeToggle(); onClose(); }}
         >
@@ -177,10 +179,12 @@ export function PlusMenu({
       )}
       {isAdmin && onLiveToggle && (
         <button
+          disabled={liveLocked}
           style={{
             ...itemStyle,
             borderBottom: (onNotice || (inLiveMode && onEmojiPreset)) ? "0.5px solid var(--hairline)" : "none",
             opacity: liveLocked ? 0.72 : 1,
+            cursor: liveLocked ? "default" : "pointer",
           }}
           onClick={() => { onLiveToggle(); onClose(); }}
         >
