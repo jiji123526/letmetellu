@@ -104,6 +104,8 @@ interface SavedScrollPosition {
 
 const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
 const SCROLL_POSITION_SAVE_INTERVAL_MS = 150;
+const PREPEND_LAYOUT_MARGIN_PX = 720;
+const PREPEND_LAYOUT_TIMEOUT_MS = 1_800;
 
 function messageCursor(message: Message | undefined): MessagePageCursor | null {
   return message?.id && message.created_at
@@ -349,6 +351,76 @@ async function waitForCompleteHistoryWindow(
         return "ready";
       }
       previousHeight = height;
+    }
+    return "timeout";
+  } finally {
+    container.removeEventListener("wheel", interrupt);
+    container.removeEventListener("touchstart", interrupt);
+    container.removeEventListener("pointerdown", interrupt);
+  }
+}
+
+function isInPrependLayoutScope(
+  node: Element,
+  anchor: HTMLElement,
+  anchorRect: DOMRect,
+): boolean {
+  if (!isBeforeOrInsideTarget(node, anchor)) return false;
+  if (anchor.contains(node)) return true;
+  const nodeRect = node.getBoundingClientRect();
+  return nodeRect.bottom >= anchorRect.top - PREPEND_LAYOUT_MARGIN_PX
+    && nodeRect.top <= anchorRect.bottom + PREPEND_LAYOUT_MARGIN_PX;
+}
+
+async function waitForPrependAnchorStability(
+  container: HTMLElement,
+  anchor: HTMLElement,
+  isCurrent: () => boolean,
+): Promise<"ready" | "timeout" | "cancelled"> {
+  const startedAt = performance.now();
+  let userInterrupted = false;
+  let previousSignature = "";
+  let stableFrames = 0;
+  const interrupt = () => { userInterrupted = true; };
+
+  container.addEventListener("wheel", interrupt, { passive: true });
+  container.addEventListener("touchstart", interrupt, { passive: true });
+  container.addEventListener("pointerdown", interrupt, { passive: true });
+
+  try {
+    const initialAnchorRect = anchor.getBoundingClientRect();
+    const deferredPreviews = [...container.querySelectorAll<HTMLElement>(
+      "[data-message-preview-url][data-history-layout-pending]",
+    )].filter((node) => isInPrependLayoutScope(node, anchor, initialAnchorRect));
+    deferredPreviews.forEach((node) => {
+      node.dispatchEvent(new Event("chat-history-preview-activate"));
+    });
+
+    await nextAnimationFrame();
+    while (performance.now() - startedAt < PREPEND_LAYOUT_TIMEOUT_MS) {
+      if (!isCurrent() || userInterrupted) return "cancelled";
+
+      const anchorRect = anchor.getBoundingClientRect();
+      const pending = [...container.querySelectorAll(
+        ".media-loading-dots, [data-history-layout-pending], img, video",
+      )].some((node) => {
+        if (!isInPrependLayoutScope(node, anchor, anchorRect)) return false;
+        if (
+          node.classList.contains("media-loading-dots")
+          || node.hasAttribute("data-history-layout-pending")
+        ) return true;
+        if (node instanceof HTMLImageElement) return !node.complete;
+        return node instanceof HTMLVideoElement
+          && node.networkState !== HTMLMediaElement.NETWORK_NO_SOURCE
+          && node.readyState < HTMLMediaElement.HAVE_METADATA;
+      });
+      const signature = `${anchor.offsetTop}:${anchor.offsetHeight}`;
+      stableFrames = !pending && signature === previousSignature
+        ? stableFrames + 1
+        : 0;
+      previousSignature = signature;
+      if (stableFrames >= 3) return "ready";
+      await nextAnimationFrame();
     }
     return "timeout";
   } finally {
@@ -911,12 +983,11 @@ export function useChatHistoryNavigation({
                 ? document.getElementById(anchor.id) as HTMLElement | null
                 : null;
               if (anchorElement) {
-                window.dispatchEvent(new Event("chat-history-preload"));
-                await waitForCompleteHistoryWindow(
+                window.dispatchEvent(new Event("chat-history-mounted"));
+                await waitForPrependAnchorStability(
                   element,
-                  () => historyLoadAnchorRequestRef.current === prependRequestId,
-                  45_000,
                   anchorElement,
+                  () => historyLoadAnchorRequestRef.current === prependRequestId,
                 );
               }
             } finally {
@@ -971,12 +1042,11 @@ export function useChatHistoryNavigation({
               return;
             }
             await nextAnimationFrame();
-            window.dispatchEvent(new Event("chat-history-preload"));
-            const readiness = await waitForCompleteHistoryWindow(
+            window.dispatchEvent(new Event("chat-history-mounted"));
+            const readiness = await waitForPrependAnchorStability(
               element,
-              () => historyLoadAnchorRequestRef.current === prependRequestId,
-              45_000,
               anchorElement,
+              () => historyLoadAnchorRequestRef.current === prependRequestId,
             );
             if (readiness === "cancelled") {
               releaseLockedScrollAnchor(prependRequestId);

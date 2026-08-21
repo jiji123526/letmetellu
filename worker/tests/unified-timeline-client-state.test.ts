@@ -465,18 +465,33 @@ test("prepending a unified page preserves mounted DM object references", () => {
   assert.equal(state.timelineItems[1], existingDm);
 });
 
-test("unified prepend holds its viewport anchor while inserted media settles", () => {
+test("older pagination holds its anchor and scopes preview layout work", () => {
   const unifiedPrepend = historyNavigationSource.match(
     /if \(unifiedTimelineEnabled && unifiedStartCursorRef\.current\) \{([\s\S]*?)setIsOlderHistoryLoading\(true\);/,
   )?.[1] || "";
+  const legacyPrepend = historyNavigationSource.match(
+    /fetchMessagePage\(fetchChannel, "before",[\s\S]*?setIsOlderHistoryLoading\(true\);/,
+  )?.[0] || "";
 
   assert.match(unifiedPrepend, /holdViewportPosition\(/);
   assert.match(unifiedPrepend, /anchorMessageId: anchor\.id/);
   assert.match(unifiedPrepend, /historyModeRef\.current = "context";/);
   assert.match(unifiedPrepend, /setHistoryMode\("context"\);/);
   assert.match(unifiedPrepend, /applyUnifiedHistoryPage\(/);
-  assert.match(unifiedPrepend, /waitForCompleteHistoryWindow\(/);
+  assert.match(unifiedPrepend, /waitForPrependAnchorStability\(/);
+  assert.match(legacyPrepend, /waitForPrependAnchorStability\(/);
+  assert.match(unifiedPrepend, /new Event\("chat-history-mounted"\)/);
+  assert.match(legacyPrepend, /new Event\("chat-history-mounted"\)/);
+  assert.doesNotMatch(unifiedPrepend, /new Event\("chat-history-preload"\)/);
+  assert.doesNotMatch(legacyPrepend, /new Event\("chat-history-preload"\)/);
   assert.match(unifiedPrepend, /releaseHeldViewport\?\.\(\)/);
+  assert.match(historyNavigationSource, /const PREPEND_LAYOUT_MARGIN_PX = 720/);
+  assert.match(historyNavigationSource, /const PREPEND_LAYOUT_TIMEOUT_MS = 1_800/);
+  assert.match(
+    historyNavigationSource,
+    /node\.dispatchEvent\(new Event\("chat-history-preview-activate"\)\)/,
+  );
+  assert.match(historyNavigationSource, /stableFrames >= 3/);
   assert.ok(
     unifiedPrepend.indexOf("holdViewportPosition(")
       < unifiedPrepend.indexOf("applyUnifiedHistoryPage("),
@@ -495,21 +510,27 @@ test("latest button disables after context browsing reaches the newest edge", ()
   assert.match(bottomShellSource, /disabled=\{historyMode === "context" \? latestButtonDisabled : false\}/);
 });
 
-test("newer pagination replenishes bounded preview warming in both readers", () => {
+test("history pagination replenishes bounded preview warming in both readers", () => {
+  const unifiedBefore = historyNavigationSource.indexOf('"before",\n          unifiedStartCursorRef.current');
+  const legacyBefore = historyNavigationSource.indexOf('fetchMessagePage(fetchChannel, "before"');
   const unifiedAfter = historyNavigationSource.indexOf('"after",\n          unifiedEndCursorRef.current');
   const legacyAfter = historyNavigationSource.indexOf('fetchMessagePage(fetchChannel, "after"');
   const mountedEvents = [...historyNavigationSource.matchAll(
     /window\.dispatchEvent\(new Event\("chat-history-mounted"\)\)/g,
   )].map((match) => match.index);
 
-  assert.ok(unifiedAfter >= 0);
+  assert.ok(unifiedBefore >= 0);
+  assert.ok(legacyBefore > unifiedBefore);
+  assert.ok(unifiedAfter > legacyBefore);
   assert.ok(legacyAfter > unifiedAfter);
   assert.equal(
     mountedEvents.length,
-    2,
+    4,
   );
-  assert.ok(mountedEvents[0] > unifiedAfter && mountedEvents[0] < legacyAfter);
-  assert.ok(mountedEvents[1] > legacyAfter);
+  assert.ok(mountedEvents[0] > unifiedBefore && mountedEvents[0] < legacyBefore);
+  assert.ok(mountedEvents[1] > legacyBefore && mountedEvents[1] < unifiedAfter);
+  assert.ok(mountedEvents[2] > unifiedAfter && mountedEvents[2] < legacyAfter);
+  assert.ok(mountedEvents[3] > legacyAfter);
 });
 
 test("context navigation synchronizes cursors before checking gallery history edges", () => {

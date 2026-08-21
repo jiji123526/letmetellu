@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Older-history prepend stabilizes only the locked viewport anchor — 2026-08-21
+
+- Production inspection measured older unified-timeline requests at `166-238 ms` and `8-12 KB` while the mounted history was already `286/300` messages. The visible lag continued after the response: each prepend broadcast `chat-history-preload`, activating every deferred link preview in the mounted window, then required a `900 ms` quiet period while repeated preview and media mutations changed scroll geometry.
+- Unified and legacy older-page loading now publish `chat-history-mounted`, which only replenishes the existing six-URL background warming budget. They no longer globally activate every mounted deferred preview.
+- Prepend readiness activates unresolved previews only within `720px` of and at or before the locked viewport anchor. It checks pending preview, image and video geometry in that same bounded area and releases the anchor after three stable animation frames, with a `1.8s` safety limit.
+- Wheel, touch and pointer input still cancel stabilization immediately. Unified prepend continues holding the viewport anchor throughout the bounded wait, and both readers retain the existing thread-aware 300-message mounted-window limit.
+- Full-window readiness remains available for context and search navigation where replacing the entire history window requires broader geometry confidence.
+
+Trade-off: deferred previews farther from the locked anchor remain lazy and can expand when the reader approaches them later. This removes unrelated work from the prepend-critical path; nearby content that can immediately affect the visible anchor is still activated and stabilized.
+
+Deployment note: frontend-only. No Worker deployment or D1 migration is required. In a preview-heavy channel near the 300-message cap, load older pages and confirm the current first visible message remains fixed while only nearby previews activate and the loading state clears without the previous mandatory quiet-period delay.
+
 ### Legacy gallery navigation uses canonical message IDs — 2026-08-20
 
 - The direct-gallery optimization initially returned `gallery.id` as the navigation target. Current image messages normally use the same value for `messages.id` and `gallery.id`, but historical rows can use a distinct gallery key stored in `messages.gallery_id`. Selecting one of those images sent the gallery key to message-context navigation, which correctly returned `message not found`.
