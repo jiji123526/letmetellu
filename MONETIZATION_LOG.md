@@ -12,7 +12,8 @@ the newest entry is always first. Product decisions and future work belong in
 #### Yearly Plus pricing highlights its discount
 
 - Compare the 365-day price against twelve 30-day payments using the server-returned catalog amounts.
-- Give the discounted yearly card a distinct treatment with the reference price, calculated discount percentage and annual savings.
+- Give the discounted yearly card a distinct but compact treatment with the reference price and calculated discount percentage.
+- Keep the monthly and yearly cards on the same row structure and remove the separate annual-savings sentence.
 - Hide all discount treatment automatically when the catalog no longer represents a saving.
 
 #### Plus prices are final VAT-inclusive amounts

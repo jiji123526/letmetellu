@@ -91,7 +91,6 @@ export const en: Record<LocaleKeys, string> = {
   dashboardPlanDetailsMonthly: "30 days",
   dashboardPlanDetailsYearly: "365 days",
   dashboardPlanYearlyDiscount: "{percent}% off",
-  dashboardPlanYearlySavings: "Save {amount} per year",
   billingTaxIncluded: "VAT included",
   dashboardPlanDetailsFeatureAds: "Unlimited image sending in channels you own",
   dashboardPlanDetailsFeatureCustomization: "Bubble color and background customization",

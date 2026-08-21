@@ -2765,12 +2765,11 @@ function DashboardPageContent() {
                   const discountPercent = hasYearlyDiscount
                     ? Math.round((1 - plan.amount / referenceAmount) * 100)
                     : 0;
-                  const savingsAmount = hasYearlyDiscount ? referenceAmount - plan.amount : 0;
 
                   return (
                     <div
                       key={plan.billing_cycle}
-                      className="relative overflow-hidden rounded-[14px] p-3"
+                      className="relative flex h-full flex-col overflow-hidden rounded-[14px] p-3"
                       style={{
                         background: hasYearlyDiscount
                           ? "linear-gradient(145deg, #fff7ed 0%, #fff 72%)"
@@ -2792,25 +2791,19 @@ function DashboardPageContent() {
                           </span>
                         ) : null}
                       </div>
-                      {hasYearlyDiscount ? (
-                        <div className="mt-1 text-[12px] font-medium line-through" style={{ color: "#9a6b52" }}>
-                          {formatCurrency(referenceAmount, plan.currency, locale)}
+                      <div className="mt-1 flex min-h-[30px] items-end gap-1.5">
+                        <div
+                          className="text-[18px] font-bold"
+                          style={{ color: hasYearlyDiscount ? "#c2410c" : "inherit" }}
+                        >
+                          {formatCurrency(plan.amount, plan.currency, locale)}
                         </div>
-                      ) : null}
-                      <div
-                        className={`${hasYearlyDiscount ? "mt-0 text-[22px]" : "mt-1 text-[18px]"} font-bold`}
-                        style={{ color: hasYearlyDiscount ? "#c2410c" : "inherit" }}
-                      >
-                        {formatCurrency(plan.amount, plan.currency, locale)}
+                        {hasYearlyDiscount ? (
+                          <div className="pb-0.5 text-[10px] font-medium line-through" style={{ color: "#9a6b52" }}>
+                            {formatCurrency(referenceAmount, plan.currency, locale)}
+                          </div>
+                        ) : null}
                       </div>
-                      {hasYearlyDiscount ? (
-                        <div className="mt-1 text-[11px] font-semibold" style={{ color: "#c2410c" }}>
-                          {t("dashboardPlanYearlySavings").replace(
-                            "{amount}",
-                            formatCurrency(savingsAmount, plan.currency, locale),
-                          )}
-                        </div>
-                      ) : null}
                       <div className="mt-1 text-[11px]" style={{ color: "var(--meta)" }}>
                         {plan.auto_renews ? t("dashboardPlanAutorenewBadge") : t("dashboardPlanExpiresBadge")}
                         {" · "}

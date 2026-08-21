@@ -6,7 +6,8 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ### Yearly Plus discount is prominent in the plan panel — 2026-08-21
 
-- The 365-day card compares its amount with twelve 30-day payments and displays the reference price, calculated discount percentage and annual savings.
+- The 365-day card compares its amount with twelve 30-day payments and displays a compact reference price and calculated discount percentage.
+- Monthly and yearly cards share the same row heights; the separate annual-savings sentence was removed so both options remain aligned.
 - Discount styling is derived from the billing catalog rather than hardcoded to the current amounts. It disappears if the yearly plan is not cheaper or currencies differ.
 
 Deployment note: no database, Worker or R2 change is required. Deploy the frontend.

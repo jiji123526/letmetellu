@@ -89,7 +89,6 @@ export const ko = {
   dashboardPlanDetailsMonthly: "30일",
   dashboardPlanDetailsYearly: "365일",
   dashboardPlanYearlyDiscount: "{percent}% 할인",
-  dashboardPlanYearlySavings: "연간 {amount} 절약",
   billingTaxIncluded: "부가세 포함",
   dashboardPlanDetailsFeatureAds: "소유한 채널에서 이미지 무제한 전송",
   dashboardPlanDetailsFeatureCustomization: "버블 색상과 배경 커스터마이징",

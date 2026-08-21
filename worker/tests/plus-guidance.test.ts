@@ -82,9 +82,8 @@ test("successful checkout offers the activation card actions", () => {
 test("yearly Plus pricing visibly explains its monthly-price discount", () => {
   assert.match(dashboardSource, /monthlyPlan\.amount \* 12/);
   assert.match(dashboardSource, /dashboardPlanYearlyDiscount/);
-  assert.match(dashboardSource, /dashboardPlanYearlySavings/);
   assert.match(koreanLocaleSource, /dashboardPlanYearlyDiscount: "\{percent\}% 할인"/);
-  assert.match(koreanLocaleSource, /dashboardPlanYearlySavings: "연간 \{amount\} 절약"/);
+  assert.doesNotMatch(dashboardSource, /dashboardPlanYearlySavings/);
 });
 
 test("personal bubble colors require the viewer's Plus entitlement", () => {
