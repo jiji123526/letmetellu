@@ -70,3 +70,11 @@ export function calculateBillingOrderExpiresAt(
   const base = new Date(now);
   return new Date(base.getTime() + ttlMinutes * 60_000).toISOString();
 }
+
+export function calculateBillingEntitlementEndsAt(
+  startsAt: string,
+  durationDays: number,
+): string {
+  const base = new Date(startsAt);
+  return new Date(base.getTime() + durationDays * 24 * 60 * 60_000).toISOString();
+}
