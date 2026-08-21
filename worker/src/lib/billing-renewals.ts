@@ -10,6 +10,7 @@ import {
 } from "./billing-subscriptions.ts";
 import { persistBillingConfirmation, type PendingBillingOrderRow } from "./billing-persistence.ts";
 import { ensureDefaultChannelRetentionChoice } from "./channel-plan-locks.ts";
+import { isValidTossBillingCharge } from "./toss-billing.ts";
 
 function getTossApiAuthorizationHeader(secretKey: string): string {
   return `Basic ${btoa(`${secretKey}:`)}`;
@@ -153,16 +154,13 @@ export async function runBillingSubscriptionRenewals(
         orderName: buildRenewalOrderName(subscription),
       }),
     });
-    const chargeData = await chargeResponse.json().catch(() => ({})) as {
-      paymentKey?: string;
-      orderId?: string;
-      totalAmount?: number;
-      method?: string;
-      approvedAt?: string;
-      customerKey?: string;
-    };
+    const chargeData = await chargeResponse.json().catch(() => ({})) as Record<string, unknown>;
 
-    if (!chargeResponse.ok || !chargeData.paymentKey || !Number.isInteger(chargeData.totalAmount)) {
+    if (!chargeResponse.ok || !isValidTossBillingCharge(chargeData, {
+      orderId: order.order_id,
+      amount: selection.amount,
+      currency: selection.currency,
+    })) {
       failed += 1;
       await markRenewalOrderFailed(env, order.order_id, now);
       await recordRenewalFailure(env, subscription, now);
@@ -177,12 +175,12 @@ export async function runBillingSubscriptionRenewals(
       userId: subscription.user_id,
       order,
       provider: subscription.provider,
-      providerOrderId: chargeData.orderId || order.order_id,
+      providerOrderId: chargeData.orderId,
       providerPaymentId: chargeData.paymentKey,
-      amount: Number(chargeData.totalAmount),
+      amount: chargeData.totalAmount,
       currency: selection.currency,
       paymentMethod: chargeData.method || "card",
-      providerCustomerId: chargeData.customerKey || subscription.provider_customer_key,
+      providerCustomerId: subscription.provider_customer_key,
       providerSubscriptionId: null,
       approvedAt,
       entitlementStartsAt: subscription.current_period_ends_at,

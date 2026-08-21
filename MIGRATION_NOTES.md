@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Toss renewal responses use strict payment validation — 2026-08-21
+
+- Scheduled renewal charges now require `DONE`, `BILLING`, the generated renewal order ID, the catalog amount and the configured currency before persistence.
+- Rejected responses mark the renewal order failed and use the existing 24-hour retry policy. A third failure changes the subscription to non-renewing and prepares channel retention.
+- The provider customer key already bound to the stored billing key is persisted instead of trusting an optional payment-response field.
+
+Trade-off: a provider-side response contract change can turn a successful charge into an internal renewal failure requiring reconciliation. This is safer than extending Plus from an unverified payment. No database migration is required; deploy the Worker.
+
 ### Toss first-charge responses are strictly validated — 2026-08-21
 
 - Billing-key issuance must return a non-empty key associated with the exact server-generated customer key.

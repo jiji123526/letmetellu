@@ -9,6 +9,12 @@ the newest entry is always first. Product decisions and future work belong in
 
 ### 2026-08-21
 
+#### Toss renewals reject mismatched payment responses
+
+- Apply the same completed billing-payment validation to scheduled renewal charges.
+- A mismatched order ID, amount, currency, status or payment type cannot extend the Plus entitlement.
+- Route rejected responses through the existing renewal failure, retry and terminal non-renewing policy.
+
 #### Toss first charges require an exact provider response
 
 - Validate that billing-key issuance returns the server-expected customer key before charging or storing the key.

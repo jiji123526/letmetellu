@@ -115,6 +115,7 @@ test("renewal pipeline stores subscription records and charges Toss billing keys
   assert.match(renewalsSource, /readDueBillingSubscriptions/);
   assert.match(renewalsSource, /INSERT INTO billing_orders/);
   assert.match(renewalsSource, /https:\/\/api\.tosspayments\.com\/v1\/billing/);
+  assert.match(renewalsSource, /isValidTossBillingCharge\(chargeData/);
   assert.match(renewalsSource, /markBillingSubscriptionRenewed/);
   assert.match(renewalsSource, /markBillingSubscriptionRenewalFailed/);
 });
