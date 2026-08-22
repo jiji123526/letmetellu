@@ -13,9 +13,10 @@ export function ScrollToBottom({ visible, disabled = false, unreadCount, label, 
 
   return (
     <button
-      className="absolute bottom-[70px] left-1/2 -translate-x-1/2 z-10 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
+      className="absolute left-1/2 -translate-x-1/2 z-10 h-9 rounded-full border-none cursor-pointer flex items-center justify-center"
       disabled={disabled}
       style={{
+        bottom: "calc(70px + env(safe-area-inset-bottom))",
         width: label ? "auto" : "36px",
         padding: label ? "0 13px" : 0,
         gap: label ? "6px" : 0,
