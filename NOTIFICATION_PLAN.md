@@ -1,119 +1,107 @@
-# Notification Plan
+# Web Push Notification Plan
 
 This document defines the proposed notification system for yap. It is an
 unimplemented plan. Shipped behavior must be recorded in
 [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) as each phase is completed.
 
-## Product Decision
+## Product Decisions
 
-Notifications are available only to authenticated users.
-
-- Email/password and Google-authenticated accounts are eligible.
-- Anonymous visitors do not receive Web Push, email notifications or
-  server-synchronized unread state.
-- Guest dashboards may continue showing locally stored recent channels, but
-  this local history must not be presented as a notification subscription.
-- Signing in does not automatically enable browser notifications. Push
-  permission is requested only after an explicit user action such as
-  **Enable notifications for this channel**.
-- A user must already have legitimate access to a channel before subscribing.
-  A push subscription never grants channel access or bypasses a passcode.
+- Notifications are available only to authenticated users. Email/password and
+  Google-authenticated accounts are eligible; anonymous visitors are not.
+- This project implements Web Push only. It does not add dashboard unread dots,
+  account-synchronized read cursors, in-app notification banners or counts.
+- Signing in does not automatically enable notifications. Browser permission is
+  requested only after an explicit action such as **Enable notifications for
+  this channel**.
+- A user must already have legitimate channel access before subscribing. A push
+  subscription never grants access or bypasses a passcode.
+- Channel-admin messages and live-session starts are **Important** events for
+  authenticated non-admin users subscribed to that channel.
+- Push delivery is asynchronous and must never delay message persistence,
+  realtime broadcast or the sender's acknowledgement.
 
 ## Goals
 
-1. Show reliable per-channel unread state across a signed-in user's devices.
-2. Notify users about high-value events without turning active chat traffic
-   into notification spam.
-3. Support browser Web Push when the browser and operating system permit it.
-4. Keep notification delivery asynchronous so message persistence and realtime
-   chat acknowledgements are never delayed by a push provider.
-5. Give users channel-level and global controls, quiet hours and a clear way to
-   remove a device subscription.
+1. Deliver useful background notifications to signed-in channel users who opt
+   in, even when yap. is not open.
+2. Make **Important only** useful by including channel-admin messages and live
+   starts while excluding routine member traffic.
+3. Avoid duplicate, noisy or privacy-sensitive lock-screen notifications.
+4. Keep message and live-session mutations independent from push-provider
+   latency or failure.
+5. Support browser/device revocation, quiet hours and bounded retries.
 
-## Initial Notification Policy
+## Notification Modes
 
-| Event | In-app unread | Web Push default | Notes |
-| --- | --- | --- | --- |
-| Normal channel message | Yes | Off | User may enable per channel; batch bursts. |
-| Direct message to owner | Yes | On after channel opt-in | Highest-value immediate event. |
-| Channel report or moderation warning | Yes | On for relevant owner/operator | Never expose sensitive evidence in lock-screen text. |
-| Support reply | Yes | On after global opt-in | Deep-link to the support thread. |
-| Live session started | Optional | Off | Separate per-channel preference. |
-| Messages during live | Yes while retained | Off | Never push every live message. |
-| Reaction, edit or deletion | No | Off | These update existing state, not unread count. |
-| User's own action | No | Off | Suppress on every device owned by the actor. |
+Each authenticated user has one preference per channel.
 
-The first release should support unread state, DMs, support replies and
-channel-owner alerts. Normal-message Web Push can follow after production
-frequency data is available.
+| Mode | Admin message | Live starts | Member message | DM/support/owner alert |
+| --- | --- | --- | --- | --- |
+| Off | No | No | No | Only separately enabled account-level alerts |
+| Important only | Yes | Yes | No | Yes when relevant |
+| All new messages | Yes | Yes | Yes | Yes when relevant |
 
-## User Experience
+The initial default is **Off**. Existing channel participation must not silently
+grant push permission or create a subscription.
 
-### Dashboard
+### Important event classification
 
-- Show one iMessage-style unread dot on a channel row when its latest eligible
-  event is newer than the user's last-read cursor.
-- Prefer a dot over a numeric count initially. Exact counts require additional
-  aggregation and can imply precision across deleted or moderated messages.
-- Clear the dot only after the channel opens successfully and its latest
-  visible cursor has been acknowledged by the client.
-- Synchronize the read cursor to the account so another signed-in device also
-  clears the dot.
+- **Channel-admin message:** a normal-channel message whose sender is the
+  authoritative channel owner/admin. Determine this on the server, never from a
+  client-supplied `is_admin` value.
+- **Live start:** the transition from no active session to a newly created live
+  session. One session creates at most one important event per subscribed user.
+- Live-session messages are not individually important. Users receive the live
+  start notification, then follow the session in the app if they choose.
+- DM, support and moderation events remain important only to their intended
+  recipient; their sensitive contents should not appear on the lock screen.
+- Reactions, edits, deletions and the user's own actions do not create push.
 
-### Channel notification control
+### Important-event recipient rules
 
-- Add **Notifications** to the channel's general settings for signed-in users.
-- States:
-  - Off
-  - Important only
-  - All new messages
-- Keep live-start alerts as a separate toggle if introduced.
-- If browser permission is not granted, explain what enabling notifications
-  does before calling the permission API.
-- If permission is denied, show browser-specific instructions instead of
-  repeatedly requesting permission.
+- The recipient must be authenticated, associated with the channel and have a
+  valid active subscription.
+- The channel preference must be `important` or `all`.
+- Admin-message notifications target non-admin channel users, not the sender.
+- Live-start notifications target opted-in non-admin channel users, excluding
+  the owner who started the session.
+- Blocked users, users who lost access and users removed from the account's
+  channel list are excluded.
+- If a user's active browser is visibly viewing that channel, suppress the push
+  for that device.
 
-### Global control
+## Channel User Experience
 
-- Add a dashboard settings section listing registered devices and global push
-  status.
-- Allow disabling all push while retaining in-app unread dots.
-- Allow quiet hours using the user's local time zone. Store an IANA time-zone
-  identifier, not a fixed UTC offset.
-- Removing a device revokes only that browser subscription.
+Put notification controls in the channel's general settings because users spend
+most of their time inside channels rather than on the dashboard.
+
+```text
+Notifications
+○ Off
+○ Important only
+  Admin messages and live starts
+○ All new messages
+```
+
+- Show an explanatory pre-permission panel before calling
+  `Notification.requestPermission()`.
+- Request permission only after the user selects a push-enabled mode.
+- If permission is denied, keep the preference off and provide browser-specific
+  instructions. Do not repeatedly trigger the native prompt.
+- If registration fails, show a retry action and keep the previous server
+  preference unchanged.
+- Turning a channel off does not revoke the entire device. Global device
+  revocation belongs in account settings.
 
 ### iOS and installed web apps
 
-- Explain that supported iPhone/iPad Web Push generally requires adding yap. to
-  the Home Screen and opening the installed web app before granting permission.
-- Do not show installation guidance to browsers that can subscribe normally.
-- Notification UI must remain useful when Web Push is unavailable: unread dots
-  and in-app realtime updates are the baseline feature.
+- Supported iPhone/iPad Web Push generally requires adding yap. to the Home
+  Screen, opening the installed web app and granting permission there.
+- Show installation guidance only when the current platform requires it.
+- If Web Push is unavailable, keep the channel usable without substituting an
+  in-app or dashboard notification system.
 
 ## Data Model
-
-Use separate tables so read state, preferences and physical device endpoints
-can evolve independently.
-
-### `channel_read_state`
-
-One row per authenticated user and joined/owned channel.
-
-```sql
-CREATE TABLE channel_read_state (
-  user_id TEXT NOT NULL,
-  channel_id TEXT NOT NULL,
-  last_read_created_at TEXT,
-  last_read_source TEXT,
-  last_read_id TEXT,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (user_id, channel_id)
-);
-```
-
-Use the unified timeline's composite ordering rather than a message-only ID so
-normal messages and owner-visible DMs cannot produce contradictory unread
-state. Validate source and cursor ownership server-side.
 
 ### `notification_preferences`
 
@@ -122,14 +110,16 @@ CREATE TABLE notification_preferences (
   user_id TEXT NOT NULL,
   channel_id TEXT NOT NULL,
   mode TEXT NOT NULL DEFAULT 'off',
-  live_start_enabled INTEGER NOT NULL DEFAULT 0,
+  quiet_hours_json TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, channel_id)
 );
 ```
 
-Allowed modes should be enforced by the Worker: `off`, `important`, and `all`.
-Deleting a channel must remove both read-state and preference rows.
+- Enforce `off`, `important` and `all` in the Worker.
+- Channel deletion and account/channel unlinking remove or disable the row.
+- Quiet hours use the user's IANA time zone, never a fixed UTC offset.
+- Do not create read-state or unread-count rows.
 
 ### `push_subscriptions`
 
@@ -150,16 +140,15 @@ CREATE TABLE push_subscriptions (
 );
 ```
 
-- Treat endpoint and key material as sensitive operational data.
-- Never return another user's subscription details.
-- Store only a coarse browser family if needed for device management; avoid a
-  full fingerprint.
-- Cap active subscriptions per user, initially at five devices.
+- Treat endpoints and keys as sensitive operational data.
+- Return only the current user's coarse device summaries.
+- Avoid storing a full browser fingerprint.
+- Initially cap active subscriptions at five devices per account.
+- Permanently revoke endpoints returning `404` or `410`.
 
-### Optional `notification_outbox`
+### `notification_outbox`
 
-Do not make push delivery part of the message transaction. Add a durable
-outbox before enabling production push fan-out:
+Use a durable outbox before enabling production fan-out.
 
 ```sql
 CREATE TABLE notification_outbox (
@@ -177,181 +166,200 @@ CREATE TABLE notification_outbox (
 );
 ```
 
-The unique event key makes retries idempotent. Process rows in bounded batches
-using a queue or scheduled Worker. A provider failure must not fail message
-creation.
+- One qualifying mutation creates logical events, not synchronous sends to
+  every device.
+- Unique event keys make retries and duplicate realtime events idempotent.
+- A queue consumer or scheduled Worker processes bounded batches.
+- Provider failure never rolls back a message or live-session start.
 
 ## API Shape
 
 All endpoints require the existing authenticated session to be verified by the
-Vercel layer and forwarded to the Worker through the trusted internal identity
-path.
+Vercel layer and forwarded through the trusted Worker identity path.
 
-- `GET /api/notifications/state`
-  - Returns bounded unread channel IDs, current preferences and registered
-    device summary for the current user.
-- `POST /api/notifications/read`
-  - Accepts channel ID plus a canonical unified-timeline cursor.
-  - Advances only; an older cursor must never make a channel unread again.
-- `PUT /api/notifications/preferences`
-  - Updates one channel's mode and optional live-start preference.
-- `POST /api/notifications/subscriptions`
-  - Registers or rotates the current browser's Push API subscription.
-- `DELETE /api/notifications/subscriptions/:id`
-  - Revokes a subscription owned by the current user.
+- `GET /api/notifications/preferences?channel={id}` returns channel mode and a
+  device capability summary.
+- `PUT /api/notifications/preferences` updates one channel mode after verifying
+  current channel association and access.
+- `POST /api/notifications/subscriptions` registers or rotates the current
+  browser subscription.
+- `DELETE /api/notifications/subscriptions/:id` revokes a device owned by the
+  current user.
+- An optional `POST /api/notifications/test` sends a tightly rate-limited
+  self-test only after registration.
 
-Apply request-body limits, schema validation, CSRF/origin checks and bounded
-rate limits to every mutation. Preference and read updates should be cheap
-idempotent upserts.
+Apply body-size limits, schema validation, origin/CSRF checks and durable rate
+limits to every mutation. Preferences are idempotent upserts. No dashboard
+notification endpoint or read-cursor endpoint is needed.
 
-## Web Push Delivery
+## Web Push Flow
 
 1. Register a dedicated Service Worker from the production origin.
-2. Generate VAPID keys once and store the private key only as a Worker secret.
-3. After explicit user consent, call `Notification.requestPermission()` and
-   create a `PushSubscription` using the public VAPID key.
-4. Send the subscription to the authenticated registration endpoint.
-5. After a qualifying event commits, enqueue an outbox record for each eligible
-   user—not for each device.
-6. The delivery worker expands the user to active device subscriptions,
-   applies batching/quiet-hour policy and sends push payloads.
-7. On permanent `404`/`410` push responses, revoke the endpoint. On transient
-   errors, retry with bounded exponential backoff and a maximum attempt count.
-8. Notification clicks open a validated same-origin route such as
-   `/ch/{channel}?notification={eventId}`. Never accept an arbitrary URL from
-   stored payload data.
+2. Generate VAPID keys once. Store the private key only as a Worker secret and
+   expose only the public key to the client.
+3. After explicit consent, request browser permission and create a
+   `PushSubscription` using the public VAPID key.
+4. Register the subscription through the authenticated endpoint.
+5. Persist the selected channel mode only after registration succeeds.
+6. When an admin message, live start or other qualifying event commits, enqueue
+   outbox work without awaiting delivery.
+7. The delivery worker resolves eligible users, expands them to active devices,
+   applies active-channel suppression, quiet hours, batching and rate limits,
+   then sends Web Push.
+8. Permanent endpoint failures revoke the device. Transient failures retry with
+   bounded exponential backoff and a maximum attempt count.
+9. Notification clicks open a validated same-origin route. Admin-message pushes
+   may include an opaque message target; live-start pushes open the live channel
+   without exposing a session token.
 
-Push payloads should contain minimal information:
+## Payload and Copy
 
-- Generic title or channel name when safe.
-- Short non-sensitive summary.
-- Opaque event ID and validated channel route.
-- No passcodes, report evidence, email address, anonymous identifier or private
-  message body on the lock screen by default.
+Keep payloads minimal and safe for lock screens.
+
+Suggested Korean copy:
+
+- Admin message: `관리자가 새 메시지를 보냈어요`
+- Live start: `라이브가 시작되었어요`
+
+Suggested English copy:
+
+- Admin message: `The channel admin sent a new message`
+- Live start: `A live session has started`
+
+The payload may include the channel name only if the privacy decision allows
+it. Never include passcodes, report evidence, email addresses, anonymous
+identifiers, private DM bodies or arbitrary navigation URLs.
 
 ## Batching and Spam Control
 
-- Suppress push when the same authenticated user has the target channel visible
-  in a recently active browser connection.
-- Collapse normal-message bursts per user/channel into one notification over a
-  short window, initially 30–60 seconds.
-- Send DMs and support replies immediately, but cap repeated alerts from the
-  same source.
-- Enforce per-user and per-channel delivery ceilings in the Worker, independent
-  of browser subscription count.
-- Do not enqueue push for reactions, edits, deletions or the actor's own event.
-- Use a collapse/deduplication key so retries or reconnect duplicate writes do
-  not produce duplicate notifications.
+- Collapse rapid admin messages from the same channel into one push over a
+  30–60 second window.
+- Never batch a live start with an unrelated message. Deduplicate it by live
+  session ID so reconnects or repeated processing cannot resend it.
+- `all` mode may batch member traffic per user/channel over the same short
+  window.
+- Suppress a device when its authenticated session reports that the target
+  channel is visible and recently active. A background tab is not visible.
+- Enforce per-user, per-channel and per-device ceilings independently of
+  subscription count.
+- Do not enqueue events for the actor's own action.
 
 ## Security and Privacy Requirements
 
-- Authentication and authorization are rechecked when preferences, read state
-  and subscriptions are changed.
-- Subscription possession is not authorization to read a channel.
-- Passcode changes, channel removal from an account, moderation blocks and
-  channel deletion must invalidate or suppress future notification eligibility.
-- Channel deletion must clean notification state using the existing recoverable
-  deletion workflow rather than relying on one large transaction.
-- VAPID private keys and any provider credentials stay in Worker secrets and
-  must never enter Vercel public environment variables or client bundles.
-- Redact endpoints and key material from logs, metrics and support dashboards.
-- Define subscription and outbox retention before launch; revoked endpoints
-  should be deleted after a short operational recovery window.
-- Document notification processing and push providers in the privacy policy
-  before enabling the feature for users.
+- Recheck authentication, channel association and authorization when modifying
+  preferences or subscriptions.
+- Re-evaluate eligibility at delivery time because access may change between
+  event creation and outbox processing.
+- A subscription is a delivery endpoint, not authorization to read a channel.
+- Passcode changes, blocks, moderation restrictions, account/channel unlinking
+  and channel deletion suppress future delivery.
+- Channel deletion cleans preferences and pending events using a bounded,
+  recoverable deletion workflow.
+- VAPID private keys and provider credentials stay in Worker secrets and never
+  enter client bundles or public Vercel variables.
+- Redact endpoints and key material from logs, metrics and support tools.
+- Define retention for revoked subscriptions and delivered/dead-lettered outbox
+  rows before production launch.
+- Update the privacy policy before enabling push for users.
 
-## Realtime and Read-State Semantics
+## Active-Channel Suppression
 
-- Existing WebSocket events can update unread dots while the dashboard is open.
-- Server state remains authoritative; realtime events are only a fast path.
-- On dashboard focus/reconnect, fetch the bounded current notification state to
-  recover missed events.
-- Opening a channel does not mark future unseen messages as read. Advance the
-  cursor only to the newest visible item confirmed by the client.
-- When the user is reading older history, do not clear newer unread activity
-  until they reach or explicitly jump to the latest state.
-- Deleted messages do not move a read cursor backward.
+Because users commonly remain inside one channel, avoid notifying them about a
+message or live start they are already viewing.
+
+- The client reports active only while `document.visibilityState` is `visible`,
+  the channel is open and the realtime connection is healthy.
+- Durable Object presence may hold a short authenticated user/channel activity
+  timestamp. Do not write every heartbeat to D1.
+- Delivery suppresses only the currently active device. Account-wide
+  suppression can be added later if duplicate-device metrics justify it.
+- When presence is unavailable, prefer sending the opted-in notification rather
+  than silently losing it.
 
 ## Rollout Plan
 
-### Phase 1 — account-synchronized unread state
+### Phase 1 — subscription foundation
 
-- Add read-state schema and authenticated APIs.
-- Show dashboard unread dots.
-- Advance state when a user reaches the latest visible timeline item.
-- Recover state on reconnect and across devices.
-- No browser permission or Service Worker changes.
+- Add VAPID secrets, Service Worker registration and feature detection.
+- Add subscription and preference schema plus authenticated APIs.
+- Add channel settings UI with explicit permission education.
+- Support test pushes only for an internal allowlist.
 
-### Phase 2 — preferences and in-app alerts
+### Phase 2 — important admin messages
 
-- Add channel and global preferences.
-- Add in-app alerts for DMs, support replies and owner events.
-- Validate suppression while the channel is already visible.
-- Measure event frequency before enabling external push.
+- Create outbox events after authoritative admin-message persistence.
+- Add recipient resolution, current-channel suppression and permanent endpoint
+  cleanup.
+- Collapse rapid admin-message bursts and confirm send acknowledgement latency
+  is unchanged.
 
-### Phase 3 — Web Push foundation
+### Phase 3 — important live starts
 
-- Register the Service Worker and VAPID configuration.
-- Add explicit opt-in UI and device management.
-- Implement subscription rotation/revocation and permanent-failure cleanup.
-- Deliver only test notifications and support/DM events to an allowlist.
+- Create exactly one event when a new live session becomes active.
+- Deduplicate with the live session ID.
+- Notify `important` and `all` subscribers, excluding the initiating admin and
+  currently active viewers.
+- Confirm live restart, expiry and reconnect paths do not emit duplicates.
 
-### Phase 4 — durable production delivery
+### Phase 4 — remaining important events
 
-- Add the outbox/queue, bounded retry and deduplication.
-- Enable important notifications for opted-in users.
-- Add batching, quiet hours and operational dashboards.
-- Gradually allow per-channel normal-message notifications.
+- Add DM, support and moderation notifications with generic lock-screen copy.
+- Add bounded retry, dead-letter visibility and operational alerts.
+- Enable quiet hours.
 
-### Phase 5 — calibration
+### Phase 5 — optional all-message delivery
 
-- Review opt-in, delivery, click, mute and unsubscribe rates.
-- Adjust batching and defaults from actual behavior.
-- Add live-start alerts only if users request them.
-- Do not add anonymous push unless a separate privacy and abuse review proves it
-  worthwhile.
+- Use production frequency data to decide whether `all` mode is worth enabling.
+- Add member-message batching and stricter ceilings before broad exposure.
+- Do not add anonymous push without a separate privacy and abuse review.
 
 ## Tests and Acceptance Criteria
 
-- Anonymous requests cannot read or mutate notification state.
-- A user cannot subscribe to or read another user's channels.
-- Read cursors advance monotonically across message and DM sources.
-- Own messages do not create unread dots or push events.
-- Duplicate realtime events and outbox retries produce at most one alert.
-- Opening a channel on one device clears its unread state on another after sync.
-- Current-channel activity suppresses push without losing server unread state.
-- Passcode changes, blocks and channel deletion stop future delivery.
-- Expired endpoints are revoked after permanent provider responses.
-- Push/provider outages do not increase message-send latency or fail sends.
-- Quiet hours respect the stored IANA time zone through daylight-saving changes.
-- Service Worker notification clicks navigate only to validated same-origin
-  routes.
+- Anonymous requests cannot read or mutate preferences or subscriptions.
+- A signed-in user cannot subscribe to a channel not associated with the
+  account.
+- Forging `is_admin` cannot produce an important admin-message event.
+- One admin message produces at most one logical event per eligible user.
+- One live session ID produces at most one live-start event per eligible user.
+- `important` receives admin messages and live starts but not member messages.
+- `all` receives admin messages, live starts and batched member messages.
+- `off` receives none of the channel events.
+- The initiating admin never receives their own admin-message or live-start
+  push.
+- Duplicate outbox processing and transient retries produce at most one visible
+  alert per collapse key.
+- A visible active channel suppresses its device push; a hidden tab does not.
+- Passcode/access changes, blocks and channel deletion stop future delivery.
+- Permanent provider failures revoke endpoints.
+- Provider outages do not increase message-send or live-start latency and do
+  not roll back successful mutations.
+- Service Worker clicks navigate only to validated same-origin routes.
+- Unsupported or denied push leaves chat fully functional.
 
 ## Operational Metrics
 
 Collect bounded aggregate metrics without endpoint or message content:
 
-- unread-state read/update count and latency;
-- preference mutation failures;
-- active and revoked subscription counts;
-- outbox queued, delivered, retried, expired and dead-lettered counts;
-- provider response category and delivery latency;
-- notification click and disable rates;
-- batching suppression and active-channel suppression counts;
-- per-event-type delivery volume.
+- preference updates and subscription registration failures;
+- active/revoked subscription totals;
+- outbox queued, delivered, retried, expired and dead-lettered totals;
+- event volume split by admin message, live start, DM, support and moderation;
+- provider response class and delivery latency;
+- collapse, rate-limit and active-channel suppression counts;
+- notification clicks, channel mutes and device revocations;
+- message acknowledgement and live-start mutation latency before and after push
+  rollout.
 
-Alert on sustained outbox age, repeated provider authentication failures,
-unexpected subscription growth, high permanent-failure rate and any measurable
-increase in message acknowledgement latency.
+Alert on sustained outbox age, provider authentication failures, unexpected
+subscription growth, high permanent-failure rates and any measurable mutation
+latency regression.
 
-## Decisions Required Before Phase 3
+## Decisions Required Before Implementation
 
-- Use direct standards-based Web Push with VAPID or a managed delivery provider.
-- Define the exact important-event set and lock-screen copy in Korean and
-  English.
-- Choose quiet-hour defaults and whether they are global or channel-specific.
-- Decide whether channel names may appear in lock-screen notifications by
-  default.
-- Set retention windows for revoked subscriptions, delivered outbox rows and
-  aggregate delivery metrics.
+- Direct standards-based VAPID delivery or a managed Web Push provider.
+- Whether channel names may appear on lock screens by default.
+- Quiet-hour defaults and retention periods.
+- Exact Korean and English pre-permission and failure copy.
+- Whether `all` mode ships initially or remains hidden until important-only
+  delivery is stable.
 
