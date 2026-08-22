@@ -39,10 +39,6 @@ const serviceWorker = readFileSync(
   new URL("../../public/push-sw.js", import.meta.url),
   "utf8",
 );
-const testProxy = readFileSync(
-  new URL("../../src/app/api/notifications/test/route.ts", import.meta.url),
-  "utf8",
-);
 const delivery = readFileSync(
   new URL("../src/lib/notification-delivery.ts", import.meta.url),
   "utf8",
@@ -194,17 +190,6 @@ test("push clicks accept only same-origin channel paths", () => {
   assert.match(serviceWorker, /includeUncontrolled: true/);
 });
 
-test("self-test delivery is owner scoped, strongly rate limited and queued", () => {
-  assert.match(route, /"push-self-test"/);
-  assert.match(route, /SELF_TEST_LIMIT = 3/);
-  assert.match(route, /SELF_TEST_WINDOW_MS = 24 \* 60 \* 60 \* 1000/);
-  assert.match(route, /WHERE id = \? AND user_id = \? AND revoked_at IS NULL/);
-  assert.match(route, /INSERT INTO notification_outbox/);
-  assert.match(route, /ctx\.waitUntil\(processNotificationOutbox\(env, 1, id\)\)/);
-  assert.match(testProxy, /isSameOriginNotificationMutation\(request\)/);
-  assert.match(testProxy, /const session = await auth\(\)/);
-});
-
 test("outbox delivery uses leases, bounded retries and permanent endpoint cleanup", () => {
   assert.match(outboxMigration, /event_key TEXT NOT NULL UNIQUE/);
   assert.match(outboxMigration, /ON DELETE CASCADE ON UPDATE CASCADE/);
@@ -236,7 +221,7 @@ test("notification permission remains behind an explicit channel settings action
   assert.match(settingsPanel, /onClick=\{\(\) => \{ void selectNotificationMode\(mode\); \}\}/);
   assert.match(settingsPanel, /subscribeCurrentBrowserToPush\(\)/);
   assert.match(settingsPanel, /updateNotificationPreference\(mode\)/);
-  assert.match(settingsPanel, /sendPushSelfTest\(registered\.subscriptionId, locale\)/);
+  assert.doesNotMatch(settingsPanel, /sendPushSelfTest|notifications\/test/);
   assert.match(overlays, /notificationsAvailable=\{true\}/);
   assert.doesNotMatch(settingsPanel, /useEffect\([\s\S]{0,300}subscribeCurrentBrowserToPush/);
 });
@@ -244,7 +229,7 @@ test("notification permission remains behind an explicit channel settings action
 test("disabling one channel keeps the account's browser subscription available", () => {
   const offBranch = settingsPanel.slice(
     settingsPanel.indexOf('if (mode === "off")'),
-    settingsPanel.indexOf("const registered = await subscribeCurrentBrowserToPush"),
+    settingsPanel.indexOf("await subscribeCurrentBrowserToPush"),
   );
   assert.match(offBranch, /updateNotificationPreference\("off"\)/);
   assert.doesNotMatch(offBranch, /unsubscribe|subscriptions\//);

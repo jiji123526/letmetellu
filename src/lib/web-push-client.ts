@@ -111,13 +111,3 @@ export async function subscribeCurrentBrowserToPush(deviceLabel?: string): Promi
   }
   return { subscription: serialized, subscriptionId: responseBody.subscriptionId };
 }
-
-export async function sendPushSelfTest(subscriptionId: string, locale: "ko" | "en"): Promise<void> {
-  const response = await fetch("/api/notifications/test", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subscription_id: subscriptionId, locale }),
-  });
-  if (!response.ok) throw new Error(`push_self_test_failed:${response.status}`);
-}

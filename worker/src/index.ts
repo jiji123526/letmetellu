@@ -279,7 +279,7 @@ export default {
       } else if (url.pathname.startsWith("/api/survey")) {
         response = await handleSurvey(request, env);
       } else if (url.pathname.startsWith("/api/notifications")) {
-        response = await handleNotifications(request, env, ctx);
+        response = await handleNotifications(request, env);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key, ctx);

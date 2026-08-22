@@ -9,14 +9,11 @@ import {
 } from "../lib/notification-input.ts";
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import type { Env } from "../types.ts";
-import { processNotificationOutbox } from "../lib/notification-delivery.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 
 const PREFERENCE_MUTATION_LIMIT = 30;
 const SUBSCRIPTION_MUTATION_LIMIT = 30;
 const MUTATION_WINDOW_MS = 10 * 60 * 1000;
-const SELF_TEST_LIMIT = 3;
-const SELF_TEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const VAPID_PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-]{87}$/;
 
 interface ChannelAccessRow {
@@ -60,7 +57,7 @@ async function readBoundedJson(request: Request): Promise<{ ok: true; value: unk
 async function consumeNotificationMutationLimit(
   env: Env,
   userId: string,
-  scope: "notification-preference" | "push-subscription" | "push-self-test",
+  scope: "notification-preference" | "push-subscription",
   limit: number,
   windowMs = MUTATION_WINDOW_MS,
 ): Promise<Response | null> {
@@ -319,61 +316,7 @@ async function handleSubscriptionRevocation(
   return Response.json({ ok: true });
 }
 
-async function handleSelfTest(
-  request: Request,
-  env: Env,
-  ctx: ExecutionContext,
-  userId: string,
-): Promise<Response> {
-  if (request.method !== "POST") {
-    return Response.json({ error: "method_not_allowed" }, { status: 405 });
-  }
-  const bodyResult = await readBoundedJson(request);
-  if (!bodyResult.ok) return bodyResult.response;
-  const value = bodyResult.value;
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return Response.json({ error: "invalid_test_request" }, { status: 400 });
-  }
-  const subscriptionId = (value as { subscription_id?: unknown }).subscription_id;
-  const locale = (value as { locale?: unknown }).locale;
-  if (typeof subscriptionId !== "string"
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subscriptionId)
-    || (locale !== "ko" && locale !== "en")) {
-    return Response.json({ error: "invalid_test_request" }, { status: 400 });
-  }
-
-  const rateLimited = await consumeNotificationMutationLimit(
-    env,
-    userId,
-    "push-self-test",
-    SELF_TEST_LIMIT,
-    SELF_TEST_WINDOW_MS,
-  );
-  if (rateLimited) return rateLimited;
-
-  const subscription = await env.DB.prepare(`
-    SELECT id FROM push_subscriptions
-    WHERE id = ? AND user_id = ? AND revoked_at IS NULL
-    LIMIT 1
-  `).bind(subscriptionId, userId).first<{ id: string }>();
-  if (!subscription) return Response.json({ error: "subscription_not_found" }, { status: 404 });
-
-  const now = new Date().toISOString();
-  const id = crypto.randomUUID();
-  const payload = locale === "ko"
-    ? { title: "yap.", body: "알림이 정상적으로 연결되었어요", url: "/dashboard", tag: `push-test-${id}` }
-    : { title: "yap.", body: "Notifications are connected", url: "/dashboard", tag: `push-test-${id}` };
-  await env.DB.prepare(`
-    INSERT INTO notification_outbox (
-      id, event_type, event_key, user_id, channel_id, subscription_id,
-      payload_json, status, attempt_count, next_attempt_at, created_at, updated_at
-    ) VALUES (?, 'self_test', ?, ?, NULL, ?, ?, 'pending', 0, ?, ?, ?)
-  `).bind(id, `self-test:${id}`, userId, subscriptionId, JSON.stringify(payload), now, now, now).run();
-  ctx.waitUntil(processNotificationOutbox(env, 1, id));
-  return Response.json({ ok: true, status: "queued" }, { status: 202 });
-}
-
-export async function handleNotifications(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+export async function handleNotifications(request: Request, env: Env): Promise<Response> {
   const userId = await requireExistingUser(request, env);
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
@@ -392,9 +335,6 @@ export async function handleNotifications(request: Request, env: Env, ctx: Execu
   }
   if (pathname === "/api/notifications/preferences") {
     return handlePreferences(request, env, userId);
-  }
-  if (pathname === "/api/notifications/test") {
-    return handleSelfTest(request, env, ctx, userId);
   }
   if (pathname === "/api/notifications/subscriptions") {
     return handleSubscriptionRegistration(request, env, userId);

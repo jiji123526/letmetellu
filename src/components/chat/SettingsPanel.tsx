@@ -8,7 +8,6 @@ import { saveFontSize } from "@/components/UserPreferencesSync";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import {
   getWebPushSupport,
-  sendPushSelfTest,
   subscribeCurrentBrowserToPush,
 } from "@/lib/web-push-client";
 
@@ -33,7 +32,7 @@ interface SettingsPanelProps {
 
 type NotificationMode = "off" | "important" | "all";
 type NotificationState = "loading" | NotificationMode | "unsupported" | "blocked" | "error" | "ios-install-required" | "ios-update-required";
-type NotificationNote = "notificationReconfirm" | "notificationTestQueued" | "notificationTestFailed";
+type NotificationNote = "notificationReconfirm";
 
 export function SettingsPanel({
   channelId,
@@ -55,6 +54,7 @@ export function SettingsPanel({
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationNote, setNotificationNote] = useState<NotificationNote | null>(null);
   const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
+  const [showNotificationInfo, setShowNotificationInfo] = useState(false);
 
   useEffect(() => {
     const handleFontSize = (event: Event) => {
@@ -121,18 +121,9 @@ export function SettingsPanel({
         setNotificationState("off");
         return;
       }
-      const wasEnabled = notificationState === "important" || notificationState === "all";
-      const registered = await subscribeCurrentBrowserToPush();
+      await subscribeCurrentBrowserToPush();
       await updateNotificationPreference(mode);
       setNotificationState(mode);
-      if (!wasEnabled) {
-        try {
-          await sendPushSelfTest(registered.subscriptionId, locale);
-          setNotificationNote("notificationTestQueued");
-        } catch {
-          setNotificationNote("notificationTestFailed");
-        }
-      }
     } catch (error) {
       const support = getWebPushSupport();
       if (support === "blocked" || (error instanceof Error && error.message === "push_permission_not_granted")) {
@@ -282,22 +273,47 @@ export function SettingsPanel({
             <>
               <div className="flex items-start justify-between" style={{ padding: "12px 0", gap: "12px" }}>
                 <div style={{ minWidth: 0, paddingTop: "2px" }}>
-                  <div style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>
-                    {t("notifications")}
+                  <div className="flex items-center" style={{ gap: "5px", fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>
+                    <span>{t("notifications")}</span>
+                    <button
+                      type="button"
+                      aria-label={t("notificationInfoTitle")}
+                      onClick={() => setShowNotificationInfo(true)}
+                      style={{
+                        width: "18px",
+                        height: "18px",
+                        padding: 0,
+                        border: "1.4px solid currentColor",
+                        borderRadius: "50%",
+                        background: "transparent",
+                        color: "var(--meta)",
+                        fontFamily: "inherit",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        lineHeight: "16px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      i
+                    </button>
                   </div>
-                  <div style={{ marginTop: "4px", color: "var(--meta)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
-                    {notificationState === "unsupported"
-                      ? t("notificationUnsupported")
-                      : notificationState === "ios-install-required"
-                        ? t("notificationIosInstallRequired")
-                        : notificationState === "ios-update-required"
-                          ? t("notificationIosUpdateRequired")
-                      : notificationState === "blocked"
-                        ? t("notificationBlocked")
-                        : notificationState === "error"
-                          ? t("notificationLoadFailed")
-                          : t(onAdmin ? "ownerNotificationsDesc" : "memberNotificationsDesc")}
-                  </div>
+                  {(notificationState === "unsupported"
+                    || notificationState === "ios-install-required"
+                    || notificationState === "ios-update-required"
+                    || notificationState === "blocked"
+                    || notificationState === "error") && (
+                    <div style={{ marginTop: "4px", color: "var(--meta)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
+                      {notificationState === "unsupported"
+                        ? t("notificationUnsupported")
+                        : notificationState === "ios-install-required"
+                          ? t("notificationIosInstallRequired")
+                          : notificationState === "ios-update-required"
+                            ? t("notificationIosUpdateRequired")
+                            : notificationState === "blocked"
+                              ? t("notificationBlocked")
+                              : t("notificationLoadFailed")}
+                    </div>
+                  )}
                   {notificationNote && (
                     <div style={{ marginTop: "4px", color: "var(--bubble-sent)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
                       {t(notificationNote)}
@@ -325,7 +341,7 @@ export function SettingsPanel({
                   )}
                 </div>
                 {notificationState !== "ios-install-required" && notificationState !== "ios-update-required" && (
-                  <div className="flex" style={{ flexShrink: 0, gap: "3px", padding: "3px", borderRadius: "10px", background: "var(--input-bg)" }}>
+                  <div className="flex" style={{ width: "140px", flexShrink: 0, gap: "3px", padding: "3px", borderRadius: "10px", background: "var(--input-bg)" }}>
                     {(["off", "important", "all"] as NotificationMode[]).map((mode) => {
                       const selected = notificationState === mode;
                       return (
@@ -337,6 +353,7 @@ export function SettingsPanel({
                           onClick={() => { void selectNotificationMode(mode); }}
                           style={{
                             padding: "6px 7px",
+                            flex: 1,
                             border: 0,
                             borderRadius: "8px",
                             background: selected ? "var(--bubble-sent)" : "transparent",
@@ -439,6 +456,52 @@ export function SettingsPanel({
           )}
         </div>
       </div>
+
+      {showNotificationInfo && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-6 animate-[ctxFade_0.16s_ease]"
+          style={{ background: "rgba(0,0,0,.32)", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)" }}
+          onClick={(event) => { if (event.target === event.currentTarget) setShowNotificationInfo(false); }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="notification-info-title"
+            className="w-full max-w-[300px] rounded-[16px] overflow-hidden"
+            style={{ background: "var(--bg)", color: "var(--gray-text)", boxShadow: "0 14px 45px rgba(0,0,0,.25)" }}
+          >
+            <div className="flex items-center justify-between" style={{ padding: "14px 16px", borderBottom: "0.5px solid var(--hairline)" }}>
+              <h4 id="notification-info-title" className="m-0 font-medium" style={{ fontSize: "var(--bubble-font-size, 15px)" }}>
+                {t("notificationInfoTitle")}
+              </h4>
+              <button
+                type="button"
+                aria-label={t("close")}
+                onClick={() => setShowNotificationInfo(false)}
+                style={{ padding: "4px 7px", border: 0, background: "transparent", color: "var(--meta)", cursor: "pointer" }}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+            <div style={{ padding: "8px 16px 14px" }}>
+              {(["off", "important", "all"] as const).map((mode) => (
+                <div key={mode} style={{ padding: "9px 0", borderBottom: mode === "all" ? 0 : "0.5px solid var(--hairline)" }}>
+                  <div style={{ fontSize: "calc(var(--bubble-font-size) - 1px)", fontWeight: 600 }}>
+                    {t(mode === "off" ? "notificationOff" : mode === "important" ? "notificationImportant" : "notificationAll")}
+                  </div>
+                  <div style={{ marginTop: "3px", color: "var(--meta)", fontSize: "calc(var(--bubble-font-size) - 4px)", lineHeight: 1.4 }}>
+                    {t(mode === "off"
+                      ? "notificationOffDesc"
+                      : mode === "important"
+                        ? (onAdmin ? "ownerImportantNotificationsDesc" : "memberImportantNotificationsDesc")
+                        : "notificationAllDesc")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -313,7 +313,7 @@ export function ChatViewBottomShell({
       )}
 
       <footer
-        className="flex-none flex items-end gap-2"
+        className="chat-composer flex-none flex items-end gap-2"
         style={{
           padding: "8px 10px calc(8px + env(safe-area-inset-bottom))",
           background: "var(--composer-bg)",
