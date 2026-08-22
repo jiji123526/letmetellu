@@ -341,9 +341,37 @@ export function SettingsPanel({
                   )}
                 </div>
                 {notificationState !== "ios-install-required" && notificationState !== "ios-update-required" && (
-                  <div className="flex" style={{ width: "140px", flexShrink: 0, gap: "3px", padding: "3px", borderRadius: "10px", background: "var(--input-bg)" }}>
+                  <div
+                    className="relative flex"
+                    style={{
+                      width: "140px",
+                      height: "36px",
+                      flexShrink: 0,
+                      padding: "3px",
+                      borderRadius: "18px",
+                      background: notificationState === "important" || notificationState === "all" ? "#34c759" : "var(--input-border)",
+                      boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,.08)",
+                      transition: "background-color .22s ease",
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute"
+                      style={{
+                        top: "3px",
+                        left: "3px",
+                        width: "calc((100% - 6px) / 3)",
+                        height: "30px",
+                        borderRadius: "15px",
+                        background: "#fff",
+                        boxShadow: "0 1px 3px rgba(0,0,0,.22), 0 1px 1px rgba(0,0,0,.08)",
+                        transform: `translateX(${notificationState === "important" ? "100%" : notificationState === "all" ? "200%" : "0"})`,
+                        transition: "transform .24s cubic-bezier(.4,0,.2,1)",
+                      }}
+                    />
                     {(["off", "important", "all"] as NotificationMode[]).map((mode) => {
                       const selected = notificationState === mode;
+                      const enabled = notificationState === "important" || notificationState === "all";
                       return (
                         <button
                           key={mode}
@@ -352,16 +380,19 @@ export function SettingsPanel({
                           disabled={notificationBusy || notificationState === "loading" || notificationState === "unsupported" || notificationState === "blocked"}
                           onClick={() => { void selectNotificationMode(mode); }}
                           style={{
-                            padding: "6px 7px",
+                            position: "relative",
+                            zIndex: 1,
+                            padding: 0,
                             flex: 1,
                             border: 0,
-                            borderRadius: "8px",
-                            background: selected ? "var(--bubble-sent)" : "transparent",
-                            color: selected ? "#fff" : "var(--meta)",
+                            borderRadius: "15px",
+                            background: "transparent",
+                            color: selected ? "#202124" : enabled ? "rgba(255,255,255,.9)" : "var(--meta)",
                             fontFamily: "inherit",
                             fontSize: "calc(var(--bubble-font-size) - 5px)",
                             fontWeight: selected ? 600 : 400,
                             cursor: notificationBusy ? "wait" : "pointer",
+                            transition: "color .18s ease",
                           }}
                         >
                           {t(mode === "off" ? "notificationOff" : mode === "important" ? "notificationImportant" : "notificationAll")}
