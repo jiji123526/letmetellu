@@ -14,6 +14,7 @@ import { authorizeRoomToken } from "./passcode.ts";
 const PREFERENCE_MUTATION_LIMIT = 30;
 const SUBSCRIPTION_MUTATION_LIMIT = 30;
 const MUTATION_WINDOW_MS = 10 * 60 * 1000;
+const VAPID_PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-]{87}$/;
 
 interface ChannelAccessRow {
   id: string;
@@ -317,6 +318,18 @@ export async function handleNotifications(request: Request, env: Env): Promise<R
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   const pathname = new URL(request.url).pathname;
+  if (pathname === "/api/notifications/vapid-key") {
+    if (request.method !== "GET") {
+      return Response.json({ error: "method_not_allowed" }, { status: 405 });
+    }
+    if (!VAPID_PUBLIC_KEY_PATTERN.test(env.VAPID_PUBLIC_KEY || "")) {
+      return Response.json({ error: "push_not_configured" }, { status: 503 });
+    }
+    return Response.json(
+      { publicKey: env.VAPID_PUBLIC_KEY },
+      { headers: { "Cache-Control": "private, max-age=300" } },
+    );
+  }
   if (pathname === "/api/notifications/preferences") {
     return handlePreferences(request, env, userId);
   }

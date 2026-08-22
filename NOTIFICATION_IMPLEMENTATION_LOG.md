@@ -26,6 +26,64 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Direct VAPID browser foundation added — 2026-08-22
+
+### Scope and user-visible behavior
+
+- Selected direct standards-based VAPID delivery rather than a managed push
+  provider. Added an authenticated public-key endpoint, a dedicated Push Service
+  Worker and a browser subscription helper.
+- This stage still has no visible toggle and never requests permission on page
+  load. The helper can be called only by the future explicit settings action, so
+  deploying this foundation does not display a browser prompt or create a
+  subscription by itself.
+- Notification delivery, outbox writes and chat/live hot paths remain unchanged.
+
+### Security and privacy boundaries
+
+- The VAPID public key is returned only through the authenticated Next.js proxy.
+  The Worker validates its expected uncompressed P-256 base64url shape and
+  returns `503 push_not_configured` when secrets are absent or malformed.
+- `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` are Worker-only secrets. They are not
+  referenced by frontend code, API responses, committed files or logs.
+- The Service Worker accepts notification navigation only for same-origin
+  `/ch/` paths. External URLs and unrelated same-origin paths fall back to the
+  dashboard, preventing a future payload bug from becoming an open redirect.
+- Subscription serialization sends only the browser-issued endpoint, `p256dh`,
+  `auth`, optional expiry and a bounded device label to the existing protected
+  API. The client does not persist this material in local storage.
+
+### Performance and trade-offs
+
+- The public key is fetched only during explicit subscription and is private-
+  cached for five minutes. Normal page loads perform no notification request.
+- The Service Worker is registered only after permission is granted. This avoids
+  adding a worker to users who never opt in, but the first opt-in has a small
+  registration/setup delay.
+- An existing browser subscription is reused. Rotating VAPID keys later would
+  therefore require an explicit resubscription migration; production keys must
+  be treated as stable credentials and backed up securely.
+- The implementation intentionally defers a delivery library. This keeps an
+  immature or Node-compatibility dependency out of the Worker until outbox and
+  retry semantics are ready, but a real test notification cannot be sent in
+  this stage.
+
+### Verification and rollout
+
+- Added regression checks for authenticated key access, explicit-only browser
+  permission, subscription serialization and click-target validation.
+- Required production secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and
+  `VAPID_SUBJECT=mailto:yapndot@gmail.com`.
+- Worker deployment and direct authenticated key smoke verification must be
+  completed before this entry is marked rolled out.
+
+### Next step
+
+1. Add a tightly rate-limited self-test delivery path using the durable outbox.
+2. Add localized explicit opt-in UI only after self-test delivery succeeds.
+3. Add admin-message events and then live-start events without awaiting push
+   delivery in either authoritative write response.
+
 ## Authenticated preference and subscription APIs added — 2026-08-22
 
 ### Scope and user-visible behavior

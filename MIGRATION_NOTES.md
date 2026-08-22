@@ -4,6 +4,21 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Direct VAPID browser foundation — 2026-08-22
+
+- Chose direct Web Push with stable VAPID credentials and added an authenticated
+  public-key endpoint, explicit-only browser subscription helper and dedicated
+  `/push-sw.js` receiver.
+- No permission prompt, visible setting or delivery occurs automatically. The
+  normal dashboard, channel bootstrap, message send and live-start paths add no
+  request or database work.
+- Push clicks are restricted to same-origin channel paths and otherwise open the
+  dashboard. Private VAPID material remains in Worker secrets only.
+- Key rotation requires a future resubscription migration, so the generated
+  production pair must remain stable and be backed up outside the repository.
+- Detailed verification, risks and next steps are recorded in
+  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+
 ### Authenticated notification preference and device APIs — 2026-08-22
 
 - Added authenticated Next.js-to-Worker APIs for channel preference reads and

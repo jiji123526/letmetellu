@@ -27,6 +27,18 @@ const revokeProxy = readFileSync(
   new URL("../../src/app/api/notifications/subscriptions/[id]/route.ts", import.meta.url),
   "utf8",
 );
+const vapidKeyProxy = readFileSync(
+  new URL("../../src/app/api/notifications/vapid-key/route.ts", import.meta.url),
+  "utf8",
+);
+const pushClient = readFileSync(
+  new URL("../../src/lib/web-push-client.ts", import.meta.url),
+  "utf8",
+);
+const serviceWorker = readFileSync(
+  new URL("../../public/push-sw.js", import.meta.url),
+  "utf8",
+);
 const proxyHelper = readFileSync(
   new URL("../../src/lib/notification-proxy.ts", import.meta.url),
   "utf8",
@@ -127,4 +139,26 @@ test("mutations are bounded, rate limited and routed through authenticated same-
   assert.match(revokeProxy, /isSameOriginNotificationMutation\(request\)/);
   assert.match(proxyHelper, /new URL\(origin\)\.origin === new URL\(request\.url\)\.origin/);
   assert.match(proxyHelper, /readRoomTokenCookie/);
+});
+
+test("VAPID public key access is authenticated and private-cache scoped", () => {
+  assert.match(route, /pathname === "\/api\/notifications\/vapid-key"/);
+  assert.match(route, /VAPID_PUBLIC_KEY_PATTERN\.test\(env\.VAPID_PUBLIC_KEY/);
+  assert.match(route, /"Cache-Control": "private, max-age=300"/);
+  assert.match(vapidKeyProxy, /const session = await auth\(\)/);
+  assert.match(vapidKeyProxy, /cache: "no-store"/);
+});
+
+test("browser subscription requires an explicit caller and stores only serialized Push API data", () => {
+  assert.match(pushClient, /Notification\.requestPermission\(\)/);
+  assert.match(pushClient, /navigator\.serviceWorker\.register\("\/push-sw\.js"/);
+  assert.match(pushClient, /applicationServerKey: base64UrlToUint8Array\(publicKey\)/);
+  assert.match(pushClient, /fetch\("\/api\/notifications\/subscriptions"/);
+  assert.doesNotMatch(pushClient, /addEventListener\(["']load/);
+});
+
+test("push clicks accept only same-origin channel paths", () => {
+  assert.match(serviceWorker, /target\.origin !== self\.location\.origin/);
+  assert.match(serviceWorker, /!target\.pathname\.startsWith\("\/ch\/"\)/);
+  assert.match(serviceWorker, /includeUncontrolled: true/);
 });
