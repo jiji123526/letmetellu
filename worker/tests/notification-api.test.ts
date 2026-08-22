@@ -94,6 +94,12 @@ test("turning notifications off remains possible after channel access is lost", 
   assert.doesNotMatch(offBranch, /resolveChannelAccess/);
 });
 
+test("a passcode change is represented as off until the user opts in again", () => {
+  assert.match(route, /SELECT mode, access_binding, updated_at/);
+  assert.match(route, /preference\.access_binding === access\.accessBinding/);
+  assert.match(route, /requiresReconfirmation: preference\?\.mode === "important" && !hasCurrentAccessBinding/);
+});
+
 test("device registration is capped atomically and responses omit endpoint secrets", () => {
   assert.match(route, /COUNT\(\*\)[\s\S]*revoked_at IS NULL AND endpoint != \?[\s\S]*< \?/);
   assert.match(route, /ON CONFLICT\(endpoint\) DO UPDATE SET[\s\S]*user_id = excluded\.user_id/);

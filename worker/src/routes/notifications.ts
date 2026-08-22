@@ -140,18 +140,25 @@ async function handlePreferences(request: Request, env: Env, userId: string): Pr
 
     const [preference, devices] = await Promise.all([
       env.DB.prepare(`
-        SELECT mode, updated_at
+        SELECT mode, access_binding, updated_at
         FROM notification_preferences
         WHERE user_id = ? AND channel_id = ?
         LIMIT 1
-      `).bind(userId, channelId).first<{ mode: string; updated_at: string }>(),
+      `).bind(userId, channelId).first<{
+        mode: string;
+        access_binding: string | null;
+        updated_at: string;
+      }>(),
       listActiveDevices(env, userId),
     ]);
+    const hasCurrentAccessBinding = !preference
+      || preference.access_binding === access.accessBinding;
     return Response.json({
       preference: {
         channelId,
-        mode: preference?.mode === "important" ? "important" : "off",
+        mode: preference?.mode === "important" && hasCurrentAccessBinding ? "important" : "off",
         updatedAt: preference?.updated_at || null,
+        requiresReconfirmation: preference?.mode === "important" && !hasCurrentAccessBinding,
       },
       devices: serializeDevices(devices),
       activeDeviceCount: devices.length,

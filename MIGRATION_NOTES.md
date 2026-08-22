@@ -14,6 +14,8 @@ This file records both the original CSS-to-TSX porting constraints and the datab
   Protected-channel opt-in also requires a room token bound to the current
   passcode. Migration `0056_notification_access_binding.sql` stores that binding
   so a later delivery worker can suppress access after a passcode change.
+- Preference reads return a stale protected-room setting as `off` with an
+  explicit reconfirmation flag until the user opts in under the new passcode.
 - The API accepts only `off` and `important` during the initial rollout. It
   limits bodies to 8 KiB, requires HTTPS endpoints and bounded browser keys,
   enforces exact same-origin mutations, applies hashed per-user rate limits and

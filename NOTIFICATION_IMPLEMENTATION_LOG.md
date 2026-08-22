@@ -50,6 +50,10 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
   to its current passcode. Migration `0056_notification_access_binding.sql`
   stores that passcode binding on opt-in so future delivery can suppress stale
   access after a passcode change.
+- Preference reads compare the stored and current access bindings. A passcode
+  change is returned as `off` with `requiresReconfirmation` until the user
+  explicitly opts in again, avoiding an enabled-looking control that cannot
+  deliver.
 - Turning a preference off deletes only that user's preference and remains
   possible after channel access is lost, avoiding a stuck opt-in.
 
