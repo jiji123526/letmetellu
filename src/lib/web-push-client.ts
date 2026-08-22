@@ -1,4 +1,9 @@
-export type WebPushSupport = "supported" | "unsupported" | "blocked";
+export type WebPushSupport =
+  | "supported"
+  | "unsupported"
+  | "blocked"
+  | "ios-install-required"
+  | "ios-update-required";
 
 interface StoredPushSubscription {
   endpoint: string;
@@ -40,7 +45,26 @@ async function readVapidPublicKey(): Promise<string> {
 }
 
 export function getWebPushSupport(): WebPushSupport {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+  if (typeof window === "undefined") return "unsupported";
+
+  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+  const isTouchMac = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || isTouchMac;
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+    || navigatorWithStandalone.standalone === true;
+  const versionMatch = isIos ? navigator.userAgent.match(/OS (\d+)[._](\d+)/) : null;
+
+  if (versionMatch) {
+    const major = Number(versionMatch[1]);
+    const minor = Number(versionMatch[2]);
+    if (major < 16 || (major === 16 && minor < 4)) return "ios-update-required";
+  }
+
+  if (isIos && !isStandalone) {
+    return "ios-install-required";
+  }
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     return "unsupported";
   }
   return Notification.permission === "denied" ? "blocked" : "supported";

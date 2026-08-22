@@ -31,7 +31,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type NotificationState = "loading" | "off" | "on" | "unsupported" | "blocked" | "error";
+type NotificationState = "loading" | "off" | "on" | "unsupported" | "blocked" | "error" | "ios-install-required" | "ios-update-required";
 type NotificationNote = "notificationReconfirm" | "notificationTestQueued" | "notificationTestFailed";
 
 export function SettingsPanel({
@@ -53,6 +53,7 @@ export function SettingsPanel({
   const [notificationState, setNotificationState] = useState<NotificationState>("loading");
   const [notificationBusy, setNotificationBusy] = useState(false);
   const [notificationNote, setNotificationNote] = useState<NotificationNote | null>(null);
+  const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
 
   useEffect(() => {
     const handleFontSize = (event: Event) => {
@@ -66,8 +67,8 @@ export function SettingsPanel({
   useEffect(() => {
     if (!notificationsAvailable || status !== "authenticated") return;
     const support = getWebPushSupport();
-    if (support === "unsupported") {
-      setNotificationState("unsupported");
+    if (support === "unsupported" || support === "ios-install-required" || support === "ios-update-required") {
+      setNotificationState(support);
       return;
     }
     if (support === "blocked") {
@@ -131,8 +132,8 @@ export function SettingsPanel({
       const support = getWebPushSupport();
       if (support === "blocked" || (error instanceof Error && error.message === "push_permission_not_granted")) {
         setNotificationState("blocked");
-      } else if (support === "unsupported") {
-        setNotificationState("unsupported");
+      } else if (support === "unsupported" || support === "ios-install-required" || support === "ios-update-required") {
+        setNotificationState(support);
       } else {
         setNotificationState("error");
       }
@@ -282,6 +283,10 @@ export function SettingsPanel({
                   <div style={{ marginTop: "4px", color: "var(--meta)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
                     {notificationState === "unsupported"
                       ? t("notificationUnsupported")
+                      : notificationState === "ios-install-required"
+                        ? t("notificationIosInstallRequired")
+                        : notificationState === "ios-update-required"
+                          ? t("notificationIosUpdateRequired")
                       : notificationState === "blocked"
                         ? t("notificationBlocked")
                         : notificationState === "error"
@@ -293,8 +298,28 @@ export function SettingsPanel({
                       {t(notificationNote)}
                     </div>
                   )}
+                  {notificationState === "ios-install-required" && (
+                    <button
+                      type="button"
+                      onClick={() => setShowIosInstallGuide((visible) => !visible)}
+                      aria-expanded={showIosInstallGuide}
+                      style={{
+                        display: "block",
+                        marginTop: "7px",
+                        padding: 0,
+                        border: 0,
+                        background: "transparent",
+                        color: "var(--bubble-sent)",
+                        fontSize: "calc(var(--bubble-font-size) - 4px)",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {t("notificationInstallGuide")}
+                    </button>
+                  )}
                 </div>
-                <button
+                {notificationState !== "ios-install-required" && notificationState !== "ios-update-required" && <button
                   type="button"
                   role="switch"
                   aria-checked={notificationState === "on"}
@@ -327,8 +352,25 @@ export function SettingsPanel({
                       transition: "transform .2s ease",
                     }}
                   />
-                </button>
+                </button>}
               </div>
+              {notificationState === "ios-install-required" && showIosInstallGuide && (
+                <div
+                  style={{
+                    margin: "0 0 12px",
+                    padding: "12px 14px",
+                    borderRadius: "14px",
+                    background: "var(--input-bg)",
+                    color: "var(--text)",
+                    fontSize: "calc(var(--bubble-font-size) - 4px)",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <div>1. {t("notificationInstallStep1")}</div>
+                  <div style={{ marginTop: "5px" }}>2. {t("notificationInstallStep2")}</div>
+                  <div style={{ marginTop: "5px" }}>3. {t("notificationInstallStep3")}</div>
+                </div>
+              )}
               <div style={{ height: "1px", background: "var(--hairline)", margin: "8px 0" }} />
             </>
           )}

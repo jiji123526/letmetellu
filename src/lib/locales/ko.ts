@@ -184,6 +184,12 @@ export const ko = {
   notificationReconfirm: "채널 비밀번호가 바뀌어 다시 켜야 해요.",
   notificationTestQueued: "테스트 알림을 보냈어요.",
   notificationTestFailed: "알림은 켜졌지만 테스트 전송을 확인하지 못했어요.",
+  notificationIosInstallRequired: "iPhone에서는 홈 화면에 yap.을 추가한 뒤 알림을 켤 수 있어요.",
+  notificationIosUpdateRequired: "푸시 알림을 사용하려면 iOS 16.4 이상으로 업데이트해 주세요.",
+  notificationInstallGuide: "홈 화면에 추가하는 방법",
+  notificationInstallStep1: "Safari 하단의 공유 버튼을 눌러 주세요.",
+  notificationInstallStep2: "‘홈 화면에 추가’를 선택해 주세요.",
+  notificationInstallStep3: "홈 화면의 yap.을 열고 중요 알림을 켜 주세요.",
 
   // Admin panel
   channel: "채널",

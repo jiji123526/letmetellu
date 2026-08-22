@@ -186,6 +186,12 @@ export const en: Record<LocaleKeys, string> = {
   notificationReconfirm: "The channel passcode changed. Turn notifications on again.",
   notificationTestQueued: "A test notification was sent.",
   notificationTestFailed: "Notifications are on, but the test delivery couldn't be confirmed.",
+  notificationIosInstallRequired: "On iPhone, add yap. to your Home Screen before turning on notifications.",
+  notificationIosUpdateRequired: "Update to iOS 16.4 or later to use push notifications.",
+  notificationInstallGuide: "How to add to Home Screen",
+  notificationInstallStep1: "Tap the Share button at the bottom of Safari.",
+  notificationInstallStep2: "Choose ‘Add to Home Screen’.",
+  notificationInstallStep3: "Open yap. from your Home Screen and turn on Important Notifications.",
 
   // Admin panel
   channel: "Channel",

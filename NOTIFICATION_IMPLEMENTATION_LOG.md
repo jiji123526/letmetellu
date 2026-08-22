@@ -26,6 +26,58 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## iOS Home Screen Web Push onboarding added — 2026-08-22
+
+### Scope and user-visible behavior
+
+- Added an installable `yap.` web app manifest with standalone display mode,
+  dashboard start URL, site-wide scope, theme colors and dedicated 180/192/512
+  PNG icons. The root metadata now advertises the Apple web-app title, status
+  bar behavior and touch icon.
+- Logged-in non-admin users visiting from an uninstalled iPhone/iPad browser no
+  longer see the misleading generic unsupported message. They see a localized
+  explanation and an optional three-step Safari Home Screen guide.
+- iOS/iPadOS versions below 16.4 receive an update-required explanation.
+  Installed Home Screen web apps continue into the existing standards-based
+  VAPID subscription and self-test flow; Android and desktop behavior is
+  unchanged.
+
+### Security, performance and privacy boundaries
+
+- Installation guidance performs no API call, Service Worker registration,
+  permission request or subscription write. Notification permission remains
+  behind the user's explicit switch click after the Home Screen app is opened.
+- Runtime detection uses only local browser capability, display-mode, user-agent
+  platform and OS-version signals. None is transmitted or persisted.
+- The manifest and four small static PNG assets add negligible cached transfer
+  and no D1/Worker/realtime work. Existing VAPID secrets and delivery code are
+  unchanged, so no Worker deployment or migration is required.
+
+### Trade-offs and failure modes
+
+- Apple does not allow a webpage to complete Home Screen installation
+  automatically. The user must use the browser share menu, then reopen `yap.`
+  from its Home Screen icon before permission can be requested.
+- iPad desktop-style user agents do not always expose a reliable iPadOS version.
+  They still receive install guidance; final support is determined from Push,
+  Notification and Service Worker APIs after standalone launch.
+- Home Screen apps have a distinct browsing context. Users may need to sign in
+  again depending on OS/browser cookie transfer behavior. This release does not
+  attempt to copy local-only anonymous channel state across those contexts.
+- The inline guide targets the dominant Safari flow. iOS 17+ browsers can also
+  expose Add to Home Screen, but their share-menu placement may differ.
+
+### Verification and rollout
+
+- Added a regression check for standalone manifest configuration, the iOS 16.4
+  boundary, install-first classification and visible localized guide.
+- Focused notification tests pass 17 cases, the full Worker hardening suite
+  passes 313 tests, and the production build succeeds with a statically
+  generated `/manifest.webmanifest` route.
+- Production validation requires a real iPhone/iPad: first inspect the Safari
+  guide, add `yap.` to Home Screen, launch the icon, sign in if required, enable
+  Important Notifications and confirm the fixed self-test alert.
+
 ## Explicit non-admin notification opt-in added — 2026-08-22
 
 ### Scope and user-visible behavior

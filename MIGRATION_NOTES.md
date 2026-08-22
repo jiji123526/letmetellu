@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### iOS Home Screen Web Push onboarding — 2026-08-22
+
+- Added a standalone `yap.` web app manifest, Apple web-app metadata and
+  dedicated install icons so iOS/iPadOS 16.4+ can expose standards-based Web
+  Push from the Home Screen app.
+- Uninstalled iPhone/iPad browser sessions now receive localized Home Screen
+  installation steps instead of a generic unsupported error. Versions below
+  iOS/iPadOS 16.4 receive a separate update requirement.
+- The guide itself performs no network, permission or subscription work.
+  Permission remains behind an explicit switch click after standalone launch,
+  and Android/desktop behavior is unchanged.
+- No D1 migration or Worker deploy is required. The only steady-state cost is a
+  few cacheable manifest/icon assets; browser/platform detection remains local.
+- Trade-offs: Home Screen installation cannot be automated, browser storage may
+  be separate, and users may need to sign in again after opening the installed
+  app. Full notes and the physical-device verification checklist are in
+  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+
 ### Explicit important-notification opt-in UI — 2026-08-22
 
 - Logged-in non-admin channel visitors can explicitly enable or disable

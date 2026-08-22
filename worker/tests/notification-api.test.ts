@@ -226,3 +226,18 @@ test("disabling one channel keeps the account's browser subscription available",
   assert.match(offBranch, /updateNotificationPreference\("off"\)/);
   assert.doesNotMatch(offBranch, /unsubscribe|subscriptions\//);
 });
+
+test("iOS Safari receives install guidance before Web Push feature rejection", () => {
+  const pushClient = readFileSync(
+    new URL("../../src/lib/web-push-client.ts", import.meta.url),
+    "utf8",
+  );
+  const manifest = readFileSync(new URL("../../src/app/manifest.ts", import.meta.url), "utf8");
+  assert.match(pushClient, /isIos && !isStandalone/);
+  assert.match(pushClient, /return "ios-install-required"/);
+  assert.match(pushClient, /major === 16 && minor < 4/);
+  assert.match(settingsPanel, /notificationInstallGuide/);
+  assert.match(settingsPanel, /notificationInstallStep1/);
+  assert.match(manifest, /display: "standalone"/);
+  assert.match(manifest, /start_url: "\/dashboard"/);
+});
