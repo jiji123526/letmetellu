@@ -4,6 +4,27 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Web Push self-test outbox — 2026-08-22
+
+- Migration `0057_notification_delivery_outbox.sql` adds a leased, retryable and
+  deduplicated Web Push outbox. The first producer is a fixed-copy self-test for
+  one active subscription owned by the authenticated caller; admin messages and
+  live starts remain disconnected.
+- Self-tests require an Auth.js session, exact same-origin mutation and Worker-
+  verified subscription ownership, and are capped at three per user per day.
+  Arbitrary notification text and navigation are not accepted.
+- Delivery is detached with `ctx.waitUntil`, retried by the five-minute cron and
+  bounded to ten rows/four attempts. Dead 404/410 endpoints are revoked; retry
+  eligibility is limited to transport failures, 408, 429 and 5xx.
+- Added Cloudflare's documented `web-push` delivery dependency and
+  `nodejs_compat`. The gzip Worker bundle increases by roughly 60 KiB. Updating
+  Wrangler to 4.125 clears the Worker package audit to zero known issues.
+- Normal chat and live paths perform no new work. The initial empty-queue cost is
+  one indexed D1 probe every five minutes; delivered/dead retention remains a
+  prerequisite before fanout is enabled.
+- Full verification and deferred concerns are recorded in
+  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+
 ### Direct VAPID browser foundation — 2026-08-22
 
 - Chose direct Web Push with stable VAPID credentials and added an authenticated

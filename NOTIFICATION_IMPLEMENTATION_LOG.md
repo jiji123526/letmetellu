@@ -26,6 +26,86 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Rate-limited self-test delivery and durable outbox added — 2026-08-22
+
+### Scope and user-visible behavior
+
+- Added a self-test delivery endpoint and a durable D1 outbox. It can send only
+  fixed localized `yap.` connection-confirmation copy to one active subscription
+  owned by the current authenticated user.
+- There is still no visible toggle or automatic permission prompt. The frontend
+  helper is ready to register a browser and request its self-test from a future
+  explicit settings action, but importing it causes no network or browser work.
+- Admin messages and live starts do not enqueue notifications yet. Normal chat,
+  message persistence, realtime acknowledgement and live-start latency remain
+  unchanged.
+
+### Authentication, authorization and abuse controls
+
+- The Next.js self-test proxy requires an Auth.js session and exact same-origin
+  browser mutation. The Worker repeats trusted-user validation and verifies the
+  requested subscription ID belongs to that user and is not revoked.
+- Request bodies retain the existing 8 KiB limit and accept only a UUID plus
+  `ko` or `en`. Callers cannot choose notification title, body, URL or tag.
+- Self-tests are limited to three per authenticated user per 24 hours using the
+  existing hashed durable rate-limit buckets. The newly inserted outbox ID is
+  passed directly to the background processor, so another queued event cannot
+  delay the interactive test.
+- Subscription endpoints and encryption keys remain absent from responses and
+  logs. Push errors retain only a bounded HTTP-class error code.
+
+### Outbox consistency and failure handling
+
+- Migration `0057_notification_delivery_outbox.sql` adds unique event keys,
+  user/channel/subscription ownership, status, attempts, next-attempt time,
+  leases and error classification. Foreign keys cascade account/channel/delete
+  cleanup, and subscription ID rotation cascades queued rows.
+- Requests commit the outbox row before returning `202`; delivery runs under
+  `ctx.waitUntil`, not in the response latency. The five-minute cron recovers
+  transient failures or a Worker interruption.
+- Claims use a two-minute conditional lease. A concurrent worker can process a
+  row only if it wins the guarded update; expired processing leases can be
+  reclaimed.
+- HTTP 404/410 permanently revokes a dead browser endpoint. Transport errors,
+  408, 429 and 5xx retry at bounded 1-minute, 5-minute and 30-minute delays, with
+  at most four attempts. Other 4xx responses become dead immediately.
+
+### Performance, dependencies and trade-offs
+
+- The delivery batch is capped at ten. An empty ready-queue index probe occurs
+  only on the five-minute cron, approximately 288 very small D1 reads per day.
+  This is acceptable for the initial rollout but should be replaced by a
+  queue/alarm wakeup if push volume grows materially.
+- Each claimed delivery currently uses a candidate read, guarded claim, joined
+  subscription read and a small outcome batch. This prioritizes recoverability
+  and secret isolation over minimum D1 operation count.
+- Added the mature `web-push` package recommended by Cloudflare and enabled
+  `nodejs_compat`. The dry-run Worker bundle grew from about 105 KiB to 166 KiB
+  gzip. The code runs only in delivery processing, but compatibility shims widen
+  the bundle and should be reconsidered if an equally mature native Web Crypto
+  implementation emerges.
+- Updating Wrangler from 4.113 to 4.125 removed four high-severity development-
+  dependency audit findings. The Worker package audit now reports zero known
+  vulnerabilities.
+- Delivered/dead outbox retention cleanup is not included yet. The three-per-day
+  self-test cap bounds interim growth, but retention must be added before admin
+  message fanout.
+
+### Verification and rollout
+
+- Focused notification/schema tests pass 18 cases; the full Worker hardening
+  suite passes 310 tests. Worker/frontend TypeScript and the Next.js production
+  build pass, and Wrangler successfully bundles `web-push` in a dry run.
+- A local D1 accepted migration `0057`. Production migration, implementation
+  commit, Worker deploy and a real browser self-test remain required before this
+  entry is marked rolled out.
+
+### Next step
+
+1. Apply migration `0057`, deploy the Worker and verify unauthenticated denial.
+2. Add a localized explicit opt-in control and run one real browser self-test.
+3. Add bounded delivered/dead retention before admin-message fanout.
+
 ## Direct VAPID browser foundation added — 2026-08-22
 
 ### Scope and user-visible behavior

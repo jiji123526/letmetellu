@@ -46,7 +46,12 @@ export function getWebPushSupport(): WebPushSupport {
   return Notification.permission === "denied" ? "blocked" : "supported";
 }
 
-export async function subscribeCurrentBrowserToPush(deviceLabel?: string): Promise<StoredPushSubscription> {
+export interface RegisteredPushSubscription {
+  subscription: StoredPushSubscription;
+  subscriptionId: string;
+}
+
+export async function subscribeCurrentBrowserToPush(deviceLabel?: string): Promise<RegisteredPushSubscription> {
   if (getWebPushSupport() === "unsupported") throw new Error("push_unsupported");
   if (Notification.permission === "denied") throw new Error("push_permission_blocked");
 
@@ -76,6 +81,19 @@ export async function subscribeCurrentBrowserToPush(deviceLabel?: string): Promi
       device_label: deviceLabel?.trim() || null,
     }),
   });
-  if (!response.ok) throw new Error(`push_subscription_registration_failed:${response.status}`);
-  return serialized;
+  const responseBody = await response.json().catch(() => null) as { subscriptionId?: unknown } | null;
+  if (!response.ok || typeof responseBody?.subscriptionId !== "string") {
+    throw new Error(`push_subscription_registration_failed:${response.status}`);
+  }
+  return { subscription: serialized, subscriptionId: responseBody.subscriptionId };
+}
+
+export async function sendPushSelfTest(subscriptionId: string, locale: "ko" | "en"): Promise<void> {
+  const response = await fetch("/api/notifications/test", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subscription_id: subscriptionId, locale }),
+  });
+  if (!response.ok) throw new Error(`push_self_test_failed:${response.status}`);
 }

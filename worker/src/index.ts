@@ -31,6 +31,7 @@ import {
 } from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
 import { runOperationalHealthAlerts } from "./lib/operational-alerts";
+import { processNotificationOutbox } from "./lib/notification-delivery";
 import { isAllowedRequestOrigin } from "./lib/request-origin";
 
 export { ChatRoom };
@@ -278,7 +279,7 @@ export default {
       } else if (url.pathname.startsWith("/api/survey")) {
         response = await handleSurvey(request, env);
       } else if (url.pathname.startsWith("/api/notifications")) {
-        response = await handleNotifications(request, env);
+        response = await handleNotifications(request, env, ctx);
       } else if (url.pathname.startsWith("/api/media/")) {
         const key = url.pathname.replace("/api/media/", "");
         response = await handleMediaServe(request, env, key, ctx);
@@ -358,6 +359,22 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (controller.cron === "*/5 * * * *") {
+      ctx.waitUntil((async () => {
+        try {
+          await processNotificationOutbox(env);
+        } catch (error) {
+          console.error("notification outbox delivery failed", error);
+          await recordOperationalEvent({
+            env,
+            severity: "error",
+            route: "scheduled notification delivery",
+            eventType: "notification_delivery_failed",
+            detail: { error: error instanceof Error ? error.message : String(error) },
+          });
+        }
+      })());
+    }
     if (controller.cron === "17 * * * *") {
       ctx.waitUntil((async () => {
         try {

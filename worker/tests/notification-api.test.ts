@@ -39,6 +39,18 @@ const serviceWorker = readFileSync(
   new URL("../../public/push-sw.js", import.meta.url),
   "utf8",
 );
+const testProxy = readFileSync(
+  new URL("../../src/app/api/notifications/test/route.ts", import.meta.url),
+  "utf8",
+);
+const delivery = readFileSync(
+  new URL("../src/lib/notification-delivery.ts", import.meta.url),
+  "utf8",
+);
+const outboxMigration = readFileSync(
+  new URL("../migrations/0057_notification_delivery_outbox.sql", import.meta.url),
+  "utf8",
+);
 const proxyHelper = readFileSync(
   new URL("../../src/lib/notification-proxy.ts", import.meta.url),
   "utf8",
@@ -161,4 +173,29 @@ test("push clicks accept only same-origin channel paths", () => {
   assert.match(serviceWorker, /target\.origin !== self\.location\.origin/);
   assert.match(serviceWorker, /!target\.pathname\.startsWith\("\/ch\/"\)/);
   assert.match(serviceWorker, /includeUncontrolled: true/);
+});
+
+test("self-test delivery is owner scoped, strongly rate limited and queued", () => {
+  assert.match(route, /"push-self-test"/);
+  assert.match(route, /SELF_TEST_LIMIT = 3/);
+  assert.match(route, /SELF_TEST_WINDOW_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(route, /WHERE id = \? AND user_id = \? AND revoked_at IS NULL/);
+  assert.match(route, /INSERT INTO notification_outbox/);
+  assert.match(route, /ctx\.waitUntil\(processNotificationOutbox\(env, 1, id\)\)/);
+  assert.match(testProxy, /isSameOriginNotificationMutation\(request\)/);
+  assert.match(testProxy, /const session = await auth\(\)/);
+});
+
+test("outbox delivery uses leases, bounded retries and permanent endpoint cleanup", () => {
+  assert.match(outboxMigration, /event_key TEXT NOT NULL UNIQUE/);
+  assert.match(outboxMigration, /ON DELETE CASCADE ON UPDATE CASCADE/);
+  assert.match(outboxMigration, /notification_outbox_ready_idx/);
+  assert.match(delivery, /DELIVERY_BATCH_SIZE = 10/);
+  assert.match(delivery, /DELIVERY_LEASE_MS = 2 \* 60 \* 1000/);
+  assert.match(delivery, /MAX_DELIVERY_ATTEMPTS = 4/);
+  assert.match(delivery, /preferredId \? env\.DB\.prepare/);
+  assert.match(delivery, /status === 404 \|\| status === 410/);
+  assert.match(delivery, /SET revoked_at = \?/);
+  assert.match(delivery, /status === 0 \|\| status === 408 \|\| status === 429 \|\| status >= 500/);
+  assert.doesNotMatch(delivery, /console\.(?:log|warn|error).*endpoint/);
 });
