@@ -135,7 +135,8 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
   `codex/web-push-notifications` before rollout.
 - Production D1 migration `0056_notification_access_binding.sql` was applied
   successfully; a follow-up listing reports no pending migrations.
-- Worker version `47ce5ee1-6fcc-4fe3-84af-b5e43d1437ca` was deployed. An
+- Worker version `57b33831-99b9-4546-972d-7399b291a1fe` was deployed after the
+  passcode-reconfirmation follow-up in commit `5be6b9b`. An
   unauthenticated production request to the new preference endpoint returned
   `401` with no data.
 - Frontend production remains unchanged until this branch is merged and its API

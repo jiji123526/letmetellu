@@ -37,7 +37,7 @@ registration makes the newest authenticated account authoritative so browser
 account switching does not create duplicate delivery.
 
 Deployment note: production D1 migration `0056` is applied and Worker version
-`47ce5ee1-6fcc-4fe3-84af-b5e43d1437ca` is deployed. Direct unauthenticated
+`57b33831-99b9-4546-972d-7399b291a1fe` is deployed. Direct unauthenticated
 access returns `401`. Frontend production has no notification UI and will not
 expose the session proxies until the feature branch is merged.
 
