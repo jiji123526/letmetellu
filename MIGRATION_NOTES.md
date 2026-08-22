@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Notification delivery cron guard correction — 2026-08-22
+
+- Fixed a production mismatch where the deployed every-minute Cron trigger used
+  `* * * * *` but the Worker outbox handler still checked the obsolete
+  `*/5 * * * *` expression. Normal-message notification rows therefore stayed
+  pending even with valid `All` preferences and active Safari subscriptions.
+- Added a regression assertion covering both `wrangler.toml` and the scheduled
+  handler. Existing pending rows drain through the corrected bounded delivery
+  loop; no D1 migration or preference reset is required.
+- Notification mode changes no longer enqueue a connection self-test. They now
+  perform only browser subscription registration and preference persistence,
+  so test rate limits or transport failures cannot be confused with setting
+  failures.
+- Worker version `a4de0773-8c9e-47fb-896f-8b126352d35a` is live. Production
+  verification confirmed all five previously pending `ttaerrari` message
+  notification rows transitioned to `delivered` on the next Cron with no error.
+
 ### Role-aware Push modes and notification fanout — 2026-08-22
 
 - Signed-in members and channel owners now have `Off`, `Important` and `All`

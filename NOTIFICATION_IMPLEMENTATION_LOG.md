@@ -26,6 +26,41 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Ordinary-message delivery cron mismatch fixed — 2026-08-22
+
+### Production diagnosis and behavior
+
+- A channel owner with `All` enabled and two active browser subscriptions did
+  not receive an anonymous member message. Production D1 confirmed that the
+  preference and subscriptions were valid while five `channel_message` rows
+  remained in `pending` for the tested channel.
+- Ordinary messages are deliberately bundled for one minute and depend on the
+  scheduled outbox drain. `worker/wrangler.toml` invoked the Worker every minute
+  (`* * * * *`), but the handler accepted only the old five-minute expression
+  (`*/5 * * * *`), so every delivery invocation skipped the drain.
+- The handler now matches the deployed every-minute trigger. Pending rows that
+  are still eligible are drained automatically; preference, subscription and
+  message-send behavior is unchanged.
+
+### Risk, cost and verification
+
+- This restores the already-documented cadence rather than increasing it: one
+  bounded indexed outbox probe runs each minute and at most three batches are
+  drained. Provider failures retain the existing lease, retry and dead-endpoint
+  handling.
+- Added a regression test that compares the configured Cron expression with the
+  handler guard so this silent mismatch cannot recur. Worker TypeScript and all
+  318 hardening tests pass.
+- The settings UI no longer sends automatic self-tests when a mode changes;
+  enabling notifications now registers the browser and stores the preference
+  only. This prevents test-only failures and rate limits from being presented
+  as a settings failure.
+- Worker version `a4de0773-8c9e-47fb-896f-8b126352d35a` is deployed. On the
+  first corrected production Cron, all five previously pending `ttaerrari`
+  `channel_message` rows became `delivered` with no recorded delivery error.
+
+---
+
 ## Role-aware notification modes and event fanout implemented — 2026-08-22
 
 ### Scope and user-visible behavior

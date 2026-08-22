@@ -359,7 +359,7 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (controller.cron === "*/5 * * * *") {
+    if (controller.cron === "* * * * *") {
       ctx.waitUntil((async () => {
         try {
           await drainNotificationOutbox(env);

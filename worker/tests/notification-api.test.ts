@@ -204,6 +204,13 @@ test("outbox delivery uses leases, bounded retries and permanent endpoint cleanu
   assert.doesNotMatch(delivery, /console\.(?:log|warn|error).*endpoint/);
 });
 
+test("notification delivery handler matches the deployed every-minute cron", () => {
+  const wranglerConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+  assert.match(wranglerConfig, /crons\s*=\s*\[[^\]]*"\* \* \* \* \*"/);
+  assert.match(workerIndex, /controller\.cron === "\* \* \* \* \*"/);
+  assert.doesNotMatch(workerIndex, /controller\.cron === "\*\/5 \* \* \* \*"/);
+});
+
 test("Worker enables the Node HTTPS client required by web-push", () => {
   const wranglerConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
   assert.match(wranglerConfig, /compatibility_flags\s*=\s*\[[^\]]*"nodejs_compat"/);
