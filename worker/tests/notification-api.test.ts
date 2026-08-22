@@ -102,8 +102,20 @@ test("push subscription input is bounded and requires HTTPS browser keys", () =>
     expirationTime: null,
     deviceLabel: "My phone",
   });
-  assert.equal(parsePushSubscription({ ...validSubscription, endpoint: "http://push.example.test/a" }), null);
-  assert.equal(parsePushSubscription({ ...validSubscription, keys: { p256dh: "short", auth: "short" } }), null);
+  assert.equal(
+    parsePushSubscription({
+      ...validSubscription,
+      endpoint: "http://push.example.test/a",
+    }),
+    null,
+  );
+  assert.equal(
+    parsePushSubscription({
+      ...validSubscription,
+      keys: { p256dh: "short", auth: "short" },
+    }),
+    null,
+  );
   assert.equal(MAX_ACTIVE_PUSH_SUBSCRIPTIONS, 5);
 });
 
@@ -115,10 +127,16 @@ test("only a coarse browser family is retained", () => {
 });
 
 test("notification APIs require trusted existing accounts and current channel access", () => {
-  assert.match(accessBindingMigration, /ALTER TABLE notification_preferences ADD COLUMN access_binding TEXT/);
+  assert.match(
+    accessBindingMigration,
+    /ALTER TABLE notification_preferences ADD COLUMN access_binding TEXT/,
+  );
   assert.match(route, /getTrustedUserId\(request, env\)/);
   assert.match(route, /SELECT 1 FROM users WHERE id = \? LIMIT 1/);
-  assert.match(route, /FROM user_recent_channels recent[\s\S]*recent\.user_id = \? AND recent\.channel_id = c\.id/);
+  assert.match(
+    route,
+    /FROM user_recent_channels recent[\s\S]*recent\.user_id = \? AND recent\.channel_id = c\.id/,
+  );
   assert.match(route, /channel\.owner_uid !== userId && !channel\.associated/);
   assert.match(route, /authorizeRoomToken\(roomToken, channelId, channel\.passcode, env\)/);
   assert.match(route, /access_binding = excluded\.access_binding/);
@@ -127,8 +145,12 @@ test("notification APIs require trusted existing accounts and current channel ac
 test("turning notifications off remains possible after channel access is lost", () => {
   const offBranch = route.slice(
     route.indexOf('if (input.mode === "off")'),
-    route.indexOf("const access = await resolveChannelAccess", route.indexOf('if (input.mode === "off")')),
+    route.indexOf(
+      "const access = await resolveChannelAccess",
+      route.indexOf('if (input.mode === "off")'),
+    ),
   );
+
   assert.match(offBranch, /DELETE FROM notification_preferences/);
   assert.doesNotMatch(offBranch, /resolveChannelAccess/);
 });
@@ -136,16 +158,33 @@ test("turning notifications off remains possible after channel access is lost", 
 test("a passcode change is represented as off until the user opts in again", () => {
   assert.match(route, /SELECT mode, access_binding, updated_at/);
   assert.match(route, /preference\.access_binding === access\.accessBinding/);
-  assert.match(route, /requiresReconfirmation: \(preference\?\.mode === "important" \|\| preference\?\.mode === "all"\) && !hasCurrentAccessBinding/);
+  assert.match(
+    route,
+    /requiresReconfirmation: \(preference\?\.mode === "important" \|\| preference\?\.mode === "all"\) && !hasCurrentAccessBinding/,
+  );
 });
 
 test("device registration is capped atomically and responses omit endpoint secrets", () => {
-  assert.match(route, /COUNT\(\*\)[\s\S]*revoked_at IS NULL AND endpoint != \?[\s\S]*< \?/);
-  assert.match(route, /ON CONFLICT\(endpoint\) DO UPDATE SET[\s\S]*user_id = excluded\.user_id/);
+  assert.match(
+    route,
+    /COUNT\(\*\)[\s\S]*revoked_at IS NULL AND endpoint != \?[\s\S]*< \?/,
+  );
+  assert.match(
+    route,
+    /ON CONFLICT\(endpoint\) DO UPDATE SET[\s\S]*user_id = excluded\.user_id/,
+  );
   assert.match(route, /device_limit_reached/);
-  const deviceQuery = route.slice(route.indexOf("async function listActiveDevices"), route.indexOf("function serializeDevices"));
+
+  const deviceQuery = route.slice(
+    route.indexOf("async function listActiveDevices"),
+    route.indexOf("function serializeDevices"),
+  );
   assert.doesNotMatch(deviceQuery, /endpoint|p256dh|auth/);
-  const serialization = route.slice(route.indexOf("function serializeDevices"), route.indexOf("async function handlePreferences"));
+
+  const serialization = route.slice(
+    route.indexOf("function serializeDevices"),
+    route.indexOf("async function handlePreferences"),
+  );
   assert.doesNotMatch(serialization, /endpoint|p256dh|auth/);
 });
 
@@ -164,7 +203,10 @@ test("mutations are bounded, rate limited and routed through authenticated same-
   assert.match(preferenceProxy, /isSameOriginNotificationMutation\(request\)/);
   assert.match(subscriptionProxy, /isSameOriginNotificationMutation\(request\)/);
   assert.match(revokeProxy, /isSameOriginNotificationMutation\(request\)/);
-  assert.match(proxyHelper, /new URL\(origin\)\.origin === new URL\(request\.url\)\.origin/);
+  assert.match(
+    proxyHelper,
+    /new URL\(origin\)\.origin === new URL\(request\.url\)\.origin/,
+  );
   assert.match(proxyHelper, /readRoomTokenCookie/);
 });
 
@@ -178,15 +220,30 @@ test("VAPID public key access is authenticated and private-cache scoped", () => 
 
 test("browser subscription requires an explicit caller and stores only serialized Push API data", () => {
   assert.match(pushClient, /Notification\.requestPermission\(\)/);
-  assert.match(pushClient, /navigator\.serviceWorker\.register\("\/push-sw\.js"/);
-  assert.match(pushClient, /applicationServerKey: base64UrlToUint8Array\(publicKey\)/);
-  assert.match(pushClient, /fetch\("\/api\/notifications\/subscriptions"/);
+  assert.match(
+    pushClient,
+    /navigator\.serviceWorker\.register\("\/push-sw\.js"/,
+  );
+  assert.match(
+    pushClient,
+    /applicationServerKey: base64UrlToUint8Array\(publicKey\)/,
+  );
+  assert.match(
+    pushClient,
+    /fetch\("\/api\/notifications\/subscriptions"/,
+  );
   assert.doesNotMatch(pushClient, /addEventListener\(["']load/);
 });
 
 test("push clicks accept only same-origin channel paths", () => {
-  assert.match(serviceWorker, /target\.origin !== self\.location\.origin/);
-  assert.match(serviceWorker, /!target\.pathname\.startsWith\("\/ch\/"\)/);
+  assert.match(
+    serviceWorker,
+    /target\.origin !== self\.location\.origin/,
+  );
+  assert.match(
+    serviceWorker,
+    /!target\.pathname\.startsWith\("\/ch\/"\)/,
+  );
   assert.match(serviceWorker, /includeUncontrolled: true/);
 });
 
@@ -200,68 +257,191 @@ test("outbox delivery uses leases, bounded retries and permanent endpoint cleanu
   assert.match(delivery, /preferredId \? env\.DB\.prepare/);
   assert.match(delivery, /status === 404 \|\| status === 410/);
   assert.match(delivery, /SET revoked_at = \?/);
-  assert.match(delivery, /status === 0 \|\| status === 408 \|\| status === 429 \|\| status >= 500/);
-  assert.doesNotMatch(delivery, /console\.(?:log|warn|error).*endpoint/);
+  assert.match(
+    delivery,
+    /status === 0 \|\| status === 408 \|\| status === 429 \|\| status >= 500/,
+  );
+  assert.doesNotMatch(
+    delivery,
+    /console\.(?:log|warn|error).*endpoint/,
+  );
 });
 
 test("notification delivery handler matches the deployed every-minute cron", () => {
-  const wranglerConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-  assert.match(wranglerConfig, /crons\s*=\s*\[[^\]]*"\* \* \* \* \*"/);
-  assert.match(workerIndex, /controller\.cron === "\* \* \* \* \*"/);
-  assert.doesNotMatch(workerIndex, /controller\.cron === "\*\/5 \* \* \* \*"/);
+  const wranglerConfig = readFileSync(
+    new URL("../wrangler.toml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    wranglerConfig,
+    /crons\s*=\s*\[[^\]]*"\* \* \* \* \*"/,
+  );
+  assert.match(
+    workerIndex,
+    /controller\.cron === "\* \* \* \* \*"/,
+  );
+  assert.doesNotMatch(
+    workerIndex,
+    /controller\.cron === "\*\/5 \* \* \* \*"/,
+  );
 });
 
 test("Worker enables the Node HTTPS client required by web-push", () => {
-  const wranglerConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
-  assert.match(wranglerConfig, /compatibility_flags\s*=\s*\[[^\]]*"nodejs_compat"/);
-  assert.match(wranglerConfig, /compatibility_flags\s*=\s*\[[^\]]*"enable_nodejs_http_modules"/);
+  const wranglerConfig = readFileSync(
+    new URL("../wrangler.toml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    wranglerConfig,
+    /compatibility_flags\s*=\s*\[[^\]]*"nodejs_compat"/,
+  );
+  assert.match(
+    wranglerConfig,
+    /compatibility_flags\s*=\s*\[[^\]]*"enable_nodejs_http_modules"/,
+  );
 });
 
 test("transport diagnostics retain only bounded runtime codes", () => {
   assert.match(delivery, /\^\[A-Z0-9_\]\{1,48\}\$/);
-  assert.match(delivery, /push_transport_\$\{candidate\.toLowerCase\(\)\}/);
+  assert.match(
+    delivery,
+    /push_transport_\$\{candidate\.toLowerCase\(\)\}/,
+  );
   assert.doesNotMatch(delivery, /error\.message|error\.stack/);
 });
 
 test("notification permission remains behind an explicit channel settings action", () => {
-  assert.match(settingsPanel, /notificationsAvailable && status === "authenticated"/);
-  assert.match(settingsPanel, /onClick=\{\(\) => \{ void selectNotificationMode\(mode\); \}\}/);
-  assert.match(settingsPanel, /subscribeCurrentBrowserToPush\(\)/);
-  assert.match(settingsPanel, /updateNotificationPreference\(mode\)/);
-  assert.doesNotMatch(settingsPanel, /sendPushSelfTest|notifications\/test/);
-  assert.match(overlays, /notificationsAvailable=\{true\}/);
-  assert.doesNotMatch(settingsPanel, /useEffect\([\s\S]{0,300}subscribeCurrentBrowserToPush/);
+  assert.match(
+    settingsPanel,
+    /notificationsAvailable && status === "authenticated"/,
+  );
+  assert.match(
+    settingsPanel,
+    /onClick=\{\(\) => \{ void selectNotificationMode\(mode\); \}\}/,
+  );
+  assert.match(
+    settingsPanel,
+    /subscribeCurrentBrowserToPush\(\)/,
+  );
+  assert.match(
+    settingsPanel,
+    /updateNotificationPreference\(mode\)/,
+  );
+  assert.doesNotMatch(
+    settingsPanel,
+    /sendPushSelfTest|notifications\/test/,
+  );
+  assert.match(
+    overlays,
+    /notificationsAvailable=\{true\}/,
+  );
+  assert.doesNotMatch(
+    settingsPanel,
+    /useEffect\([\s\S]{0,300}subscribeCurrentBrowserToPush/,
+  );
 });
 
 test("disabling one channel keeps the account's browser subscription available", () => {
   const offBranch = settingsPanel.slice(
     settingsPanel.indexOf('if (mode === "off")'),
-    settingsPanel.indexOf("await subscribeCurrentBrowserToPush"),
+    settingsPanel.indexOf(
+      "await subscribeCurrentBrowserToPush",
+    ),
   );
-  assert.match(offBranch, /updateNotificationPreference\("off"\)/);
-  assert.doesNotMatch(offBranch, /unsubscribe|subscriptions\//);
+
+  assert.match(
+    offBranch,
+    /updateNotificationPreference\("off"\)/,
+  );
+  assert.doesNotMatch(
+    offBranch,
+    /unsubscribe|subscriptions\//,
+  );
 });
 
-test("role-aware fanout bundles general messages and keeps important owner events immediate", () => {
-  assert.match(fanoutMigration, /'channel_message', 'live_start', 'dm'/);
-  assert.match(fanoutMigration, /aggregate_count INTEGER NOT NULL DEFAULT 1/);
-  assert.match(notificationEvents, /MESSAGE_BUNDLE_WINDOW_MS = 60_000/);
-  assert.match(notificationEvents, /pref\.mode = 'all'/);
-  assert.match(notificationEvents, /pref\.mode IN \('important', 'all'\)/);
-  assert.match(notificationEvents, /aggregate_count = notification_outbox\.aggregate_count \+ 1/);
-  assert.match(notificationEvents, /ownerOnly\?: boolean/);
-  assert.match(notificationEvents, /processNotificationOutbox\(input\.env\)/);
-  assert.match(notificationEvents, /title: notificationText/);
-  assert.match(notificationEvents, /body: ""/);
-  assert.match(delivery, /payload\.title = locale === "en"/);
-});
+test(
+  "role-aware fanout delivers the first general message immediately, bundles burst updates, and keeps important owner events immediate",
+  () => {
+    assert.match(
+      fanoutMigration,
+      /'channel_message', 'live_start', 'dm'/,
+    );
+
+    assert.match(
+      fanoutMigration,
+      /aggregate_count INTEGER NOT NULL DEFAULT 1/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /MESSAGE_BUNDLE_WINDOW_MS = 10_000/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /pref\.mode = 'all'/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /pref\.mode IN \('important', 'all'\)/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /aggregate_count\s*=\s*notification_outbox\.aggregate_count\s*\+\s*1/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /ownerOnly\?: boolean/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /processNotificationOutbox\(input\.env\)/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /next_attempt_at[\s\S]*now/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /scheduleDelayedDrain/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /title: notificationText/,
+    );
+
+    assert.match(
+      notificationEvents,
+      /body: ""/,
+    );
+
+    assert.match(
+      delivery,
+      /payload\.title = locale === "en"/,
+    );
+  },
+);
 
 test("iOS Safari receives install guidance before Web Push feature rejection", () => {
   const pushClient = readFileSync(
     new URL("../../src/lib/web-push-client.ts", import.meta.url),
     "utf8",
   );
-  const manifest = readFileSync(new URL("../../src/app/manifest.ts", import.meta.url), "utf8");
+
+  const manifest = readFileSync(
+    new URL("../../src/app/manifest.ts", import.meta.url),
+    "utf8",
+  );
+
   assert.match(pushClient, /isIos && !isStandalone/);
   assert.match(pushClient, /return "ios-install-required"/);
   assert.match(pushClient, /major === 16 && minor < 4/);
