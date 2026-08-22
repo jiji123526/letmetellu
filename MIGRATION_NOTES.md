@@ -16,6 +16,10 @@ This file records both the original CSS-to-TSX porting constraints and the datab
   dashboard. Private VAPID material remains in Worker secrets only.
 - Key rotation requires a future resubscription migration, so the generated
   production pair must remain stable and be backed up outside the repository.
+- The three production VAPID secrets are configured and Worker version
+  `25dd2f3f-da12-419b-96ad-b1b41e395d7f` is deployed. The full Worker suite
+  passes 308 tests and frontend/Worker type checks plus the production build
+  pass.
 - Detailed verification, risks and next steps are recorded in
   `NOTIFICATION_IMPLEMENTATION_LOG.md`.
 

@@ -72,10 +72,17 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 - Added regression checks for authenticated key access, explicit-only browser
   permission, subscription serialization and click-target validation.
+- The full Worker hardening suite passes 308 tests. Worker/frontend TypeScript
+  checks and the Next.js production build pass; the build includes the new
+  authenticated `/api/notifications/vapid-key` route.
 - Required production secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and
-  `VAPID_SUBJECT=mailto:yapndot@gmail.com`.
-- Worker deployment and direct authenticated key smoke verification must be
-  completed before this entry is marked rolled out.
+  `VAPID_SUBJECT=mailto:yapndot@gmail.com`. All three are configured on the
+  production Worker, and the stable pair has a local mode-600 backup outside
+  the repository.
+- Worker version `25dd2f3f-da12-419b-96ad-b1b41e395d7f` is deployed. The public
+  browser helper and Next.js proxy remain feature-branch-only until merge, so an
+  end-to-end authenticated browser subscription is intentionally deferred to
+  the opt-in UI/self-test stage.
 
 ### Next step
 
