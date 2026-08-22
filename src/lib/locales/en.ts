@@ -178,6 +178,14 @@ export const en: Record<LocaleKeys, string> = {
   bubbleColor: "Bubble Color",
   customColor: "Custom Color",
   language: "Language",
+  importantNotifications: "Important Notifications",
+  importantNotificationsDesc: "Get notified about admin messages and live starts.",
+  notificationUnsupported: "Push notifications aren't supported in this browser.",
+  notificationBlocked: "Allow notifications in your browser settings.",
+  notificationLoadFailed: "Couldn't load notification settings. Please try again.",
+  notificationReconfirm: "The channel passcode changed. Turn notifications on again.",
+  notificationTestQueued: "A test notification was sent.",
+  notificationTestFailed: "Notifications are on, but the test delivery couldn't be confirmed.",
 
   // Admin panel
   channel: "Channel",

@@ -6,6 +6,11 @@ import { useLocale } from "@/hooks/useLocale";
 import { useSession } from "next-auth/react";
 import { saveFontSize } from "@/components/UserPreferencesSync";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
+import {
+  getWebPushSupport,
+  sendPushSelfTest,
+  subscribeCurrentBrowserToPush,
+} from "@/lib/web-push-client";
 
 const BUBBLE_COLORS = ["#3598fe", "#9b59b6", "#2e7d32", "#e74c3c", "#f39c12", "#1abc9c", "#e91e63"];
 
@@ -21,11 +26,22 @@ interface SettingsPanelProps {
   channelId: string;
   currentColor: string;
   onColorChange: (color: string) => void;
+  notificationsAvailable: boolean;
   onAdmin?: () => void;
   onClose: () => void;
 }
 
-export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin, onClose }: SettingsPanelProps) {
+type NotificationState = "loading" | "off" | "on" | "unsupported" | "blocked" | "error";
+type NotificationNote = "notificationReconfirm" | "notificationTestQueued" | "notificationTestFailed";
+
+export function SettingsPanel({
+  channelId,
+  currentColor,
+  onColorChange,
+  notificationsAvailable,
+  onAdmin,
+  onClose,
+}: SettingsPanelProps) {
   const { locale, setLocale, t } = useLocale();
   const { status } = useSession();
   const [fontSize, setFontSize] = useState(() => {
@@ -34,6 +50,9 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
   });
   const [selectedColor, setSelectedColor] = useState(currentColor);
   const colorInputRef = useRef<HTMLInputElement>(null);
+  const [notificationState, setNotificationState] = useState<NotificationState>("loading");
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationNote, setNotificationNote] = useState<NotificationNote | null>(null);
 
   useEffect(() => {
     const handleFontSize = (event: Event) => {
@@ -43,6 +62,84 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
     window.addEventListener("font-size-changed", handleFontSize);
     return () => window.removeEventListener("font-size-changed", handleFontSize);
   }, []);
+
+  useEffect(() => {
+    if (!notificationsAvailable || status !== "authenticated") return;
+    const support = getWebPushSupport();
+    if (support === "unsupported") {
+      setNotificationState("unsupported");
+      return;
+    }
+    if (support === "blocked") {
+      setNotificationState("blocked");
+      return;
+    }
+    const controller = new AbortController();
+    setNotificationState("loading");
+    fetch(`/api/notifications/preferences?channel=${encodeURIComponent(channelId)}`, {
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = await response.json().catch(() => null) as {
+          preference?: { mode?: unknown; requiresReconfirmation?: unknown };
+        } | null;
+        if (!response.ok) throw new Error(`notification_preference_failed:${response.status}`);
+        setNotificationState(body?.preference?.mode === "important" ? "on" : "off");
+        if (body?.preference?.requiresReconfirmation === true) {
+          setNotificationNote("notificationReconfirm");
+        }
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setNotificationState("error");
+      });
+    return () => controller.abort();
+  }, [channelId, notificationsAvailable, status]);
+
+  const updateNotificationPreference = async (mode: "off" | "important") => {
+    const response = await fetch("/api/notifications/preferences", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel_id: channelId, mode }),
+    });
+    if (!response.ok) throw new Error(`notification_preference_failed:${response.status}`);
+  };
+
+  const toggleNotifications = async () => {
+    if (notificationBusy || notificationState === "loading") return;
+    setNotificationBusy(true);
+    setNotificationNote(null);
+    try {
+      if (notificationState === "on") {
+        await updateNotificationPreference("off");
+        setNotificationState("off");
+        return;
+      }
+      const registered = await subscribeCurrentBrowserToPush();
+      await updateNotificationPreference("important");
+      setNotificationState("on");
+      try {
+        await sendPushSelfTest(registered.subscriptionId, locale);
+        setNotificationNote("notificationTestQueued");
+      } catch {
+        setNotificationNote("notificationTestFailed");
+      }
+    } catch (error) {
+      const support = getWebPushSupport();
+      if (support === "blocked" || (error instanceof Error && error.message === "push_permission_not_granted")) {
+        setNotificationState("blocked");
+      } else if (support === "unsupported") {
+        setNotificationState("unsupported");
+      } else {
+        setNotificationState("error");
+      }
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
 
   const changeFontSize = (dir: number) => {
     const newSize = Math.max(12, Math.min(20, fontSize + dir));
@@ -174,6 +271,67 @@ export function SettingsPanel({ channelId, currentColor, onColorChange, onAdmin,
 
           {/* Divider */}
           <div style={{ height: "1px", background: "var(--hairline)", margin: "8px 0" }} />
+
+          {notificationsAvailable && status === "authenticated" && (
+            <>
+              <div className="flex items-start justify-between" style={{ padding: "12px 0", gap: "12px" }}>
+                <div style={{ minWidth: 0, paddingTop: "2px" }}>
+                  <div style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>
+                    {t("importantNotifications")}
+                  </div>
+                  <div style={{ marginTop: "4px", color: "var(--meta)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
+                    {notificationState === "unsupported"
+                      ? t("notificationUnsupported")
+                      : notificationState === "blocked"
+                        ? t("notificationBlocked")
+                        : notificationState === "error"
+                          ? t("notificationLoadFailed")
+                          : t("importantNotificationsDesc")}
+                  </div>
+                  {notificationNote && (
+                    <div style={{ marginTop: "4px", color: "var(--bubble-sent)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
+                      {t(notificationNote)}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={notificationState === "on"}
+                  aria-label={t("importantNotifications")}
+                  disabled={notificationBusy || notificationState === "loading" || notificationState === "unsupported" || notificationState === "blocked"}
+                  onClick={() => { void toggleNotifications(); }}
+                  style={{
+                    width: "46px",
+                    height: "28px",
+                    flexShrink: 0,
+                    padding: "2px",
+                    border: "none",
+                    borderRadius: "999px",
+                    background: notificationState === "on" ? "var(--bubble-sent)" : "var(--input-border)",
+                    cursor: notificationBusy ? "wait" : "pointer",
+                    opacity: notificationState === "loading" || notificationState === "unsupported" || notificationState === "blocked" ? 0.55 : 1,
+                    transition: "background .2s ease, opacity .2s ease",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "block",
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "50%",
+                      background: "#fff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,.2)",
+                      transform: notificationState === "on" ? "translateX(18px)" : "translateX(0)",
+                      transition: "transform .2s ease",
+                    }}
+                  />
+                </button>
+              </div>
+              <div style={{ height: "1px", background: "var(--hairline)", margin: "8px 0" }} />
+            </>
+          )}
 
           {/* Language */}
           <div className="flex items-center justify-between" style={{ padding: "12px 0" }}>

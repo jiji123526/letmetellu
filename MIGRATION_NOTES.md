@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Explicit important-notification opt-in UI — 2026-08-22
+
+- Logged-in non-admin channel visitors can explicitly enable or disable
+  localized important notifications from general settings. Owners/admin views
+  do not render the recipient switch, and no browser permission request occurs
+  until the user clicks it.
+- First opt-in registers or reuses the current browser, stores the channel
+  preference and queues the fixed connection test. Turning one channel off
+  preserves the browser subscription for other channels.
+- Opening the eligible settings panel adds one indexed preference read; normal
+  channel/dashboard/send/realtime/live paths are unchanged. First opt-in has the
+  expected one-time Service Worker, key, subscription and self-test setup cost.
+- The full Worker hardening suite passes 312 tests and the production frontend
+  build passes. Local visual verification was blocked by the existing local
+  channel-init `500`, so the first real permission/test-alert check remains a
+  Vercel preview task.
+- Known follow-up: account-level channel state and per-browser registration are
+  not yet shown separately in multi-device UI. Outbox retention is still needed
+  before admin-message or live-start fanout is enabled.
+
 ### Web Push self-test outbox — 2026-08-22
 
 - Migration `0057_notification_delivery_outbox.sql` adds a leased, retryable and

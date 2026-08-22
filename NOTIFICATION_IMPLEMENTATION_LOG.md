@@ -26,6 +26,71 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Explicit non-admin notification opt-in added — 2026-08-22
+
+### Scope and user-visible behavior
+
+- Logged-in non-admin channel visitors now see a localized `Important
+  notifications` switch in the existing general-settings panel. Channel owners
+  and platform-admin views do not render this recipient control.
+- Opening settings reads the current channel preference but never requests
+  browser permission. The permission prompt is reachable only from an explicit
+  switch click. A successful first opt-in registers or reuses this browser,
+  enables the channel preference and queues the fixed-copy connection test.
+- Turning the channel switch off changes only that channel preference. It does
+  not revoke the account's browser subscription, because the same browser may
+  still receive notifications from other opted-in channels.
+- Unsupported, denied, loading and API-failure states are localized. A failed
+  self-test leaves a successfully enabled preference on and explains that the
+  setting was saved even though the test could not be sent.
+
+### Security, performance and privacy boundaries
+
+- The UI is only an entry point: Auth.js, same-origin enforcement, Worker-side
+  trusted identity, channel association, protected-room access binding, device
+  ownership and durable self-test rate limiting remain authoritative.
+- Normal dashboard loads, channel bootstrap, message send, realtime and live
+  start add no notification work. An eligible user opening general settings adds
+  one low-frequency indexed preference read. First opt-in adds VAPID-key,
+  subscription, preference and self-test requests; later opt-ins reuse the
+  browser subscription where possible.
+- Browser permission is not requested on page load or settings open. Endpoint
+  and encryption-key material remain outside local storage, UI and logs.
+
+### Trade-offs and deferred work
+
+- Notification preference is account-and-channel scoped while Push
+  subscriptions are account-and-browser scoped. If another device enabled the
+  channel, a newly used browser can initially display the account preference as
+  on even before that browser is registered. A later multi-device UI should
+  distinguish `channel enabled` from `this device connected`; this does not
+  affect the initial rollout where preferences default to off.
+- A denied permission cannot be recovered inside the app. The localized state
+  directs the user to browser/site settings, and iOS/iPadOS support still
+  depends on the platform's installed-web-app requirements.
+- This stage does not fan out admin messages or live-start events. Outbox
+  retention remains required before either producer is enabled.
+
+### Verification and rollout
+
+- The focused notification tests now cover explicit user-gesture subscription,
+  the non-admin boundary and channel-only disable behavior. The full Worker
+  hardening suite passes 312 tests, and the Next.js production build passes.
+- Local visual inspection reached the channel shell, but the local channel init
+  API returned the pre-existing `500`, so an authenticated end-to-end permission
+  prompt was intentionally not exercised. Production/preview verification must
+  click the switch as a logged-in non-admin and confirm the fixed test alert.
+- This is a frontend feature-branch change. The already deployed Worker version
+  `c0e75d85-d1e8-48d9-8acd-49a5cb248179` contains the required APIs and delivery
+  path; no redundant Worker deploy is required for this UI-only step.
+
+### Next step
+
+1. Deploy the feature branch through Vercel and run one real opt-in/self-test.
+2. Add bounded delivered/dead outbox retention.
+3. Add admin-message fanout, then live-start fanout, with delivery detached from
+   each authoritative mutation response.
+
 ## Rate-limited self-test delivery and durable outbox added — 2026-08-22
 
 ### Scope and user-visible behavior

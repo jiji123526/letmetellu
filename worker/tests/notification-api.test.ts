@@ -51,6 +51,14 @@ const outboxMigration = readFileSync(
   new URL("../migrations/0057_notification_delivery_outbox.sql", import.meta.url),
   "utf8",
 );
+const settingsPanel = readFileSync(
+  new URL("../../src/components/chat/SettingsPanel.tsx", import.meta.url),
+  "utf8",
+);
+const overlays = readFileSync(
+  new URL("../../src/components/chat/ChatViewOverlays.tsx", import.meta.url),
+  "utf8",
+);
 const proxyHelper = readFileSync(
   new URL("../../src/lib/notification-proxy.ts", import.meta.url),
   "utf8",
@@ -198,4 +206,23 @@ test("outbox delivery uses leases, bounded retries and permanent endpoint cleanu
   assert.match(delivery, /SET revoked_at = \?/);
   assert.match(delivery, /status === 0 \|\| status === 408 \|\| status === 429 \|\| status >= 500/);
   assert.doesNotMatch(delivery, /console\.(?:log|warn|error).*endpoint/);
+});
+
+test("notification permission remains behind an explicit non-admin settings action", () => {
+  assert.match(settingsPanel, /notificationsAvailable && status === "authenticated"/);
+  assert.match(settingsPanel, /onClick=\{\(\) => \{ void toggleNotifications\(\); \}\}/);
+  assert.match(settingsPanel, /subscribeCurrentBrowserToPush\(\)/);
+  assert.match(settingsPanel, /updateNotificationPreference\("important"\)/);
+  assert.match(settingsPanel, /sendPushSelfTest\(registered\.subscriptionId, locale\)/);
+  assert.match(overlays, /notificationsAvailable=\{!effectiveAdmin\}/);
+  assert.doesNotMatch(settingsPanel, /useEffect\([\s\S]{0,300}subscribeCurrentBrowserToPush/);
+});
+
+test("disabling one channel keeps the account's browser subscription available", () => {
+  const offBranch = settingsPanel.slice(
+    settingsPanel.indexOf('if (notificationState === "on")'),
+    settingsPanel.indexOf("const registered = await subscribeCurrentBrowserToPush"),
+  );
+  assert.match(offBranch, /updateNotificationPreference\("off"\)/);
+  assert.doesNotMatch(offBranch, /unsubscribe|subscriptions\//);
 });

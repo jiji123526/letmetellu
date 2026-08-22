@@ -176,6 +176,14 @@ export const ko = {
   bubbleColor: "말풍선 색상",
   customColor: "커스텀 색상",
   language: "언어",
+  importantNotifications: "중요 알림",
+  importantNotificationsDesc: "방장 메시지와 라이브 시작을 알려드려요.",
+  notificationUnsupported: "이 브라우저에서는 푸시 알림을 사용할 수 없어요.",
+  notificationBlocked: "브라우저 설정에서 알림 허용이 필요해요.",
+  notificationLoadFailed: "알림 설정을 불러오지 못했어요. 다시 시도해 주세요.",
+  notificationReconfirm: "채널 비밀번호가 바뀌어 다시 켜야 해요.",
+  notificationTestQueued: "테스트 알림을 보냈어요.",
+  notificationTestFailed: "알림은 켜졌지만 테스트 전송을 확인하지 못했어요.",
 
   // Admin panel
   channel: "채널",
