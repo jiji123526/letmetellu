@@ -9,6 +9,7 @@ WHERE name IN (
 ORDER BY type DESC, name;
 
 PRAGMA foreign_key_list(notification_preferences);
+PRAGMA table_info(notification_preferences);
 PRAGMA foreign_key_list(push_subscriptions);
 
 EXPLAIN QUERY PLAN
@@ -23,4 +24,3 @@ FROM push_subscriptions
 WHERE user_id = 'audit-user'
   AND revoked_at IS NULL
 ORDER BY updated_at DESC;
-
