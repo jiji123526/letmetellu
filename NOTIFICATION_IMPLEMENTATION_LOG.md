@@ -96,15 +96,18 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 - Focused notification/schema tests pass 18 cases; the full Worker hardening
   suite passes 310 tests. Worker/frontend TypeScript and the Next.js production
   build pass, and Wrangler successfully bundles `web-push` in a dry run.
-- A local D1 accepted migration `0057`. Production migration, implementation
-  commit, Worker deploy and a real browser self-test remain required before this
-  entry is marked rolled out.
+- Local and production D1 accepted migration `0057`. Commit `4d65d38` is pushed,
+  and Worker version
+  `c0e75d85-d1e8-48d9-8acd-49a5cb248179` is deployed. A direct unauthenticated
+  self-test request returned `401`.
+- A real browser self-test still requires the explicit opt-in UI/feature-branch
+  frontend to be deployed. No user has been prompted or subscribed by this
+  backend rollout.
 
 ### Next step
 
-1. Apply migration `0057`, deploy the Worker and verify unauthenticated denial.
-2. Add a localized explicit opt-in control and run one real browser self-test.
-3. Add bounded delivered/dead retention before admin-message fanout.
+1. Add a localized explicit opt-in control and run one real browser self-test.
+2. Add bounded delivered/dead retention before admin-message fanout.
 
 ## Direct VAPID browser foundation added — 2026-08-22
 

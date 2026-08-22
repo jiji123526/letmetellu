@@ -24,6 +24,10 @@ This file records both the original CSS-to-TSX porting constraints and the datab
   prerequisite before fanout is enabled.
 - Full verification and deferred concerns are recorded in
   `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+- Production D1 migration `0057` is applied and Worker version
+  `c0e75d85-d1e8-48d9-8acd-49a5cb248179` is deployed. The public endpoint
+  rejects unauthenticated self-test requests with `401`; real browser delivery
+  remains intentionally deferred until explicit opt-in UI is available.
 
 ### Direct VAPID browser foundation — 2026-08-22
 
