@@ -24,6 +24,46 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+
+## Immediate first-message delivery with short burst aggregation — 2026-08-22
+
+### Scope and user-visible behavior
+
+- Normal channel-message notifications no longer wait for the previous one-minute bundle window before the first Push is delivered.
+- The first eligible normal message in a short burst is now sent immediately.
+- Additional normal messages arriving within the same 10-second window are aggregated and delivered once at the end of the window.
+- The aggregate Push uses the same channel-specific notification tag, so supported browsers and operating systems replace the existing notification instead of leaving multiple persistent notification cards.
+- Aggregated normal-message copy continues to use the existing localized count format, such as `[채널명] 새 메시지 4개가 도착했어요`.
+- Important events including live starts, DMs, message reports and channel reports retain their existing immediate-delivery behavior.
+
+### Backend and delivery behavior
+
+- Reduced the normal-message aggregation window from 60 seconds to 10 seconds.
+- Normal-message fanout now creates a separate immediate outbox row for the first message in each channel, subscription and time-window combination.
+- Second and later messages in the same window are stored in a separate aggregate outbox row whose `aggregate_count` starts at `2` and increments for each additional message.
+- The immediate row is eligible for delivery as soon as it is created and triggers `processNotificationOutbox` asynchronously through `ExecutionContext.waitUntil`.
+- Aggregate rows become eligible at the end of the active 10-second window and schedule a delayed outbox drain so they normally do not need to wait for the one-minute Cron fallback.
+- The existing one-minute scheduled outbox drain remains unchanged as a recovery path for delayed or missed asynchronous delivery.
+- Existing Push payload tags and Service Worker notification handling remain unchanged.
+
+### Performance, traffic and trade-offs
+
+- The change substantially reduces perceived notification latency for normal messages while avoiding one Push request for every message in a busy burst.
+- A burst now normally generates at most two Push deliveries per channel and recipient device during a 10-second window: one immediate notification and one aggregate update.
+- D1 outbox writes increase slightly because immediate and aggregate rows are stored separately, but repeated messages within the same burst continue to update a single aggregate row.
+- The same notification tag is reused for the immediate and aggregate Push. Platform notification presentation remains controlled by the browser and operating system, so exact replacement, sound or banner behavior may vary by platform.
+- If delayed execution does not complete, the existing scheduled outbox drain still processes eligible aggregate rows, which may result in a longer fallback delay.
+- Normal-message Push delivery remains asynchronous and does not change message persistence or realtime chat acknowledgement behavior.
+
+### Verification and rollout
+
+- Verify that the first normal message received by an `All` subscriber produces a Push without waiting for the scheduled Cron.
+- Verify that multiple messages within one 10-second window update the existing notification with the correct aggregate count.
+- Verify that a new burst after the previous window produces a new immediate notification.
+- Verify that live-start, DM, message-report and channel-report notifications remain immediate and unchanged.
+- Verify that normal-message delivery still succeeds if the delayed drain is missed and the scheduled Cron performs the fallback drain.
+
+
 ---
 
 ## Uploaded brand logo used for Home Screen and Push icons — 2026-08-22
