@@ -2,12 +2,6 @@ import type { Env } from "../types.ts";
 import { createRoomTokenBinding } from "../routes/passcode.ts";
 import { processNotificationOutbox } from "./notification-delivery.ts";
 
-// Normal messages:
-// - first message in each 10-second window is delivered immediately
-// - additional messages in that window are aggregated
-// - the aggregate notification replaces the first notification via the same tag
-const MESSAGE_BUNDLE_WINDOW_MS = 10_000;
-
 export type ChannelNotificationEvent =
   | "channel_message"
   | "live_start"
@@ -46,8 +40,29 @@ interface QueueChannelNotificationInput {
   /** Normal member messages may also notify an owner who selected All. */
   includeOwner?: boolean;
 
-  /** Normal channel messages may be bundled. */
+  /**
+   * Retained for caller compatibility.
+   * Normal messages are no longer bundled.
+   */
   bundle?: boolean;
+}
+
+function notificationTag(input: {
+  event: ChannelNotificationEvent;
+  channelId: string;
+  eventId: string;
+}): string {
+  /*
+   * Normal messages must have a unique tag so each Push remains
+   * independently visible in the notification center.
+   *
+   * Important channel-level events retain their existing stable tag.
+   */
+  if (input.event === "channel_message") {
+    return `${input.event}-${input.channelId}-${input.eventId}`;
+  }
+
+  return `${input.event}-${input.channelId}`;
 }
 
 function payloadFor(input: {
@@ -91,7 +106,7 @@ function payloadFor(input: {
     default:
       notificationText = ko
         ? `${channel} 새 메시지가 도착했어요`
-        : `${channel} New messages have arrived`;
+        : `${channel} New message has arrived`;
   }
 
   return {
@@ -102,32 +117,6 @@ function payloadFor(input: {
     url: `/ch/${encodeURIComponent(input.channelId)}`,
     tag: input.tag,
   };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Schedule a short delayed outbox drain.
- *
- * Cron remains a fallback, but normal-message aggregate rows do not need
- * to wait for the one-minute cron in the normal case.
- */
-function scheduleDelayedDrain(
-  ctx: ExecutionContext,
-  env: Env,
-  delayMs: number,
-): void {
-  ctx.waitUntil(
-    (async () => {
-      if (delayMs > 0) {
-        await sleep(delayMs);
-      }
-
-      await processNotificationOutbox(env);
-    })(),
-  );
 }
 
 export async function queueChannelNotification(
@@ -176,7 +165,10 @@ export async function queueChannelNotification(
   }
 
   if (currentBinding) {
-    params.push(channel.owner_uid, currentBinding);
+    params.push(
+      channel.owner_uid,
+      currentBinding,
+    );
   }
 
   if (input.actorUserId) {
@@ -205,141 +197,45 @@ export async function queueChannelNotification(
 
   if (!results.length) return 0;
 
-  const nowMs = Date.now();
-  const now = new Date(nowMs).toISOString();
-  const bundle = input.bundle === true;
+  const now = new Date().toISOString();
 
   /*
-   * Important notifications
+   * Every notification event now receives its own outbox row.
    *
-   * DM, live start, message report, channel report, etc.
-   * retain the existing immediate-delivery behavior.
+   * In particular, every channel_message uses input.eventId as part
+   * of both the event key and notification tag, so normal messages:
+   *
+   * - become immediately eligible for delivery;
+   * - trigger an asynchronous outbox drain immediately;
+   * - are not aggregated;
+   * - do not replace previous message notifications in the OS
+   *   notification center.
    */
-  if (!bundle) {
-    const statements = results.map((recipient) => {
-      const id = crypto.randomUUID();
+  const statements = results.map((recipient) => {
+    const id = crypto.randomUUID();
 
-      const eventKey =
-        `${input.event}:` +
-        `${input.channelId}:` +
-        `${recipient.subscription_id}:` +
-        `${input.eventId}`;
+    const eventKey =
+      `${input.event}:` +
+      `${input.channelId}:` +
+      `${recipient.subscription_id}:` +
+      `${input.eventId}`;
 
-      const payload = payloadFor({
-        locale: recipient.locale || "ko",
-        channelId: input.channelId,
-        channelName: channel.name || input.channelId,
-        event: input.event,
-        liveTitle: input.liveTitle,
-        tag: `${input.event}-${input.channelId}`,
-      });
-
-      return input.env.DB.prepare(`
-        INSERT INTO notification_outbox (
-          id,
-          event_type,
-          event_key,
-          user_id,
-          channel_id,
-          subscription_id,
-          payload_json,
-          aggregate_count,
-          status,
-          attempt_count,
-          next_attempt_at,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          ?, ?, ?, ?, ?, ?, ?,
-          1,
-          'pending',
-          0,
-          ?, ?, ?
-        )
-      `).bind(
-        id,
-        input.event,
-        eventKey,
-        recipient.user_id,
-        input.channelId,
-        recipient.subscription_id,
-        JSON.stringify(payload),
-        now,
-        now,
-        now,
-      );
+    const tag = notificationTag({
+      event: input.event,
+      channelId: input.channelId,
+      eventId: input.eventId,
     });
 
-    await input.env.DB.batch(statements);
-
-    if (input.ctx) {
-      input.ctx.waitUntil(
-        processNotificationOutbox(input.env),
-      );
-    }
-
-    return statements.length;
-  }
-
-  /*
-   * Normal channel messages
-   *
-   * Each 10-second interval acts as a small notification burst window.
-   *
-   * Example:
-   *
-   * 00.0s A -> immediate push
-   * 02.0s B -> aggregate count = 2
-   * 05.0s C -> aggregate count = 3
-   * 09.0s D -> aggregate count = 4
-   * 10.0s   -> push updates existing notification to "4 new messages"
-   *
-   * The Service Worker uses the same channel_message-{channelId} tag,
-   * so the aggregate push replaces the existing notification instead
-   * of creating another persistent notification card.
-   */
-
-  const bucket = Math.floor(
-    nowMs / MESSAGE_BUNDLE_WINDOW_MS,
-  );
-
-  const bucketEndMs =
-    (bucket + 1) * MESSAGE_BUNDLE_WINDOW_MS;
-
-  let queued = 0;
-
-  let shouldDrainImmediately = false;
-  let shouldDrainAtBucketEnd = false;
-
-  for (const recipient of results) {
     const payload = payloadFor({
       locale: recipient.locale || "ko",
       channelId: input.channelId,
       channelName: channel.name || input.channelId,
       event: input.event,
       liveTitle: input.liveTitle,
-
-      // Keep this stable across the channel.
-      // push-sw.js will use it to replace the prior notification.
-      tag: `${input.event}-${input.channelId}`,
+      tag,
     });
 
-    /*
-     * FIRST MESSAGE
-     *
-     * Only one initial row is allowed for each
-     * channel + browser subscription + 10-second bucket.
-     */
-    const initialId = crypto.randomUUID();
-
-    const initialEventKey =
-      `${input.event}:` +
-      `${input.channelId}:` +
-      `${recipient.subscription_id}:` +
-      `${bucket}:initial`;
-
-    const initialInsert = await input.env.DB.prepare(`
+    return input.env.DB.prepare(`
       INSERT INTO notification_outbox (
         id,
         event_type,
@@ -363,142 +259,33 @@ export async function queueChannelNotification(
         ?, ?, ?
       )
       ON CONFLICT(event_key) DO NOTHING
-    `)
-      .bind(
-        initialId,
-        input.event,
-        initialEventKey,
-        recipient.user_id,
-        input.channelId,
-        recipient.subscription_id,
-        JSON.stringify(payload),
+    `).bind(
+      id,
+      input.event,
+      eventKey,
+      recipient.user_id,
+      input.channelId,
+      recipient.subscription_id,
+      JSON.stringify(payload),
+      now,
+      now,
+      now,
+    );
+  });
 
-        // Immediately eligible.
-        now,
-
-        now,
-        now,
-      )
-      .run();
-
-    if (initialInsert.meta.changes > 0) {
-      /*
-       * This is the first message in the current burst.
-       *
-       * Deliver immediately.
-       */
-      queued += 1;
-      shouldDrainImmediately = true;
-      continue;
-    }
-
-    /*
-     * SECOND+ MESSAGE
-     *
-     * The first message was already sent.
-     *
-     * Create/update a separate aggregate row.
-     * aggregate_count begins at 2 because it represents:
-     *
-     *   first already-delivered message
-     *   +
-     *   this second message
-     */
-    const aggregateId = crypto.randomUUID();
-
-    const aggregateEventKey =
-      `${input.event}:` +
-      `${input.channelId}:` +
-      `${recipient.subscription_id}:` +
-      `${bucket}:aggregate`;
-
-    const aggregateNextAttempt =
-      new Date(bucketEndMs).toISOString();
-
-    await input.env.DB.prepare(`
-      INSERT INTO notification_outbox (
-        id,
-        event_type,
-        event_key,
-        user_id,
-        channel_id,
-        subscription_id,
-        payload_json,
-        aggregate_count,
-        status,
-        attempt_count,
-        next_attempt_at,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?,
-        2,
-        'pending',
-        0,
-        ?, ?, ?
-      )
-
-      ON CONFLICT(event_key) DO UPDATE SET
-        aggregate_count =
-          notification_outbox.aggregate_count + 1,
-
-        payload_json =
-          excluded.payload_json,
-
-        updated_at =
-          excluded.updated_at
-
-      WHERE notification_outbox.status
-        IN ('pending', 'retry')
-    `)
-      .bind(
-        aggregateId,
-        input.event,
-        aggregateEventKey,
-        recipient.user_id,
-        input.channelId,
-        recipient.subscription_id,
-        JSON.stringify(payload),
-        aggregateNextAttempt,
-        now,
-        now,
-      )
-      .run();
-
-    queued += 1;
-    shouldDrainAtBucketEnd = true;
-  }
+  await input.env.DB.batch(statements);
 
   /*
-   * Deliver the first message immediately.
+   * Every event is immediately eligible.
+   *
+   * waitUntil keeps Push-provider latency outside the response-critical
+   * message persistence path.
    */
-  if (shouldDrainImmediately && input.ctx) {
+  if (input.ctx) {
     input.ctx.waitUntil(
       processNotificationOutbox(input.env),
     );
   }
 
-  /*
-   * If more messages arrived during the burst,
-   * deliver the aggregate update at the end of
-   * the current 10-second window.
-   *
-   * Add a tiny safety margin so D1's ISO timestamp
-   * is definitely <= the delivery worker's Date.now().
-   */
-  if (shouldDrainAtBucketEnd && input.ctx) {
-    const delayMs = Math.max(
-      0,
-      bucketEndMs - Date.now() + 100,
-    );
-
-    scheduleDelayedDrain(
-      input.ctx,
-      input.env,
-      delayMs,
-    );
-  }
-
-  return queued;
+  return statements.length;
 }
