@@ -26,6 +26,20 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Uploaded brand logo used for Home Screen and Push icons — 2026-08-22
+
+- Replaced the font-rendered `yap.` artwork in install and notification icons
+  with the uploaded vector brand mark from `public/logo-white.svg`, retaining
+  the existing blue icon background and platform masking behavior.
+- Added new cache-busting 180, 192, 512 and maskable PNG asset paths. The web
+  manifest and Apple touch icon use the new files, and the Push service worker
+  now requests the same 192px logo for both notification icon and badge.
+- No notification payload, subscription, authorization, D1 or Worker behavior
+  changes. Existing installed iOS Home Screen apps may still require removal
+  and reinstallation because iOS controls installed-icon refresh timing.
+
+---
+
 ## Compact two-row iOS notification layout — 2026-08-22
 
 - Push content now occupies the required Web Notification title field and leaves

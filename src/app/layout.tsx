@@ -38,7 +38,7 @@ export const metadata: Metadata = {
       { url: "/logo-white.svg", media: "(prefers-color-scheme: dark)" },
     ],
     apple: [
-      { url: "/icons/yap-180.png", sizes: "180x180", type: "image/png" },
+      { url: "/icons/yap-logo-180.png", sizes: "180x180", type: "image/png" },
     ],
   },
   appleWebApp: {

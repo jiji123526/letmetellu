@@ -12,9 +12,9 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#ffffff",
     theme_color: "#ffffff",
     icons: [
-      { src: "/icons/yap-192.png", sizes: "192x192", type: "image/png" },
-      { src: "/icons/yap-512.png", sizes: "512x512", type: "image/png" },
-      { src: "/icons/yap-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/icons/yap-logo-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icons/yap-logo-512.png", sizes: "512x512", type: "image/png" },
+      { src: "/icons/yap-logo-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

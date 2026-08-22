@@ -28,8 +28,8 @@ self.addEventListener("push", (event) => {
     typeof payload.title === "string" ? payload.title : "yap.",
     {
       body: typeof payload.body === "string" ? payload.body : "",
-      icon: "/favicon.ico",
-      badge: "/favicon.ico",
+      icon: "/icons/yap-logo-192.png",
+      badge: "/icons/yap-logo-192.png",
       tag: typeof payload.tag === "string" ? payload.tag : undefined,
       data: { target },
     },

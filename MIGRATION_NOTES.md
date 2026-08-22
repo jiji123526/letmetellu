@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Shared uploaded logo for install and Push icons — 2026-08-22
+
+- Generated Home Screen, manifest, maskable and Push PNG icons from the uploaded
+  `logo-white.svg` brand mark instead of rendering a separate font approximation.
+- New asset filenames avoid stale browser caches. Existing iOS installations may
+  need to be removed and added to the Home Screen again before Apple refreshes
+  the installed icon; notification delivery and subscription state are unchanged.
+
 ### Compact Web Push content layout — 2026-08-22
 
 - Moved the localized notification copy into the required Web Notification
