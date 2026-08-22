@@ -51,6 +51,14 @@ const outboxMigration = readFileSync(
   new URL("../migrations/0057_notification_delivery_outbox.sql", import.meta.url),
   "utf8",
 );
+const fanoutMigration = readFileSync(
+  new URL("../migrations/0058_notification_event_fanout.sql", import.meta.url),
+  "utf8",
+);
+const notificationEvents = readFileSync(
+  new URL("../src/lib/notification-events.ts", import.meta.url),
+  "utf8",
+);
 const settingsPanel = readFileSync(
   new URL("../../src/components/chat/SettingsPanel.tsx", import.meta.url),
   "utf8",
@@ -74,7 +82,7 @@ const validSubscription = {
   device_label: "  My phone  ",
 };
 
-test("the first API rollout exposes only off and important modes", () => {
+test("notification preferences support off, important and all modes", () => {
   assert.deepEqual(parseNotificationPreference({ channel_id: "my-room", mode: "important" }), {
     channelId: "my-room",
     mode: "important",
@@ -83,7 +91,10 @@ test("the first API rollout exposes only off and important modes", () => {
     channelId: "my-room",
     mode: "off",
   });
-  assert.equal(parseNotificationPreference({ channel_id: "my-room", mode: "all" }), null);
+  assert.deepEqual(parseNotificationPreference({ channel_id: "my-room", mode: "all" }), {
+    channelId: "my-room",
+    mode: "all",
+  });
   assert.equal(parseNotificationPreference({ channel_id: "../room", mode: "important" }), null);
 });
 
@@ -129,7 +140,7 @@ test("turning notifications off remains possible after channel access is lost", 
 test("a passcode change is represented as off until the user opts in again", () => {
   assert.match(route, /SELECT mode, access_binding, updated_at/);
   assert.match(route, /preference\.access_binding === access\.accessBinding/);
-  assert.match(route, /requiresReconfirmation: preference\?\.mode === "important" && !hasCurrentAccessBinding/);
+  assert.match(route, /requiresReconfirmation: \(preference\?\.mode === "important" \|\| preference\?\.mode === "all"\) && !hasCurrentAccessBinding/);
 });
 
 test("device registration is capped atomically and responses omit endpoint secrets", () => {
@@ -220,23 +231,34 @@ test("transport diagnostics retain only bounded runtime codes", () => {
   assert.doesNotMatch(delivery, /error\.message|error\.stack/);
 });
 
-test("notification permission remains behind an explicit non-admin settings action", () => {
+test("notification permission remains behind an explicit channel settings action", () => {
   assert.match(settingsPanel, /notificationsAvailable && status === "authenticated"/);
-  assert.match(settingsPanel, /onClick=\{\(\) => \{ void toggleNotifications\(\); \}\}/);
+  assert.match(settingsPanel, /onClick=\{\(\) => \{ void selectNotificationMode\(mode\); \}\}/);
   assert.match(settingsPanel, /subscribeCurrentBrowserToPush\(\)/);
-  assert.match(settingsPanel, /updateNotificationPreference\("important"\)/);
+  assert.match(settingsPanel, /updateNotificationPreference\(mode\)/);
   assert.match(settingsPanel, /sendPushSelfTest\(registered\.subscriptionId, locale\)/);
-  assert.match(overlays, /notificationsAvailable=\{!effectiveAdmin\}/);
+  assert.match(overlays, /notificationsAvailable=\{true\}/);
   assert.doesNotMatch(settingsPanel, /useEffect\([\s\S]{0,300}subscribeCurrentBrowserToPush/);
 });
 
 test("disabling one channel keeps the account's browser subscription available", () => {
   const offBranch = settingsPanel.slice(
-    settingsPanel.indexOf('if (notificationState === "on")'),
+    settingsPanel.indexOf('if (mode === "off")'),
     settingsPanel.indexOf("const registered = await subscribeCurrentBrowserToPush"),
   );
   assert.match(offBranch, /updateNotificationPreference\("off"\)/);
   assert.doesNotMatch(offBranch, /unsubscribe|subscriptions\//);
+});
+
+test("role-aware fanout bundles general messages and keeps important owner events immediate", () => {
+  assert.match(fanoutMigration, /'channel_message', 'live_start', 'dm'/);
+  assert.match(fanoutMigration, /aggregate_count INTEGER NOT NULL DEFAULT 1/);
+  assert.match(notificationEvents, /MESSAGE_BUNDLE_WINDOW_MS = 60_000/);
+  assert.match(notificationEvents, /pref\.mode = 'all'/);
+  assert.match(notificationEvents, /pref\.mode IN \('important', 'all'\)/);
+  assert.match(notificationEvents, /aggregate_count = notification_outbox\.aggregate_count \+ 1/);
+  assert.match(notificationEvents, /ownerOnly\?: boolean/);
+  assert.match(notificationEvents, /processNotificationOutbox\(input\.env\)/);
 });
 
 test("iOS Safari receives install guidance before Web Push feature rejection", () => {

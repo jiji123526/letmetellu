@@ -31,7 +31,7 @@ import {
 } from "./lib/operational-events";
 import { runScheduledMaintenance } from "./lib/maintenance";
 import { runOperationalHealthAlerts } from "./lib/operational-alerts";
-import { processNotificationOutbox } from "./lib/notification-delivery";
+import { drainNotificationOutbox } from "./lib/notification-delivery";
 import { isAllowedRequestOrigin } from "./lib/request-origin";
 
 export { ChatRoom };
@@ -253,7 +253,7 @@ export default {
       } else if (url.pathname.startsWith("/api/channel-state")) {
         response = await handleChannelState(request, env);
       } else if (url.pathname.startsWith("/api/admin")) {
-        response = await handleAdmin(request, env);
+        response = await handleAdmin(request, env, ctx);
       } else if (url.pathname.startsWith("/api/user")) {
         response = await handleUser(request, env);
       } else if (url.pathname.startsWith("/api/socket-auth")) {
@@ -263,7 +263,7 @@ export default {
       } else if (url.pathname.startsWith("/api/auth")) {
         response = await handleAuth(request, env);
       } else if (url.pathname.startsWith("/api/dm")) {
-        response = await handleDm(request, env);
+        response = await handleDm(request, env, ctx);
       } else if (url.pathname.startsWith("/api/upload")) {
         response = await handleUpload(request, env);
       } else if (url.pathname.startsWith("/api/preview")) {
@@ -271,7 +271,7 @@ export default {
       } else if (url.pathname.startsWith("/api/verify-passcode")) {
         response = await handleVerifyPasscode(request, env);
       } else if (url.pathname.startsWith("/api/channel-reports")) {
-        response = await handleChannelReports(request, env);
+        response = await handleChannelReports(request, env, ctx);
       } else if (url.pathname.startsWith("/api/platform-admin/support")) {
         response = await handlePlatformSupport(request, env);
       } else if (url.pathname.startsWith("/api/support")) {
@@ -362,7 +362,7 @@ export default {
     if (controller.cron === "*/5 * * * *") {
       ctx.waitUntil((async () => {
         try {
-          await processNotificationOutbox(env);
+          await drainNotificationOutbox(env);
         } catch (error) {
           console.error("notification outbox delivery failed", error);
           await recordOperationalEvent({

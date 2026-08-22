@@ -6,7 +6,7 @@ const PUSH_ENDPOINT_MAX_LENGTH = 2_048;
 const PUSH_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const DEVICE_LABEL_MAX_LENGTH = 40;
 
-export type NotificationMode = "off" | "important";
+export type NotificationMode = "off" | "important" | "all";
 
 export interface NotificationPreferenceInput {
   channelId: string;
@@ -31,7 +31,7 @@ export function isValidNotificationChannelId(value: unknown): value is string {
 
 export function parseNotificationPreference(value: unknown): NotificationPreferenceInput | null {
   if (!isRecord(value) || !isValidNotificationChannelId(value.channel_id)) return null;
-  if (value.mode !== "off" && value.mode !== "important") return null;
+  if (value.mode !== "off" && value.mode !== "important" && value.mode !== "all") return null;
   return { channelId: value.channel_id, mode: value.mode };
 }
 

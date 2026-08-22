@@ -14,6 +14,8 @@ interface DeliveryRow {
   auth: string;
   payload_json: string;
   attempt_count: number;
+  event_type: string;
+  aggregate_count: number;
 }
 
 function isConfigured(env: Env): boolean {
@@ -132,6 +134,7 @@ async function claimRows(env: Env, nowMs: number, limit: number, preferredId?: s
     if (!claim.meta.changes) continue;
     const row = await env.DB.prepare(`
       SELECT outbox.id, outbox.subscription_id, outbox.payload_json, outbox.attempt_count,
+             outbox.event_type, outbox.aggregate_count,
              subscription.endpoint, subscription.p256dh, subscription.auth
       FROM notification_outbox outbox
       INNER JOIN push_subscriptions subscription ON subscription.id = outbox.subscription_id
@@ -161,10 +164,17 @@ export async function processNotificationOutbox(
   const rows = await claimRows(env, Date.now(), Math.max(1, Math.min(limit, DELIVERY_BATCH_SIZE)), preferredId);
   await Promise.all(rows.map(async (row) => {
     try {
-      JSON.parse(row.payload_json);
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      if (row.event_type === "channel_message" && row.aggregate_count > 1) {
+        const locale = payload.locale === "en" ? "en" : "ko";
+        const channelName = typeof payload.channelName === "string" ? payload.channelName : "yap.";
+        payload.body = locale === "en"
+          ? `[${channelName}] ${row.aggregate_count} new messages have arrived`
+          : `[${channelName}] 새 메시지 ${row.aggregate_count}개가 도착했어요`;
+      }
       await webpush.sendNotification(
         { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
-        row.payload_json,
+        JSON.stringify(payload),
         { TTL: 60, urgency: "normal" },
       );
       await markDelivered(env, row, new Date().toISOString());
@@ -178,4 +188,14 @@ export async function processNotificationOutbox(
     }
   }));
   return rows.length;
+}
+
+export async function drainNotificationOutbox(env: Env, maxBatches = 3): Promise<number> {
+  let processed = 0;
+  for (let batch = 0; batch < Math.max(1, Math.min(maxBatches, 3)); batch += 1) {
+    const count = await processNotificationOutbox(env);
+    processed += count;
+    if (count < DELIVERY_BATCH_SIZE) break;
+  }
+  return processed;
 }

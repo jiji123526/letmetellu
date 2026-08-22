@@ -8,6 +8,7 @@ import { getChannelAppearanceVersion } from "../lib/channel-appearance";
 import { invalidateBannedWordsCache, invalidatePasscodeCache } from "../lib/validation";
 import { hashBlockedDeviceId, resolveActorIdentity, type ActorRecordType } from "../lib/actor-identities";
 import { createPasscodeHash } from "./passcode";
+import { queueChannelNotification } from "../lib/notification-events";
 import { isTrustedInternalRequest } from "../lib/trusted-identity";
 import { deleteChannel } from "../lib/channel-cleanup";
 import {
@@ -89,7 +90,7 @@ function formatModerationPetitionMessage(input: {
       ].join("\n");
 }
 
-export async function handleAdmin(request: Request, env: Env): Promise<Response> {
+export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
   }
@@ -859,6 +860,19 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
           expiresAt: liveSession.expiresAt,
         }),
       }));
+
+      if (ctx) {
+        ctx.waitUntil(queueChannelNotification({
+          env,
+          ctx,
+          channelId: channel_id,
+          event: "live_start",
+          eventId: sessionId,
+          actorUserId: userId,
+          liveTitle: liveSession.title,
+          memberImportance: "important",
+        }));
+      }
 
       return Response.json({ ok: true, sessionId, live: liveSession });
     }

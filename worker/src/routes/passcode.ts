@@ -110,7 +110,7 @@ async function verifyStoredPasscode(
   };
 }
 
-async function createRoomTokenBinding(
+export async function createRoomTokenBinding(
   channelId: string,
   storedPasscodeHash: string,
   env: Env,

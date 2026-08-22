@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Role-aware Push modes and notification fanout — 2026-08-22
+
+- Signed-in members and channel owners now have `Off`, `Important` and `All`
+  channel notification modes. Member Important covers owner messages and live
+  starts; owner Important covers DMs, message reports and channel reports. All
+  adds ordinary normal-channel messages for either role.
+- Migration `0058_notification_event_fanout.sql` expands the retryable outbox
+  and adds message-burst counts. Ordinary messages coalesce per channel/device
+  in a one-minute window; sensitive bodies are never placed in Push payloads.
+- Event fanout is detached from authoritative writes with `waitUntil`. The
+  delivery cron runs every minute and drains at most 30 ready rows per run, so
+  Push outages and slow providers do not delay chat, DM, report or live-start
+  responses.
+- Trade-offs: `All` increases indexed D1 reads, outbox writes and Push traffic;
+  ordinary notifications can arrive one to two minutes later; multiple devices
+  still receive separate pushes; visible-room suppression and quiet hours are
+  deferred. Live-session messages remain intentionally excluded.
+- Worker TypeScript, the production build and all 318 hardening tests pass.
+  Migration `0058` and Worker version
+  `c605b065-dc19-4f2e-aedb-1dd167241743` are live; device verification is
+  tracked in `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+
 ### Web Push Worker HTTPS compatibility — 2026-08-22
 
 - Production self-tests were queued correctly for valid Safari and Chrome

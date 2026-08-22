@@ -26,6 +26,71 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Role-aware notification modes and event fanout implemented — 2026-08-22
+
+### Scope and user-visible behavior
+
+- Replaced the single important-notification switch with explicit `Off`,
+  `Important` and `All` choices for every signed-in channel participant,
+  including channel owners.
+- For members, Important includes authoritative owner messages and live starts;
+  All additionally includes ordinary normal-channel messages. For owners,
+  Important includes new DMs, message reports and channel reports; All also
+  includes ordinary member messages.
+- Push copy is intentionally generic and does not expose message, DM or report
+  bodies. Korean notifications use `[채널명] 새 메시지가 도착했어요` and
+  `[채널명] <라이브 제목> 라이브 세션이 시작됐어요`; English recipients
+  receive equivalent localized copy. The stable `yap.` app icon remains in use.
+- Normal-channel message bursts are coalesced per channel, recipient device and
+  one-minute bucket. A burst is delivered as one notification with its count.
+  Live starts, DMs and reports remain separate important events.
+
+### Backend, authorization and delivery behavior
+
+- Migration `0058_notification_event_fanout.sql` expands the outbox event set
+  and adds a bounded aggregate count while preserving existing self-test rows.
+- Fanout starts only after authoritative mutation persistence and runs through
+  `ExecutionContext.waitUntil`; Push-provider latency or failure cannot change
+  whether a message, live session, DM or report succeeds.
+- Recipient discovery starts from an explicit channel preference and active
+  account-owned Push subscription. It enforces the current passcode binding,
+  server-owned channel ownership and actor exclusion; client `is_admin` data is
+  never trusted for classification.
+- Live-session chat messages remain excluded from per-message pushes to avoid a
+  high-volume notification storm. Reactions, edits and deletes remain excluded.
+- The delivery cron now runs once per minute and drains at most three ten-row
+  batches. Immediate important events also trigger an asynchronous drain.
+
+### Performance, privacy and trade-offs
+
+- Each eligible mutation adds one channel lookup, one indexed preference/device
+  fanout read and one batched outbox write per recipient device, all after the
+  response-critical persistence path. Channels with no opted-in recipients add
+  reads but no writes or Push calls.
+- `All` can materially increase D1 writes and Push traffic in busy channels.
+  One-minute coalescing caps repeated message bursts, but separate channels and
+  multiple registered devices still create separate deliveries.
+- Notification delivery can be delayed roughly one to two minutes at a bucket
+  or cron boundary, and longer if more than 30 rows are continuously ready per
+  minute. This favors bounded Worker work over immediate delivery for ordinary
+  messages. Important events normally begin delivery immediately.
+- A signed-in member message can exclude that account when its trusted identity
+  is available. Anonymous browser identity cannot always be mapped back to an
+  account, so an opted-in account using an anonymous chat identity may still
+  receive its own message notification on another device.
+- Visible-channel suppression and quiet hours remain deferred. Channel names
+  can appear on the lock screen; no private contents or report evidence do.
+
+### Verification and rollout
+
+- Worker TypeScript passes, the production Next.js build passes, and the full
+  Worker hardening suite passes 318 tests.
+- Production D1 migration `0058_notification_event_fanout.sql` applied
+  successfully. Worker version `c605b065-dc19-4f2e-aedb-1dd167241743` is
+  deployed with the one-minute delivery trigger.
+- Commit/push and physical-device verification of each event class remain
+  pending for this entry.
+
 ## Web Push transport compatibility fixed — 2026-08-22
 
 ### Production diagnosis and fix

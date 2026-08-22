@@ -31,7 +31,8 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type NotificationState = "loading" | "off" | "on" | "unsupported" | "blocked" | "error" | "ios-install-required" | "ios-update-required";
+type NotificationMode = "off" | "important" | "all";
+type NotificationState = "loading" | NotificationMode | "unsupported" | "blocked" | "error" | "ios-install-required" | "ios-update-required";
 type NotificationNote = "notificationReconfirm" | "notificationTestQueued" | "notificationTestFailed";
 
 export function SettingsPanel({
@@ -87,7 +88,7 @@ export function SettingsPanel({
           preference?: { mode?: unknown; requiresReconfirmation?: unknown };
         } | null;
         if (!response.ok) throw new Error(`notification_preference_failed:${response.status}`);
-        setNotificationState(body?.preference?.mode === "important" ? "on" : "off");
+        setNotificationState(body?.preference?.mode === "all" ? "all" : body?.preference?.mode === "important" ? "important" : "off");
         if (body?.preference?.requiresReconfirmation === true) {
           setNotificationNote("notificationReconfirm");
         }
@@ -99,7 +100,7 @@ export function SettingsPanel({
     return () => controller.abort();
   }, [channelId, notificationsAvailable, status]);
 
-  const updateNotificationPreference = async (mode: "off" | "important") => {
+  const updateNotificationPreference = async (mode: NotificationMode) => {
     const response = await fetch("/api/notifications/preferences", {
       method: "PUT",
       credentials: "same-origin",
@@ -109,24 +110,28 @@ export function SettingsPanel({
     if (!response.ok) throw new Error(`notification_preference_failed:${response.status}`);
   };
 
-  const toggleNotifications = async () => {
+  const selectNotificationMode = async (mode: NotificationMode) => {
     if (notificationBusy || notificationState === "loading") return;
+    if (notificationState === mode) return;
     setNotificationBusy(true);
     setNotificationNote(null);
     try {
-      if (notificationState === "on") {
+      if (mode === "off") {
         await updateNotificationPreference("off");
         setNotificationState("off");
         return;
       }
+      const wasEnabled = notificationState === "important" || notificationState === "all";
       const registered = await subscribeCurrentBrowserToPush();
-      await updateNotificationPreference("important");
-      setNotificationState("on");
-      try {
-        await sendPushSelfTest(registered.subscriptionId, locale);
-        setNotificationNote("notificationTestQueued");
-      } catch {
-        setNotificationNote("notificationTestFailed");
+      await updateNotificationPreference(mode);
+      setNotificationState(mode);
+      if (!wasEnabled) {
+        try {
+          await sendPushSelfTest(registered.subscriptionId, locale);
+          setNotificationNote("notificationTestQueued");
+        } catch {
+          setNotificationNote("notificationTestFailed");
+        }
       }
     } catch (error) {
       const support = getWebPushSupport();
@@ -278,7 +283,7 @@ export function SettingsPanel({
               <div className="flex items-start justify-between" style={{ padding: "12px 0", gap: "12px" }}>
                 <div style={{ minWidth: 0, paddingTop: "2px" }}>
                   <div style={{ fontSize: "var(--bubble-font-size, 15px)", fontWeight: 400 }}>
-                    {t("importantNotifications")}
+                    {t("notifications")}
                   </div>
                   <div style={{ marginTop: "4px", color: "var(--meta)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
                     {notificationState === "unsupported"
@@ -291,7 +296,7 @@ export function SettingsPanel({
                         ? t("notificationBlocked")
                         : notificationState === "error"
                           ? t("notificationLoadFailed")
-                          : t("importantNotificationsDesc")}
+                          : t(onAdmin ? "ownerNotificationsDesc" : "memberNotificationsDesc")}
                   </div>
                   {notificationNote && (
                     <div style={{ marginTop: "4px", color: "var(--bubble-sent)", fontSize: "calc(var(--bubble-font-size) - 5px)", lineHeight: 1.35 }}>
@@ -319,40 +324,35 @@ export function SettingsPanel({
                     </button>
                   )}
                 </div>
-                {notificationState !== "ios-install-required" && notificationState !== "ios-update-required" && <button
-                  type="button"
-                  role="switch"
-                  aria-checked={notificationState === "on"}
-                  aria-label={t("importantNotifications")}
-                  disabled={notificationBusy || notificationState === "loading" || notificationState === "unsupported" || notificationState === "blocked"}
-                  onClick={() => { void toggleNotifications(); }}
-                  style={{
-                    width: "46px",
-                    height: "28px",
-                    flexShrink: 0,
-                    padding: "2px",
-                    border: "none",
-                    borderRadius: "999px",
-                    background: notificationState === "on" ? "var(--bubble-sent)" : "var(--input-border)",
-                    cursor: notificationBusy ? "wait" : "pointer",
-                    opacity: notificationState === "loading" || notificationState === "unsupported" || notificationState === "blocked" ? 0.55 : 1,
-                    transition: "background .2s ease, opacity .2s ease",
-                  }}
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      display: "block",
-                      width: "24px",
-                      height: "24px",
-                      borderRadius: "50%",
-                      background: "#fff",
-                      boxShadow: "0 1px 3px rgba(0,0,0,.2)",
-                      transform: notificationState === "on" ? "translateX(18px)" : "translateX(0)",
-                      transition: "transform .2s ease",
-                    }}
-                  />
-                </button>}
+                {notificationState !== "ios-install-required" && notificationState !== "ios-update-required" && (
+                  <div className="flex" style={{ flexShrink: 0, gap: "3px", padding: "3px", borderRadius: "10px", background: "var(--input-bg)" }}>
+                    {(["off", "important", "all"] as NotificationMode[]).map((mode) => {
+                      const selected = notificationState === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={notificationBusy || notificationState === "loading" || notificationState === "unsupported" || notificationState === "blocked"}
+                          onClick={() => { void selectNotificationMode(mode); }}
+                          style={{
+                            padding: "6px 7px",
+                            border: 0,
+                            borderRadius: "8px",
+                            background: selected ? "var(--bubble-sent)" : "transparent",
+                            color: selected ? "#fff" : "var(--meta)",
+                            fontFamily: "inherit",
+                            fontSize: "calc(var(--bubble-font-size) - 5px)",
+                            fontWeight: selected ? 600 : 400,
+                            cursor: notificationBusy ? "wait" : "pointer",
+                          }}
+                        >
+                          {t(mode === "off" ? "notificationOff" : mode === "important" ? "notificationImportant" : "notificationAll")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {notificationState === "ios-install-required" && showIosInstallGuide && (
                 <div

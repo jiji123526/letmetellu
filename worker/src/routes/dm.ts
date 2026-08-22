@@ -13,6 +13,7 @@ import { getChannelModeration, isOwnerModerationBlocked } from "../lib/channel-m
 import { deleteMediaByUrl } from "../lib/media.ts";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
+import { queueChannelNotification } from "../lib/notification-events.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -89,7 +90,7 @@ async function getRequesterDeviceId(request: Request, env: Env): Promise<string 
   return payload?.device_id || null;
 }
 
-export async function handleDm(request: Request, env: Env): Promise<Response> {
+export async function handleDm(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   if (request.method === "GET") {
     const url = new URL(request.url);
     const channelId = url.searchParams.get("channel") || "";
@@ -602,6 +603,19 @@ export async function handleDm(request: Request, env: Env): Promise<Response> {
       method: "POST",
       body: JSON.stringify({ type: "dm-threads-changed" }),
     }));
+
+    if (ctx) {
+      ctx.waitUntil(queueChannelNotification({
+        env,
+        ctx,
+        channelId: parentChannelId,
+        event: "dm",
+        eventId: id,
+        actorUserId: getTrustedUserId(request, env),
+        ownerOnly: true,
+        memberImportance: "important",
+      }));
+    }
 
     return Response.json({
       ok: true,

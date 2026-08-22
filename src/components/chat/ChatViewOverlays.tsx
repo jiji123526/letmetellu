@@ -352,7 +352,7 @@ export function ChatViewOverlays({
           channelId={channelId}
           currentColor={currentColor}
           onColorChange={onViewerColorChange}
-          notificationsAvailable={!effectiveAdmin}
+          notificationsAvailable={true}
           onAdmin={onSettingsAdmin}
           onClose={onCloseSettings}
         />

@@ -161,9 +161,11 @@ async function handlePreferences(request: Request, env: Env, userId: string): Pr
     return Response.json({
       preference: {
         channelId,
-        mode: preference?.mode === "important" && hasCurrentAccessBinding ? "important" : "off",
+        mode: (preference?.mode === "important" || preference?.mode === "all") && hasCurrentAccessBinding
+          ? preference.mode
+          : "off",
         updatedAt: preference?.updated_at || null,
-        requiresReconfirmation: preference?.mode === "important" && !hasCurrentAccessBinding,
+        requiresReconfirmation: (preference?.mode === "important" || preference?.mode === "all") && !hasCurrentAccessBinding,
       },
       devices: serializeDevices(devices),
       activeDeviceCount: devices.length,
@@ -201,15 +203,15 @@ async function handlePreferences(request: Request, env: Env, userId: string): Pr
   await env.DB.prepare(`
     INSERT INTO notification_preferences (
       user_id, channel_id, mode, access_binding, created_at, updated_at
-    ) VALUES (?, ?, 'important', ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, channel_id) DO UPDATE SET
-      mode = 'important',
+      mode = excluded.mode,
       access_binding = excluded.access_binding,
       updated_at = excluded.updated_at
-  `).bind(userId, input.channelId, access.accessBinding, now, now).run();
+  `).bind(userId, input.channelId, input.mode, access.accessBinding, now, now).run();
   return Response.json({
     ok: true,
-    preference: { channelId: input.channelId, mode: "important", updatedAt: now },
+    preference: { channelId: input.channelId, mode: input.mode, updatedAt: now },
   });
 }
 

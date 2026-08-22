@@ -13,6 +13,7 @@ import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
+import { queueChannelNotification } from "../lib/notification-events.ts";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -422,6 +423,20 @@ export async function handleMessages(
       });
       if (ctx) {
         ctx.waitUntil(postCommitDelivery);
+        if (!liveChannel) {
+          ctx.waitUntil(queueChannelNotification({
+            env,
+            ctx,
+            channelId: parentChannelId,
+            event: report ? "message_report" : "channel_message",
+            eventId: id,
+            actorUserId: verifiedUserId || null,
+            ownerOnly: report === true,
+            includeOwner: !isChannelOwner && !report,
+            memberImportance: isChannelOwner ? "important" : "all",
+            bundle: !report,
+          }));
+        }
         if (warmPreviewCache && !image && !report) {
           ctx.waitUntil(warmPreviewCache(request, text as string | undefined));
         }

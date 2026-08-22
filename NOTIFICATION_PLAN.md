@@ -35,7 +35,7 @@ unimplemented plan. Shipped behavior must be recorded in
 
 Each authenticated user has one preference per channel.
 
-| Mode | Admin message | Live starts | Member message | DM/support/owner alert |
+| Mode | Admin message | Live starts | Member message | Owner DM/message report/channel report |
 | --- | --- | --- | --- | --- |
 | Off | No | No | No | Only separately enabled account-level alerts |
 | Important only | Yes | Yes | No | Yes when relevant |
@@ -53,8 +53,8 @@ grant push permission or create a subscription.
   session. One session creates at most one important event per subscribed user.
 - Live-session messages are not individually important. Users receive the live
   start notification, then follow the session in the app if they choose.
-- DM, support and moderation events remain important only to their intended
-  recipient; their sensitive contents should not appear on the lock screen.
+- DM, message-report and channel-report events are important only to the channel
+  owner; their sensitive contents never appear on the lock screen.
 - Reactions, edits, deletions and the user's own actions do not create push.
 
 ### Important-event recipient rules
@@ -65,8 +65,8 @@ grant push permission or create a subscription.
 - Admin-message notifications target non-admin channel users, not the sender.
 - Live-start notifications target opted-in non-admin channel users, excluding
   the owner who started the session.
-- Blocked users, users who lost access and users removed from the account's
-  channel list are excluded.
+- Protected-channel recipients must retain the passcode binding that was current
+  when they opted in. A changed passcode requires reconfirmation.
 - If a user's active browser is visibly viewing that channel, suppress the push
   for that device.
 
@@ -232,8 +232,8 @@ identifiers, private DM bodies or arbitrary navigation URLs.
 
 ## Batching and Spam Control
 
-- Collapse rapid admin messages from the same channel into one push over a
-  30–60 second window.
+- Collapse rapid normal-channel messages from the same channel into one push
+  over a 60-second window per recipient device.
 - Never batch a live start with an unrelated message. Deduplicate it by live
   session ID so reconnects or repeated processing cannot resend it.
 - `all` mode may batch member traffic per user/channel over the same short
@@ -362,4 +362,3 @@ latency regression.
 - Exact Korean and English pre-permission and failure copy.
 - Whether `all` mode ships initially or remains hidden until important-only
   delivery is stable.
-

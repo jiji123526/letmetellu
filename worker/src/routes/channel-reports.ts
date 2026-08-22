@@ -21,6 +21,7 @@ import { getParentChannelId, isReportsChannel, isReportsChannelOwner } from "../
 import type { Env } from "../types.ts";
 import { deleteChannel } from "../lib/channel-cleanup.ts";
 import { authorizeRoomToken } from "./passcode.ts";
+import { queueChannelNotification } from "../lib/notification-events.ts";
 
 const REPORT_REASONS = new Set([
   "spam",
@@ -1293,7 +1294,7 @@ function formatReportMessage(input: {
   }, input.locale);
 }
 
-export async function handleChannelReports(request: Request, env: Env): Promise<Response> {
+export async function handleChannelReports(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   if (request.method === "PATCH") {
     return handleChannelReportAction(request, env);
   }
@@ -1450,6 +1451,19 @@ export async function handleChannelReports(request: Request, env: Env): Promise<
     nick: reportsOwnerLocale === "en" ? "Reports" : "신고함",
     extra: { report_meta: reportMeta },
   });
+
+  if (ctx) {
+    ctx.waitUntil(queueChannelNotification({
+      env,
+      ctx,
+      channelId,
+      event: "channel_report",
+      eventId: reportId,
+      actorUserId: verifiedUserId || null,
+      ownerOnly: true,
+      memberImportance: "important",
+    }));
+  }
 
   return Response.json({ ok: true, id: reportId, created_at: createdAt, report: reportMeta });
 }
