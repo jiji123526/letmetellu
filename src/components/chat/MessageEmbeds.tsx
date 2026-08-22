@@ -28,6 +28,7 @@ const previewCacheMetadata = new Map<string, { cachedAt: number }>();
 const previewRequests = new Map<string, Promise<PreviewData | null>>();
 const previewImageRequests = new Map<string, Promise<void>>();
 const previewSubscribers = new Map<string, Set<(data: PreviewData) => void>>();
+const readyPreviewImages = new Set<string>();
 const previewRequestQueue: Array<{
   url: string;
   forceRefresh: boolean;
@@ -41,6 +42,16 @@ let mountedPrefetchPath = "";
 let mountedPrefetchBudget = MOUNTED_PREVIEW_PREFETCH_LIMIT;
 let mountedPrefetchScheduled = false;
 let historyPrefetchListenerInstalled = false;
+
+function rememberReadyPreviewImage(src: string) {
+  readyPreviewImages.delete(src);
+  readyPreviewImages.add(src);
+  while (readyPreviewImages.size > PREVIEW_CACHE_LIMIT) {
+    const oldest = readyPreviewImages.values().next().value;
+    if (typeof oldest !== "string") break;
+    readyPreviewImages.delete(oldest);
+  }
+}
 
 function notifyPreviewSubscribers(url: string, data: PreviewData) {
   previewSubscribers.get(url)?.forEach((subscriber) => subscriber(data));
@@ -63,16 +74,23 @@ function preloadPreviewImage(data: PreviewData): Promise<void> {
 
   const request = new Promise<void>((resolve) => {
     const image = new Image();
-    image.onload = () => {
-      if (typeof image.decode === "function") {
-        void image.decode().catch(() => {}).finally(resolve);
-      } else {
-        resolve();
-      }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      void (typeof image.decode === "function" ? image.decode().catch(() => {}) : Promise.resolve())
+        .finally(() => {
+          rememberReadyPreviewImage(data.image);
+          resolve();
+        });
     };
-    image.onerror = () => resolve();
+    image.onload = finish;
+    image.onerror = () => {
+      settled = true;
+      resolve();
+    };
     image.src = data.image;
-    if (image.complete) image.onload?.(new Event("load"));
+    if (image.complete && image.naturalWidth > 0) finish();
   });
   previewImageRequests.set(data.image, request);
   return request;
@@ -397,6 +415,83 @@ function useDeferredEmbedVisibility() {
   return { targetRef, isVisible };
 }
 
+function PreviewImage({
+  src,
+  preserveFullImage,
+  isMine,
+}: {
+  src: string;
+  preserveFullImage: boolean;
+  isMine: boolean;
+}) {
+  const [loaded, setLoaded] = useState(readyPreviewImages.has(src));
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div
+      className="preview-media-frame"
+      style={{
+        aspectRatio: preserveFullImage ? "1 / 1" : "2 / 1",
+        maxHeight: preserveFullImage ? "320px" : "160px",
+        background: preserveFullImage
+          ? (isMine ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.05)")
+          : undefined,
+      }}
+    >
+      {!loaded && !failed && (
+        <div className="preview-media-skeleton" data-history-layout-pending aria-hidden="true" />
+      )}
+      <img
+        src={src}
+        alt=""
+        className={`media-load-fade${loaded ? " is-loaded" : ""}`}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          display: failed ? "none" : "block",
+          objectFit: preserveFullImage ? "contain" : "cover",
+        }}
+        onLoad={(event) => {
+          const image = event.currentTarget;
+          void (typeof image.decode === "function" ? image.decode().catch(() => {}) : Promise.resolve())
+            .finally(() => {
+              rememberReadyPreviewImage(src);
+              setLoaded(true);
+            });
+        }}
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
+function PreviewVideo({ src, poster }: { src: string; poster?: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="preview-media-frame" style={{ aspectRatio: "2 / 1", maxHeight: "200px" }}>
+      {!loaded && !failed && (
+        <div className="preview-media-skeleton" data-history-layout-pending aria-hidden="true" />
+      )}
+      <video
+        src={src}
+        poster={poster}
+        controls
+        playsInline
+        preload="metadata"
+        className={`media-load-fade${loaded ? " is-loaded" : ""}`}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: failed ? "none" : "block", objectFit: "cover" }}
+        onLoadedMetadata={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        onClick={(event) => event.preventDefault()}
+      />
+    </div>
+  );
+}
+
 function LinkPreviewCard({
   url,
   isMine,
@@ -472,7 +567,13 @@ function LinkPreviewCard({
     );
   }
   if (!hasResolved) {
-    return <span data-history-layout-pending aria-hidden="true" />;
+    return (
+      <div className="link-preview-skeleton" data-history-layout-pending aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    );
   }
   if (!data) return null;
 
@@ -501,27 +602,15 @@ function LinkPreviewCard({
       onClick={(e) => e.stopPropagation()}
     >
       {previewVideo ? (
-        <video
+        <PreviewVideo
           src={previewVideo}
           poster={data.image || undefined}
-          controls
-          playsInline
-          preload="metadata"
-          style={{ width: "100%", display: "block", maxHeight: "200px", objectFit: "cover" }}
-          onClick={(e) => e.preventDefault()}
         />
       ) : data.image ? (
-        <img
+        <PreviewImage
           src={data.image}
-          alt=""
-          style={{
-            width: "100%",
-            display: "block",
-            maxHeight: shouldPreserveFullImage ? "320px" : "160px",
-            objectFit: shouldPreserveFullImage ? "contain" : "cover",
-            background: shouldPreserveFullImage ? (isMine ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.05)") : undefined,
-          }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          preserveFullImage={shouldPreserveFullImage}
+          isMine={isMine}
         />
       ) : null}
       {hasTextMetadata && (

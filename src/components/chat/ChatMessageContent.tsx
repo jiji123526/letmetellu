@@ -238,7 +238,16 @@ export function MessageImage({
       style={reservedStyle}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {shouldLoad && !loaded && !failed && <MediaLoadingDots />}
+      {!loaded && !failed && (hasStableDimensions ? (
+        <div
+          className="media-loading-skeleton"
+          data-history-layout-pending={shouldLoad ? "" : undefined}
+          role="status"
+          aria-label={t("loading")}
+        />
+      ) : shouldLoad ? (
+        <MediaLoadingDots />
+      ) : null)}
       {failed ? (
         <button
           type="button"
@@ -249,8 +258,14 @@ export function MessageImage({
             setLoaded(false);
             setAttempt((value) => value + 1);
           }}
-          style={{ minHeight: "80px", padding: "8px 14px", border: 0, background: "transparent", color: "inherit", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer" }}
+          className="media-load-failure"
+          style={{ minHeight: hasStableDimensions ? "100%" : "80px", width: "100%", padding: "8px 14px", border: 0, background: "transparent", color: "inherit", fontSize: "calc(var(--bubble-font-size) - 5px)", cursor: "pointer" }}
         >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <circle cx="8.5" cy="9" r="1.5" />
+            <path d="m4 17 5-5 4 4 2-2 5 5" />
+          </svg>
           {t("retryMedia")}
         </button>
       ) : (
@@ -260,13 +275,17 @@ export function MessageImage({
           alt=""
           draggable={false}
           decoding="async"
-          className="block h-auto rounded-[15px] select-none"
+          className={`media-load-fade block h-auto rounded-[15px] select-none${loaded ? " is-loaded" : ""}`}
           style={hasStableDimensions
-            ? { display: loaded ? "block" : "none", width: "100%", height: "100%", objectFit: "contain", userSelect: "none" }
+            ? { display: "block", width: "100%", height: "100%", objectFit: "contain", userSelect: "none" }
             : { display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain", userSelect: "none" }}
-          onLoad={() => {
-            rememberReadyMessageImage(src);
-            setLoaded(true);
+          onLoad={(event) => {
+            const image = event.currentTarget;
+            void (typeof image.decode === "function" ? image.decode().catch(() => {}) : Promise.resolve())
+              .finally(() => {
+                rememberReadyMessageImage(src);
+                setLoaded(true);
+              });
           }}
           onError={() => {
             readyMessageImages.delete(src);

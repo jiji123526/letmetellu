@@ -7,6 +7,10 @@ const messageContentSource = readFileSync(
   new URL("../../src/components/chat/ChatMessageContent.tsx", import.meta.url),
   "utf8",
 );
+const globalStylesSource = readFileSync(
+  new URL("../../src/app/globals.css", import.meta.url),
+  "utf8",
+);
 const messageListSource = readFileSync(
   new URL("../../src/components/chat/ChatMessageList.tsx", import.meta.url),
   "utf8",
@@ -58,6 +62,13 @@ test("direct message images reserve geometry and activate near the chat viewport
   assert.match(messageContentSource, /rememberReadyMessageImage\(src\)/);
   assert.match(messageContentSource, /const initiallyReady = readyMessageImages\.has\(src\)/);
   assert.match(messageContentSource, /const \[loaded, setLoaded\] = useState\(initiallyReady\)/);
+  assert.match(messageContentSource, /hasStableDimensions \? \([\s\S]*media-loading-skeleton/);
+  assert.match(messageContentSource, /<MediaLoadingDots \/>/);
+  assert.match(messageContentSource, /image\.decode\(\)/);
+  assert.match(messageContentSource, /media-load-fade/);
+  assert.match(messageContentSource, /media-load-failure/);
+  assert.match(globalStylesSource, /@keyframes media-skeleton-pulse/);
+  assert.match(globalStylesSource, /prefers-reduced-motion: reduce/);
   assert.match(messageListSource, /width=\{msg\.image_w\}/);
   assert.match(messageListSource, /height=\{msg\.image_h\}/);
 });

@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Geometry-aware media loading uses stable skeletons — 2026-08-22
+
+- Message images with stored dimensions now reserve their final aspect ratio with a quiet tinted skeleton instead of placing the compact three-dot indicator inside a large media footprint. Images without trustworthy dimensions retain the fixed typing-dot bubble.
+- Single and grouped image messages inherit the same per-image behavior because every tile uses the shared message-image renderer.
+- Link previews reserve a bounded card skeleton while metadata resolves, and preview images/videos reserve their final media frame while decoding or loading metadata.
+- Ready images fade in over 180 ms after decode. Failed message media keeps the reserved geometry and shows an image/retry control instead of collapsing the bubble.
+- Skeleton pulse and fade transitions are disabled under `prefers-reduced-motion`.
+- Regression coverage distinguishes known-dimension skeletons from unknown-dimension dots and keeps preview image/video geometry, decoding and reduced-motion behavior explicit.
+
+Trade-off: geometry reservation makes loading messages visually larger than the old compact dot bubble and preview image-only cards now use a stable square frame while metadata cards use a stable 2:1 frame. This prevents scroll shifts at the cost of occasionally letterboxing image-only previews. No extra API request is introduced.
+
+Deployment note: deploy the frontend only. No Worker or D1 migration is required.
+
 ### Sparse history edges scan only deleted roots — 2026-08-21
 
 - One `active_roots AS MATERIALIZED` fingerprint ran 18 times at `8.8 ms` p50/p99 and read `43.79k` rows at a `130:1` read/return ratio. This is the sparse-edge case: when fewer than one full active page remains after a cursor, no active boundary exists and correctness requires checking the entire remaining range for deleted roots retained by active replies.

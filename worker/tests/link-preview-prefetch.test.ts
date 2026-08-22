@@ -8,6 +8,10 @@ const messageEmbedsSource = readFileSync(
   new URL("../../src/components/chat/MessageEmbeds.tsx", import.meta.url),
   "utf8",
 );
+const globalStylesSource = readFileSync(
+  new URL("../../src/app/globals.css", import.meta.url),
+  "utf8",
+);
 const messageRouteSource = readFileSync(
   new URL("../src/routes/messages.ts", import.meta.url),
   "utf8",
@@ -59,6 +63,14 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
     messageEmbedsSource,
     /mountedPrefetchBudget = Math\.max\([\s\S]*MOUNTED_PREVIEW_PREFETCH_LIMIT/,
   );
+  assert.match(messageEmbedsSource, /readyPreviewImages/);
+  assert.match(messageEmbedsSource, /function PreviewImage\(/);
+  assert.match(messageEmbedsSource, /function PreviewVideo\(/);
+  assert.match(messageEmbedsSource, /className="link-preview-skeleton"/);
+  assert.match(messageEmbedsSource, /className="preview-media-skeleton"/);
+  assert.match(messageEmbedsSource, /image\.decode\(\)/);
+  assert.match(globalStylesSource, /\.link-preview-skeleton/);
+  assert.match(globalStylesSource, /\.preview-media-skeleton/);
 });
 
 test("successful sends warm previews without delaying acknowledgement", () => {
