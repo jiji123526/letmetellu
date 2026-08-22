@@ -208,6 +208,18 @@ test("outbox delivery uses leases, bounded retries and permanent endpoint cleanu
   assert.doesNotMatch(delivery, /console\.(?:log|warn|error).*endpoint/);
 });
 
+test("Worker enables the Node HTTPS client required by web-push", () => {
+  const wranglerConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+  assert.match(wranglerConfig, /compatibility_flags\s*=\s*\[[^\]]*"nodejs_compat"/);
+  assert.match(wranglerConfig, /compatibility_flags\s*=\s*\[[^\]]*"enable_nodejs_http_modules"/);
+});
+
+test("transport diagnostics retain only bounded runtime codes", () => {
+  assert.match(delivery, /\^\[A-Z0-9_\]\{1,48\}\$/);
+  assert.match(delivery, /push_transport_\$\{candidate\.toLowerCase\(\)\}/);
+  assert.doesNotMatch(delivery, /error\.message|error\.stack/);
+});
+
 test("notification permission remains behind an explicit non-admin settings action", () => {
   assert.match(settingsPanel, /notificationsAvailable && status === "authenticated"/);
   assert.match(settingsPanel, /onClick=\{\(\) => \{ void toggleNotifications\(\); \}\}/);

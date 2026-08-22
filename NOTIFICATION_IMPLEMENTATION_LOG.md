@@ -26,6 +26,45 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Web Push transport compatibility fixed — 2026-08-22
+
+### Production diagnosis and fix
+
+- Production D1 showed valid Safari and Chrome subscriptions and successfully
+  queued self-test rows, but every delivery failed before receiving an HTTP
+  status with `push_transport_error`. This isolated the fault from browser
+  permission, PWA installation, VAPID subscription and outbox creation.
+- The Worker retained compatibility date `2024-12-01`. At that date,
+  `nodejs_compat` can load the `web-push` dependency but does not enable the
+  functional Node `http`/`https` client used by `sendNotification`.
+- Added only `enable_nodejs_http_modules`, Cloudflare's scoped compatibility
+  flag for Node HTTP/HTTPS client APIs. The compatibility date is deliberately
+  unchanged to avoid opting the mature Worker into unrelated runtime changes.
+
+### Cost, security and trade-offs
+
+- The flag makes Node HTTP client calls available Worker-wide. Existing code
+  still controls destinations; it does not expose a route, secret or browser
+  endpoint and does not weaken request authorization.
+- No schema, D1 query or normal chat-path work is added. Only actual Web Push
+  deliveries use the newly functional HTTPS bridge, which Cloudflare implements
+  over the Worker Fetch runtime.
+- Existing retry rows remain eligible and will be retried by the five-minute
+  cron. Successful delivery resets subscription failure counters. If the Push
+  service returns 404/410, the existing cleanup revokes that endpoint.
+
+### Verification and rollout
+
+- Added regression checks that both `nodejs_compat` and
+  `enable_nodejs_http_modules` remain configured and that transport diagnostics
+  retain only bounded runtime codes. The full hardening suite passes 315 tests
+  and the Wrangler dry-run succeeds.
+- Worker version `60a8f5cd-5206-4c8d-a148-563958176df2` is deployed. The newest
+  Safari self-test was safely advanced to the next retry window and changed
+  from `retry` to `delivered` at `2026-08-22T22:20:32.006Z` on attempt three;
+  `last_error_code` was cleared. No endpoint or encryption-key material was read
+  or logged during verification.
+
 ## iOS Home Screen Web Push onboarding added — 2026-08-22
 
 ### Scope and user-visible behavior

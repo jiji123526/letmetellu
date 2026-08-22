@@ -28,8 +28,16 @@ function errorStatus(error: unknown): number {
   return typeof statusCode === "number" ? statusCode : 0;
 }
 
-function boundedErrorCode(status: number): string {
-  return status > 0 ? `push_http_${status}` : "push_transport_error";
+function boundedErrorCode(status: number, error?: unknown): string {
+  if (status > 0) return `push_http_${status}`;
+  if (!error || typeof error !== "object") return "push_transport_error";
+  const directCode = (error as { code?: unknown }).code;
+  const causeCode = (error as { cause?: { code?: unknown } }).cause?.code;
+  const candidate = typeof directCode === "string" ? directCode : causeCode;
+  if (typeof candidate !== "string" || !/^[A-Z0-9_]{1,48}$/.test(candidate)) {
+    return "push_transport_error";
+  }
+  return `push_transport_${candidate.toLowerCase()}`;
 }
 
 async function markDelivered(env: Env, row: DeliveryRow, now: string): Promise<void> {
@@ -63,9 +71,9 @@ async function markGone(env: Env, row: DeliveryRow, status: number, now: string)
   ]);
 }
 
-async function markFailed(env: Env, row: DeliveryRow, status: number, nowMs: number): Promise<void> {
+async function markFailed(env: Env, row: DeliveryRow, status: number, nowMs: number, error?: unknown): Promise<void> {
   const now = new Date(nowMs).toISOString();
-  const code = boundedErrorCode(status);
+  const code = boundedErrorCode(status, error);
   const shouldRetry = row.attempt_count < MAX_DELIVERY_ATTEMPTS && (status === 0 || status === 408 || status === 429 || status >= 500);
   const nextDelay = RETRY_DELAYS_MS[Math.min(row.attempt_count - 1, RETRY_DELAYS_MS.length - 1)];
   await env.DB.batch([
@@ -165,7 +173,7 @@ export async function processNotificationOutbox(
       if (status === 404 || status === 410) {
         await markGone(env, row, status, new Date().toISOString());
       } else {
-        await markFailed(env, row, status, Date.now());
+        await markFailed(env, row, status, Date.now(), error);
       }
     }
   }));

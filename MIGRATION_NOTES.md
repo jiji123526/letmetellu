@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Web Push Worker HTTPS compatibility — 2026-08-22
+
+- Production self-tests were queued correctly for valid Safari and Chrome
+  subscriptions but failed with status-free `push_transport_error` before any
+  Push service response.
+- The retained `2024-12-01` compatibility date required the scoped
+  `enable_nodejs_http_modules` flag in addition to `nodejs_compat` for the
+  `web-push` package's Node HTTPS client. The compatibility date itself remains
+  unchanged to avoid unrelated runtime behavior changes.
+- This adds no schema or chat-path work. It enables HTTPS only for actual Push
+  delivery and preserves the existing bounded outbox retry/dead-endpoint rules.
+- Worker version `60a8f5cd-5206-4c8d-a148-563958176df2` is deployed. The failed
+  Safari self-test subsequently completed as `delivered` on its third bounded
+  attempt, confirming the server-to-Push-service path in production.
+- Detailed diagnosis, verification and rollout evidence is recorded in
+  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+
 ### iOS Home Screen Web Push onboarding — 2026-08-22
 
 - Added a standalone `yap.` web app manifest, Apple web-app metadata and
