@@ -251,6 +251,9 @@ test("role-aware fanout bundles general messages and keeps important owner event
   assert.match(notificationEvents, /aggregate_count = notification_outbox\.aggregate_count \+ 1/);
   assert.match(notificationEvents, /ownerOnly\?: boolean/);
   assert.match(notificationEvents, /processNotificationOutbox\(input\.env\)/);
+  assert.match(notificationEvents, /title: notificationText/);
+  assert.match(notificationEvents, /body: ""/);
+  assert.match(delivery, /payload\.title = locale === "en"/);
 });
 
 test("iOS Safari receives install guidance before Web Push feature rejection", () => {

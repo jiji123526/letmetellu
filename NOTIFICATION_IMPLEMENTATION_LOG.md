@@ -26,6 +26,22 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ---
 
+## Compact two-row iOS notification layout — 2026-08-22
+
+- Push content now occupies the required Web Notification title field and leaves
+  the optional body empty. On iOS this removes the separate third content row,
+  leaving the Home Screen app identity row plus one notification-content row.
+- The change applies consistently to normal messages, bundled message counts,
+  live starts, DMs, message reports and channel reports. Navigation targets,
+  privacy-safe copy, recipient selection and delivery scheduling are unchanged.
+- iOS may still render its platform-owned `from` prefix before the title; web
+  apps cannot suppress that label. Long channel or live titles may wrap within
+  the remaining content row depending on device width and text size.
+- Worker version `eb965f38-cd1c-417e-b666-1adfb89f63de` is deployed after
+  Worker TypeScript and all 318 hardening tests passed.
+
+---
+
 ## Ordinary-message delivery cron mismatch fixed — 2026-08-22
 
 ### Production diagnosis and behavior

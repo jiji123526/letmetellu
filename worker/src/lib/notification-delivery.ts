@@ -168,9 +168,10 @@ export async function processNotificationOutbox(
       if (row.event_type === "channel_message" && row.aggregate_count > 1) {
         const locale = payload.locale === "en" ? "en" : "ko";
         const channelName = typeof payload.channelName === "string" ? payload.channelName : "yap.";
-        payload.body = locale === "en"
+        payload.title = locale === "en"
           ? `[${channelName}] ${row.aggregate_count} new messages have arrived`
           : `[${channelName}] 새 메시지 ${row.aggregate_count}개가 도착했어요`;
+        payload.body = "";
       }
       await webpush.sendNotification(
         { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },

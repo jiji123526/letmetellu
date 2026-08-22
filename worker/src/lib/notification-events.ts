@@ -51,28 +51,28 @@ function payloadFor(input: {
 }) {
   const ko = input.locale !== "en";
   const channel = `[${input.channelName}]`;
-  let body: string;
+  let notificationText: string;
   switch (input.event) {
     case "live_start":
-      body = ko
+      notificationText = ko
         ? `${channel} ${input.liveTitle || "라이브"} 라이브 세션이 시작됐어요`
         : `${channel} ${input.liveTitle || "Live"} live session has started`;
       break;
     case "dm":
-      body = ko ? `${channel} 새 DM이 도착했어요` : `${channel} You received a new DM`;
+      notificationText = ko ? `${channel} 새 DM이 도착했어요` : `${channel} You received a new DM`;
       break;
     case "message_report":
-      body = ko ? `${channel} 새 메시지 신고가 접수됐어요` : `${channel} A message was reported`;
+      notificationText = ko ? `${channel} 새 메시지 신고가 접수됐어요` : `${channel} A message was reported`;
       break;
     case "channel_report":
-      body = ko ? `${channel} 채널 신고가 접수됐어요` : `${channel} Your channel was reported`;
+      notificationText = ko ? `${channel} 채널 신고가 접수됐어요` : `${channel} Your channel was reported`;
       break;
     default:
-      body = ko ? `${channel} 새 메시지가 도착했어요` : `${channel} New messages have arrived`;
+      notificationText = ko ? `${channel} 새 메시지가 도착했어요` : `${channel} New messages have arrived`;
   }
   return {
-    title: "yap.",
-    body,
+    title: notificationText,
+    body: "",
     locale: ko ? "ko" : "en",
     channelName: input.channelName,
     url: `/ch/${encodeURIComponent(input.channelId)}`,

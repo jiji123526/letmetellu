@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Compact Web Push content layout — 2026-08-22
+
+- Moved the localized notification copy into the required Web Notification
+  title and left the optional body empty, producing the compact two-row iOS
+  layout instead of an app row, redundant `from yap.` row and separate body.
+- Bundled message counts use the same title-only layout. Fanout eligibility,
+  outbox scheduling, click navigation and privacy boundaries are unchanged.
+- iOS controls its own `from` prefix and may wrap long titles; those aspects
+  cannot be removed reliably by a Home Screen web app.
+- Worker version `eb965f38-cd1c-417e-b666-1adfb89f63de` is live; Worker
+  TypeScript and all 318 hardening tests pass.
+
 ### Notification delivery cron guard correction — 2026-08-22
 
 - Fixed a production mismatch where the deployed every-minute Cron trigger used

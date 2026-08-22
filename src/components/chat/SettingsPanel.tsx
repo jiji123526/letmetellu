@@ -349,7 +349,7 @@ export function SettingsPanel({
                       flexShrink: 0,
                       padding: "3px",
                       borderRadius: "18px",
-                      background: notificationState === "important" || notificationState === "all" ? "#34c759" : "var(--input-border)",
+                      background: notificationState === "important" || notificationState === "all" ? "var(--bubble-sent)" : "var(--input-border)",
                       boxShadow: "inset 0 0 0 0.5px rgba(0,0,0,.08)",
                       transition: "background-color .22s ease",
                     }}
