@@ -4,6 +4,32 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Authenticated Web Push schema foundation — 2026-08-22
+
+- Migration `0055_web_push_subscription_foundation.sql` adds channel-scoped
+  notification preferences for authenticated users and user-owned browser Push
+  API subscriptions. Preferences default to `off`; no account is opted in by
+  migration.
+- Partial indexes cover opted-in recipient lookup by channel and active browser
+  subscription lookup by user. Account/channel deletion cascades remove the
+  associated preference or subscription rows.
+- A focused schema regression test and `audit-notification-schema.sql` cover
+  constraints, foreign keys and both query plans. The full Worker hardening
+  suite passed 296 tests before rollout.
+- The production D1 migration was applied successfully and the follow-up list
+  reported no pending migrations. The remote audit completed five read-only
+  checks with zero rows written.
+
+Trade-off: endpoint and browser encryption-key material is sensitive account
+data and must be redacted from future request/error logs. The two partial
+indexes add small storage and preference/subscription write costs, while the
+unique endpoint constraint requires later registration APIs to rotate or
+reassign an existing browser endpoint atomically when accounts change.
+
+Deployment note: D1 migration `0055` is deployed. No Worker or frontend deploy
+was required because this step adds unused schema only; notification APIs,
+Service Worker registration, permission UI and delivery remain disabled.
+
 ### Geometry-aware media loading uses stable skeletons — 2026-08-22
 
 - Message images with stored dimensions now reserve their final aspect ratio with a quiet tinted skeleton instead of placing the compact three-dot indicator inside a large media footprint. Images without trustworthy dimensions retain the fixed typing-dot bubble.

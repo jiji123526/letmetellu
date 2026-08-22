@@ -101,11 +101,15 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ### Deployment
 
-- Branch implementation only: the production D1 migration has not been applied.
-- Worker and frontend behavior are unchanged and no Worker deployment is needed
-  for this schema-only branch step.
-- Production rollout order remains migration first, then the compatible Worker,
-  then frontend opt-in UI. Commit and remote status are recorded in git history.
+- Production D1 migration `0055_web_push_subscription_foundation.sql` was
+  applied successfully on 2026-08-22. A follow-up migration listing reported no
+  pending migrations.
+- The remote audit executed all five schema/foreign-key/query-plan checks
+  successfully, reading 194 rows and writing 0 rows.
+- Worker and frontend behavior are unchanged, so no Worker or frontend deploy
+  was performed for this schema-only step.
+- The next rollout remains a backward-compatible Worker API deployment before
+  any frontend opt-in UI. Commit and remote status are recorded in git history.
 
 ## Notification implementation branch and audit log created — 2026-08-22
 
