@@ -4,6 +4,41 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Authenticated notification preference and device APIs — 2026-08-22
+
+- Added authenticated Next.js-to-Worker APIs for channel preference reads and
+  updates, browser Push subscription registration/rotation and idempotent
+  current-user device revocation. There is no UI, permission prompt, Service
+  Worker or delivery behavior yet.
+- Public-channel opt-in requires the existing account/channel association.
+  Protected-channel opt-in also requires a room token bound to the current
+  passcode. Migration `0056_notification_access_binding.sql` stores that binding
+  so a later delivery worker can suppress access after a passcode change.
+- The API accepts only `off` and `important` during the initial rollout. It
+  limits bodies to 8 KiB, requires HTTPS endpoints and bounded browser keys,
+  enforces exact same-origin mutations, applies hashed per-user rate limits and
+  caps registration at five active devices atomically.
+- Responses expose only device IDs, browser family, optional user label and
+  timestamps. Endpoint, `p256dh`, `auth` and the full user agent are never
+  returned; the full user agent is reduced to a coarse family before storage.
+- Focused notification tests passed 12 cases, the full Worker suite passed 304
+  tests, Worker/frontend type checks passed and the Next.js production build
+  includes all three proxy routes. A fresh 56-migration D1 and local registration
+  smoke test confirmed the access binding and five-device limit.
+
+Trade-off: each low-frequency preference/subscription mutation performs two D1
+rate-limit operations before its data write, and preference reads perform an
+account probe plus indexed access/preference/device reads. These costs are kept
+off chat, dashboard, send and live-start hot paths. Exact Origin enforcement
+intentionally excludes non-browser mutation clients, and existing endpoint
+registration makes the newest authenticated account authoritative so browser
+account switching does not create duplicate delivery.
+
+Deployment note: production D1 migration `0056` is applied and Worker version
+`47ce5ee1-6fcc-4fe3-84af-b5e43d1437ca` is deployed. Direct unauthenticated
+access returns `401`. Frontend production has no notification UI and will not
+expose the session proxies until the feature branch is merged.
+
 ### Authenticated Web Push schema foundation — 2026-08-22
 
 - Migration `0055_web_push_subscription_foundation.sql` adds channel-scoped

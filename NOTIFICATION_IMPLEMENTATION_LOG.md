@@ -127,10 +127,16 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 ### Deployment
 
-- Implementation commit and branch push precede rollout.
-- Production rollout is pending in this entry: apply migration `0056` first,
-  then deploy the backward-compatible Worker route. Frontend production remains
-  unchanged until this branch is merged and its API proxies deploy.
+- Implementation commit `54c6255` was pushed to
+  `codex/web-push-notifications` before rollout.
+- Production D1 migration `0056_notification_access_binding.sql` was applied
+  successfully; a follow-up listing reports no pending migrations.
+- Worker version `47ce5ee1-6fcc-4fe3-84af-b5e43d1437ca` was deployed. An
+  unauthenticated production request to the new preference endpoint returned
+  `401` with no data.
+- Frontend production remains unchanged until this branch is merged and its API
+  proxies deploy. Because the Worker requires the internal proxy secret, the new
+  route cannot be used directly by a public browser in the meantime.
 
 ## Authenticated Web Push schema foundation added — 2026-08-22
 
