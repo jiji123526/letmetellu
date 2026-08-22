@@ -88,8 +88,8 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 - Production D1 migration `0058_notification_event_fanout.sql` applied
   successfully. Worker version `c605b065-dc19-4f2e-aedb-1dd167241743` is
   deployed with the one-minute delivery trigger.
-- Commit/push and physical-device verification of each event class remain
-  pending for this entry.
+- Implementation commit `93d1af5` is pushed to `main`. Physical-device
+  verification of each event class remains pending for this entry.
 
 ## Web Push transport compatibility fixed — 2026-08-22
 
