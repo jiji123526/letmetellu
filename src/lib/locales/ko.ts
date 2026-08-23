@@ -188,7 +188,7 @@ export const ko = {
   notificationOffDesc: "이 채널의 푸시 알림을 받지 않아요.",
   memberImportantNotificationsDesc: "방장 메시지와 라이브 시작을 알려드려요.",
   ownerImportantNotificationsDesc: "새 DM, 메시지 신고와 채널 신고를 알려드려요.",
-  notificationAllDesc: "중요 알림과 일반 메시지를 모두 알려드려요. 짧은 시간에 온 메시지는 하나로 묶어요.",
+  notificationAllDesc: "중요 알림과 일반 메시지를 모두 알려드려요.",
   notificationUnsupported: "이 브라우저에서는 푸시 알림을 사용할 수 없어요.",
   notificationBlocked: "브라우저 설정에서 알림 허용이 필요해요.",
   notificationLoadFailed: "알림 설정을 불러오지 못했어요. 다시 시도해 주세요.",

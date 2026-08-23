@@ -190,7 +190,7 @@ export const en: Record<LocaleKeys, string> = {
   notificationOffDesc: "Don't receive push notifications from this channel.",
   memberImportantNotificationsDesc: "Get notified about admin messages and live starts.",
   ownerImportantNotificationsDesc: "Get notified about new DMs, message reports, and channel reports.",
-  notificationAllDesc: "Get important and regular message notifications. Messages arriving close together are bundled.",
+  notificationAllDesc: "Get important and regular message notifications.",
   notificationUnsupported: "Push notifications aren't supported in this browser.",
   notificationBlocked: "Allow notifications in your browser settings.",
   notificationLoadFailed: "Couldn't load notification settings. Please try again.",
