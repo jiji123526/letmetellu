@@ -27,11 +27,7 @@ function darkenColor(hex: string, amount: number): string {
   const g = Math.max(0, ((num >> 8) & 0xff) - amount);
   const b = Math.max(0, (num & 0xff) - amount);
 
-  return `#${(
-    (r << 16) |
-    (g << 8) |
-    b
-  )
+  return `#${((r << 16) | (g << 8) | b)
     .toString(16)
     .padStart(6, "0")}`;
 }
@@ -45,10 +41,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-type NotificationMode =
-  | "off"
-  | "important"
-  | "all";
+type NotificationMode = "off" | "important" | "all";
 
 type NotificationState =
   | "loading"
@@ -59,8 +52,7 @@ type NotificationState =
   | "ios-install-required"
   | "ios-update-required";
 
-type NotificationNote =
-  | "notificationReconfirm";
+type NotificationNote = "notificationReconfirm";
 
 export function SettingsPanel({
   channelId,
@@ -74,98 +66,58 @@ export function SettingsPanel({
   const { status } = useSession();
 
   const [fontSize, setFontSize] = useState(() => {
-    if (typeof window === "undefined") {
-      return 15;
-    }
+    if (typeof window === "undefined") return 15;
 
     return (
       parseInt(
-        getComputedStyle(
-          document.documentElement,
-        ).getPropertyValue(
+        getComputedStyle(document.documentElement).getPropertyValue(
           "--bubble-font-size",
         ),
       ) || 15
     );
   });
 
-  const [selectedColor, setSelectedColor] =
-    useState(currentColor);
+  const [selectedColor, setSelectedColor] = useState(currentColor);
+  const colorInputRef = useRef<HTMLInputElement>(null);
 
-  const colorInputRef =
-    useRef<HTMLInputElement>(null);
-
-  const [
-    notificationState,
-    setNotificationState,
-  ] =
+  const [notificationState, setNotificationState] =
     useState<NotificationState>("loading");
 
-  const [
-    notificationBusy,
-    setNotificationBusy,
-  ] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
 
-  const [
-    notificationNote,
-    setNotificationNote,
-  ] =
+  const [notificationNote, setNotificationNote] =
     useState<NotificationNote | null>(null);
 
-  const [
-    showIosInstallGuide,
-    setShowIosInstallGuide,
-  ] = useState(false);
-
-  const [
-    showNotificationInfo,
-    setShowNotificationInfo,
-  ] = useState(false);
+  const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
+  const [showNotificationInfo, setShowNotificationInfo] = useState(false);
 
   useEffect(() => {
-    const handleFontSize = (
-      event: Event,
-    ) => {
-      const size = (
-        event as CustomEvent<{
-          size: number;
-        }>
-      ).detail?.size;
+    const handleFontSize = (event: Event) => {
+      const size = (event as CustomEvent<{ size: number }>).detail?.size;
 
       if (size) {
         setFontSize(size);
       }
     };
 
-    window.addEventListener(
-      "font-size-changed",
-      handleFontSize,
-    );
+    window.addEventListener("font-size-changed", handleFontSize);
 
-    return () =>
-      window.removeEventListener(
-        "font-size-changed",
-        handleFontSize,
-      );
+    return () => {
+      window.removeEventListener("font-size-changed", handleFontSize);
+    };
   }, []);
 
   useEffect(() => {
-    if (
-      !notificationsAvailable ||
-      status !== "authenticated"
-    ) {
+    if (!notificationsAvailable || status !== "authenticated") {
       return;
     }
 
-    const support =
-      getWebPushSupport();
+    const support = getWebPushSupport();
 
     if (
       support === "unsupported" ||
-      support ===
-        "ios-install-required" ||
-      support ===
-        "ios-update-required"
+      support === "ios-install-required" ||
+      support === "ios-update-required"
     ) {
       setNotificationState(support);
       return;
@@ -176,15 +128,12 @@ export function SettingsPanel({
       return;
     }
 
-    const controller =
-      new AbortController();
+    const controller = new AbortController();
 
     setNotificationState("loading");
 
     fetch(
-      `/api/notifications/preferences?channel=${encodeURIComponent(
-        channelId,
-      )}`,
+      `/api/notifications/preferences?channel=${encodeURIComponent(channelId)}`,
       {
         credentials: "same-origin",
         cache: "no-store",
@@ -192,9 +141,7 @@ export function SettingsPanel({
       },
     )
       .then(async (response) => {
-        const body = (await response
-          .json()
-          .catch(() => null)) as {
+        const body = (await response.json().catch(() => null)) as {
           preference?: {
             mode?: unknown;
             requiresReconfirmation?: unknown;
@@ -208,161 +155,109 @@ export function SettingsPanel({
         }
 
         setNotificationState(
-          body?.preference?.mode ===
-            "all"
+          body?.preference?.mode === "all"
             ? "all"
-            : body?.preference
-                  ?.mode ===
-                "important"
+            : body?.preference?.mode === "important"
               ? "important"
               : "off",
         );
 
-        if (
-          body?.preference
-            ?.requiresReconfirmation ===
-          true
-        ) {
-          setNotificationNote(
-            "notificationReconfirm",
-          );
+        if (body?.preference?.requiresReconfirmation === true) {
+          setNotificationNote("notificationReconfirm");
         }
       })
-      .catch(
-        (error: unknown) => {
-          if (
-            error instanceof
-              DOMException &&
-            error.name ===
-              "AbortError"
-          ) {
-            return;
-          }
-
-          setNotificationState(
-            "error",
-          );
-        },
-      );
-
-    return () =>
-      controller.abort();
-  }, [
-    channelId,
-    notificationsAvailable,
-    status,
-  ]);
-
-  const updateNotificationPreference =
-    async (
-      mode: NotificationMode,
-    ) => {
-      const response = await fetch(
-        "/api/notifications/preferences",
-        {
-          method: "PUT",
-          credentials: "same-origin",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            channel_id: channelId,
-            mode,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `notification_preference_failed:${response.status}`,
-        );
-      }
-    };
-
-  const selectNotificationMode =
-    async (
-      mode: NotificationMode,
-    ) => {
-      if (
-        notificationBusy ||
-        notificationState ===
-          "loading"
-      ) {
-        return;
-      }
-
-      if (
-        notificationState === mode
-      ) {
-        return;
-      }
-
-      setNotificationBusy(true);
-      setNotificationNote(null);
-
-      try {
-        if (mode === "off") {
-          await updateNotificationPreference(
-            "off",
-          );
-
-          setNotificationState(
-            "off",
-          );
-
+      .catch((error: unknown) => {
+        if (
+          error instanceof DOMException &&
+          error.name === "AbortError"
+        ) {
           return;
         }
 
-        await subscribeCurrentBrowserToPush();
+        setNotificationState("error");
+      });
 
-        await updateNotificationPreference(
-          mode,
-        );
-
-        setNotificationState(mode);
-      } catch (error) {
-        const support =
-          getWebPushSupport();
-
-        if (
-          support === "blocked" ||
-          (error instanceof Error &&
-            error.message ===
-              "push_permission_not_granted")
-        ) {
-          setNotificationState(
-            "blocked",
-          );
-        } else if (
-          support === "unsupported" ||
-          support ===
-            "ios-install-required" ||
-          support ===
-            "ios-update-required"
-        ) {
-          setNotificationState(
-            support,
-          );
-        } else {
-          setNotificationState(
-            "error",
-          );
-        }
-      } finally {
-        setNotificationBusy(false);
-      }
+    return () => {
+      controller.abort();
     };
+  }, [channelId, notificationsAvailable, status]);
 
-  const changeFontSize = (
-    dir: number,
+  const updateNotificationPreference = async (
+    mode: NotificationMode,
   ) => {
+    const response = await fetch("/api/notifications/preferences", {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        channel_id: channelId,
+        mode,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `notification_preference_failed:${response.status}`,
+      );
+    }
+  };
+
+  const selectNotificationMode = async (
+    mode: NotificationMode,
+  ) => {
+    if (
+      notificationBusy ||
+      notificationState === "loading"
+    ) {
+      return;
+    }
+
+    if (notificationState === mode) {
+      return;
+    }
+
+    setNotificationBusy(true);
+    setNotificationNote(null);
+
+    try {
+      if (mode === "off") {
+        await updateNotificationPreference("off");
+        setNotificationState("off");
+        return;
+      }
+
+      await subscribeCurrentBrowserToPush();
+      await updateNotificationPreference(mode);
+      setNotificationState(mode);
+    } catch (error) {
+      const support = getWebPushSupport();
+
+      if (
+        support === "blocked" ||
+        (error instanceof Error &&
+          error.message === "push_permission_not_granted")
+      ) {
+        setNotificationState("blocked");
+      } else if (
+        support === "unsupported" ||
+        support === "ios-install-required" ||
+        support === "ios-update-required"
+      ) {
+        setNotificationState(support);
+      } else {
+        setNotificationState("error");
+      }
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
+
+  const changeFontSize = (dir: number) => {
     const newSize = Math.max(
       12,
-      Math.min(
-        20,
-        fontSize + dir,
-      ),
+      Math.min(20, fontSize + dir),
     );
 
     setFontSize(newSize);
@@ -373,15 +268,10 @@ export function SettingsPanel({
     );
   };
 
-  const changeColor = (
-    color: string,
-  ) => {
-    const normalizedColor =
-      normalizeBubbleColor(color);
+  const changeColor = (color: string) => {
+    const normalizedColor = normalizeBubbleColor(color);
 
-    setSelectedColor(
-      normalizedColor,
-    );
+    setSelectedColor(normalizedColor);
 
     localStorage.setItem(
       `bubbleColor_${channelId}`,
@@ -393,32 +283,22 @@ export function SettingsPanel({
       normalizedColor,
     );
 
-    onColorChange(
-      normalizedColor,
-    );
+    onColorChange(normalizedColor);
   };
 
   const isCustomColor =
-    !BUBBLE_COLORS.includes(
-      selectedColor,
-    );
+    !BUBBLE_COLORS.includes(selectedColor);
 
   return (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center p-6 animate-[ctxFade_0.2s_ease]"
       style={{
-        background:
-          "rgba(0,0,0,.4)",
-        backdropFilter:
-          "blur(6px)",
-        WebkitBackdropFilter:
-          "blur(6px)",
+        background: "rgba(0,0,0,.4)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
       }}
       onClick={(e) => {
-        if (
-          e.target ===
-          e.currentTarget
-        ) {
+        if (e.target === e.currentTarget) {
           onClose();
         }
       }}
@@ -427,27 +307,22 @@ export function SettingsPanel({
         className="w-full max-w-[320px] rounded-[16px] overflow-hidden"
         style={{
           background: "var(--bg)",
-          color:
-            "var(--gray-text)",
-          boxShadow:
-            "0 12px 40px rgba(0,0,0,.25)",
+          color: "var(--gray-text)",
+          boxShadow: "0 12px 40px rgba(0,0,0,.25)",
         }}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between"
           style={{
-            padding:
-              "16px 18px",
-            borderBottom:
-              "0.5px solid var(--hairline)",
+            padding: "16px 18px",
+            borderBottom: "0.5px solid var(--hairline)",
           }}
         >
           <h3
             className="m-0 font-medium"
             style={{
-              fontSize:
-                "var(--bubble-font-size, 16px)",
+              fontSize: "var(--bubble-font-size, 16px)",
             }}
           >
             {t("settings")}
@@ -456,8 +331,7 @@ export function SettingsPanel({
           <button
             className="bg-transparent border-none cursor-pointer"
             style={{
-              color:
-                "var(--meta)",
+              color: "var(--meta)",
               padding: "4px 8px",
             }}
             onClick={onClose}
@@ -467,24 +341,15 @@ export function SettingsPanel({
         </div>
 
         {/* Body */}
-        <div
-          style={{
-            padding:
-              "12px 18px",
-          }}
-        >
+        <div style={{ padding: "12px 18px" }}>
           {/* Font size */}
           <div
             className="flex items-start justify-between"
-            style={{
-              padding:
-                "12px 0",
-            }}
+            style={{ padding: "12px 0" }}
           >
             <span
               style={{
-                fontSize:
-                  "var(--bubble-font-size, 15px)",
+                fontSize: "var(--bubble-font-size, 15px)",
                 fontWeight: 400,
               }}
             >
@@ -503,38 +368,24 @@ export function SettingsPanel({
                 style={{
                   width: "40px",
                   height: "32px",
-                  border:
-                    "1px solid var(--input-border)",
-                  background:
-                    "var(--input-bg)",
-                  color:
-                    "var(--gray-text)",
-                  borderRadius:
-                    "8px",
-                  fontSize:
-                    "var(--bubble-font-size, 13px)",
-                  fontFamily:
-                    "inherit",
+                  border: "1px solid var(--input-border)",
+                  background: "var(--input-bg)",
+                  color: "var(--gray-text)",
+                  borderRadius: "8px",
+                  fontSize: "var(--bubble-font-size, 13px)",
+                  fontFamily: "inherit",
                 }}
-                onClick={() =>
-                  changeFontSize(
-                    -1,
-                  )
-                }
+                onClick={() => changeFontSize(-1)}
               >
                 A-
               </button>
 
               <span
                 style={{
-                  fontSize:
-                    "var(--bubble-font-size, 14px)",
-                  color:
-                    "var(--meta)",
-                  minWidth:
-                    "36px",
-                  textAlign:
-                    "center",
+                  fontSize: "var(--bubble-font-size, 14px)",
+                  color: "var(--meta)",
+                  minWidth: "36px",
+                  textAlign: "center",
                 }}
               >
                 {fontSize}px
@@ -545,24 +396,14 @@ export function SettingsPanel({
                 style={{
                   width: "40px",
                   height: "32px",
-                  border:
-                    "1px solid var(--input-border)",
-                  background:
-                    "var(--input-bg)",
-                  color:
-                    "var(--gray-text)",
-                  borderRadius:
-                    "8px",
-                  fontSize:
-                    "var(--bubble-font-size, 13px)",
-                  fontFamily:
-                    "inherit",
+                  border: "1px solid var(--input-border)",
+                  background: "var(--input-bg)",
+                  color: "var(--gray-text)",
+                  borderRadius: "8px",
+                  fontSize: "var(--bubble-font-size, 13px)",
+                  fontFamily: "inherit",
                 }}
-                onClick={() =>
-                  changeFontSize(
-                    1,
-                  )
-                }
+                onClick={() => changeFontSize(1)}
               >
                 A+
               </button>
@@ -572,15 +413,11 @@ export function SettingsPanel({
           {/* Bubble color */}
           <div
             className="flex items-start justify-between"
-            style={{
-              padding:
-                "12px 0",
-            }}
+            style={{ padding: "12px 0" }}
           >
             <span
               style={{
-                fontSize:
-                  "var(--bubble-font-size, 15px)",
+                fontSize: "var(--bubble-font-size, 15px)",
                 fontWeight: 400,
               }}
             >
@@ -590,48 +427,34 @@ export function SettingsPanel({
             <div
               className="grid justify-items-center"
               style={{
-                gridTemplateColumns:
-                  "repeat(4, 1fr)",
+                gridTemplateColumns: "repeat(4, 1fr)",
                 gap: "6px",
                 width: "140px",
                 padding: "2px",
               }}
             >
-              {BUBBLE_COLORS.map(
-                (color) => (
-                  <button
-                    key={color}
-                    className="cursor-pointer"
-                    style={{
-                      width:
-                        "calc(var(--bubble-font-size, 17px) + 9px)",
-                      height:
-                        "calc(var(--bubble-font-size, 17px) + 9px)",
-                      borderRadius:
-                        "50%",
-                      background:
-                        color,
-                      border:
-                        "3px solid transparent",
-                      outline:
-                        selectedColor ===
-                        color
-                          ? `3px solid ${darkenColor(
-                              color,
-                              50,
-                            )}`
-                          : "3px solid transparent",
-                      transition:
-                        "outline-color .15s, transform .15s",
-                    }}
-                    onClick={() =>
-                      changeColor(
-                        color,
-                      )
-                    }
-                  />
-                ),
-              )}
+              {BUBBLE_COLORS.map((color) => (
+                <button
+                  key={color}
+                  className="cursor-pointer"
+                  style={{
+                    width:
+                      "calc(var(--bubble-font-size, 17px) + 9px)",
+                    height:
+                      "calc(var(--bubble-font-size, 17px) + 9px)",
+                    borderRadius: "50%",
+                    background: color,
+                    border: "3px solid transparent",
+                    outline:
+                      selectedColor === color
+                        ? `3px solid ${darkenColor(color, 50)}`
+                        : "3px solid transparent",
+                    transition:
+                      "outline-color .15s, transform .15s",
+                  }}
+                  onClick={() => changeColor(color)}
+                />
+              ))}
 
               {/* Custom color picker */}
               <button
@@ -641,37 +464,27 @@ export function SettingsPanel({
                     "calc(var(--bubble-font-size, 17px) + 9px)",
                   height:
                     "calc(var(--bubble-font-size, 17px) + 9px)",
-                  borderRadius:
-                    "50%",
+                  borderRadius: "50%",
                   background:
                     "conic-gradient(red,orange,yellow,green,cyan,blue,violet,red)",
-                  border:
-                    "3px solid transparent",
-                  outline:
-                    isCustomColor
-                      ? `3px solid ${darkenColor(
-                          selectedColor,
-                          50,
-                        )}`
-                      : "3px solid transparent",
+                  border: "3px solid transparent",
+                  outline: isCustomColor
+                    ? `3px solid ${darkenColor(
+                        selectedColor,
+                        50,
+                      )}`
+                    : "3px solid transparent",
                   transition:
                     "outline-color .15s, transform .15s",
                 }}
               >
                 <input
-                  ref={
-                    colorInputRef
-                  }
+                  ref={colorInputRef}
                   type="color"
-                  value={
-                    selectedColor
-                  }
+                  value={selectedColor}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={(e) =>
-                    changeColor(
-                      e.target
-                        .value,
-                    )
+                    changeColor(e.target.value)
                   }
                 />
               </button>
@@ -682,29 +495,25 @@ export function SettingsPanel({
           <div
             style={{
               height: "1px",
-              background:
-                "var(--hairline)",
+              background: "var(--hairline)",
               margin: "8px 0",
             }}
           />
 
           {notificationsAvailable &&
-            status ===
-              "authenticated" && (
+            status === "authenticated" && (
               <>
                 <div
                   className="flex items-start justify-between"
                   style={{
-                    padding:
-                      "12px 0",
+                    padding: "12px 0",
                     gap: "12px",
                   }}
                 >
                   <div
                     style={{
                       minWidth: 0,
-                      paddingTop:
-                        "2px",
+                      paddingTop: "2px",
                     }}
                   >
                     <div
@@ -713,14 +522,11 @@ export function SettingsPanel({
                         gap: "5px",
                         fontSize:
                           "var(--bubble-font-size, 15px)",
-                        fontWeight:
-                          400,
+                        fontWeight: 400,
                       }}
                     >
                       <span>
-                        {t(
-                          "notifications",
-                        )}
+                        {t("notifications")}
                       </span>
 
                       <button
@@ -729,67 +535,46 @@ export function SettingsPanel({
                           "notificationInfoTitle",
                         )}
                         onClick={() =>
-                          setShowNotificationInfo(
-                            true,
-                          )
+                          setShowNotificationInfo(true)
                         }
                         style={{
-                          width:
-                            "18px",
-                          height:
-                            "18px",
+                          width: "18px",
+                          height: "18px",
                           padding: 0,
                           border:
                             "1.4px solid currentColor",
-                          borderRadius:
-                            "50%",
-                          background:
-                            "transparent",
-                          color:
-                            "var(--meta)",
-                          fontFamily:
-                            "inherit",
-                          fontSize:
-                            "11px",
-                          fontWeight:
-                            700,
-                          lineHeight:
-                            "16px",
-                          cursor:
-                            "pointer",
+                          borderRadius: "50%",
+                          background: "transparent",
+                          color: "var(--meta)",
+                          fontFamily: "inherit",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          lineHeight: "16px",
+                          cursor: "pointer",
                         }}
                       >
                         i
                       </button>
                     </div>
 
-                    {(notificationState ===
-                      "unsupported" ||
+                    {(notificationState === "unsupported" ||
                       notificationState ===
                         "ios-install-required" ||
                       notificationState ===
                         "ios-update-required" ||
-                      notificationState ===
-                        "blocked" ||
-                      notificationState ===
-                        "error") && (
+                      notificationState === "blocked" ||
+                      notificationState === "error") && (
                       <div
                         style={{
-                          marginTop:
-                            "4px",
-                          color:
-                            "var(--meta)",
+                          marginTop: "4px",
+                          color: "var(--meta)",
                           fontSize:
                             "calc(var(--bubble-font-size) - 5px)",
-                          lineHeight:
-                            1.35,
+                          lineHeight: 1.35,
                         }}
                       >
-                        {notificationState ===
-                        "unsupported"
-                          ? t(
-                              "notificationUnsupported",
-                            )
+                        {notificationState === "unsupported"
+                          ? t("notificationUnsupported")
                           : notificationState ===
                               "ios-install-required"
                             ? t(
@@ -814,19 +599,14 @@ export function SettingsPanel({
                     {notificationNote && (
                       <div
                         style={{
-                          marginTop:
-                            "4px",
-                          color:
-                            "var(--bubble-sent)",
+                          marginTop: "4px",
+                          color: "var(--bubble-sent)",
                           fontSize:
                             "calc(var(--bubble-font-size) - 5px)",
-                          lineHeight:
-                            1.35,
+                          lineHeight: 1.35,
                         }}
                       >
-                        {t(
-                          notificationNote,
-                        )}
+                        {t(notificationNote)}
                       </div>
                     )}
 
@@ -836,32 +616,23 @@ export function SettingsPanel({
                         type="button"
                         onClick={() =>
                           setShowIosInstallGuide(
-                            (
-                              visible,
-                            ) =>
-                              !visible,
+                            (visible) => !visible,
                           )
                         }
                         aria-expanded={
                           showIosInstallGuide
                         }
                         style={{
-                          display:
-                            "block",
-                          marginTop:
-                            "7px",
+                          display: "block",
+                          marginTop: "7px",
                           padding: 0,
                           border: 0,
-                          background:
-                            "transparent",
-                          color:
-                            "var(--bubble-sent)",
+                          background: "transparent",
+                          color: "var(--bubble-sent)",
                           fontSize:
                             "calc(var(--bubble-font-size) - 4px)",
-                          fontWeight:
-                            600,
-                          cursor:
-                            "pointer",
+                          fontWeight: 600,
+                          cursor: "pointer",
                         }}
                       >
                         {t(
@@ -878,20 +649,15 @@ export function SettingsPanel({
                       <div
                         className="relative flex"
                         style={{
-                          width:
-                            "140px",
-                          height:
-                            "36px",
+                          width: "140px",
+                          height: "36px",
                           flexShrink: 0,
-                          padding:
-                            "3px",
-                          borderRadius:
-                            "18px",
+                          padding: "3px",
+                          borderRadius: "18px",
                           background:
                             notificationState ===
                               "important" ||
-                            notificationState ===
-                              "all"
+                            notificationState === "all"
                               ? "var(--bubble-sent)"
                               : "var(--input-border)",
                           boxShadow:
@@ -908,20 +674,16 @@ export function SettingsPanel({
                             left: "3px",
                             width:
                               "calc((100% - 6px) / 3)",
-                            height:
-                              "30px",
-                            borderRadius:
-                              "15px",
-                            background:
-                              "#fff",
+                            height: "30px",
+                            borderRadius: "15px",
+                            background: "#fff",
                             boxShadow:
                               "0 1px 3px rgba(0,0,0,.22), 0 1px 1px rgba(0,0,0,.08)",
                             transform: `translateX(${
                               notificationState ===
                               "important"
                                 ? "100%"
-                                : notificationState ===
-                                    "all"
+                                : notificationState === "all"
                                   ? "200%"
                                   : "0"
                             })`,
@@ -936,90 +698,70 @@ export function SettingsPanel({
                             "important",
                             "all",
                           ] as NotificationMode[]
-                        ).map(
-                          (mode) => {
-                            const selected =
-                              notificationState ===
-                              mode;
+                        ).map((mode) => {
+                          const selected =
+                            notificationState === mode;
 
-                            const enabled =
-                              notificationState ===
-                                "important" ||
-                              notificationState ===
-                                "all";
+                          const enabled =
+                            notificationState ===
+                              "important" ||
+                            notificationState === "all";
 
-                            return (
-                              <button
-                                key={
-                                  mode
-                                }
-                                type="button"
-                                aria-pressed={
-                                  selected
-                                }
-                                disabled={
-                                  notificationBusy ||
-                                  notificationState ===
-                                    "loading" ||
-                                  notificationState ===
-                                    "unsupported" ||
-                                  notificationState ===
-                                    "blocked"
-                                }
-                                onClick={() => {
-                                  void selectNotificationMode(
-                                    mode,
-                                  );
-                                }}
-                                style={{
-                                  position:
-                                    "relative",
-                                  zIndex:
-                                    1,
-                                  padding:
-                                    0,
-                                  flex: 1,
-                                  border:
-                                    0,
-                                  borderRadius:
-                                    "15px",
-                                  background:
-                                    "transparent",
-                                  color:
-                                    selected
-                                      ? "#202124"
-                                      : enabled
-                                        ? "rgba(255,255,255,.9)"
-                                        : "var(--meta)",
-                                  fontFamily:
-                                    "inherit",
-                                  fontSize:
-                                    "calc(var(--bubble-font-size) - 5px)",
-                                  fontWeight:
-                                    selected
-                                      ? 600
-                                      : 400,
-                                  cursor:
-                                    notificationBusy
-                                      ? "wait"
-                                      : "pointer",
-                                  transition:
-                                    "color .18s ease",
-                                }}
-                              >
-                                {t(
-                                  mode ===
-                                    "off"
-                                    ? "notificationOff"
-                                    : mode ===
-                                        "important"
-                                      ? "notificationImportant"
-                                      : "notificationAll",
-                                )}
-                              </button>
-                            );
-                          },
-                        )}
+                          return (
+                            <button
+                              key={mode}
+                              type="button"
+                              aria-pressed={selected}
+                              disabled={
+                                notificationBusy ||
+                                notificationState ===
+                                  "loading" ||
+                                notificationState ===
+                                  "unsupported" ||
+                                notificationState ===
+                                  "blocked"
+                              }
+                              onClick={() => {
+                                void selectNotificationMode(
+                                  mode,
+                                );
+                              }}
+                              style={{
+                                position: "relative",
+                                zIndex: 1,
+                                padding: 0,
+                                flex: 1,
+                                border: 0,
+                                borderRadius: "15px",
+                                background: "transparent",
+                                color: selected
+                                  ? "#202124"
+                                  : enabled
+                                    ? "rgba(255,255,255,.9)"
+                                    : "var(--meta)",
+                                fontFamily: "inherit",
+                                fontSize:
+                                  "calc(var(--bubble-font-size) - 5px)",
+                                fontWeight: selected
+                                  ? 600
+                                  : 400,
+                                cursor: notificationBusy
+                                  ? "wait"
+                                  : "pointer",
+                                transition:
+                                  "color .18s ease",
+                              }}
+                            >
+                              {t(
+                                mode === "off"
+                                  ? "notificationOff"
+                                  : mode === "important"
+                                    ? "notificationImportant"
+                                    : "notificationAll",
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                 </div>
@@ -1029,20 +771,14 @@ export function SettingsPanel({
                   showIosInstallGuide && (
                     <div
                       style={{
-                        margin:
-                          "0 0 12px",
-                        padding:
-                          "12px 14px",
-                        borderRadius:
-                          "14px",
-                        background:
-                          "var(--input-bg)",
-                        color:
-                          "var(--text)",
+                        margin: "0 0 12px",
+                        padding: "12px 14px",
+                        borderRadius: "14px",
+                        background: "var(--input-bg)",
+                        color: "var(--text)",
                         fontSize:
                           "calc(var(--bubble-font-size) - 4px)",
-                        lineHeight:
-                          1.5,
+                        lineHeight: 1.5,
                       }}
                     >
                       <div>
@@ -1052,24 +788,14 @@ export function SettingsPanel({
                         )}
                       </div>
 
-                      <div
-                        style={{
-                          marginTop:
-                            "5px",
-                        }}
-                      >
+                      <div style={{ marginTop: "5px" }}>
                         2.{" "}
                         {t(
                           "notificationInstallStep2",
                         )}
                       </div>
 
-                      <div
-                        style={{
-                          marginTop:
-                            "5px",
-                        }}
-                      >
+                      <div style={{ marginTop: "5px" }}>
                         3.{" "}
                         {t(
                           "notificationInstallStep3",
@@ -1077,17 +803,6 @@ export function SettingsPanel({
                       </div>
                     </div>
                   )}
-
-                <div
-                  style={{
-                    height:
-                      "1px",
-                    background:
-                      "var(--hairline)",
-                    margin:
-                      "8px 0",
-                  }}
-                />
               </>
             )}
 
@@ -1096,8 +811,7 @@ export function SettingsPanel({
               <div
                 style={{
                   height: "1px",
-                  background:
-                    "var(--hairline)",
+                  background: "var(--hairline)",
                   margin: "8px 0",
                 }}
               />
@@ -1106,12 +820,9 @@ export function SettingsPanel({
                 type="button"
                 className="w-full border-none bg-transparent cursor-pointer flex items-center justify-between"
                 style={{
-                  padding:
-                    "12px 0",
-                  color:
-                    "var(--gray-text)",
-                  fontFamily:
-                    "inherit",
+                  padding: "12px 0",
+                  color: "var(--gray-text)",
+                  fontFamily: "inherit",
                 }}
                 onClick={onAdmin}
               >
@@ -1121,17 +832,13 @@ export function SettingsPanel({
                       "var(--bubble-font-size, 15px)",
                   }}
                 >
-                  {t(
-                    "adminSettings",
-                  )}
+                  {t("adminSettings")}
                 </span>
 
                 <span
                   style={{
-                    color:
-                      "var(--meta)",
-                    fontSize:
-                      "20px",
+                    color: "var(--meta)",
+                    fontSize: "20px",
                     lineHeight: 1,
                   }}
                 >
@@ -1147,21 +854,15 @@ export function SettingsPanel({
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center p-6 animate-[ctxFade_0.16s_ease]"
           style={{
-            background:
-              "rgba(0,0,0,.32)",
-            backdropFilter:
-              "blur(3px)",
-            WebkitBackdropFilter:
-              "blur(3px)",
+            background: "rgba(0,0,0,.32)",
+            backdropFilter: "blur(3px)",
+            WebkitBackdropFilter: "blur(3px)",
           }}
           onClick={(event) => {
             if (
-              event.target ===
-              event.currentTarget
+              event.target === event.currentTarget
             ) {
-              setShowNotificationInfo(
-                false,
-              );
+              setShowNotificationInfo(false);
             }
           }}
         >
@@ -1171,10 +872,8 @@ export function SettingsPanel({
             aria-labelledby="notification-info-title"
             className="w-full max-w-[300px] rounded-[16px] overflow-hidden"
             style={{
-              background:
-                "var(--bg)",
-              color:
-                "var(--gray-text)",
+              background: "var(--bg)",
+              color: "var(--gray-text)",
               boxShadow:
                 "0 14px 45px rgba(0,0,0,.25)",
             }}
@@ -1182,8 +881,7 @@ export function SettingsPanel({
             <div
               className="flex items-center justify-between"
               style={{
-                padding:
-                  "14px 16px",
+                padding: "14px 16px",
                 borderBottom:
                   "0.5px solid var(--hairline)",
               }}
@@ -1196,31 +894,21 @@ export function SettingsPanel({
                     "var(--bubble-font-size, 15px)",
                 }}
               >
-                {t(
-                  "notificationInfoTitle",
-                )}
+                {t("notificationInfoTitle")}
               </h4>
 
               <button
                 type="button"
-                aria-label={t(
-                  "close",
-                )}
+                aria-label={t("close")}
                 onClick={() =>
-                  setShowNotificationInfo(
-                    false,
-                  )
+                  setShowNotificationInfo(false)
                 }
                 style={{
-                  padding:
-                    "4px 7px",
+                  padding: "4px 7px",
                   border: 0,
-                  background:
-                    "transparent",
-                  color:
-                    "var(--meta)",
-                  cursor:
-                    "pointer",
+                  background: "transparent",
+                  color: "var(--meta)",
+                  cursor: "pointer",
                 }}
               >
                 <CloseIcon />
@@ -1229,8 +917,7 @@ export function SettingsPanel({
 
             <div
               style={{
-                padding:
-                  "8px 16px 14px",
+                padding: "8px 16px 14px",
               }}
             >
               {(
@@ -1243,8 +930,7 @@ export function SettingsPanel({
                 <div
                   key={mode}
                   style={{
-                    padding:
-                      "9px 0",
+                    padding: "9px 0",
                     borderBottom:
                       mode === "all"
                         ? 0
@@ -1255,16 +941,13 @@ export function SettingsPanel({
                     style={{
                       fontSize:
                         "calc(var(--bubble-font-size) - 1px)",
-                      fontWeight:
-                        600,
+                      fontWeight: 600,
                     }}
                   >
                     {t(
-                      mode ===
-                        "off"
+                      mode === "off"
                         ? "notificationOff"
-                        : mode ===
-                            "important"
+                        : mode === "important"
                           ? "notificationImportant"
                           : "notificationAll",
                     )}
@@ -1272,22 +955,17 @@ export function SettingsPanel({
 
                   <div
                     style={{
-                      marginTop:
-                        "3px",
-                      color:
-                        "var(--meta)",
+                      marginTop: "3px",
+                      color: "var(--meta)",
                       fontSize:
                         "calc(var(--bubble-font-size) - 4px)",
-                      lineHeight:
-                        1.4,
+                      lineHeight: 1.4,
                     }}
                   >
                     {t(
-                      mode ===
-                        "off"
+                      mode === "off"
                         ? "notificationOffDesc"
-                        : mode ===
-                            "important"
+                        : mode === "important"
                           ? onAdmin
                             ? "ownerImportantNotificationsDesc"
                             : "memberImportantNotificationsDesc"

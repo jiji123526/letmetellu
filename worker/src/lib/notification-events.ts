@@ -81,8 +81,8 @@ function payloadFor(input: {
   switch (input.event) {
     case "live_start":
       notificationText = ko
-        ? `${channel} ${input.liveTitle || "라이브"} 라이브 세션이 시작됐어요`
-        : `${channel} ${input.liveTitle || "Live"} live session has started`;
+        ? `${channel} 라이브 세션이 시작됐어요`
+        : `${channel} A live session has started`;
       break;
 
     case "dm":
