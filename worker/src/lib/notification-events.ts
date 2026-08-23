@@ -97,19 +97,19 @@ function payloadFor(input: {
 
     case "message_reply":
       notificationText = ko
-        ? `${channel} 내 메시지에 답글이 달렸어요`
+        ? `${channel} 새 답글이 달렸어요`
         : `${channel} Someone replied to your message`;
       break;
 
     case "dm":
       notificationText = ko
-        ? `${channel} 새 DM이 도착했어요`
+        ? `${channel} 새 비밀 메시지가 도착했어요`
         : `${channel} You received a new DM`;
       break;
 
     case "message_report":
       notificationText = ko
-        ? `${channel} 새 메시지 신고가 접수됐어요`
+        ? `${channel} 메시지 신고가 접수됐어요`
         : `${channel} A message was reported`;
       break;
 
