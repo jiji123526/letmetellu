@@ -121,7 +121,7 @@ export function useChatLiveSession({
   const liveNoticeDismissedKey = `noticeDismissed_${channelId}_live`;
 
   const [liveActive, setLiveActive] = useState(() => readStoredFlag(liveActiveKey));
-  const [inLiveMode, setInLiveMode] = useState(() => readStoredFlag(inLiveModeKey));
+  const [inLiveMode, setInLiveMode] = useState(false);
   const [liveTitle, setLiveTitle] = useState(() => readStoredValue(liveTitleKey) || texts.liveTitle);
   const [liveSessionId, setLiveSessionId] = useState(() => readStoredValue(liveSessionKey));
   const [liveExpiresAt, setLiveExpiresAt] = useState<string | null>(null);
@@ -138,6 +138,10 @@ export function useChatLiveSession({
   const liveExpiryCheckInFlightRef = useRef(false);
   const previousLiveTimeLeftRef = useRef<number | null>(null);
   const inLiveModeRef = useRef(inLiveMode);
+
+  useEffect(() => {
+    localStorage.setItem(inLiveModeKey, "false");
+  }, [inLiveModeKey]);
 
   const clearLiveNoticeTimeout = useCallback(() => {
     if (!liveCountdownTimeoutRef.current) return;
