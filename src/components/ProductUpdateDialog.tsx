@@ -35,23 +35,20 @@ export function ProductUpdateDialog() {
     ? {
         eyebrow: "NEW",
         title: "알림 기능이 추가됐어요",
-        description: "이제 채널의 중요한 소식을 푸시 알림으로 받아보세요.",
+        description:
+          "로그인한 사용자라면 이제 채널의 중요한 소식을 푸시 알림으로 받아볼 수 있어요.",
 
         importantTitle: "중요 알림",
         importantBody:
-          "멤버는 방장 메시지·라이브 시작, 방장은 새 DM·신고 알림을 받아요.",
+          "멤버는 방장 메시지와 라이브 시작을, 방장은 새 DM과 신고 알림을 받을 수 있어요.",
 
         allTitle: "모든 알림",
-        allBody: "중요 알림과 함께 일반 채팅 메시지도 알려드려요.",
+        allBody:
+          "중요 알림에 더해 채널의 일반 메시지 알림도 받을 수 있어요.",
 
         settingsTitle: "채널별로 설정",
-        settingsBody: "채널 설정에서 끔 · 중요 · 모두 중 선택할 수 있어요.",
-
-        deviceTitle: "기기별 안내",
-        iosBody:
-          "iPhone/iPad: Safari에서 홈 화면에 yap.을 추가한 뒤 실행해 주세요.",
-        androidBody:
-          "Android: Chrome·Samsung Internet에서 브라우저 알림을 허용해 주세요.",
+        settingsBody:
+          "각 채널의 설정에서 알림을 끔 · 중요 · 모두 중 원하는 방식으로 선택할 수 있어요.",
 
         confirm: "확인",
       }
@@ -59,25 +56,19 @@ export function ProductUpdateDialog() {
         eyebrow: "NEW",
         title: "Notifications are here",
         description:
-          "Get push notifications for important activity in your channels.",
+          "Signed-in users can now receive push notifications for important activity in their channels.",
 
         importantTitle: "Important",
         importantBody:
-          "Members get owner and live alerts. Owners also get DM and report alerts.",
+          "Members can receive owner messages and live-start alerts. Owners can receive new DM and report alerts.",
 
         allTitle: "All notifications",
         allBody:
-          "Receive important alerts plus regular channel messages.",
+          "Receive important notifications as well as regular channel message alerts.",
 
         settingsTitle: "Choose per channel",
         settingsBody:
-          "Select Off, Important, or All in each channel's settings.",
-
-        deviceTitle: "Device setup",
-        iosBody:
-          "iPhone/iPad: Add yap. to your Home Screen from Safari, then open it there.",
-        androidBody:
-          "Android: Allow browser notifications in Chrome or Samsung Internet.",
+          "Open a channel's settings and choose Off, Important, or All at any time.",
 
         confirm: "Got it",
       };
@@ -98,7 +89,7 @@ export function ProductUpdateDialog() {
       role="presentation"
     >
       <section
-        className="flex max-h-[82dvh] w-full max-w-[340px] flex-col overflow-hidden"
+        className="w-full max-w-[340px] overflow-hidden"
         style={{
           background: "var(--bg, #fff)",
           border: "0.5px solid var(--hairline, rgba(60,60,67,.22))",
@@ -110,144 +101,116 @@ export function ProductUpdateDialog() {
         aria-modal="true"
         aria-labelledby="product-update-title"
       >
-        <div className="overflow-y-auto">
-          {/* Header */}
-          <div className="px-5 pb-4 pt-5 text-center">
-            <div
-              className="relative mx-auto mb-3 flex h-[54px] w-[54px] items-center justify-center rounded-[18px]"
+        <div className="px-5 pb-4 pt-5 text-center">
+          <div
+            className="relative mx-auto mb-3 flex h-[54px] w-[54px] items-center justify-center rounded-[18px]"
+            style={{
+              background:
+                "color-mix(in srgb, var(--tint, #007aff) 12%, var(--bg, #fff))",
+              color: "var(--tint, #007aff)",
+            }}
+            aria-hidden="true"
+          >
+            <svg
+              viewBox="0 0 32 32"
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M10 24h12" />
+              <path d="M12 27h8" />
+              <path d="M8.5 20.5h15" />
+              <path d="M10 20.5v-7a6 6 0 0 1 12 0v7" />
+              <path d="M7 20.5h18" />
+            </svg>
+
+            <span
+              className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2"
               style={{
-                background:
-                  "color-mix(in srgb, var(--tint, #007aff) 12%, var(--bg, #fff))",
-                color: "var(--tint, #007aff)",
+                background: "var(--tint, #007aff)",
+                borderColor: "var(--bg, #fff)",
+                color: "#fff",
               }}
-              aria-hidden="true"
             >
               <svg
-                viewBox="0 0 32 32"
-                className="h-7 w-7"
+                viewBox="0 0 24 24"
+                className="h-3 w-3"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="1.9"
+                strokeWidth="2.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="M10 24h12" />
-                <path d="M12 27h8" />
-                <path d="M8.5 20.5h15" />
-                <path d="M10 20.5v-7a6 6 0 0 1 12 0v7" />
-                <path d="M7 20.5h18" />
+                <path d="m7 12 3 3 7-7" />
               </svg>
-
-              <span
-                className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2"
-                style={{
-                  background: "var(--tint, #007aff)",
-                  borderColor: "var(--bg, #fff)",
-                  color: "#fff",
-                }}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="m7 12 3 3 7-7" />
-                </svg>
-              </span>
-            </div>
-
-            <div
-              className="mb-1.5 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[.11em]"
-              style={{
-                background: "var(--card, #f2f2f7)",
-                color: "var(--tint, #007aff)",
-              }}
-            >
-              {copy.eyebrow}
-            </div>
-
-            <h2
-              id="product-update-title"
-              className="m-0 text-[20px] font-bold tracking-[-.025em]"
-            >
-              {copy.title}
-            </h2>
-
-            <p
-              className="mx-auto mb-0 mt-1.5 max-w-[270px] text-[13px] leading-[1.45]"
-              style={{
-                color: "var(--meta, #8e8e93)",
-              }}
-            >
-              {copy.description}
-            </p>
+            </span>
           </div>
 
-          {/* Main features */}
           <div
-            className="mx-4 overflow-hidden rounded-[14px]"
+            className="mb-1.5 inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[.11em]"
             style={{
               background: "var(--card, #f2f2f7)",
+              color: "var(--tint, #007aff)",
             }}
           >
-            <CompactRow
-              icon="important"
-              title={copy.importantTitle}
-              body={copy.importantBody}
-              first
-            />
-
-            <CompactRow
-              icon="all"
-              title={copy.allTitle}
-              body={copy.allBody}
-            />
-
-            <CompactRow
-              icon="settings"
-              title={copy.settingsTitle}
-              body={copy.settingsBody}
-            />
+            {copy.eyebrow}
           </div>
 
-          {/* Device instructions */}
-          <div className="px-5 pb-4 pt-3">
-            <div
-              className="text-[11px] font-semibold"
-              style={{
-                color: "var(--gray-text, #111)",
-              }}
-            >
-              {copy.deviceTitle}
-            </div>
+          <h2
+            id="product-update-title"
+            className="m-0 text-[20px] font-bold tracking-[-.025em]"
+          >
+            {copy.title}
+          </h2>
 
-            <div
-              className="mt-1.5 space-y-1 text-[11px] leading-[1.45]"
-              style={{
-                color: "var(--meta, #8e8e93)",
-              }}
-            >
-              <p className="m-0">{copy.iosBody}</p>
-              <p className="m-0">{copy.androidBody}</p>
-            </div>
-          </div>
+          <p
+            className="mx-auto mb-0 mt-1.5 max-w-[280px] text-[13px] leading-[1.45]"
+            style={{
+              color: "var(--meta, #8e8e93)",
+            }}
+          >
+            {copy.description}
+          </p>
         </div>
 
-        {/* Bottom action */}
+        <div
+          className="mx-4 mb-4 overflow-hidden rounded-[14px]"
+          style={{
+            background: "var(--card, #f2f2f7)",
+          }}
+        >
+          <CompactRow
+            icon="important"
+            title={copy.importantTitle}
+            body={copy.importantBody}
+            first
+          />
+
+          <CompactRow
+            icon="all"
+            title={copy.allTitle}
+            body={copy.allBody}
+          />
+
+          <CompactRow
+            icon="settings"
+            title={copy.settingsTitle}
+            body={copy.settingsBody}
+          />
+        </div>
+
         <button
           type="button"
           autoFocus
-          className="w-full shrink-0 cursor-pointer border-x-0 border-b-0 bg-transparent py-[13px] text-[15px] font-semibold"
+          className="w-full cursor-pointer border-x-0 border-b-0 bg-transparent py-[13px] text-[15px] font-semibold"
           style={{
             borderTop:
               "0.5px solid var(--hairline, rgba(60,60,67,.22))",
             color: "var(--tint, #007aff)",
             fontFamily: "inherit",
-            background: "var(--bg, #fff)",
           }}
           onClick={() => {
             setVisible(false);
