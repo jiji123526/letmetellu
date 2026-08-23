@@ -73,3 +73,90 @@ test("important owner fanout is owner-scoped and actor-excluding", async () => {
   assert.deepEqual(calls[1].params, ["test-room", "owner-1", "member-1"]);
 });
 
+test("reply notification is targeted and uses Important mode", async () => {
+  const { env, calls } = createEnv();
+
+  assert.equal(await queueChannelNotification({
+    env,
+    channelId: "test-room",
+    event: "message_reply",
+    eventId: "reply-1",
+    actorUserId: "member-2",
+    recipientUserId: "member-1",
+    memberImportance: "important",
+  }), 0);
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].sql, /pref\.user_id = \?/);
+  assert.match(
+    calls[1].sql,
+    /pref\.mode IN \('important', 'all'\)/,
+  );
+  assert.deepEqual(
+    calls[1].params,
+    ["test-room", "member-1", "member-2"],
+  );
+});
+
+test("normal message fanout excludes the reply recipient", async () => {
+  const { env, calls } = createEnv();
+
+  assert.equal(await queueChannelNotification({
+    env,
+    channelId: "test-room",
+    event: "channel_message",
+    eventId: "reply-1",
+    actorUserId: "member-2",
+    includeOwner: true,
+    memberImportance: "all",
+    excludeUserId: "member-1",
+  }), 0);
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(
+    calls[1].params,
+    ["test-room", "member-2", "member-1"],
+  );
+});
+
+test("owner reply recipient receives reply notification instead of duplicate owner message", async () => {
+  const normal = createEnv();
+
+  assert.equal(await queueChannelNotification({
+    env: normal.env,
+    channelId: "test-room",
+    event: "channel_message",
+    eventId: "reply-by-owner-1",
+    actorUserId: "owner-1",
+    memberImportance: "important",
+    includeOwner: false,
+    excludeUserId: "member-1",
+  }), 0);
+
+  assert.equal(normal.calls.length, 2);
+
+  // owner-1 is already excluded by the normal owner-message fanout clause,
+  // so it must not be bound a second time as actorUserId.
+  assert.deepEqual(
+    normal.calls[1].params,
+    ["test-room", "owner-1", "member-1"],
+  );
+
+  const reply = createEnv();
+
+  assert.equal(await queueChannelNotification({
+    env: reply.env,
+    channelId: "test-room",
+    event: "message_reply",
+    eventId: "reply-by-owner-1",
+    actorUserId: "owner-1",
+    recipientUserId: "member-1",
+    memberImportance: "important",
+  }), 0);
+
+  assert.equal(reply.calls.length, 2);
+  assert.deepEqual(
+    reply.calls[1].params,
+    ["test-room", "member-1", "owner-1"],
+  );
+});

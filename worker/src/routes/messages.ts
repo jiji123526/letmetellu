@@ -310,6 +310,32 @@ export async function handleMessages(
       if (requestedReplyTo && !resolvedReplyTo) {
         return Response.json({ error: "invalid_reply_target" }, { status: 400 });
       }
+
+      routeStage = "resolve_reply_notification_owner";
+      const replyNotificationOwner = resolvedReplyTo
+        ? await env.DB.prepare(`
+          SELECT
+            owner.user_id,
+            message.uid AS message_uid
+          FROM message_notification_owners owner
+          INNER JOIN messages message
+            ON message.id = owner.message_id
+          WHERE owner.message_id = ?
+            AND owner.channel_id = ?
+          LIMIT 1
+        `)
+          .bind(resolvedReplyTo, parentChannelId)
+          .first<{ user_id: string; message_uid: string }>()
+        : null;
+
+      // Do not notify a user for replying to their own message, even if their
+      // authenticated session changed while the anonymous message UID remained.
+      const replyNotificationUserId =
+        replyNotificationOwner &&
+        replyNotificationOwner.message_uid !== requesterUid
+          ? replyNotificationOwner.user_id
+          : null;
+
       routeStage = "resolve_report_target";
       const resolvedReportedMessage = requestedReportedMessageId
         ? await env.DB.prepare(
@@ -374,6 +400,28 @@ export async function handleMessages(
           created_at,
         ),
       ];
+
+      // Store authenticated notification ownership privately instead of
+      // exposing account IDs through the public messages row.
+      if (!liveChannel && !report && notificationActorUserId) {
+        stmts.push(
+          env.DB.prepare(`
+            INSERT INTO message_notification_owners (
+              message_id,
+              channel_id,
+              user_id,
+              created_at
+            )
+            VALUES (?, ?, ?, ?)
+          `).bind(
+            id,
+            parentChannelId,
+            notificationActorUserId,
+            created_at,
+          )
+        );
+      }
+
       if (!isChannelOwner && requesterDeviceId) {
         routeStage = "persist_message_identities";
         const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
@@ -437,8 +485,26 @@ export async function handleMessages(
             ownerOnly: report === true,
             includeOwner: !isChannelOwner && !report,
             memberImportance: isChannelOwner ? "important" : "all",
+            excludeUserId: !report ? replyNotificationUserId : null,
             bundle: !report,
           }));
+
+          if (
+            !report &&
+            replyNotificationUserId &&
+            replyNotificationUserId !== notificationActorUserId
+          ) {
+            ctx.waitUntil(queueChannelNotification({
+              env,
+              ctx,
+              channelId: parentChannelId,
+              event: "message_reply",
+              eventId: id,
+              actorUserId: notificationActorUserId,
+              recipientUserId: replyNotificationUserId,
+              memberImportance: "important",
+            }));
+          }
         }
         if (warmPreviewCache && !image && !report) {
           ctx.waitUntil(warmPreviewCache(request, text as string | undefined));

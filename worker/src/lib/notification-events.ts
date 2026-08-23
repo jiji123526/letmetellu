@@ -4,6 +4,7 @@ import { processNotificationOutbox } from "./notification-delivery.ts";
 
 export type ChannelNotificationEvent =
   | "channel_message"
+  | "message_reply"
   | "live_start"
   | "dm"
   | "message_report"
@@ -31,7 +32,13 @@ interface QueueChannelNotificationInput {
   actorUserId?: string | null;
   liveTitle?: string | null;
 
-  /** Owner messages and live starts are important for members. */
+  /** Send this event only to one authenticated user. */
+  recipientUserId?: string | null;
+
+  /** Exclude one user from normal channel fanout. */
+  excludeUserId?: string | null;
+
+  /** Owner messages, replies, and live starts are important for members. */
   memberImportance?: "important" | "all";
 
   /** DM and report events are sent only to the channel owner. */
@@ -58,7 +65,10 @@ function notificationTag(input: {
    *
    * Important channel-level events retain their existing stable tag.
    */
-  if (input.event === "channel_message") {
+  if (
+    input.event === "channel_message" ||
+    input.event === "message_reply"
+  ) {
     return `${input.event}-${input.channelId}-${input.eventId}`;
   }
 
@@ -83,6 +93,12 @@ function payloadFor(input: {
       notificationText = ko
         ? `${channel} 라이브 세션이 시작됐어요`
         : `${channel} A live session has started`;
+      break;
+
+    case "message_reply":
+      notificationText = ko
+        ? `${channel} 내 메시지에 답글이 달렸어요`
+        : `${channel} Someone replied to your message`;
       break;
 
     case "dm":
@@ -146,11 +162,13 @@ export async function queueChannelNotification(
       ? "pref.mode = 'all'"
       : "pref.mode IN ('important', 'all')";
 
-  const ownerClause = input.ownerOnly
+  const recipientClause = input.recipientUserId
     ? "pref.user_id = ?"
-    : input.includeOwner
-      ? "1 = 1"
-      : "pref.user_id != ?";
+    : input.ownerOnly
+      ? "pref.user_id = ?"
+      : input.includeOwner
+        ? "1 = 1"
+        : "pref.user_id != ?";
 
   const ownerBind = channel.owner_uid;
 
@@ -160,7 +178,9 @@ export async function queueChannelNotification(
 
   const params: unknown[] = [channel.id];
 
-  if (!input.includeOwner || input.ownerOnly) {
+  if (input.recipientUserId) {
+    params.push(input.recipientUserId);
+  } else if (!input.includeOwner || input.ownerOnly) {
     params.push(ownerBind);
   }
 
@@ -171,8 +191,21 @@ export async function queueChannelNotification(
     );
   }
 
-  if (input.actorUserId) {
+  // An owner message already excludes the owner through recipientClause.
+  // Do not bind the same owner ID a second time just for actor exclusion.
+  const actorAlreadyExcluded =
+    !!input.actorUserId &&
+    !input.recipientUserId &&
+    !input.ownerOnly &&
+    !input.includeOwner &&
+    input.actorUserId === ownerBind;
+
+  if (input.actorUserId && !actorAlreadyExcluded) {
     params.push(input.actorUserId);
+  }
+
+  if (input.excludeUserId) {
+    params.push(input.excludeUserId);
   }
 
   const { results } = await input.env.DB.prepare(`
@@ -187,10 +220,11 @@ export async function queueChannelNotification(
     INNER JOIN users
       ON users.id = pref.user_id
     WHERE pref.channel_id = ?
-      AND ${ownerClause}
+      AND ${recipientClause}
       AND ${bindingClause}
       AND ${modeClause}
-      ${input.actorUserId ? "AND pref.user_id != ?" : ""}
+      ${input.actorUserId && !actorAlreadyExcluded ? "AND pref.user_id != ?" : ""}
+      ${input.excludeUserId ? "AND pref.user_id != ?" : ""}
   `)
     .bind(...params)
     .all<RecipientRow>();
