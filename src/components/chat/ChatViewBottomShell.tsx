@@ -479,7 +479,7 @@ export function ChatViewBottomShell({
             className="absolute border-none bg-transparent p-0 flex items-center justify-center cursor-pointer"
             style={{
               left: "5px",
-              bottom: "3px",
+              bottom: "4.5px",
               width: "calc(var(--bubble-font-size) + 13px)",
               height: "calc(var(--bubble-font-size) + 13px)",
               color: "var(--meta)",
