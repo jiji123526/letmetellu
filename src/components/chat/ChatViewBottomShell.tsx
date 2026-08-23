@@ -466,8 +466,8 @@ export function ChatViewBottomShell({
           className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-end"
           style={{
             color: "var(--meta)",
-            width: "32px",
-            height: "32px",
+            width: "calc(var(--bubble-font-size) + 19px)",
+            height: "calc(var(--bubble-font-size) + 19px)",
             opacity: plusDisabled ? 0.3 : 1,
             pointerEvents: plusDisabled
               ? "none"
@@ -483,9 +483,9 @@ export function ChatViewBottomShell({
             viewBox="0 0 24 24"
             style={{
               width:
-                "calc(var(--bubble-font-size) + 11px)",
+                "calc(var(--bubble-font-size) + 19px)",
               height:
-                "calc(var(--bubble-font-size) + 11px)",
+                "calc(var(--bubble-font-size) + 19px)",
             }}
           >
             <circle
