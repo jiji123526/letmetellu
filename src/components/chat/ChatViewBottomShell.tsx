@@ -462,62 +462,63 @@ export function ChatViewBottomShell({
           }}
         />
 
-        <button
-          className="flex-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer self-end"
-          style={{
-            color: "var(--meta)",
-            width: "calc(var(--bubble-font-size) + 19px)",
-            height: "calc(var(--bubble-font-size) + 19px)",
-            opacity: plusDisabled ? 0.3 : 1,
-            pointerEvents: plusDisabled
-              ? "none"
-              : "auto",
-          }}
-          onClick={(event) =>
-            onOpenPlusMenu(
-              event.currentTarget.getBoundingClientRect(),
-            )
-          }
-        >
-          <svg
-            viewBox="0 0 24 24"
-            style={{
-              width:
-                "calc(var(--bubble-font-size) + 19px)",
-              height:
-                "calc(var(--bubble-font-size) + 19px)",
-            }}
-          >
-            <circle
-              cx="12"
-              cy="12"
-              r="11"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-            />
-            <path
-              d="M12 7v10M7 12h10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-
         <div
           className="flex-1 flex items-end relative"
           style={{
             minHeight:
               "calc(var(--bubble-font-size) + 19px)",
             padding:
-              "0 6px 0 calc(var(--bubble-font-size) * 0.824)",
+              "0 6px 0 calc(var(--bubble-font-size) + 27px)",
             background: composerBackground,
             border: composerBorder,
             borderRadius: "20px",
           }}
         >
+          <button
+            type="button"
+            className="absolute border-none bg-transparent p-0 flex items-center justify-center cursor-pointer"
+            style={{
+              left: "5px",
+              bottom: "3px",
+              width: "calc(var(--bubble-font-size) + 13px)",
+              height: "calc(var(--bubble-font-size) + 13px)",
+              color: "var(--meta)",
+              opacity: plusDisabled ? 0.3 : 1,
+              pointerEvents: plusDisabled
+                ? "none"
+                : "auto",
+            }}
+            onClick={(event) =>
+              onOpenPlusMenu(
+                event.currentTarget.getBoundingClientRect(),
+              )
+            }
+          >
+            <svg
+              viewBox="0 0 24 24"
+              style={{
+                width: "100%",
+                height: "100%",
+              }}
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="11"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+              <path
+                d="M12 7v10M7 12h10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+
           <textarea
             ref={textareaRef}
             value={input}
