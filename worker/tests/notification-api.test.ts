@@ -691,7 +691,7 @@ test(
 
     assert.match(
       settingsPanel,
-      /onClick=\{\(\)\s*=>\s*\{[\s\S]*?void\s+selectNotificationMode\(mode\);[\s\S]*?\}\}/,
+      /onClick=\{\(\)\s*=>\s*\{[\s\S]*?void\s+selectNotificationMode\(\s*mode\s*,?\s*\);[\s\S]*?\}\}/,
     );
 
     assert.match(

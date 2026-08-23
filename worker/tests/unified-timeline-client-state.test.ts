@@ -503,11 +503,30 @@ test("older pagination holds its anchor and scopes preview layout work", () => {
 });
 
 test("latest button disables after context browsing reaches the newest edge", () => {
-  assert.match(historyNavigationSource, /const \[hasMoreNewerMessages, setHasMoreNewerMessages\] = useState\(false\)/);
-  assert.match(historyNavigationSource, /const updateHasMoreNewerMessages = useCallback/);
-  assert.match(historyNavigationSource, /hasMoreNewerMessages,/);
-  assert.match(chatViewSource, /latestButtonDisabled=\{historyMode === "context" && isNearBottom && !hasMoreNewerMessages\}/);
-  assert.match(bottomShellSource, /disabled=\{historyMode === "context" \? latestButtonDisabled : false\}/);
+  assert.match(
+    historyNavigationSource,
+    /const \[hasMoreNewerMessages,\s*setHasMoreNewerMessages\]\s*=\s*useState\(false\)/,
+  );
+
+  assert.match(
+    historyNavigationSource,
+    /const updateHasMoreNewerMessages\s*=\s*useCallback/,
+  );
+
+  assert.match(
+    historyNavigationSource,
+    /hasMoreNewerMessages,/,
+  );
+
+  assert.match(
+    chatViewSource,
+    /latestButtonDisabled=\{\s*historyMode\s*===\s*"context"\s*&&\s*isNearBottom\s*&&\s*!hasMoreNewerMessages\s*\}/,
+  );
+
+  assert.match(
+    bottomShellSource,
+    /disabled=\{\s*historyMode\s*===\s*"context"\s*\?\s*latestButtonDisabled\s*:\s*false\s*\}/,
+  );
 });
 
 test("history pagination replenishes bounded preview warming in both readers", () => {
