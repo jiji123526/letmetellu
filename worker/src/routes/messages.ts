@@ -174,6 +174,9 @@ export async function handleMessages(
       const internalToken = request.headers.get("X-Internal-Token");
       const verifiedUserId = request.headers.get("X-User-Id");
       const hasVerifiedIdentity = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+      const notificationActorUserId = internalToken === env.INTERNAL_SECRET
+        ? request.headers.get("X-Notification-Actor-User-Id") || verifiedUserId
+        : null;
 
       // Passcode gate — check if channel requires passcode for writing
       liveChannel = requestChannelId.endsWith("_live");
@@ -430,7 +433,7 @@ export async function handleMessages(
             channelId: parentChannelId,
             event: report ? "message_report" : "channel_message",
             eventId: id,
-            actorUserId: verifiedUserId || null,
+            actorUserId: notificationActorUserId,
             ownerOnly: report === true,
             includeOwner: !isChannelOwner && !report,
             memberImportance: isChannelOwner ? "important" : "all",

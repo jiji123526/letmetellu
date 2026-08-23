@@ -48,9 +48,16 @@ async function forwardMessageRequest(request: Request, method: "POST" | "PATCH" 
     || (channelId ? readRoomTokenCookie(request.headers.get("cookie"), channelId) : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
-  if (session?.user?.id && !anonymousMode) {
+  if (session?.user?.id) {
     headers["X-Internal-Token"] = process.env.INTERNAL_SECRET || "";
-    headers["X-User-Id"] = session.user.id;
+
+    if (!anonymousMode) {
+      headers["X-User-Id"] = session.user.id;
+    }
+
+    if (proxyTarget === "messages") {
+      headers["X-Notification-Actor-User-Id"] = session.user.id;
+    }
   }
 
   const res = await fetch(`${workerUrl}/api/${proxyTarget}`, {

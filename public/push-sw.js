@@ -15,6 +15,34 @@ function safeTargetPath(value) {
   }
 }
 
+async function isTargetChannelVisible(target) {
+  try {
+    const targetUrl = new URL(target, self.location.origin);
+    if (targetUrl.origin !== self.location.origin || !targetUrl.pathname.startsWith("/ch/")) {
+      return false;
+    }
+
+    const clients = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+
+    return clients.some((client) => {
+      if (client.visibilityState !== "visible") return false;
+
+      try {
+        const clientUrl = new URL(client.url);
+        return clientUrl.origin === self.location.origin
+          && clientUrl.pathname === targetUrl.pathname;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let payload;
@@ -24,16 +52,20 @@ self.addEventListener("push", (event) => {
     return;
   }
   const target = safeTargetPath(payload.url);
-  event.waitUntil(self.registration.showNotification(
-    typeof payload.title === "string" ? payload.title : "yap.",
-    {
-      body: typeof payload.body === "string" ? payload.body : "",
-      icon: "/icons/yap-logo-192.png",
-      badge: "/icons/yap-logo-192.png",
-      tag: typeof payload.tag === "string" ? payload.tag : undefined,
-      data: { target },
-    },
-  ));
+  event.waitUntil((async () => {
+    if (await isTargetChannelVisible(target)) return;
+
+    await self.registration.showNotification(
+      typeof payload.title === "string" ? payload.title : "yap.",
+      {
+        body: typeof payload.body === "string" ? payload.body : "",
+        icon: "/icons/yap-logo-192.png",
+        badge: "/icons/yap-logo-192.png",
+        tag: typeof payload.tag === "string" ? payload.tag : undefined,
+        data: { target },
+      },
+    );
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {
