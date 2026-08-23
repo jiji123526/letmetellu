@@ -321,6 +321,7 @@ export const en: Record<LocaleKeys, string> = {
   userGuideFeaturesTitle: "Extra Features",
   userGuideDm: "Private messages — In enabled channels, you can send a message visible only to the owner. Your sent DM and the owner's private replies, including one photo per reply, remain visible in the same browser. Long-press your original DM to delete the whole thread. To answer again, send a new DM rather than replying inside the thread.",
   userGuideLive: "Live — Live chat runs as a separate temporary session, and its messages disappear when the session ends.",
+  userGuideNotifications: "Notifications — Sign in to set push notifications for each channel.",
   userGuideTip: "If something changes, check the notice, rules, or any block and freeze message shown in chat first.",
 
   // Gallery

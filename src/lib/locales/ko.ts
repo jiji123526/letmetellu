@@ -319,6 +319,7 @@ export const ko = {
   userGuideFeaturesTitle: "추가 기능",
   userGuideDm: "비밀 메시지 — 허용된 채널에서는 방장에게만 보이는 메시지를 보낼 수 있어요. 다시 답하려면 새 DM을 보내야 해요.",
   userGuideLive: "라이브 — 라이브 채팅은 일반 채팅과 분리된 임시 세션이며, 종료되면 세션 메시지가 사라져요.",
+  userGuideNotifications: "알림 — 로그인 후 각 채널의 푸시알림을 설정할 수 있어요.",
   userGuideTip: "문제가 생기면 공지, 규칙, 또는 채팅에 표시되는 차단·동결 안내를 먼저 확인해 보세요.",
 
   // Gallery
