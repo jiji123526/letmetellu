@@ -58,7 +58,7 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
       <button
         type="button"
         className="emoji-fx-trigger"
-        style={{ border: "none", background: "none", fontSize: "calc(var(--bubble-font-size) + 2px)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "calc(var(--bubble-font-size) + 9px)", height: "calc(var(--bubble-font-size) + 9px)", marginRight: "4px", lineHeight: 1 }}
+        style={{ border: "none", background: "none", fontSize: "calc(var(--bubble-font-size) + 2px)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "calc(var(--bubble-font-size) + 13px)", height: "calc(var(--bubble-font-size) + 13px)", marginRight: "4px", marginBottom: "4.5px", lineHeight: 1 }}
         onClick={(e) => { e.stopPropagation(); setShowGrid(!showGrid); }}
       >
         {emojis[0]}
