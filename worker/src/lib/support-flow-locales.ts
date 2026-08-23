@@ -74,6 +74,7 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
         account: [
           { id: "getting-started", label: "Sign up or create a channel", questionIds: ["signup", "create-channel", "channel-account-required"] },
           { id: "display", label: "Language, font, or bubble color", questionIds: ["change-language", "change-font-size", "change-bubble-color", "personal-settings-scope"] },
+          { id: "notifications", label: "Notifications", questionIds: ["enable-notifications", "notifications-not-arriving"] },
           { id: "navigation", label: "Guide or channel menus", questionIds: ["reopen-guide", "find-channel-menu"] },
         ],
         access: [],
@@ -93,6 +94,7 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
         ],
         live: [
           { id: "basics", label: "Live chat basics", questionIds: ["what-is-live", "live-separate", "normal-messages-live", "live-duration"] },
+          { id: "notifications", label: "Live notifications", questionIds: ["live-notification-missing"] },
           { id: "ended", label: "Ended live sessions", questionIds: ["live-messages-disappeared", "recover-live", "ended-live-send"] },
         ],
         info: [],
@@ -101,6 +103,7 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
         account: [
           { id: "setup", label: "Create or open admin tools", questionIds: ["admin-create-channel", "admin-channel-limit", "admin-open-admin-settings"] },
           { id: "appearance", label: "Profile, color, or background", questionIds: ["admin-edit-profile", "admin-change-default-color", "admin-change-background", "admin-profile-visibility"] },
+          { id: "notifications", label: "Notifications", questionIds: ["admin-enable-notifications", "admin-notifications-not-arriving"] },
           { id: "welcome", label: "Welcome popup or onboarding", questionIds: ["admin-edit-welcome", "admin-visitor-onboarding"] },
         ],
         access: [],
@@ -158,6 +161,16 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
             id: "personal-settings-scope",
             label: "Do these settings affect everyone or only me?",
             answer: "Language, font size, and your bubble color affect only your view.",
+          },
+          {
+            id: "enable-notifications",
+            label: "How do I turn notifications on?",
+            answer: "Sign in, then set Notifications to Important or All in the channel Settings.",
+          },
+          {
+            id: "notifications-not-arriving",
+            label: "Why am I not getting notifications?",
+            answer: "Let’s check your notification settings step by step.",
           },
           {
             id: "reopen-guide",
@@ -404,6 +417,11 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
             label: "How long can a live session remain open?",
             answer: "A live session can remain open for up to eight hours.",
           },
+          {
+            id: "live-notification-missing",
+            label: "Why didn’t I get a live-start notification?",
+            answer: "Let’s check your live notification settings step by step.",
+          },
         ],
         info: [
           {
@@ -464,6 +482,16 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
             id: "admin-profile-visibility",
             label: "How do I show a channel on my admin profile?",
             answer: "Channels are private by default. Turn on profile visibility in Channel Settings to show them on your admin profile.",
+          },
+          {
+            id: "admin-enable-notifications",
+            label: "How do I turn admin notifications on?",
+            answer: "Set Notifications to Important or All in the channel Settings.",
+          },
+          {
+            id: "admin-notifications-not-arriving",
+            label: "Why am I not getting admin notifications?",
+            answer: "Let’s check your notification settings step by step.",
           },
           {
             id: "admin-edit-welcome",
@@ -731,6 +759,7 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
         account: [
           { id: "getting-started", label: "가입 또는 채널 만들기", questionIds: ["signup", "create-channel", "channel-account-required"] },
           { id: "display", label: "언어, 글자 또는 말풍선 색", questionIds: ["change-language", "change-font-size", "change-bubble-color", "personal-settings-scope"] },
+          { id: "notifications", label: "알림", questionIds: ["enable-notifications", "notifications-not-arriving"] },
           { id: "navigation", label: "가이드 또는 채널 메뉴", questionIds: ["reopen-guide", "find-channel-menu"] },
         ],
         access: [],
@@ -750,6 +779,7 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
         ],
         live: [
           { id: "basics", label: "라이브 채팅 기본", questionIds: ["what-is-live", "live-separate", "normal-messages-live", "live-duration"] },
+          { id: "notifications", label: "라이브 알림", questionIds: ["live-notification-missing"] },
           { id: "ended", label: "종료된 라이브", questionIds: ["live-messages-disappeared", "recover-live", "ended-live-send"] },
         ],
         info: [],
@@ -758,6 +788,7 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
         account: [
           { id: "setup", label: "채널 만들기 또는 방장 설정 열기", questionIds: ["admin-create-channel", "admin-channel-limit", "admin-open-admin-settings"] },
           { id: "appearance", label: "프로필, 색상 또는 배경", questionIds: ["admin-edit-profile", "admin-change-default-color", "admin-change-background", "admin-profile-visibility"] },
+          { id: "notifications", label: "알림", questionIds: ["admin-enable-notifications", "admin-notifications-not-arriving"] },
           { id: "welcome", label: "환영 팝업 또는 첫 방문 안내", questionIds: ["admin-edit-welcome", "admin-visitor-onboarding"] },
         ],
         access: [],
@@ -815,6 +846,16 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
             id: "personal-settings-scope",
             label: "이 설정은 모두에게 적용되나요?",
             answer: "언어, 글자 크기, 내 말풍선 색은 내 화면에만 적용됩니다.",
+          },
+          {
+            id: "enable-notifications",
+            label: "알림은 어떻게 켜나요?",
+            answer: "로그인한 뒤 채널 설정에서 알림을 중요 또는 모두로 선택해 주세요.",
+          },
+          {
+            id: "notifications-not-arriving",
+            label: "알림이 안 와요.",
+            answer: "알림 설정을 하나씩 확인해 볼게요.",
           },
           {
             id: "reopen-guide",
@@ -1061,6 +1102,11 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
             label: "라이브 세션은 얼마나 오래 열 수 있나요?",
             answer: "최대 8시간 동안 열 수 있습니다.",
           },
+          {
+            id: "live-notification-missing",
+            label: "라이브 시작 알림이 왜 안 오나요?",
+            answer: "라이브 알림 설정을 하나씩 확인해 볼게요.",
+          },
         ],
         info: [
           {
@@ -1121,6 +1167,16 @@ const SUPPORT_FLOW_LOCALES: Record<UserLocale, SupportFlowLocaleStrings> = {
             id: "admin-profile-visibility",
             label: "내 프로필에 채널을 어떻게 노출하나요?",
             answer: "채널은 기본적으로 비공개입니다. 채널 설정에서 프로필 공개를 켜야 방장 프로필에 표시됩니다.",
+          },
+          {
+            id: "admin-enable-notifications",
+            label: "방장 알림은 어떻게 켜나요?",
+            answer: "채널 설정에서 알림을 중요 또는 모두로 선택해 주세요.",
+          },
+          {
+            id: "admin-notifications-not-arriving",
+            label: "방장 알림이 안 와요.",
+            answer: "알림 설정을 하나씩 확인해 볼게요.",
           },
           {
             id: "admin-edit-welcome",

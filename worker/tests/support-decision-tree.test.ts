@@ -30,6 +30,8 @@ const USER_QUESTION_IDS = [
   "change-font-size",
   "change-bubble-color",
   "personal-settings-scope",
+  "enable-notifications",
+  "notifications-not-arriving",
   "reopen-guide",
   "find-channel-menu",
   "passcode-required",
@@ -77,6 +79,7 @@ const USER_QUESTION_IDS = [
   "recover-live",
   "ended-live-send",
   "live-duration",
+  "live-notification-missing",
   "channel-rules",
   "notice-meaning",
   "notice-reappeared",
@@ -91,6 +94,8 @@ const ADMIN_QUESTION_IDS = [
   "admin-change-default-color",
   "admin-change-background",
   "admin-profile-visibility",
+  "admin-enable-notifications",
+  "admin-notifications-not-arriving",
   "admin-edit-welcome",
   "admin-visitor-onboarding",
   "admin-set-passcode",
@@ -262,8 +267,18 @@ test("every current guided-support transition resolves to a valid node", () => {
     assert.ok(visited.has("other-escalate"));
     assert.ok(visited.has("admin-other-details"));
     assert.ok(visited.has("admin-other-escalate"));
+    const diagnosticQuestionTargets: Record<string, string> = {
+      "notifications-not-arriving": "notification-login-check",
+      "admin-notifications-not-arriving": "admin-notification-login-check",
+      "live-notification-missing": "live-notification-login-check",
+    };
+
     for (const questionId of EXPECTED_QUESTION_IDS) {
-      assert.ok(visited.has(`answer-${questionId}`));
+      const diagnosticTarget = diagnosticQuestionTargets[questionId];
+      assert.ok(
+        visited.has(diagnosticTarget || `answer-${questionId}`),
+        `${locale} flow does not reach ${questionId}`,
+      );
     }
   }
 });

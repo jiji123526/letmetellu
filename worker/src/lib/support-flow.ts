@@ -74,6 +74,13 @@ export function getSupportNode(nodeId: string, locale: UserLocale): SupportNode 
   return buildSupportFlow(locale)[nodeId] || null;
 }
 
+function diagnosticQuestionNext(questionId: string): string | null {
+  if (questionId === "notifications-not-arriving") return "notification-login-check";
+  if (questionId === "admin-notifications-not-arriving") return "admin-notification-login-check";
+  if (questionId === "live-notification-missing") return "live-notification-login-check";
+  return null;
+}
+
 function questionMenuNode(
   id: string,
   questions: SupportQuestionCopy[],
@@ -89,7 +96,7 @@ function questionMenuNode(
       ...questions.map((question) => ({
         id: `question-${question.id}`,
         label: question.label,
-        next: `answer-${question.id}`,
+        next: diagnosticQuestionNext(question.id) || `answer-${question.id}`,
       })),
       ...(backTo ? [{
         id: `back-${id}`,
@@ -201,6 +208,377 @@ function topicMenuNode(audience: SupportAudience, locale: UserLocale): SupportNo
   };
 }
 
+function diagnosticResultNode(
+  id: string,
+  message: string,
+  audience: SupportAudience,
+  topic: GuidedSupportTopic,
+  locale: UserLocale,
+): SupportNode {
+  const copy = getSupportFlowLocale(locale);
+  return {
+    id,
+    kind: "choice",
+    messages: [message],
+    choices: [
+      {
+        id: `resolved-${id}`,
+        label: copy.resolvedChoice,
+        next: "resolved",
+      },
+      {
+        id: `need-help-${id}`,
+        label: copy.needHelpChoice,
+        next: detailNodeId(audience, topic),
+      },
+      {
+        id: `back-${id}`,
+        label: copy.backToTopicsChoice,
+        next: `${audience}-topics`,
+      },
+    ],
+  };
+}
+
+function notificationDiagnosticNodes(locale: UserLocale): Record<string, SupportNode> {
+  const ko = locale === "ko";
+  const yes = ko ? "네" : "Yes";
+  const no = ko ? "아니요" : "No";
+
+  const signedInQuestion = ko
+    ? "현재 로그인되어 있나요?"
+    : "Are you currently signed in?";
+
+  const enabledQuestion = ko
+    ? "해당 채널의 알림이 중요 또는 모두로 켜져 있나요?"
+    : "Is Notifications set to Important or All for this channel?";
+
+  const iphoneQuestion = ko
+    ? "iPhone에서 사용 중인가요?"
+    : "Are you using an iPhone?";
+
+  const homeScreenQuestion = ko
+    ? "홈 화면에 추가한 yap.에서 사용 중인가요?"
+    : "Are you using yap. from the Home Screen?";
+
+  const permissionQuestion = ko
+    ? "기기 또는 브라우저에서 yap. 알림이 허용되어 있나요?"
+    : "Are notifications for yap. allowed by your device or browser?";
+
+  const normalSituationQuestion = ko
+    ? "알림이 오지 않았던 상황은 무엇인가요?"
+    : "Which situation describes the missing notification?";
+
+  const liveVisibleQuestion = ko
+    ? "라이브 시작 당시 같은 기기에서 그 채널을 보고 있었나요?"
+    : "Were you viewing that channel on the same device when live started?";
+
+  const loginRequired = ko
+    ? "알림을 받으려면 먼저 로그인해 주세요."
+    : "Sign in first to receive notifications.";
+
+  const enableRequired = ko
+    ? "채널 설정에서 알림을 중요 또는 모두로 켜 주세요."
+    : "Set Notifications to Important or All in the channel Settings.";
+
+  const iosRequired = ko
+    ? "iPhone에서는 yap.을 홈 화면에 추가한 뒤 홈 화면의 yap.에서 사용해 주세요."
+    : "On iPhone, add yap. to the Home Screen and use it from there.";
+
+  const permissionRequired = ko
+    ? "기기 또는 브라우저 설정에서 yap. 알림을 허용해 주세요."
+    : "Allow notifications for yap. in your device or browser settings.";
+
+  const ownMessage = ko
+    ? "내가 보낸 메시지에는 알림이 오지 않아요."
+    : "Notifications are not sent for your own messages.";
+
+  const visibleChannel = ko
+    ? "같은 기기에서 해당 채널을 보고 있을 때는 중복 알림이 표시되지 않아요."
+    : "A duplicate notification is not shown while that channel is visible on the same device.";
+
+  const liveVisible = ko
+    ? "같은 기기에서 해당 채널을 보고 있을 때는 라이브 시작 푸시가 중복 표시되지 않아요."
+    : "A live-start push is not duplicated while that channel is visible on the same device.";
+
+  const stillBroken = ko
+    ? "설정은 정상으로 보여요. 계속 문제가 있다면 상황을 알려 주세요."
+    : "Your settings look correct. If the problem continues, describe what happened.";
+
+  function standardTree(
+    prefix: string,
+    audience: SupportAudience,
+  ): Record<string, SupportNode> {
+    return {
+      [`${prefix}-login-check`]: {
+        id: `${prefix}-login-check`,
+        kind: "choice",
+        messages: [signedInQuestion],
+        choices: [
+          { id: `${prefix}-login-yes`, label: yes, next: `${prefix}-mode-check` },
+          { id: `${prefix}-login-no`, label: no, next: `${prefix}-login-required` },
+        ],
+      },
+
+      [`${prefix}-login-required`]: diagnosticResultNode(
+        `${prefix}-login-required`,
+        loginRequired,
+        audience,
+        "account",
+        locale,
+      ),
+
+      [`${prefix}-mode-check`]: {
+        id: `${prefix}-mode-check`,
+        kind: "choice",
+        messages: [enabledQuestion],
+        choices: [
+          { id: `${prefix}-mode-yes`, label: yes, next: `${prefix}-iphone-check` },
+          { id: `${prefix}-mode-no`, label: no, next: `${prefix}-mode-required` },
+        ],
+      },
+
+      [`${prefix}-mode-required`]: diagnosticResultNode(
+        `${prefix}-mode-required`,
+        enableRequired,
+        audience,
+        "account",
+        locale,
+      ),
+
+      [`${prefix}-iphone-check`]: {
+        id: `${prefix}-iphone-check`,
+        kind: "choice",
+        messages: [iphoneQuestion],
+        choices: [
+          { id: `${prefix}-iphone-yes`, label: yes, next: `${prefix}-home-screen-check` },
+          { id: `${prefix}-iphone-no`, label: no, next: `${prefix}-permission-check` },
+        ],
+      },
+
+      [`${prefix}-home-screen-check`]: {
+        id: `${prefix}-home-screen-check`,
+        kind: "choice",
+        messages: [homeScreenQuestion],
+        choices: [
+          { id: `${prefix}-home-yes`, label: yes, next: `${prefix}-permission-check` },
+          { id: `${prefix}-home-no`, label: no, next: `${prefix}-ios-required` },
+        ],
+      },
+
+      [`${prefix}-ios-required`]: diagnosticResultNode(
+        `${prefix}-ios-required`,
+        iosRequired,
+        audience,
+        "account",
+        locale,
+      ),
+
+      [`${prefix}-permission-check`]: {
+        id: `${prefix}-permission-check`,
+        kind: "choice",
+        messages: [permissionQuestion],
+        choices: [
+          {
+            id: `${prefix}-permission-yes`,
+            label: yes,
+            next: `${prefix}-situation-check`,
+          },
+          {
+            id: `${prefix}-permission-no`,
+            label: no,
+            next: `${prefix}-permission-required`,
+          },
+        ],
+      },
+
+      [`${prefix}-permission-required`]: diagnosticResultNode(
+        `${prefix}-permission-required`,
+        permissionRequired,
+        audience,
+        "account",
+        locale,
+      ),
+
+      [`${prefix}-situation-check`]: {
+        id: `${prefix}-situation-check`,
+        kind: "choice",
+        messages: [normalSituationQuestion],
+        choices: audience === "user"
+          ? [
+              {
+                id: `${prefix}-own`,
+                label: ko ? "내가 보낸 메시지였어요" : "It was my own message",
+                next: `${prefix}-own-message`,
+              },
+              {
+                id: `${prefix}-visible`,
+                label: ko ? "그 채널을 보고 있었어요" : "I was viewing that channel",
+                next: `${prefix}-channel-visible`,
+              },
+              {
+                id: `${prefix}-other`,
+                label: ko ? "둘 다 아니에요" : "Neither",
+                next: `${prefix}-still-broken`,
+              },
+            ]
+          : [
+              {
+                id: `${prefix}-visible`,
+                label: ko ? "그 채널을 보고 있었어요" : "I was viewing that channel",
+                next: `${prefix}-channel-visible`,
+              },
+              {
+                id: `${prefix}-other`,
+                label: ko ? "아니에요" : "No",
+                next: `${prefix}-still-broken`,
+              },
+            ],
+      },
+
+      [`${prefix}-own-message`]: diagnosticResultNode(
+        `${prefix}-own-message`,
+        ownMessage,
+        audience,
+        "account",
+        locale,
+      ),
+
+      [`${prefix}-channel-visible`]: diagnosticResultNode(
+        `${prefix}-channel-visible`,
+        visibleChannel,
+        audience,
+        "account",
+        locale,
+      ),
+
+      [`${prefix}-still-broken`]: diagnosticResultNode(
+        `${prefix}-still-broken`,
+        stillBroken,
+        audience,
+        "account",
+        locale,
+      ),
+    };
+  }
+
+  const liveNodes: Record<string, SupportNode> = {
+    "live-notification-login-check": {
+      id: "live-notification-login-check",
+      kind: "choice",
+      messages: [signedInQuestion],
+      choices: [
+        { id: "live-login-yes", label: yes, next: "live-notification-mode-check" },
+        { id: "live-login-no", label: no, next: "live-notification-login-required" },
+      ],
+    },
+
+    "live-notification-login-required": diagnosticResultNode(
+      "live-notification-login-required",
+      loginRequired,
+      "user",
+      "live",
+      locale,
+    ),
+
+    "live-notification-mode-check": {
+      id: "live-notification-mode-check",
+      kind: "choice",
+      messages: [enabledQuestion],
+      choices: [
+        { id: "live-mode-yes", label: yes, next: "live-notification-visible-check" },
+        { id: "live-mode-no", label: no, next: "live-notification-mode-required" },
+      ],
+    },
+
+    "live-notification-mode-required": diagnosticResultNode(
+      "live-notification-mode-required",
+      enableRequired,
+      "user",
+      "live",
+      locale,
+    ),
+
+    "live-notification-visible-check": {
+      id: "live-notification-visible-check",
+      kind: "choice",
+      messages: [liveVisibleQuestion],
+      choices: [
+        { id: "live-visible-yes", label: yes, next: "live-notification-visible" },
+        { id: "live-visible-no", label: no, next: "live-notification-iphone-check" },
+      ],
+    },
+
+    "live-notification-visible": diagnosticResultNode(
+      "live-notification-visible",
+      liveVisible,
+      "user",
+      "live",
+      locale,
+    ),
+
+    "live-notification-iphone-check": {
+      id: "live-notification-iphone-check",
+      kind: "choice",
+      messages: [iphoneQuestion],
+      choices: [
+        { id: "live-iphone-yes", label: yes, next: "live-notification-home-screen-check" },
+        { id: "live-iphone-no", label: no, next: "live-notification-permission-check" },
+      ],
+    },
+
+    "live-notification-home-screen-check": {
+      id: "live-notification-home-screen-check",
+      kind: "choice",
+      messages: [homeScreenQuestion],
+      choices: [
+        { id: "live-home-yes", label: yes, next: "live-notification-permission-check" },
+        { id: "live-home-no", label: no, next: "live-notification-ios-required" },
+      ],
+    },
+
+    "live-notification-ios-required": diagnosticResultNode(
+      "live-notification-ios-required",
+      iosRequired,
+      "user",
+      "live",
+      locale,
+    ),
+
+    "live-notification-permission-check": {
+      id: "live-notification-permission-check",
+      kind: "choice",
+      messages: [permissionQuestion],
+      choices: [
+        { id: "live-permission-yes", label: yes, next: "live-notification-still-broken" },
+        { id: "live-permission-no", label: no, next: "live-notification-permission-required" },
+      ],
+    },
+
+    "live-notification-permission-required": diagnosticResultNode(
+      "live-notification-permission-required",
+      permissionRequired,
+      "user",
+      "live",
+      locale,
+    ),
+
+    "live-notification-still-broken": diagnosticResultNode(
+      "live-notification-still-broken",
+      stillBroken,
+      "user",
+      "live",
+      locale,
+    ),
+  };
+
+  return {
+    ...standardTree("notification", "user"),
+    ...standardTree("admin-notification", "admin"),
+    ...liveNodes,
+  };
+}
+
 export function buildSupportFlow(locale: UserLocale): Record<string, SupportNode> {
   const copy = getSupportFlowLocale(locale);
   const nodes: Record<string, SupportNode> = {
@@ -229,6 +607,7 @@ export function buildSupportFlow(locale: UserLocale): Record<string, SupportNode
     },
     "user-topics": topicMenuNode("user", locale),
     "admin-topics": topicMenuNode("admin", locale),
+    ...notificationDiagnosticNodes(locale),
   };
 
   for (const audience of SUPPORT_AUDIENCES) {
