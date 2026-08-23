@@ -686,12 +686,12 @@ test(
   () => {
     assert.match(
       settingsPanel,
-      /notificationsAvailable && status === "authenticated"/,
+      /notificationsAvailable\s*&&\s*status\s*===\s*"authenticated"/,
     );
 
     assert.match(
       settingsPanel,
-      /onClick=\{\(\) => \{ void selectNotificationMode\(mode\); \}\}/,
+      /onClick=\{\(\)\s*=>\s*\{[\s\S]*?void\s+selectNotificationMode\(mode\);[\s\S]*?\}\}/,
     );
 
     assert.match(
