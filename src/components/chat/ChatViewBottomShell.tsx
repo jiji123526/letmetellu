@@ -573,10 +573,10 @@ export function ChatViewBottomShell({
               className="flex-none flex items-center justify-center border-none cursor-pointer self-end"
               style={{
                 width:
-                  "calc(var(--bubble-font-size) + 9px)",
+                  "calc(var(--bubble-font-size) + 13px)",
                 height:
-                  "calc(var(--bubble-font-size) + 9px)",
-                marginBottom: "8px",
+                  "calc(var(--bubble-font-size) + 13px)",
+                marginBottom: "4.5px",
                 borderRadius: "50%",
                 background: dmMode
                   ? "#7b3fa0"
@@ -591,9 +591,9 @@ export function ChatViewBottomShell({
                 viewBox="0 0 24 24"
                 style={{
                   width:
-                    "calc(var(--bubble-font-size) - 1px)",
+                    "calc(var(--bubble-font-size) + 1px)",
                   height:
-                    "calc(var(--bubble-font-size) - 1px)",
+                    "calc(var(--bubble-font-size) + 1px)",
                 }}
               >
                 <path
