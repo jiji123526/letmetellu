@@ -1,7 +1,7 @@
 # Web Push Notification Plan
 
-This document defines the proposed notification system for yap. It is an
-unimplemented plan. Shipped behavior must be recorded in
+This document defines the current notification design and remaining work for
+yap. Shipped behavior must be recorded in
 [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) as each phase is completed.
 
 ## Product Decisions
@@ -204,8 +204,8 @@ notification endpoint or read-cursor endpoint is needed.
 6. When an admin message, live start or other qualifying event commits, enqueue
    outbox work without awaiting delivery.
 7. The delivery worker resolves eligible users, expands them to active devices,
-   applies active-channel suppression, quiet hours, batching and rate limits,
-   then sends Web Push.
+   applies active-channel suppression, quiet hours and rate limits, then sends
+   Web Push.
 8. Permanent endpoint failures revoke the device. Transient failures retry with
    bounded exponential backoff and a maximum attempt count.
 9. Notification clicks open a validated same-origin route. Admin-message pushes
@@ -230,14 +230,13 @@ The payload may include the channel name only if the privacy decision allows
 it. Never include passcodes, report evidence, email addresses, anonymous
 identifiers, private DM bodies or arbitrary navigation URLs.
 
-## Batching and Spam Control
+## Delivery and Spam Control
 
-- Collapse rapid normal-channel messages from the same channel into one push
-  over a 60-second window per recipient device.
-- Never batch a live start with an unrelated message. Deduplicate it by live
-  session ID so reconnects or repeated processing cannot resend it.
-- `all` mode may batch member traffic per user/channel over the same short
-  window.
+- Every eligible message creates an immediately available event for each
+  recipient device. Message notifications use event-specific tags so they
+  remain individually visible rather than replacing one another.
+- Deduplicate live starts by live session ID so reconnects or repeated
+  processing cannot resend them.
 - Suppress a device when its authenticated session reports that the target
   channel is visible and recently active. A background tab is not visible.
 - Enforce per-user, per-channel and per-device ceilings independently of
@@ -258,8 +257,9 @@ identifiers, private DM bodies or arbitrary navigation URLs.
 - VAPID private keys and provider credentials stay in Worker secrets and never
   enter client bundles or public Vercel variables.
 - Redact endpoints and key material from logs, metrics and support tools.
-- Define retention for revoked subscriptions and delivered/dead-lettered outbox
-  rows before production launch.
+- Retain delivered outbox rows for 30 days, dead rows for 90 days and revoked
+  subscriptions for at least 90 days. Delete only bounded indexed batches, and
+  never retention-delete pending, retry or processing work.
 - Update the privacy policy before enabling push for users.
 
 ## Active-Channel Suppression
@@ -267,14 +267,14 @@ identifiers, private DM bodies or arbitrary navigation URLs.
 Because users commonly remain inside one channel, avoid notifying them about a
 message or live start they are already viewing.
 
-- The client reports active only while `document.visibilityState` is `visible`,
-  the channel is open and the realtime connection is healthy.
-- Durable Object presence may hold a short authenticated user/channel activity
-  timestamp. Do not write every heartbeat to D1.
-- Delivery suppresses only the currently active device. Account-wide
-  suppression can be added later if duplicate-device metrics justify it.
-- When presence is unavailable, prefer sending the opted-in notification rather
-  than silently losing it.
+- The Push Service Worker suppresses display when a visible same-origin window
+  already has the target channel open. This avoids user-visible duplication but
+  does not avoid the outbox row or provider request.
+- Server-side suppression may later use short-lived Durable Object
+  user/channel/device presence if production traffic justifies the complexity.
+  Do not write every heartbeat to D1.
+- When server presence is unavailable, prefer sending the opted-in notification
+  and let the Service Worker make the local visibility decision.
 
 ## Rollout Plan
 
@@ -290,8 +290,7 @@ message or live start they are already viewing.
 - Create outbox events after authoritative admin-message persistence.
 - Add recipient resolution, current-channel suppression and permanent endpoint
   cleanup.
-- Collapse rapid admin-message bursts and confirm send acknowledgement latency
-  is unchanged.
+- Confirm send acknowledgement latency is unchanged by immediate fanout.
 
 ### Phase 3 — important live starts
 
@@ -307,10 +306,10 @@ message or live start they are already viewing.
 - Add bounded retry, dead-letter visibility and operational alerts.
 - Enable quiet hours.
 
-### Phase 5 — optional all-message delivery
+### Phase 5 — all-message delivery
 
-- Use production frequency data to decide whether `all` mode is worth enabling.
-- Add member-message batching and stricter ceilings before broad exposure.
+- `All` mode delivers each eligible member message immediately and separately.
+- Use production frequency data to decide whether stricter ceilings are needed.
 - Do not add anonymous push without a separate privacy and abuse review.
 
 ## Tests and Acceptance Criteria
@@ -322,12 +321,12 @@ message or live start they are already viewing.
 - One admin message produces at most one logical event per eligible user.
 - One live session ID produces at most one live-start event per eligible user.
 - `important` receives admin messages and live starts but not member messages.
-- `all` receives admin messages, live starts and batched member messages.
+- `all` receives admin messages, live starts and individual member messages.
 - `off` receives none of the channel events.
 - The initiating admin never receives their own admin-message or live-start
   push.
 - Duplicate outbox processing and transient retries produce at most one visible
-  alert per collapse key.
+  alert per event key.
 - A visible active channel suppresses its device push; a hidden tab does not.
 - Passcode/access changes, blocks and channel deletion stop future delivery.
 - Permanent provider failures revoke endpoints.
@@ -345,7 +344,7 @@ Collect bounded aggregate metrics without endpoint or message content:
 - outbox queued, delivered, retried, expired and dead-lettered totals;
 - event volume split by admin message, live start, DM, support and moderation;
 - provider response class and delivery latency;
-- collapse, rate-limit and active-channel suppression counts;
+- deduplication, rate-limit and active-channel suppression counts;
 - notification clicks, channel mutes and device revocations;
 - message acknowledgement and live-start mutation latency before and after push
   rollout.
@@ -358,7 +357,5 @@ latency regression.
 
 - Direct standards-based VAPID delivery or a managed Web Push provider.
 - Whether channel names may appear on lock screens by default.
-- Quiet-hour defaults and retention periods.
+- Quiet-hour defaults.
 - Exact Korean and English pre-permission and failure copy.
-- Whether `all` mode ships initially or remains hidden until important-only
-  delivery is stable.

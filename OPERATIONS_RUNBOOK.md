@@ -73,6 +73,30 @@ Counts therefore cannot produce a true error rate or latency SLO. Use
 Cloudflare/Vercel request analytics for denominators until bounded success and
 latency telemetry is added.
 
+## Notification Operations
+
+Run the read-only notification audit from `worker/` after migration `0062`,
+after the first hourly maintenance pass, and when Push delivery appears delayed:
+
+```bash
+npx wrangler d1 execute letsplay-db --remote \
+  --file scripts/audit-notification-operations.sql
+```
+
+Interpret the results as follows:
+
+- `ready_rows` should normally return to zero. Investigate sustained growth or
+  an old `oldest_ready_created_at` before increasing delivery batch limits.
+- `expired_delivered_rows` and `expired_dead_rows` may be nonzero between hourly
+  maintenance runs but should drain in bounded batches.
+- `expired_unreferenced_revoked_subscriptions` should drain only after retained
+  outbox references have expired.
+- The final result must list all six ready, terminal, subscription-reference,
+  active-subscription and revoked-subscription indexes.
+
+The audit intentionally does not select Push endpoints, `p256dh`, `auth` or
+payload JSON. Keep production audit output in the private operator workspace.
+
 ## Response Procedure
 
 ### Critical

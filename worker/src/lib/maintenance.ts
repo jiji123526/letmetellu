@@ -11,6 +11,9 @@ const MODERATION_AUDIT_RETENTION_MS = 365 * DAY_MS;
 const SUPPORT_AUDIT_RETENTION_MS = 365 * DAY_MS;
 const MESSAGE_ACTOR_IDENTITY_RETENTION_MS = 90 * DAY_MS;
 const COMPLETED_CLEANUP_JOB_RETENTION_MS = 30 * DAY_MS;
+const NOTIFICATION_DELIVERED_RETENTION_MS = 30 * DAY_MS;
+const NOTIFICATION_DEAD_RETENTION_MS = 90 * DAY_MS;
+const REVOKED_PUSH_SUBSCRIPTION_RETENTION_MS = 90 * DAY_MS;
 const CLEANUP_BATCH_LIMIT = 250;
 const CLEANUP_MAX_BATCHES = 8;
 const LIVE_SESSION_EXPIRY_BATCH_LIMIT = 20;
@@ -76,6 +79,88 @@ async function drainCompletedCleanupJobRetention(env: Env, cutoff: string): Prom
   return deleted;
 }
 
+async function deleteTerminalNotificationRows(
+  env: Env,
+  status: "delivered" | "dead",
+  cutoff: string,
+  limit: number,
+): Promise<number> {
+  const indexName = status === "delivered"
+    ? "notification_outbox_delivered_updated_idx"
+    : "notification_outbox_dead_updated_idx";
+  const result = await env.DB.prepare(`
+    DELETE FROM notification_outbox
+    WHERE rowid IN (
+      SELECT rowid
+      FROM notification_outbox INDEXED BY ${indexName}
+      WHERE status = '${status}'
+        AND updated_at < ?
+      ORDER BY updated_at ASC
+      LIMIT ?
+    )
+  `).bind(cutoff, limit).run();
+  return result.meta.changes || 0;
+}
+
+async function drainTerminalNotificationRetention(
+  env: Env,
+  status: "delivered" | "dead",
+  cutoff: string,
+): Promise<number> {
+  let deleted = 0;
+  for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch++) {
+    const count = await deleteTerminalNotificationRows(
+      env,
+      status,
+      cutoff,
+      CLEANUP_BATCH_LIMIT,
+    );
+    deleted += count;
+    if (count < CLEANUP_BATCH_LIMIT) break;
+  }
+  return deleted;
+}
+
+async function deleteRevokedPushSubscriptions(
+  env: Env,
+  cutoff: string,
+  limit: number,
+): Promise<number> {
+  const result = await env.DB.prepare(`
+    DELETE FROM push_subscriptions
+    WHERE rowid IN (
+      SELECT subscription.rowid
+      FROM push_subscriptions AS subscription
+      WHERE subscription.revoked_at < ?
+        AND NOT EXISTS (
+          SELECT 1
+          FROM notification_outbox AS outbox INDEXED BY notification_outbox_subscription_idx
+          WHERE outbox.subscription_id = subscription.id
+        )
+      ORDER BY subscription.revoked_at ASC
+      LIMIT ?
+    )
+  `).bind(cutoff, limit).run();
+  return result.meta.changes || 0;
+}
+
+async function drainRevokedPushSubscriptionRetention(
+  env: Env,
+  cutoff: string,
+): Promise<number> {
+  let deleted = 0;
+  for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch++) {
+    const count = await deleteRevokedPushSubscriptions(
+      env,
+      cutoff,
+      CLEANUP_BATCH_LIMIT,
+    );
+    deleted += count;
+    if (count < CLEANUP_BATCH_LIMIT) break;
+  }
+  return deleted;
+}
+
 async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<number> {
   const { results } = await env.DB.prepare(
     "SELECT id, channel_id, text, updated_at FROM config WHERE id GLOB 'live_*' AND text IS NOT NULL AND text != 'false' ORDER BY updated_at ASC LIMIT ?"
@@ -106,6 +191,9 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   channelCleanupJobsPending: number;
   completedCleanupJobsDeleted: number;
   pendingAdminDeletionsFinalized: number;
+  deliveredNotificationOutboxDeleted: number;
+  deadNotificationOutboxDeleted: number;
+  revokedPushSubscriptionsDeleted: number;
 }> {
   const expiredLiveSessionsEnded = await expireTimedOutLiveSessions(env, nowMs);
   const pendingAdminDeletionsFinalized = await finalizeExpiredAdminDeletions(env, nowMs);
@@ -145,6 +233,20 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     env,
     cutoffIso(COMPLETED_CLEANUP_JOB_RETENTION_MS, nowMs),
   );
+  const deliveredNotificationOutboxDeleted = await drainTerminalNotificationRetention(
+    env,
+    "delivered",
+    cutoffIso(NOTIFICATION_DELIVERED_RETENTION_MS, nowMs),
+  );
+  const deadNotificationOutboxDeleted = await drainTerminalNotificationRetention(
+    env,
+    "dead",
+    cutoffIso(NOTIFICATION_DEAD_RETENTION_MS, nowMs),
+  );
+  const revokedPushSubscriptionsDeleted = await drainRevokedPushSubscriptionRetention(
+    env,
+    cutoffIso(REVOKED_PUSH_SUBSCRIPTION_RETENTION_MS, nowMs),
+  );
 
   return {
     expiredLiveSessionsEnded,
@@ -159,5 +261,8 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     channelCleanupJobsPending: channelCleanup.pending,
     completedCleanupJobsDeleted,
     pendingAdminDeletionsFinalized,
+    deliveredNotificationOutboxDeleted,
+    deadNotificationOutboxDeleted,
+    revokedPushSubscriptionsDeleted,
   };
 }

@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Notification retention is bounded and individual delivery is authoritative — 2026-08-24
+
+- Migration `0062_notification_retention.sql` adds indexed terminal-outbox and revoked-subscription cleanup paths.
+- Hourly maintenance retains delivered notification rows for 30 days, dead rows for 90 days and revoked Push subscriptions for at least 90 days. Revoked subscriptions are removed only when no retained outbox row references them.
+- Cleanup is capped at eight 250-row batches per category and never selects pending, retry or processing work.
+- `worker/scripts/audit-notification-operations.sql` reports status, age, recent volume, ready backlog, expired rows, subscription totals and index installation without exposing Push endpoint or key material.
+- The current product policy is individual immediate message delivery. The notification plan no longer describes the superseded aggregate-message behavior.
+
+Trade-off: terminal event-key idempotency is retained only for the diagnostic window, and the four cleanup indexes add modest write/storage overhead. No frontend or R2 change is required.
+
+Deployment note: apply migration `0062`, deploy the Worker, run the audit, then verify the next hourly maintenance pass.
+
 ### Shared uploaded logo for install and Push icons — 2026-08-22
 
 - Generated Home Screen, manifest, maskable and Push PNG icons from the uploaded

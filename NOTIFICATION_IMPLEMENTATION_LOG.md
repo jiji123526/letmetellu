@@ -24,6 +24,58 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## Individual delivery policy and bounded notification retention — 2026-08-24
+
+### Scope and current behavior
+
+- Confirmed the current product policy: every eligible message notification is
+  immediately queued per recipient device and remains individually visible.
+  The earlier 10-second aggregate behavior is not restored.
+- Updated the notification plan to remove stale 60-second and 10-second
+  batching expectations. Existing event-specific outbox keys and notification
+  tags remain unchanged.
+
+### Retention and operational inspection
+
+- Migration `0062_notification_retention.sql` adds partial terminal-age and
+  revoked-subscription indexes plus a subscription-reference index.
+- Hourly maintenance retains delivered outbox rows for 30 days and dead rows
+  for 90 days. Revoked Push subscriptions are retained for at least 90 days and
+  are deleted only after no outbox row references them.
+- Each cleanup category deletes at most eight batches of 250 rows per hourly
+  run. Pending, retry and processing rows are never selected by retention.
+- Added `worker/scripts/audit-notification-operations.sql` to report outbox
+  status and age, 24-hour event volume, ready backlog, expired terminal rows,
+  active/revoked subscriptions and required indexes without reading endpoint or
+  encryption-key material.
+
+### Performance, privacy and trade-offs
+
+- Four cleanup indexes add modest outbox/subscription write and storage cost in
+  exchange for bounded cleanup and foreign-key-safe subscription deletion.
+- Removing terminal rows eventually removes their unique event keys. The
+  30/90-day diagnostic windows remain much longer than delivery retries, and
+  producers create event IDs only at authoritative mutation time, so an old
+  event should not be replayed after retention.
+- Individual delivery intentionally scales outbox rows and Push requests with
+  eligible messages and recipient devices. Production event-volume and backlog
+  audits should drive any future ceiling or Queue/Alarm work.
+
+### Verification and deployment
+
+- Apply migration `0062` before deploying the Worker. No frontend, R2 or secret
+  change is required.
+- Run the notification operations audit after migration and again after the
+  first hourly maintenance cycle.
+- Worker and frontend TypeScript pass, all 62 Worker hardening tests pass, and
+  the Worker dry-run bundles at about 168 KiB gzip.
+- Migration, audit and cleanup SQL were exercised against SQLite with old
+  delivered/dead rows, an old pending row and referenced/unreferenced revoked
+  subscriptions. Only terminal rows and then-unreferenced revoked subscriptions
+  were removed.
+- The implementation is committed and pushed to `main`; production migration,
+  Worker deployment and post-maintenance verification remain pending.
+
 
 ## Immediate first-message delivery with short burst aggregation — 2026-08-22
 
