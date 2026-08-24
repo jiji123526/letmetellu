@@ -226,6 +226,18 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!isOwner || effectiveAdmin) return dmMessages;
     return getAnonymousViewerDmMessages(dmMessages, uid);
   }, [dmMessages, effectiveAdmin, isOwner, uid]);
+
+  const renderedTimelineItems = useMemo(() => {
+    if (!timelineItems) return null;
+    if (!isOwner || effectiveAdmin) return timelineItems;
+
+    const visibleDmIds = new Set(
+      renderedDmMessages.map((message) => message.id),
+    );
+    return timelineItems.filter((item) =>
+      item.source !== "dm" || visibleDmIds.has(item.id)
+    );
+  }, [effectiveAdmin, isOwner, renderedDmMessages, timelineItems]);
   const {
     input,
     replyingTo,
@@ -427,6 +439,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     inLiveMode,
     messages,
     dmMessages: renderedDmMessages,
+    timelineItems: renderedTimelineItems,
     historyMode,
     unavailableReplyParentIds,
     effectiveAdmin,
@@ -597,9 +610,18 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (isOwner && !effectiveAdmin) {
       stagedDmMessages = getAnonymousViewerDmMessages(stagedDmMessages, uid);
     }
+
+    const visibleStagedDmIds = new Set(
+      stagedDmMessages.map((message) => message.id),
+    );
+    const stagedRenderedTimelineItems = stagedGalleryTimelineItems.filter((item) =>
+      item.source !== "dm" || visibleStagedDmIds.has(item.id)
+    );
+
     return deriveChatMessageCollections({
       messages: stagedMessages,
       dmMessages: stagedDmMessages,
+      timelineItems: stagedRenderedTimelineItems,
       historyMode: "context",
       unavailableReplyParentIds,
       effectiveAdmin,

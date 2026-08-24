@@ -54,6 +54,43 @@ test("normal display order linearly merges already sorted message sources", () =
   assert.match(displaySource, /mergeChronologicalMessages\(/);
 });
 
+test("unified display preserves canonical timeline order across context paging", () => {
+  const messages = [
+    message("m1", "2026-08-19T01:00:00.000Z"),
+    message("m2", "2026-08-19T02:00:00.000Z"),
+  ];
+  const dmMessages = [
+    message("d-old", "2026-08-18T00:00:00.000Z", { dm: true }),
+    message("d-old-r", "2026-08-19T03:00:00.000Z", {
+      dm: true,
+      dm_reply: true,
+      reply_to: "d-old",
+    }),
+  ];
+
+  // The DM root is chronologically old, but the unified reader has already
+  // positioned its thread after m2 because of recent DM activity.
+  const canonicalTimeline = [
+    messages[0],
+    messages[1],
+    dmMessages[0],
+    dmMessages[1],
+  ];
+
+  assert.deepEqual(
+    getDisplayMessages(
+      messages,
+      dmMessages,
+      true,
+      false,
+      null,
+      "context",
+      canonicalTimeline,
+    ).map((item) => item.id),
+    ["m1", "m2", "d-old", "d-old-r"],
+  );
+});
+
 test("display ordering falls back safely when a source arrives unsorted", () => {
   const messages = [
     message("m2", "2026-08-19T02:00:00.000Z"),

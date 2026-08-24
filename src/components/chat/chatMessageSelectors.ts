@@ -20,6 +20,7 @@ export interface ThreadedMessages {
 interface DeriveChatMessageCollectionsArgs {
   messages: Message[];
   dmMessages: Message[];
+  timelineItems?: Message[] | null;
   historyMode: "latest" | "context";
   unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
@@ -90,48 +91,64 @@ export function getDisplayMessages(
   isReportsOwnerView: boolean,
   reportsOwnerFilter: ReportsOwnerFilter,
   historyMode: "latest" | "context" = "latest",
+  timelineItems: Message[] | null = null,
 ): Message[] {
-  if (!effectiveAdmin) {
-    return mergeChronologicalMessages(
-      messages.filter((message) => !message.report),
-      dmMessages,
+  let adminMessages: Message[];
+
+  if (timelineItems) {
+    if (!effectiveAdmin) {
+      return timelineItems.filter((message) => !message.report);
+    }
+    adminMessages = timelineItems;
+    if (!isReportsOwnerView) {
+      return adminMessages;
+    }
+  } else {
+    if (!effectiveAdmin) {
+      return mergeChronologicalMessages(
+        messages.filter((message) => !message.report),
+        dmMessages,
+      );
+    }
+
+    const loadedMessageRange = messages.reduce<{
+      oldest: string | null;
+      newest: string | null;
+    }>((range, message) => {
+      if (!message.created_at) return range;
+      return {
+        oldest: !range.oldest || message.created_at.localeCompare(range.oldest) < 0
+          ? message.created_at
+          : range.oldest,
+        newest: !range.newest || message.created_at.localeCompare(range.newest) > 0
+          ? message.created_at
+          : range.newest,
+      };
+    }, { oldest: null, newest: null });
+
+    const hasUnifiedDmWindow = dmMessages.some((message) =>
+      "visual_root_created_at" in message
+      && "visual_root_id" in message
     );
-  }
-  const loadedMessageRange = messages.reduce<{
-    oldest: string | null;
-    newest: string | null;
-  }>((range, message) => {
-    if (!message.created_at) return range;
-    return {
-      oldest: !range.oldest || message.created_at.localeCompare(range.oldest) < 0
-        ? message.created_at
-        : range.oldest,
-      newest: !range.newest || message.created_at.localeCompare(range.newest) > 0
-        ? message.created_at
-        : range.newest,
-    };
-  }, { oldest: null, newest: null });
-  const hasUnifiedDmWindow = dmMessages.some((message) =>
-    "visual_root_created_at" in message
-    && "visual_root_id" in message
-  );
-  const visibleDmMessages = historyMode === "latest" || hasUnifiedDmWindow
-    ? dmMessages
-    : loadedMessageRange.oldest
-    ? dmMessages.filter((message) =>
-        !message.created_at
-        || (
-          message.created_at.localeCompare(loadedMessageRange.oldest!) >= 0
-          && (
-            !loadedMessageRange.newest
-            || message.created_at.localeCompare(loadedMessageRange.newest) <= 0
+    const visibleDmMessages = historyMode === "latest" || hasUnifiedDmWindow
+      ? dmMessages
+      : loadedMessageRange.oldest
+      ? dmMessages.filter((message) =>
+          !message.created_at
+          || (
+            message.created_at.localeCompare(loadedMessageRange.oldest!) >= 0
+            && (
+              !loadedMessageRange.newest
+              || message.created_at.localeCompare(loadedMessageRange.newest) <= 0
+            )
           )
         )
-      )
-    : dmMessages;
-  const adminMessages = [...messages, ...visibleDmMessages];
-  if (!isReportsOwnerView) {
-    return mergeChronologicalMessages(messages, visibleDmMessages);
+      : dmMessages;
+
+    adminMessages = [...messages, ...visibleDmMessages];
+    if (!isReportsOwnerView) {
+      return mergeChronologicalMessages(messages, visibleDmMessages);
+    }
   }
 
   const orderedMessages = adminMessages
@@ -299,6 +316,7 @@ export function getThreadedMessages(
 export function deriveChatMessageCollections({
   messages,
   dmMessages,
+  timelineItems,
   historyMode,
   unavailableReplyParentIds,
   effectiveAdmin,
@@ -314,6 +332,7 @@ export function deriveChatMessageCollections({
     reportsOwnerView,
     reportsOwnerFilter,
     historyMode,
+    timelineItems,
   );
   const knownMessageIds = new Set(
     messages.map((message) => message.id),

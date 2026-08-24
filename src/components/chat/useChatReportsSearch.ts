@@ -33,6 +33,7 @@ interface UseChatReportsSearchArgs {
   inLiveMode: boolean;
   messages: Message[];
   dmMessages: Message[];
+  timelineItems?: Message[] | null;
   historyMode: "latest" | "context";
   unavailableReplyParentIds: ReadonlySet<string>;
   effectiveAdmin: boolean;
@@ -91,6 +92,7 @@ export function useChatReportsSearch({
   inLiveMode,
   messages,
   dmMessages,
+  timelineItems,
   historyMode,
   unavailableReplyParentIds,
   effectiveAdmin,
@@ -120,13 +122,14 @@ export function useChatReportsSearch({
     () => deriveChatMessageCollections({
       messages,
       dmMessages,
+      timelineItems,
       historyMode,
       unavailableReplyParentIds,
       effectiveAdmin,
       isReportsChannelView,
       reportsOwnerFilter,
     }),
-    [dmMessages, effectiveAdmin, historyMode, isReportsChannelView, messages, reportsOwnerFilter, unavailableReplyParentIds],
+    [dmMessages, effectiveAdmin, historyMode, isReportsChannelView, messages, reportsOwnerFilter, timelineItems, unavailableReplyParentIds],
   );
 
   const searchResultIdSet = useMemo(
