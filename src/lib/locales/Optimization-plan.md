@@ -160,28 +160,32 @@ The outbox delivery flow currently has several DB operations for each delivery.
 
 ### Step 1: Find deliverable rows
 
-The Worker performs:
+The Worker performs two exact partial-index probes in one D1 batch:
 
 ```sql
-SELECT outbox.id
-FROM notification_outbox outbox
-WHERE (
-  ...
-)
-ORDER BY outbox.created_at ASC
-LIMIT ?
+SELECT id, created_at
+FROM notification_outbox
+WHERE status IN ('pending', 'retry')
+  AND next_attempt_at <= ?
+ORDER BY next_attempt_at, created_at, id
+LIMIT ?;
+
+SELECT id, created_at
+FROM notification_outbox
+WHERE status = 'processing'
+  AND lease_until < ?
+ORDER BY lease_until, created_at, id
+LIMIT ?;
 ```
 
-This finds:
-
-- pending notifications
-- retries whose retry time has arrived
-- processing rows whose lease expired
+This separately finds pending/retry notifications whose attempt time has
+arrived and processing rows whose lease expired. The Worker merges at most two
+bounded result sets and keeps the oldest candidates for the delivery batch.
 
 Approximate cost:
 
 ```text
-1 query per delivery batch
+2 indexed statements in 1 D1 batch per delivery batch
 ```
 
 ### Step 2: Claim each row

@@ -75,7 +75,8 @@ latency telemetry is added.
 
 ## Notification Operations
 
-Run the read-only notification audit from `worker/` after migration `0062`,
+Run the read-only notification audit from `worker/` after migrations `0062` and
+`0063`,
 after the first hourly maintenance pass, and when Push delivery appears delayed:
 
 ```bash
@@ -91,7 +92,7 @@ Interpret the results as follows:
   maintenance runs but should drain in bounded batches.
 - `expired_unreferenced_revoked_subscriptions` should drain only after retained
   outbox references have expired.
-- The final result must list all six ready, terminal, subscription-reference,
+- The final result must list all seven ready, terminal, subscription-reference,
   active-subscription and revoked-subscription indexes.
 
 The audit intentionally does not select Push endpoints, `p256dh`, `auth` or

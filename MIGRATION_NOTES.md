@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Notification-ready polling uses exact partial indexes — 2026-08-24
+
+- Production had no pending, retry or processing notifications, but the
+  scheduled candidate query still scanned all 467 delivered rows and built a
+  temporary ordering tree on every poll. Across six hours, 1,555 probes read
+  479,570 rows because SQLite could not map the mixed-status `OR` predicate to
+  the existing three-status partial index.
+- Migration `0063_notification_ready_lookup.sql` replaces that index with exact
+  covering indexes for due `pending/retry` attempts and expired `processing`
+  leases. The Worker executes both bounded probes in one D1 batch, merges at
+  most 20 candidates and retains the existing ten-row delivery limit.
+- Immediate preferred-ID delivery, claim guards, leases, retry policy and
+  user-visible notifications are unchanged. Empty polling performs two tiny
+  index probes instead of one growing table scan.
+
+Trade-off: two narrowly scoped indexes and two statements add small active-row
+write and statement-count overhead. In exchange, terminal outbox retention no
+longer determines scheduled polling cost.
+
+Deployment note: apply migration `0063`, deploy only the Worker and rerun the
+notification audit and query-plan checks. No frontend, R2 or secret update is
+required.
+
 ### Notification retention is bounded and individual delivery is authoritative — 2026-08-24
 
 - Migration `0062_notification_retention.sql` adds indexed terminal-outbox and revoked-subscription cleanup paths.

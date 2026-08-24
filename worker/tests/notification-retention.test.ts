@@ -65,4 +65,7 @@ test("notification operations audit reports backlog and expired retention rows",
   assert.match(auditSource, /expired_delivered_rows/);
   assert.match(auditSource, /expired_dead_rows/);
   assert.match(auditSource, /expired_unreferenced_revoked_subscriptions/);
+  assert.match(auditSource, /notification_outbox_attempt_ready_idx/);
+  assert.match(auditSource, /notification_outbox_lease_ready_idx/);
+  assert.doesNotMatch(auditSource, /'notification_outbox_ready_idx'/);
 });

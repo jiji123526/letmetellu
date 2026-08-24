@@ -18,6 +18,11 @@ interface DeliveryRow {
   aggregate_count: number;
 }
 
+interface DeliveryCandidate {
+  id: string;
+  created_at: string;
+}
+
 function isConfigured(env: Env): boolean {
   return /^[A-Za-z0-9_-]{87}$/.test(env.VAPID_PUBLIC_KEY || "")
     && /^[A-Za-z0-9_-]{43}$/.test(env.VAPID_PRIVATE_KEY || "")
@@ -101,25 +106,44 @@ async function markFailed(env: Env, row: DeliveryRow, status: number, nowMs: num
 async function claimRows(env: Env, nowMs: number, limit: number, preferredId?: string): Promise<DeliveryRow[]> {
   const now = new Date(nowMs).toISOString();
   const leaseUntil = new Date(nowMs + DELIVERY_LEASE_MS).toISOString();
-  const candidateQuery = preferredId ? env.DB.prepare(`
-    SELECT outbox.id
+  let candidates: DeliveryCandidate[];
+  if (preferredId) {
+    const { results } = await env.DB.prepare(`
+    SELECT outbox.id, outbox.created_at
     FROM notification_outbox outbox
     WHERE outbox.id = ? AND (
       (outbox.status IN ('pending', 'retry') AND outbox.next_attempt_at <= ?)
       OR (outbox.status = 'processing' AND outbox.lease_until < ?)
     )
     LIMIT 1
-  `).bind(preferredId, now, now) : env.DB.prepare(`
-    SELECT outbox.id
-    FROM notification_outbox outbox
-    WHERE (
-      (outbox.status IN ('pending', 'retry') AND outbox.next_attempt_at <= ?)
-      OR (outbox.status = 'processing' AND outbox.lease_until < ?)
-    )
-    ORDER BY outbox.created_at ASC
-    LIMIT ?
-  `).bind(now, now, limit);
-  const { results: candidates } = await candidateQuery.all<{ id: string }>();
+  `).bind(preferredId, now, now).all<DeliveryCandidate>();
+    candidates = results;
+  } else {
+    const [readyResult, expiredLeaseResult] = await env.DB.batch<DeliveryCandidate>([
+      env.DB.prepare(`
+        SELECT id, created_at
+        FROM notification_outbox
+        WHERE status IN ('pending', 'retry')
+          AND next_attempt_at <= ?
+        ORDER BY next_attempt_at ASC, created_at ASC, id ASC
+        LIMIT ?
+      `).bind(now, limit),
+      env.DB.prepare(`
+        SELECT id, created_at
+        FROM notification_outbox
+        WHERE status = 'processing'
+          AND lease_until < ?
+        ORDER BY lease_until ASC, created_at ASC, id ASC
+        LIMIT ?
+      `).bind(now, limit),
+    ]);
+    candidates = [...readyResult.results, ...expiredLeaseResult.results]
+      .sort((left, right) => (
+        left.created_at.localeCompare(right.created_at)
+        || left.id.localeCompare(right.id)
+      ))
+      .slice(0, limit);
+  }
 
   const claimed: DeliveryRow[] = [];
   for (const candidate of candidates) {

@@ -99,6 +99,14 @@ const fanoutMigration = readFileSync(
   "utf8",
 );
 
+const readyLookupMigration = readFileSync(
+  new URL(
+    "../migrations/0063_notification_ready_lookup.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 const notificationEvents = readFileSync(
   new URL(
     "../src/lib/notification-events.ts",
@@ -585,7 +593,7 @@ test(
 
     assert.match(
       delivery,
-      /preferredId \? env\.DB\.prepare/,
+      /if \(preferredId\) \{[\s\S]*WHERE outbox\.id = \?/,
     );
 
     assert.match(
@@ -606,6 +614,46 @@ test(
     assert.doesNotMatch(
       delivery,
       /console\.(?:log|warn|error).*endpoint/,
+    );
+  },
+);
+
+test(
+  "scheduled outbox probes use exact partial indexes without a mixed-status scan",
+  () => {
+    assert.match(
+      readyLookupMigration,
+      /DROP INDEX IF EXISTS notification_outbox_ready_idx/,
+    );
+
+    assert.match(
+      readyLookupMigration,
+      /notification_outbox_attempt_ready_idx[\s\S]*next_attempt_at, created_at, id[\s\S]*WHERE status IN \('pending', 'retry'\)/,
+    );
+
+    assert.match(
+      readyLookupMigration,
+      /notification_outbox_lease_ready_idx[\s\S]*lease_until, created_at, id[\s\S]*WHERE status = 'processing'/,
+    );
+
+    assert.match(
+      delivery,
+      /const \[readyResult, expiredLeaseResult\] = await env\.DB\.batch/,
+    );
+
+    assert.match(
+      delivery,
+      /ORDER BY next_attempt_at ASC, created_at ASC, id ASC/,
+    );
+
+    assert.match(
+      delivery,
+      /ORDER BY lease_until ASC, created_at ASC, id ASC/,
+    );
+
+    assert.match(
+      delivery,
+      /\.slice\(0, limit\)/,
     );
   },
 );

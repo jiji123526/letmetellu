@@ -62,7 +62,8 @@ SELECT
   type
 FROM sqlite_schema
 WHERE name IN (
-  'notification_outbox_ready_idx',
+  'notification_outbox_attempt_ready_idx',
+  'notification_outbox_lease_ready_idx',
   'notification_outbox_delivered_updated_idx',
   'notification_outbox_dead_updated_idx',
   'notification_outbox_subscription_idx',

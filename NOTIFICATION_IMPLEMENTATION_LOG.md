@@ -24,6 +24,53 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## Indexed notification-ready probes — 2026-08-24
+
+### Production diagnosis
+
+- Six-hour D1 Insights showed the scheduled notification candidate query
+  running 1,555 times, reading 479,570 rows and reading about 2,030 rows per
+  returned row despite only 467 delivered rows and no ready work being present.
+- Production `EXPLAIN QUERY PLAN` confirmed a full `notification_outbox` scan
+  and temporary order B-tree. The installed three-status partial index was not
+  selected because SQLite could not prove that the mixed ready-attempt and
+  expired-lease `OR` predicate implied its partial-index condition.
+- Splitting the SQL without changing the index did not help: the narrower
+  predicates still did not syntactically match the old three-status predicate.
+
+### Implementation and behavior
+
+- Migration `0063_notification_ready_lookup.sql` replaces the broad ready index
+  with exact covering partial indexes for `pending/retry` attempt times and
+  expired `processing` leases.
+- Scheduled drains issue the two bounded statements in one D1 batch. Each
+  branch returns at most the delivery limit, and the Worker merges at most 20
+  candidates by original creation time before claiming the existing maximum of
+  10 rows.
+- Preferred-ID immediate delivery keeps its primary-key lookup. Guarded claims,
+  two-minute leases, retry timing, attempt ceilings, endpoint revocation and
+  Push payload behavior are unchanged.
+
+### Cost, risk and rollout
+
+- An empty scheduled drain now executes two index probes instead of one table
+  scan. The two indexes contain only transient active rows and include the
+  selected ID, so their steady-state storage cost is small; status and schedule
+  updates maintain the corresponding index entry.
+- Within each branch, due attempts and oldest expired leases are selected
+  first. The bounded merge preserves creation-time fairness between branches,
+  but under a backlog larger than ten it may process an earlier-due retry before
+  an older-created retry that became due later.
+- Apply migration `0063` before deploying the Worker, then run the notification
+  audit and production `EXPLAIN QUERY PLAN` checks. No frontend, R2 or secret
+  change is required.
+- Frontend and Worker type checks pass, all 62 Worker hardening tests pass, and
+  the Worker dry-run bundles at about 168 KiB gzip.
+- Local SQLite plans use `notification_outbox_attempt_ready_idx` and
+  `notification_outbox_lease_ready_idx` as range searches without temporary
+  sorting. Production migration, Worker deployment and post-deployment D1
+  Insights comparison remain required.
+
 ## Individual delivery policy and bounded notification retention — 2026-08-24
 
 ### Scope and current behavior
