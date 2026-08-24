@@ -13,6 +13,7 @@ import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState, syncChannelInstance } from "@/lib/channel-local-state";
 import {
   clearChannelBackground,
+  prepareChannelBackground,
   readChannelAppearance,
   storeChannelAppearance,
 } from "@/lib/channel-background-cache";
@@ -289,6 +290,7 @@ export function useChatChannelBootstrap({
 
   const loadNormalChannelData = useCallback(async () => {
     const data = await fetchInit(channelId) as InitData;
+    await prepareChannelBackground(data.channel);
     applyInitData(data);
   }, [applyInitData, channelId]);
 
@@ -297,6 +299,7 @@ export function useChatChannelBootstrap({
     setDmMessages([]);
     setActiveNotice("");
     const data = await fetchInit(`${channelId}_live`) as InitData;
+    await prepareChannelBackground(data.channel);
     applyInitData(data);
   }, [applyInitData, channelId, setActiveNotice, setDmMessages, setMessages]);
 
@@ -348,6 +351,7 @@ export function useChatChannelBootstrap({
         }
 
         setPasscodeGate(null);
+        const backgroundReady = prepareChannelBackground(data.channel);
         applyInitData(data);
 
         if (!data.live?.active && initChannel !== channelId) {
@@ -358,9 +362,16 @@ export function useChatChannelBootstrap({
             completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
             return;
           }
+          await prepareChannelBackground(normalData.channel);
           applyInitData(normalData);
+        } else {
+          await backgroundReady;
         }
 
+        if (requestId !== initRequestIdRef.current) {
+          completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
+          return;
+        }
         setLoading(false);
         completeChatPerformanceCycle(channelId, traceCycleId, "settled");
       })

@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Cached public channel backgrounds transition without a repaint flash — 2026-08-24
+
+- Public channel appearance was already stored as a versioned `localStorage`
+  snapshot and public background objects already used stable `/api/media/...`
+  paths with browser and edge caching. The remaining flash occurred when React
+  removed the cached loading background and mounted a new chat background
+  element before the browser had decoded that image for the new paint.
+- Initial entry, passcode completion and normal/live channel transitions now
+  prepare and decode the authoritative background before exposing the new chat
+  surface. Concurrent preparation of the same stable image is shared in memory.
+- Failed or slow images stop delaying the transition after two seconds, so a
+  media outage cannot block channel entry. Default and solid-color backgrounds
+  add no waiting or network work.
+
+Trade-off: an uncached image can keep the loading skeleton visible for up to two
+seconds, preferring a stable transition over briefly showing an undecoded
+background. No D1 migration, Worker deployment or R2 change is required.
+
 ### Notification-ready polling uses exact partial indexes — 2026-08-24
 
 - Production had no pending, retry or processing notifications, but the

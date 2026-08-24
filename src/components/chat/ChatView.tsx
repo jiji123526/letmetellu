@@ -10,7 +10,11 @@ import { useLocale } from "@/hooks/useLocale";
 import { removeRecentChannel } from "@/lib/recent-channels";
 import { normalizeBubbleColor } from "@/lib/bubble-color";
 import { clearChannelLocalState } from "@/lib/channel-local-state";
-import { readChannelAppearance, readChannelBackground } from "@/lib/channel-background-cache";
+import {
+  prepareChannelBackground,
+  readChannelAppearance,
+  readChannelBackground,
+} from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import type { Message, MessagePageCursor } from "./chatTypes";
@@ -939,10 +943,13 @@ export function ChatView({ channelId }: { channelId: string }) {
           setLoading(true);
           setPasscodeGate(null);
           const requestId = ++initRequestIdRef.current;
-          fetchInit(channelId).then((data: InitData) => {
+          fetchInit(channelId).then(async (data: InitData) => {
             if (requestId !== initRequestIdRef.current) return;
             clearRoomAccessBanner();
+            const backgroundReady = prepareChannelBackground(data.channel);
             applyInitData(data);
+            await backgroundReady;
+            if (requestId !== initRequestIdRef.current) return;
             setLoading(false);
           }).catch((error) => {
             if (requestId !== initRequestIdRef.current) return;

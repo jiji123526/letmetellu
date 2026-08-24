@@ -79,3 +79,28 @@ test("bootstrap and realtime paths now preserve cached appearance until the serv
   assert.match(adminRouteSource, /const appearanceVersion = hasAppearanceUpdate/);
   assert.match(adminRouteSource, /appearance_version: appearanceVersion/);
 });
+
+test("chat entry decodes the stable cached background before replacing its loading surface", () => {
+  const cacheSource = readFileSync(
+    new URL("../../src/lib/channel-background-cache.ts", import.meta.url),
+    "utf8",
+  );
+  const bootstrapSource = readFileSync(
+    new URL("../../src/components/chat/useChatChannelBootstrap.ts", import.meta.url),
+    "utf8",
+  );
+  const chatViewSource = readFileSync(
+    new URL("../../src/components/chat/ChatView.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(cacheSource, /BACKGROUND_PREPARE_TIMEOUT_MS = 2_000/);
+  assert.match(cacheSource, /backgroundPreparationCache = new Map<string, Promise<boolean>>/);
+  assert.match(cacheSource, /export async function prepareChannelBackground/);
+  assert.match(cacheSource, /image\.decode\(\)\.catch/);
+  assert.match(bootstrapSource, /const backgroundReady = prepareChannelBackground\(data\.channel\)/);
+  assert.match(bootstrapSource, /await prepareChannelBackground\(normalData\.channel\)/);
+  assert.match(bootstrapSource, /await backgroundReady;[\s\S]*setLoading\(false\)/);
+  assert.match(chatViewSource, /const backgroundReady = prepareChannelBackground\(data\.channel\)/);
+  assert.match(chatViewSource, /await backgroundReady;[\s\S]*setLoading\(false\)/);
+});

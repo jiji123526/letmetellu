@@ -15,7 +15,7 @@ export interface ChannelAppearanceSnapshot extends ChannelBackgroundSnapshot {
   appearanceVersion: string;
 }
 
-interface ChannelAppearanceSource {
+export interface ChannelAppearanceSource {
   instance_id?: string | null;
   bubble_color?: string | null;
   appearance_version?: string | null;
@@ -28,6 +28,8 @@ interface ChannelAppearanceSource {
 
 const CACHE_VERSION = 2;
 const CACHE_PREFIX = "channelBackground_";
+const BACKGROUND_PREPARE_TIMEOUT_MS = 2_000;
+const backgroundPreparationCache = new Map<string, Promise<boolean>>();
 
 function cacheKey(channelId: string) {
   return `${CACHE_PREFIX}${channelId}`;
@@ -41,6 +43,58 @@ function stableMediaUrl(value: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+export async function prepareChannelBackground(
+  source: ChannelAppearanceSource,
+): Promise<void> {
+  if (
+    typeof window === "undefined"
+    || typeof Image === "undefined"
+    || source.background_type !== "image"
+  ) {
+    return;
+  }
+  const imageUrl = stableMediaUrl(source.background_image);
+  if (!imageUrl) return;
+
+  let preparation = backgroundPreparationCache.get(imageUrl);
+  if (!preparation) {
+    preparation = new Promise<boolean>((resolve) => {
+      const image = new Image();
+      let settled = false;
+      let loadHandled = false;
+      const finish = (ready: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve(ready);
+      };
+      const handleLoad = () => {
+        if (loadHandled) return;
+        loadHandled = true;
+        const decoded = typeof image.decode === "function"
+          ? image.decode().catch(() => {})
+          : Promise.resolve();
+        void decoded.then(() => finish(true));
+      };
+      const timeoutId = window.setTimeout(
+        () => finish(false),
+        BACKGROUND_PREPARE_TIMEOUT_MS,
+      );
+      image.onload = handleLoad;
+      image.onerror = () => finish(false);
+      image.src = imageUrl;
+      if (image.complete && image.naturalWidth > 0) handleLoad();
+    });
+    backgroundPreparationCache.set(imageUrl, preparation);
+    void preparation.then(() => {
+      if (backgroundPreparationCache.get(imageUrl) === preparation) {
+        backgroundPreparationCache.delete(imageUrl);
+      }
+    });
+  }
+  await preparation;
 }
 
 function isStableMediaUrl(value: unknown): value is string | null {
