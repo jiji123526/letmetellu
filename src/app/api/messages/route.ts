@@ -55,9 +55,7 @@ async function forwardMessageRequest(request: Request, method: "POST" | "PATCH" 
       headers["X-User-Id"] = session.user.id;
     }
 
-    if (proxyTarget === "messages") {
-      headers["X-Notification-Actor-User-Id"] = session.user.id;
-    }
+    headers["X-Notification-Actor-User-Id"] = session.user.id;
   }
 
   const res = await fetch(`${workerUrl}/api/${proxyTarget}`, {

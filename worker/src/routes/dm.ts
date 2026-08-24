@@ -161,15 +161,26 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
 
     const dm = await env.DB.prepare(`
-      SELECT dm.id, dm.channel_id, channels.owner_uid
+      SELECT
+        dm.id,
+        dm.channel_id,
+        channels.owner_uid,
+        notification_owner.user_id AS notification_user_id
       FROM dm
       JOIN channels ON channels.id = CASE
         WHEN dm.channel_id LIKE '%_live' THEN substr(dm.channel_id, 1, length(dm.channel_id) - 5)
         ELSE dm.channel_id
       END
+      LEFT JOIN dm_notification_owners notification_owner
+        ON notification_owner.dm_id = dm.id
       WHERE dm.id = ? AND dm.pending_delete_at IS NULL
       LIMIT 1
-    `).bind(dmId).first<{ id: string; channel_id: string; owner_uid: string }>();
+    `).bind(dmId).first<{
+      id: string;
+      channel_id: string;
+      owner_uid: string;
+      notification_user_id: string | null;
+    }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
     if (dm.owner_uid !== trustedUserId) {
       return Response.json({ error: "owner access required" }, { status: 403 });
@@ -306,6 +317,24 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       method: "POST",
       body: JSON.stringify({ type: "dm-threads-changed" }),
     }));
+
+    if (
+      ctx
+      && dm.notification_user_id
+      && !dm.channel_id.endsWith("_live")
+    ) {
+      ctx.waitUntil(queueChannelNotification({
+        env,
+        ctx,
+        channelId: parentChannelId,
+        event: "message_reply",
+        eventId: id,
+        actorUserId: trustedUserId,
+        recipientUserId: dm.notification_user_id,
+        memberImportance: "important",
+      }));
+    }
+
     return Response.json({
       ok: true,
       reply: serializeDmReply({
@@ -419,6 +448,10 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     // Passcode gate
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const notificationActorUserId =
+      request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
+        ? request.headers.get("X-Notification-Actor-User-Id")
+        : null;
     if (isLiveChannel) {
       if (!await ensureActiveLiveSession(env, parentChannelId)) {
         return Response.json({ error: "live_session_ended" }, { status: 403 });
@@ -543,29 +576,50 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
     const created_at = new Date().toISOString();
     const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
-    try {
-      await env.DB.batch([
-        env.DB.prepare(
-          "INSERT INTO dm (id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(
+    const statements = [
+      env.DB.prepare(
+        "INSERT INTO dm (id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(
+        id,
+        clientMessageId,
+        requesterUid,
+        requesterUid,
+        nick || null,
+        rawText,
+        image || null,
+        mediaDimensions?.width ?? null,
+        mediaDimensions?.height ?? null,
+        channel_id,
+        created_at,
+      ),
+      env.DB.prepare(
+        `INSERT OR REPLACE INTO message_actor_identities
+          (record_id, record_type, channel_id, uid, device_id_hash, created_at)
+         VALUES (?, 'dm', ?, ?, ?, ?)`
+      ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
+    ];
+
+    if (!isLiveChannel && notificationActorUserId) {
+      statements.push(
+        env.DB.prepare(`
+          INSERT INTO dm_notification_owners (
+            dm_id,
+            channel_id,
+            user_id,
+            created_at
+          )
+          VALUES (?, ?, ?, ?)
+        `).bind(
           id,
-          clientMessageId,
-          requesterUid,
-          requesterUid,
-          nick || null,
-          rawText,
-          image || null,
-          mediaDimensions?.width ?? null,
-          mediaDimensions?.height ?? null,
-          channel_id,
+          parentChannelId,
+          notificationActorUserId,
           created_at,
-        ),
-        env.DB.prepare(
-          `INSERT OR REPLACE INTO message_actor_identities
-            (record_id, record_type, channel_id, uid, device_id_hash, created_at)
-           VALUES (?, 'dm', ?, ?, ?, ?)`
-        ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
-      ]);
+        )
+      );
+    }
+
+    try {
+      await env.DB.batch(statements);
     } catch (error) {
       const duplicate = await env.DB.prepare(
         "SELECT * FROM dm WHERE client_message_id = ? LIMIT 1"

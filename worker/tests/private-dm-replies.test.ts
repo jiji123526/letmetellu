@@ -9,9 +9,21 @@ import {
 } from "../../src/components/chat/chatMessageSelectors.ts";
 import { canReplyToMessage } from "../../src/components/chat/messageActionRules.ts";
 import type { Message } from "../../src/components/chat/chatTypes.ts";
-import { createAnonymousIdentity } from "../src/lib/anonymous-identity.ts";
+import {
+  createAnonymousIdentity,
+  createDeviceIdentity,
+} from "../src/lib/anonymous-identity.ts";
 import { handleDm } from "../src/routes/dm.ts";
 import type { Env } from "../src/types.ts";
+
+const dmRouteSource = readFileSync(
+  new URL("../src/routes/dm.ts", import.meta.url),
+  "utf8",
+);
+const messageProxySource = readFileSync(
+  new URL("../../src/app/api/messages/route.ts", import.meta.url),
+  "utf8",
+);
 
 const INTERNAL_SECRET = "private-dm-test-secret";
 const CHANNEL_ID = "channel-a";
@@ -165,6 +177,59 @@ async function senderDeleteRequest(
     body: JSON.stringify({ dm_id: dmId, channel_id: CHANNEL_ID }),
   });
 }
+
+async function senderPostRequest(
+  env: Env,
+  notificationUserId: string,
+): Promise<Request> {
+  const sender = await createAnonymousIdentity(env, SENDER_ID);
+  const device = await createDeviceIdentity(env, "device-a");
+
+  return new Request("https://api.example.test/api/dm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Anonymous-Token": sender.token,
+      "X-Device-Token": device.token,
+      "X-Internal-Token": INTERNAL_SECRET,
+      "X-Notification-Actor-User-Id": notificationUserId,
+    },
+    body: JSON.stringify({
+      client_message_id: crypto.randomUUID(),
+      channel_id: CHANNEL_ID,
+      text: "notify me about replies",
+    }),
+  });
+}
+
+test("authenticated anonymous DM sends persist private notification ownership", async () => {
+  const { env, writes } = createFakeEnv();
+  const response = await handleDm(
+    await senderPostRequest(env, "member-a"),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.ok(writes.some((write) =>
+    write.includes("INSERT INTO dm_notification_owners")
+    && write.includes('"member-a"')
+  ));
+});
+
+test("DM owner replies are wired to the normal targeted reply notification", () => {
+  assert.match(
+    dmRouteSource,
+    /LEFT JOIN dm_notification_owners notification_owner/,
+  );
+  assert.match(
+    dmRouteSource,
+    /event: "message_reply"[\s\S]*recipientUserId: dm\.notification_user_id/,
+  );
+  assert.match(
+    messageProxySource,
+    /headers\["X-Notification-Actor-User-Id"\] = session\.user\.id/,
+  );
+});
 
 test("forged owner headers cannot create a private DM reply", async () => {
   const { env, writes } = createFakeEnv();
