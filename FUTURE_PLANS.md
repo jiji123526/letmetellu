@@ -1,27 +1,105 @@
 # Future Plans
 
-This file contains only unimplemented product and platform plans. Launch
-requirements belong in [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md), and shipped
-behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
+Last reviewed: 2026-08-24 against `main` commit `8fc6c42`.
+
+This file provides a short current-state snapshot and orders the remaining
+product and platform work. Detailed shipped behavior belongs in
+[MIGRATION_NOTES.md](./MIGRATION_NOTES.md), launch requirements belong in
+[LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md), and subsystem-specific evidence
+remains in the linked implementation documents.
+
+## Current Status
+
+### Main branch
+
+- Unified normal, live and reports timelines, source-qualified DM replies,
+  bounded history mounting, stable prepend/navigation and the global rollback
+  switch are implemented. Stage 6 production fan-out calibration and Stage 8
+  observation/legacy cleanup in
+  [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) remain incomplete.
+- Authenticated Web Push supports role-aware `Important` and `All` modes,
+  immediate individual message events, live starts, DMs and private DM replies.
+  Delivery has leases, retries, endpoint revocation and bounded terminal-row
+  retention.
+- Migration `0063_notification_ready_lookup.sql` and Worker commit `f515d5f`
+  replace an empty-queue table scan with two exact partial-index probes.
+  Production migration/deployment and the post-deploy D1 fingerprint comparison
+  must still be explicitly confirmed.
+- Public channel appearance already uses a versioned browser snapshot and stable
+  media paths. Commit `8fc6c42` additionally decodes the authoritative
+  background before replacing the cached loading surface; production mobile
+  re-entry should be verified after the frontend deploy.
+- Recent D1 inspection found no urgent main timeline or gallery query problem.
+  The one/two-character substring search read about 30,040 rows across 12
+  searches but remained at 1.4 ms P50/P99 and 0.07% of runtime, so it is not a
+  current optimization target.
+
+### Monetization branch
+
+- Plus entitlement, expiry/channel-retention, image quota and Toss billing work
+  exists only on `monetization-beta`; it is not part of `main`, and production
+  legal text still states that paid plans are not operating.
+- The branches have diverged by more than 30 monetization-only commits and more
+  than 50 newer `main` commits. A wholesale merge would conflict with or remove
+  newer notification, timeline and background work.
+- Before any paid launch, make an explicit go/no-go decision based on expected
+  conversion, the annual PG cost, legal readiness and support burden. If the
+  answer is go, port the billing work onto a fresh branch from current `main`
+  in bounded stages rather than merging the old branch as-is.
 
 ## Recommended Order
 
-1. Use beta traffic to identify real abuse, reliability and performance needs.
-2. Improve the guided-support workflow before adding another large
-   communication surface.
-3. Add notice comments only if channels need lightweight public discussion.
-4. Add rewarded media credits only after a viable ad provider and server-side
+1. Finish the pending notification migration/Worker rollout and verify the
+   background transition in production.
+2. Complete unified-timeline production calibration and remove legacy/shadow
+   paths only after the observation gates pass.
+3. Add only the operational metrics and retention work justified by real beta
+   traffic.
+4. Decide whether Plus/Toss economics justify launch. If yes, re-port and
+   validate the monetization branch against current `main`.
+5. Improve guided support before adding another communication surface.
+6. Add notice comments only if channels demonstrate a real need for lightweight
+   public discussion.
+7. Add rewarded media credits only after a viable ad provider and server-side
    reward verification are confirmed.
-5. Add delegated platform moderation only when one super admin is no longer
+8. Add delegated platform moderation only when one super admin is no longer
    operationally sufficient.
+
+## Immediate Rollout Checks
+
+### Notification ready-query optimization
+
+1. Apply all pending D1 migrations, including `0063`.
+2. Deploy the Worker from current `main`.
+3. Run `worker/scripts/audit-notification-operations.sql`; the final result must
+   list both exact ready indexes and the five retention/subscription indexes.
+4. Confirm `EXPLAIN QUERY PLAN` reports
+   `notification_outbox_attempt_ready_idx` and
+   `notification_outbox_lease_ready_idx`, with no table scan or temporary
+   ordering tree.
+5. Compare the next six-hour D1 window with the previous 1,555 probes and
+   479,570 rows-read baseline.
+
+### Cached channel appearance
+
+1. Deploy the frontend containing `8fc6c42`.
+2. Re-enter image-background public channels on iOS Safari and Android Chrome
+   both within and after the five-minute browser freshness window.
+3. Verify that cached loading and authoritative chat surfaces transition without
+   a default-background flash.
+4. Change the background, overlay, blur and bubble color once and confirm that
+   the new appearance version replaces the old snapshot.
+5. Confirm a broken or slow background cannot hold channel entry longer than
+   the two-second preparation limit.
 
 ## Operational Improvements
 
-- Complete production fan-out/query calibration and the global observation window
-  for the implemented unified normal/live/reports timeline. After the exit criteria
-  in [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) pass, remove shadow
-  double reads and legacy compatibility state while retaining the global rollback
-  until the cleanup release is stable.
+- Complete production fan-out/query calibration and the global observation
+  window for the implemented unified normal/live/reports timeline. After the
+  exit criteria in
+  [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) pass, remove shadow
+  double reads and legacy compatibility state while retaining the global
+  rollback until the cleanup release is stable.
 
 - Add bounded dashboard summaries for moderation actions, report volume,
   petition outcomes and support queue age.
@@ -33,10 +111,27 @@ behavior belongs in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
   petitions and visit-survey responses before automating their deletion.
 - Add dry-run counts, bounded batches and failure reporting before expanding
   destructive scheduled maintenance.
-- Consider a durable post-commit delivery outbox only if operational events
-  show repeated message broadcast or link-index failures.
+- Consider a separate durable post-commit outbox for realtime broadcast or
+  link-index work only if operational events show repeated failures. The
+  existing Push outbox does not cover those dependencies.
 - Surface client-cancelled `499` traffic separately if bounded edge-log
   ingestion becomes available.
+
+## Notification Follow-Up
+
+- Confirm notification backlog, delivery latency, retry/dead counts and active
+  subscription volume after the `0063` rollout before changing batch limits or
+  moving delivery to Queues.
+- Keep client-side visible-channel suppression as the default. Add server-side
+  Durable Object presence suppression only if Push volume shows meaningful
+  provider waste; do not write presence heartbeats to D1.
+- Add quiet hours only after defining timezone, daylight-saving, multi-device
+  and urgent-event behavior.
+- Add anonymous Push only after a separate privacy, abuse and identity-lifetime
+  review.
+- Keep terminal retention at delivered 30 days, dead 90 days and revoked
+  subscriptions at least 90 days unless incident-response evidence justifies a
+  change.
 
 ## Abuse And Safety Controls
 
@@ -104,6 +199,28 @@ server-enforced credit system.
 - Audit reward grants, verification failures, consumption, suspicious repeat
   claims and upload/send mismatches.
 
+## Plus And Payments
+
+Do not merge the existing `monetization-beta` branch directly into `main`.
+
+- First decide whether the expected paid-user count can recover PG, tax,
+  maintenance and support costs without relying on optimistic conversion.
+- If proceeding, create a new branch from current `main` and port the work in
+  stages: schema/entitlements, feature gates, expiry/channel retention, image
+  quota, provider-neutral orders, Toss confirmation, renewal/cancellation, then
+  UI and legal copy.
+- Resolve migration-number collisions with the notification migrations before
+  applying anything to preview or production.
+- Preserve current Push, unified timeline, media loading and channel appearance
+  behavior while porting; each stage needs focused tests and a separate commit.
+- Use Toss test keys and a preview Worker/D1 database until first charge,
+  renewal, cancellation, refund, webhook replay and failed-payment recovery all
+  pass.
+- Update terms, privacy disclosures, refund policy and merchant information
+  before enabling any production checkout.
+- Launch Plus without rewarded ads first. Add ads only after paid entitlement
+  and downgrade behavior are stable and measured.
+
 ## Delegated Platform Moderation
 
 Add multiple operator roles only when the current single-super-admin model is
@@ -122,8 +239,15 @@ insufficient.
 
 ## Conditional Performance Work
 
-- Monitor the visual-order search parent join, temporary sort, FTS storage and
-  write cost before adding denormalized root-order fields.
+- Leave one/two-character substring search unchanged while latency and traffic
+  remain near the observed 1.4 ms and 12 searches per six hours. Consider a
+  minimum length, recent-history limit or dedicated short-gram index only after
+  a measured user-facing regression.
+- Monitor the three-or-more-character visual-order search parent join,
+  temporary sort, FTS storage and write cost before adding denormalized
+  root-order fields.
+- Recheck notification-ready fingerprints after `0063`; do not add Queue/Alarm
+  infrastructure solely because the old scan had a high rows-read ratio.
 - Remove redundant indexes only after production query plans prove that their
   traffic has moved to replacement indexes.
 - Add precomputed channel activity only if `/api/user` remains a measured
