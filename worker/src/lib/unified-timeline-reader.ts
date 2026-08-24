@@ -20,7 +20,6 @@ type TimelineDirection = "before" | "after";
 type RootRow = Record<string, unknown> & {
   id: string;
   created_at: string;
-  activity_at?: string;
 };
 
 type DmReplyRow = Record<string, unknown> & {
@@ -147,7 +146,7 @@ function finalizeReadMetrics(
 
 function rootCursor(source: UnifiedTimelineSource, row: RootRow): UnifiedTimelineCursor {
   return {
-    visual_root_created_at: row.activity_at || row.created_at,
+    visual_root_created_at: row.created_at,
     source,
     visual_root_id: row.id,
     visual_depth: 0,
@@ -177,7 +176,6 @@ function appendRootCursorRange(
   source: UnifiedTimelineSource,
   cursor: UnifiedTimelineCursor | null,
   direction: TimelineDirection,
-  timeColumn = "created_at",
 ): string {
   if (!cursor) return query;
   const sourceRank = SOURCE_RANK[source];
@@ -185,8 +183,8 @@ function appendRootCursorRange(
   const comparator = direction === "after" ? ">" : "<";
   if (sourceRank === cursorRank) {
     query += ` AND (
-      ${timeColumn} ${comparator} ?
-      OR (${timeColumn} = ? AND id ${comparator} ?)
+      created_at ${comparator} ?
+      OR (created_at = ? AND id ${comparator} ?)
     )`;
     params.push(
       cursor.visual_root_created_at,
@@ -198,7 +196,7 @@ function appendRootCursorRange(
   const includesCursorTimestamp = direction === "after"
     ? sourceRank > cursorRank
     : sourceRank < cursorRank;
-  query += ` AND ${timeColumn} ${includesCursorTimestamp ? `${comparator}=` : comparator} ?`;
+  query += ` AND created_at ${includesCursorTimestamp ? `${comparator}=` : comparator} ?`;
   params.push(cursor.visual_root_created_at);
   return query;
 }
@@ -250,19 +248,12 @@ async function readDmRootCandidates(
     innerQuery += " AND uid = ?";
     params.push(viewer.anonymousUid);
   }
-  innerQuery = appendRootCursorRange(
-    innerQuery,
-    params,
-    "dm",
-    cursor,
-    direction,
-    "activity_at",
-  );
+  innerQuery = appendRootCursorRange(innerQuery, params, "dm", cursor, direction);
   innerQuery += direction === "after"
-    ? " ORDER BY activity_at ASC, id ASC LIMIT ?"
-    : " ORDER BY activity_at DESC, id DESC LIMIT ?";
+    ? " ORDER BY created_at ASC, id ASC LIMIT ?"
+    : " ORDER BY created_at DESC, id DESC LIMIT ?";
   params.push(candidateLimit);
-  const query = `SELECT * FROM (${innerQuery}) ORDER BY activity_at ASC, id ASC`;
+  const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
   const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
   recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({

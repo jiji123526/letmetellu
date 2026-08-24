@@ -342,6 +342,78 @@ test("latest unified snapshots replace their window and retain older mounted roo
   assert.equal(state.pageEndCursor, latestCursor);
 });
 
+test("DM replies stay with their original root across latest refreshes", () => {
+  const dmCursor = {
+    visual_root_created_at: "2026-08-18T00:00:00.000Z",
+    source: "dm" as const,
+    visual_root_id: "dm-old",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T00:00:00.000Z",
+    id: "dm-old",
+  };
+  const latestCursor = {
+    visual_root_created_at: "2026-08-18T10:00:00.000Z",
+    source: "message" as const,
+    visual_root_id: "latest",
+    visual_depth: 0 as const,
+    created_at: "2026-08-18T10:00:00.000Z",
+    id: "latest",
+  };
+
+  const dmRoot = {
+    ...message("dm-old", dmCursor.created_at, { dm: true }),
+    ...dmCursor,
+  };
+  const latest = {
+    ...message("latest", latestCursor.created_at),
+    ...latestCursor,
+  };
+
+  let state = setChatTimelineMode(createInitialChatTimelineState(), true);
+  state = replaceUnifiedTimelinePage(
+    state,
+    [dmRoot, latest],
+    dmCursor,
+    latestCursor,
+    true,
+  );
+
+  state = upsertChatTimelineItems(state, "dm", [
+    message("dm-reply", "2026-08-18T11:00:00.000Z", {
+      dm: true,
+      dm_reply: true,
+      reply_to: "dm-old",
+    }),
+  ]);
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(
+    state.timelineItems.map((item) => item.id),
+    ["dm-old", "dm-reply", "latest"],
+  );
+  assert.equal(
+    state.timelineItems.find((item) => item.id === "dm-reply")?.visual_root_created_at,
+    dmCursor.visual_root_created_at,
+  );
+
+  state = mergeUnifiedTimelineLatestPage(
+    state,
+    [{
+      ...message("latest", latestCursor.created_at, { text: "refreshed" }),
+      ...latestCursor,
+    }],
+    latestCursor,
+    latestCursor,
+    true,
+  );
+
+  assert.equal(state.mode, "unified");
+  assert.deepEqual(
+    state.timelineItems.map((item) => item.id),
+    ["dm-old", "dm-reply", "latest"],
+  );
+});
+
 test("bootstrap selection executes one reader and never falls back in-request", async () => {
   const calls: string[] = [];
   const unified = await readSelectedBootstrap(true, {

@@ -91,9 +91,9 @@ test("unified reader selects roots before expanding only selected replies", asyn
   const page = await readUnifiedTimelinePage(env, "channel-a", { owner: true }, { limit: 3 });
 
   assert.equal(page.rootCount, 3);
-  assert.deepEqual(page.items.map((item) => item.id), ["m1", "m1-r", "m3", "d2", "d2-r"]);
+  assert.deepEqual(page.items.map((item) => item.id), ["m1", "m1-r", "d2", "d2-r", "m3"]);
   assert.equal(page.pageStartCursor?.id, "m1");
-  assert.equal(page.pageEndCursor?.id, "d2");
+  assert.equal(page.pageEndCursor?.id, "m3");
   assert.deepEqual(page.metrics, {
     queryCount: 4,
     rowsRead: 5,
@@ -161,7 +161,8 @@ test("root cursor predicates reduce source ordering to indexable time ranges", a
   assert.match(messageCall.query, /created_at <= \?/);
   assert.doesNotMatch(messageCall.query, /id < \?/);
   assert.equal(messageCall.query.match(/created_at <= \?/g)?.length, 2);
-  assert.match(dmCall.query, /activity_at < \?[\s\S]*id < \?/);
+  assert.match(dmCall.query, /created_at < \?[\s\S]*id < \?/);
+  assert.doesNotMatch(dmCall.query, /activity_at/);
   assert.ok(dmCall.params.includes("dm-cursor"));
 });
 
