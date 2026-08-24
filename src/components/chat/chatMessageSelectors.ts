@@ -111,7 +111,11 @@ export function getDisplayMessages(
         : range.newest,
     };
   }, { oldest: null, newest: null });
-  const visibleDmMessages = historyMode === "latest"
+  const hasUnifiedDmWindow = dmMessages.some((message) =>
+    "visual_root_created_at" in message
+    && "visual_root_id" in message
+  );
+  const visibleDmMessages = historyMode === "latest" || hasUnifiedDmWindow
     ? dmMessages
     : loadedMessageRange.oldest
     ? dmMessages.filter((message) =>
