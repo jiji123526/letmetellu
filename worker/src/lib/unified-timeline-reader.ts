@@ -20,6 +20,7 @@ type TimelineDirection = "before" | "after";
 type RootRow = Record<string, unknown> & {
   id: string;
   created_at: string;
+  activity_at?: string;
 };
 
 type DmReplyRow = Record<string, unknown> & {
@@ -146,7 +147,7 @@ function finalizeReadMetrics(
 
 function rootCursor(source: UnifiedTimelineSource, row: RootRow): UnifiedTimelineCursor {
   return {
-    visual_root_created_at: row.created_at,
+    visual_root_created_at: row.activity_at || row.created_at,
     source,
     visual_root_id: row.id,
     visual_depth: 0,
@@ -176,6 +177,7 @@ function appendRootCursorRange(
   source: UnifiedTimelineSource,
   cursor: UnifiedTimelineCursor | null,
   direction: TimelineDirection,
+  timeColumn = "created_at",
 ): string {
   if (!cursor) return query;
   const sourceRank = SOURCE_RANK[source];
@@ -183,8 +185,8 @@ function appendRootCursorRange(
   const comparator = direction === "after" ? ">" : "<";
   if (sourceRank === cursorRank) {
     query += ` AND (
-      created_at ${comparator} ?
-      OR (created_at = ? AND id ${comparator} ?)
+      ${timeColumn} ${comparator} ?
+      OR (${timeColumn} = ? AND id ${comparator} ?)
     )`;
     params.push(
       cursor.visual_root_created_at,
@@ -196,7 +198,7 @@ function appendRootCursorRange(
   const includesCursorTimestamp = direction === "after"
     ? sourceRank > cursorRank
     : sourceRank < cursorRank;
-  query += ` AND created_at ${includesCursorTimestamp ? `${comparator}=` : comparator} ?`;
+  query += ` AND ${timeColumn} ${includesCursorTimestamp ? `${comparator}=` : comparator} ?`;
   params.push(cursor.visual_root_created_at);
   return query;
 }
@@ -248,12 +250,19 @@ async function readDmRootCandidates(
     innerQuery += " AND uid = ?";
     params.push(viewer.anonymousUid);
   }
-  innerQuery = appendRootCursorRange(innerQuery, params, "dm", cursor, direction);
+  innerQuery = appendRootCursorRange(
+    innerQuery,
+    params,
+    "dm",
+    cursor,
+    direction,
+    "activity_at",
+  );
   innerQuery += direction === "after"
-    ? " ORDER BY created_at ASC, id ASC LIMIT ?"
-    : " ORDER BY created_at DESC, id DESC LIMIT ?";
+    ? " ORDER BY activity_at ASC, id ASC LIMIT ?"
+    : " ORDER BY activity_at DESC, id DESC LIMIT ?";
   params.push(candidateLimit);
-  const query = `SELECT * FROM (${innerQuery}) ORDER BY created_at ASC, id ASC`;
+  const query = `SELECT * FROM (${innerQuery}) ORDER BY activity_at ASC, id ASC`;
   const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
   recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({
@@ -308,7 +317,7 @@ function normalizeDmRoot(root: RootCandidate): UnifiedTimelineItem {
   return {
     ...root.row,
     source: "dm",
-    visual_root_created_at: root.row.created_at,
+    visual_root_created_at: root.cursor.visual_root_created_at,
     visual_root_id: root.row.id,
     visual_depth: 0,
     created_at: root.row.created_at,
@@ -329,7 +338,7 @@ function normalizeDmReply(
     ...reply,
     id: reply.id,
     source: "dm",
-    visual_root_created_at: root.row.created_at,
+    visual_root_created_at: root.cursor.visual_root_created_at,
     visual_root_id: root.row.id,
     visual_depth: 1,
     created_at: reply.created_at,

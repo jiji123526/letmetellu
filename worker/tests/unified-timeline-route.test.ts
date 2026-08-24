@@ -16,6 +16,7 @@ const OWNER_ID = "owner-a";
 interface RootRow {
   id: string;
   created_at: string;
+  activity_at?: string;
   uid?: string;
   image?: string | null;
   reply_to?: null;
@@ -43,21 +44,29 @@ function selectRootWindow(
   baseParamCount: number,
 ): RootRow[] {
   let filtered = [...rows];
+  const useActivityAt = sql.includes("activity_at");
+  const rowTime = (row: RootRow) =>
+    useActivityAt ? row.activity_at || row.created_at : row.created_at;
+
   const cursorTime = String(params[baseParamCount] || "");
-  if (sql.includes("created_at <= ?")) {
-    filtered = filtered.filter((row) => row.created_at <= cursorTime);
-  } else if (sql.includes("created_at < ?")) {
-    filtered = filtered.filter((row) => row.created_at < cursorTime);
-  } else if (sql.includes("created_at >= ?")) {
-    filtered = filtered.filter((row) => row.created_at >= cursorTime);
-  } else if (sql.includes("created_at > ?")) {
-    filtered = filtered.filter((row) => row.created_at > cursorTime);
+  if (sql.includes(`${useActivityAt ? "activity_at" : "created_at"} <= ?`)) {
+    filtered = filtered.filter((row) => rowTime(row) <= cursorTime);
+  } else if (sql.includes(`${useActivityAt ? "activity_at" : "created_at"} < ?`)) {
+    filtered = filtered.filter((row) => rowTime(row) < cursorTime);
+  } else if (sql.includes(`${useActivityAt ? "activity_at" : "created_at"} >= ?`)) {
+    filtered = filtered.filter((row) => rowTime(row) >= cursorTime);
+  } else if (sql.includes(`${useActivityAt ? "activity_at" : "created_at"} > ?`)) {
+    filtered = filtered.filter((row) => rowTime(row) > cursorTime);
   }
 
   const limit = Number(params.at(-1));
   const ascending = (left: RootRow, right: RootRow) =>
-    left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id);
-  if (sql.includes("ORDER BY created_at DESC")) {
+    rowTime(left).localeCompare(rowTime(right)) || left.id.localeCompare(right.id);
+
+  if (
+    sql.includes("ORDER BY created_at DESC")
+    || sql.includes("ORDER BY activity_at DESC")
+  ) {
     return filtered.sort(ascending).reverse().slice(0, limit).sort(ascending);
   }
   return filtered.sort(ascending).slice(0, limit);
