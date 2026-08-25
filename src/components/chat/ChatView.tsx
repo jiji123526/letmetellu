@@ -208,7 +208,6 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const chatViewportRef = useRef<HTMLDivElement>(null);
   const galleryNavigationStageRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -238,86 +237,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       cancelAnimationFrame(reactionFrameRef.current);
     }
   }, []);
-
-  useEffect(() => {
-    const root = chatViewportRef.current;
-    const textarea = textareaRef.current;
-    const viewport = window.visualViewport;
-    if (!root || !textarea || !viewport) return;
-
-    let frame = 0;
-    let scrollFrame = 0;
-    const resetViewport = () => {
-      root.style.removeProperty("--chat-viewport-height");
-    };
-    const syncViewport = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (document.activeElement !== textarea) {
-          resetViewport();
-          return;
-        }
-
-        const scrollRoot = messagesContainerRef.current;
-        const bottomDistance = scrollRoot
-          ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
-          : null;
-        root.style.setProperty("--chat-viewport-height", `${viewport.height}px`);
-
-        if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
-          cancelAnimationFrame(scrollFrame);
-          scrollFrame = requestAnimationFrame(() => {
-            scrollRoot.scrollTop =
-              scrollRoot.scrollHeight - scrollRoot.clientHeight - bottomDistance;
-          });
-        }
-      });
-    };
-    const handleBlur = () => {
-      requestAnimationFrame(() => {
-        if (document.activeElement !== textarea) resetViewport();
-      });
-    };
-
-    textarea.addEventListener("focus", syncViewport);
-    textarea.addEventListener("blur", handleBlur);
-    viewport.addEventListener("resize", syncViewport);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      cancelAnimationFrame(scrollFrame);
-      textarea.removeEventListener("focus", syncViewport);
-      textarea.removeEventListener("blur", handleBlur);
-      viewport.removeEventListener("resize", syncViewport);
-      resetViewport();
-    };
-  }, [loading]);
-
-  useEffect(() => {
-    if (loading) return;
-
-    const html = document.documentElement;
-    const body = document.body;
-    const previousHtmlOverflow = html.style.overflow;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyPosition = body.style.position;
-    const previousBodyInset = body.style.inset;
-    const previousBodyWidth = body.style.width;
-
-    html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.inset = "0";
-    body.style.width = "100%";
-
-    return () => {
-      html.style.overflow = previousHtmlOverflow;
-      body.style.overflow = previousBodyOverflow;
-      body.style.position = previousBodyPosition;
-      body.style.inset = previousBodyInset;
-      body.style.width = previousBodyWidth;
-    };
-  }, [loading]);
 
   useEffect(() => {
     const handleIdentityChanged = (event: Event) => {
@@ -1146,11 +1065,8 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   return (
     <div
-      ref={chatViewportRef}
-      className="fixed inset-x-0 max-w-[480px] mx-auto flex flex-col md:border-x"
+      className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x"
       style={{
-        top: "0px",
-        height: "var(--chat-viewport-height, 100dvh)",
         background: "var(--bg)",
         color: "var(--gray-text)",
         borderColor: "var(--hairline)",

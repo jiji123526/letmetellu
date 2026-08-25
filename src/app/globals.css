@@ -104,18 +104,6 @@ body {
   padding-bottom: 8px !important;
 }
 
-@media (hover: none) and (pointer: coarse) {
-  .chat-composer:has(textarea:focus) {
-    padding-bottom: 0 !important;
-  }
-}
-
-@media (display-mode: standalone) {
-  .chat-composer:has(textarea:focus) {
-    padding-bottom: 8px !important;
-  }
-}
-
 .dashboard-font-scaled {
   --dashboard-font-offset: calc(var(--bubble-font-size, 17px) - 17px);
 }
