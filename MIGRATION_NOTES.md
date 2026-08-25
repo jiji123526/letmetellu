@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Header is fixed independently from all keyboard code — 2026-08-25
+
+- The actual chat `<header>` is now a viewport-fixed `top: 0` layer. Keyboard
+  resize and scroll handlers update only the separate chat frame that contains
+  messages and the composer; they never translate or reposition the header.
+- A measured spacer preserves the header's normal layout height below the fixed
+  layer. `ResizeObserver` handles font-size and content-height changes without
+  hard-coding a device-specific header height.
+- The obsolete stationary-header and keyboard-content wrappers were removed
+  after their transform and padding responsibilities disappeared.
+
 ### Chat frame follows the visible keyboard viewport directly — 2026-08-25
 
 - The keyboard-specific header transform and content bottom padding have been

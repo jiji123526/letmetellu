@@ -6,6 +6,10 @@ const chatViewSource = readFileSync(
   new URL("../../src/components/chat/ChatView.tsx", import.meta.url),
   "utf8",
 );
+const topChromeSource = readFileSync(
+  new URL("../../src/components/chat/ChatViewTopChrome.tsx", import.meta.url),
+  "utf8",
+);
 const globalStylesSource = readFileSync(
   new URL("../../src/app/globals.css", import.meta.url),
   "utf8",
@@ -26,14 +30,24 @@ test("focused chat composer follows the mobile visual viewport", () => {
   assert.match(chatViewSource, /viewport\.removeEventListener\("scroll", syncViewport\)/);
 });
 
-test("stationary top chrome is isolated from keyboard-aware chat content", () => {
+test("chat frame follows the visible viewport without header-specific compensation", () => {
   assert.match(chatViewSource, /className="absolute inset-x-0 max-w-\[480px\]/);
   assert.match(chatViewSource, /top: "0px"/);
   assert.match(chatViewSource, /height: "100dvh"/);
-  assert.match(chatViewSource, /data-chat-stationary-header/);
-  assert.match(chatViewSource, /data-chat-keyboard-content/);
+  assert.doesNotMatch(chatViewSource, /data-chat-stationary-header/);
+  assert.doesNotMatch(chatViewSource, /data-chat-keyboard-content/);
   assert.doesNotMatch(chatViewSource, /translate3d\(0, var\(--chat-header-offset/);
   assert.doesNotMatch(chatViewSource, /paddingBottom: "var\(--chat-keyboard-inset/);
+});
+
+test("header is an independent fixed layer with a measured layout spacer", () => {
+  assert.match(
+    topChromeSource,
+    /className="fixed left-1\/2 top-0 flex w-full max-w-\[480px\]/,
+  );
+  assert.match(topChromeSource, /const observer = new ResizeObserver\(syncHeight\)/);
+  assert.match(topChromeSource, /style=\{\{ height: `\$\{headerHeight\}px` \}\}/);
+  assert.doesNotMatch(topChromeSource, /visualViewport|keyboard/);
 });
 
 test("keyboard-aware content preserves the latest-message bottom distance", () => {

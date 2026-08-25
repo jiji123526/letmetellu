@@ -1154,11 +1154,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       onDragOver={handlePhotoDragOver}
       onDrop={handlePhotoDrop}
     >
-      <div
-        data-chat-stationary-header
-        className="relative z-30 flex-none"
-      >
-        <ChatViewTopChrome
+      <ChatViewTopChrome
         channelId={inLiveMode ? `${channelId}_live` : channelId}
         channelName={channel?.name || ""}
         channelProfileImage={channel?.profile_image || null}
@@ -1215,14 +1211,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             void loadNormalChannelData().catch(() => {});
           }
         }}
-        />
-      </div>
+      />
 
-      <div
-        data-chat-keyboard-content
-        className="relative flex min-h-0 flex-1 flex-col"
-      >
-        <ChatViewMessagePane
+      <ChatViewMessagePane
         channelId={channelId}
         inLiveMode={inLiveMode}
         backgroundType={channel?.background_type || "default"}
@@ -1267,11 +1258,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         onExpand={openExpandedPost}
         onReaction={handleReaction}
         onEmojiPicker={openEmojiPicker}
-        />
+      />
 
-        <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
+      <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
 
-        {(isMessageNavigationPending || isOlderHistoryLoading) && (
+      {(isMessageNavigationPending || isOlderHistoryLoading) && (
         <div
           className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6"
           aria-live="polite"
@@ -1298,9 +1289,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             </div>
           </div>
         </div>
-        )}
+      )}
 
-        <ChatViewBottomShell
+      <ChatViewBottomShell
         channelId={channelId}
         historyMode={historyMode}
         showScrollBtn={showScrollBtn}
@@ -1349,8 +1340,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         onSend={handleSend}
         isSending={isSending}
         bubbleColor={bubbleColor}
-        />
-      </div>
+      />
 
       <ChatViewLayerStack
         channelId={channelId}
