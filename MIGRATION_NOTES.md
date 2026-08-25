@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Live emoji controls stay inside the chat column — 2026-08-25
+
+- The live emoji shortcut row and full emoji picker now anchor to the relative
+  composer container instead of being portaled to `document.body` with a
+  viewport-level `right: 12px`.
+- Desktop layouts therefore keep both panels aligned with the centered 480px
+  chat column. Mobile placement remains directly above the composer.
+
+This is a frontend-only layout correction. It requires neither a D1 migration
+nor a Worker deployment.
+
 ### Chat-wide photo drop and clipboard paste — 2026-08-25
 
 - The entire chat surface now accepts dropped JPEG, PNG, GIF and WebP files,

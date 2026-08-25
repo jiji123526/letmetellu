@@ -2,7 +2,6 @@
 
 import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
 import { adminAction } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 import { buildEmojiPicker } from "./emojiPickerData";
@@ -64,12 +63,13 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
         {emojis[0]}
       </button>
 
-      {showGrid && typeof document !== "undefined"
-        ? createPortal(
-          <EmojiGrid emojis={emojis} onSelect={triggerEmoji} onClose={() => setShowGrid(false)} />,
-          document.body,
-        )
-        : null}
+      {showGrid && (
+        <EmojiGrid
+          emojis={emojis}
+          onSelect={triggerEmoji}
+          onClose={() => setShowGrid(false)}
+        />
+      )}
     </>
   );
 }
@@ -104,9 +104,9 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
         ref={gridRef}
         className="emoji-fx-grid"
         style={{
-          position: "fixed",
-          bottom: "70px",
-          right: "12px",
+          position: "absolute",
+          bottom: "calc(100% + 8px)",
+          right: "0",
           display: "flex",
           gap: "4px",
           background: "rgba(255,255,255,.85)",
@@ -170,7 +170,7 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
       {showFullPicker && (
         <div
           className="emoji-fx-picker-wrap"
-          style={{ position: "fixed", bottom: "120px", right: "12px", zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
+          style={{ position: "absolute", bottom: "calc(100% + 58px)", right: "0", zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
           ref={(el) => {
             pickerRef.current = el;
             if (el && !el.dataset.pickerLoading && !el.querySelector("emoji-picker")) {
