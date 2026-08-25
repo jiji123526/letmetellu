@@ -4,6 +4,21 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Flying emoji broadcasts stay inside Live — 2026-08-25
+
+- The Durable Object now accepts flying-emoji events only from authenticated
+  connections that have joined the active Live view, then sends them only to
+  authenticated Live connections. Normal-chat sockets no longer receive this
+  transient traffic.
+- The client independently checks its current Live mode before rendering a
+  received flying emoji, preventing stale or delayed events from appearing
+  after a viewer returns to normal chat.
+- Normal typing broadcasts and the sender's immediate local animation are
+  unchanged.
+
+This Worker and frontend change requires a Worker deployment but no D1
+migration.
+
 ### Live emoji controls stay inside the chat column — 2026-08-25
 
 - The live emoji shortcut row and full emoji picker retain their body portal,

@@ -581,7 +581,7 @@ export function useChatRealtimeSync({
         });
       }
 
-      if (event.type === "emoji-fx") {
+      if (event.type === "emoji-fx" && inLiveModeRef.current) {
         spawnEmoji(event.emoji as string, event.x as number, event.h as number);
       }
 

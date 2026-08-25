@@ -10,6 +10,14 @@ const bottomShellSource = readFileSync(
   new URL("../../src/components/chat/ChatViewBottomShell.tsx", import.meta.url),
   "utf8",
 );
+const realtimeSyncSource = readFileSync(
+  new URL("../../src/components/chat/useChatRealtimeSync.ts", import.meta.url),
+  "utf8",
+);
+const chatRoomSource = readFileSync(
+  new URL("../src/realtime/chat-room.ts", import.meta.url),
+  "utf8",
+);
 
 test("portaled live emoji controls anchor to the composer trigger", () => {
   assert.match(emojiBarSource, /createPortal/);
@@ -39,5 +47,24 @@ test("emoji selection still spawns locally before realtime broadcast", () => {
   assert.match(
     emojiBarSource,
     /const triggerEmoji = \(emoji: string\) => \{[\s\S]*spawnEmoji\(emoji, x, h\);[\s\S]*onBroadcast\(emoji, x, h\)/,
+  );
+});
+
+test("emoji broadcasts are restricted to active live viewers", () => {
+  assert.match(
+    realtimeSyncSource,
+    /event\.type === "emoji-fx" && inLiveModeRef\.current/,
+  );
+  assert.match(
+    chatRoomSource,
+    /data\.type === "emoji-fx" && connection\.authorized && connection\.inLive/,
+  );
+  assert.match(
+    chatRoomSource,
+    /broadcastToLive\(message: string\)[\s\S]*!connection\.authorized \|\| !connection\.inLive/,
+  );
+  assert.doesNotMatch(
+    chatRoomSource,
+    /\(data\.type === "emoji-fx" \|\| data\.type === "typing"\)/,
   );
 });

@@ -192,6 +192,8 @@ export class ChatRoom {
       if (isPrivateDmPayload) {
         // Only send DM events to authenticated admin connections
         this.broadcastToAdmin(eventStr);
+      } else if (event.type === "emoji-fx") {
+        this.broadcastToLive(eventStr);
       } else {
         this.broadcast(eventStr);
       }
@@ -288,8 +290,11 @@ export class ChatRoom {
         }
       }
 
-      if ((data.type === "emoji-fx" || data.type === "typing") && connection.authorized) {
+      if (data.type === "typing" && connection.authorized) {
         this.broadcast(message);
+      }
+      if (data.type === "emoji-fx" && connection.authorized && connection.inLive) {
+        this.broadcastToLive(message);
       }
       if (data.type === "join-live" && connection.authorized) {
         const wasInLive = connection.inLive;
@@ -412,6 +417,17 @@ export class ChatRoom {
   private broadcastToAdmin(message: string) {
     for (const [ws, conn] of this.connections) {
       if (!conn.isAdmin || !conn.authorized) continue;
+      try {
+        ws.send(message);
+      } catch {
+        this.connections.delete(ws);
+      }
+    }
+  }
+
+  private broadcastToLive(message: string) {
+    for (const [ws, connection] of this.connections) {
+      if (!connection.authorized || !connection.inLive) continue;
       try {
         ws.send(message);
       } catch {
