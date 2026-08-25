@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useState, type ChangeEvent, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, useState, type ChangeEvent, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { Message } from "./chatTypes";
+
+export const SUPPORTED_PHOTO_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 
 export interface PendingPhoto {
   blob: Blob;
@@ -25,6 +33,18 @@ interface ConsumedComposerState {
   replyToId?: string;
 }
 
+export interface AddPhotoFilesOptions {
+  maxFiles?: number;
+}
+
+export interface AddPhotoFilesResult {
+  added: number;
+  unsupported: number;
+  tooLarge: number;
+  failed: number;
+  limitReached: boolean;
+}
+
 interface UseChatComposerStateResult {
   input: string;
   replyingTo: Message | null;
@@ -40,7 +60,10 @@ interface UseChatComposerStateResult {
   clearReplyingTo: () => void;
   openEditDialog: (message: Message) => void;
   closeEditDialog: () => void;
-  handlePhotoSelect: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  addPhotoFiles: (
+    files: Iterable<File>,
+    options?: AddPhotoFilesOptions,
+  ) => Promise<AddPhotoFilesResult>;
   removePendingPhoto: (index: number) => void;
   consumeComposerState: () => ConsumedComposerState;
 }
@@ -52,7 +75,17 @@ export function useChatComposerState({
   const [input, setInput] = useState("");
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMsg, setEditingMsg] = useState<EditingMessageDraft | null>(null);
-  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  const [pendingPhotosState, setPendingPhotosState] = useState<PendingPhoto[]>([]);
+  const pendingPhotosRef = useRef<PendingPhoto[]>([]);
+  const ingestionQueueRef = useRef(Promise.resolve());
+
+  const setPendingPhotos = useCallback<Dispatch<SetStateAction<PendingPhoto[]>>>((value) => {
+    const next = typeof value === "function"
+      ? value(pendingPhotosRef.current)
+      : value;
+    pendingPhotosRef.current = next;
+    setPendingPhotosState(next);
+  }, []);
 
   const resetTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
@@ -96,19 +129,59 @@ export function useChatComposerState({
     setEditingMsg(null);
   }, []);
 
-  const handlePhotoSelect = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  const addPhotoFiles = useCallback((
+    files: Iterable<File>,
+    options: AddPhotoFilesOptions = {},
+  ): Promise<AddPhotoFilesResult> => {
+    const selectedFiles = Array.from(files);
+    const run = async (): Promise<AddPhotoFilesResult> => {
+      const result: AddPhotoFilesResult = {
+        added: 0,
+        unsupported: 0,
+        tooLarge: 0,
+        failed: 0,
+        limitReached: false,
+      };
+      const maxFiles = options.maxFiles ?? Number.POSITIVE_INFINITY;
+      let availableSlots = Math.max(0, maxFiles - pendingPhotosRef.current.length);
+      const nextPhotos: PendingPhoto[] = [];
 
-    const nextPhotos: PendingPhoto[] = [];
-    for (const file of Array.from(files)) {
-      nextPhotos.push(await processPhotoFile(file));
-    }
+      for (const file of selectedFiles) {
+        if (!SUPPORTED_PHOTO_TYPES.has(file.type)) {
+          result.unsupported += 1;
+          continue;
+        }
+        if (availableSlots === 0) {
+          result.limitReached = true;
+          continue;
+        }
 
-    setPendingPhotos((previous) => [...previous, ...nextPhotos]);
-    event.target.value = "";
-    focusTextarea();
-  }, [focusTextarea, processPhotoFile]);
+        try {
+          const photo = await processPhotoFile(file);
+          if (photo.blob.size > MAX_PHOTO_BYTES) {
+            URL.revokeObjectURL(photo.previewUrl);
+            result.tooLarge += 1;
+            continue;
+          }
+          nextPhotos.push(photo);
+          availableSlots -= 1;
+        } catch {
+          result.failed += 1;
+        }
+      }
+
+      if (nextPhotos.length > 0) {
+        setPendingPhotos((previous) => [...previous, ...nextPhotos]);
+        result.added = nextPhotos.length;
+        focusTextarea();
+      }
+      return result;
+    };
+
+    const queued = ingestionQueueRef.current.then(run, run);
+    ingestionQueueRef.current = queued.then(() => undefined, () => undefined);
+    return queued;
+  }, [focusTextarea, processPhotoFile, setPendingPhotos]);
 
   const removePendingPhoto = useCallback((index: number) => {
     setPendingPhotos((previous) => {
@@ -117,23 +190,23 @@ export function useChatComposerState({
       next.splice(index, 1);
       return next;
     });
-  }, []);
+  }, [setPendingPhotos]);
 
   const consumeComposerState = useCallback(() => {
     const nextState = {
-      photos: [...pendingPhotos],
+      photos: [...pendingPhotosState],
       replyToId: replyingTo?.id,
     };
     setPendingPhotos([]);
     setReplyingTo(null);
     return nextState;
-  }, [pendingPhotos, replyingTo]);
+  }, [pendingPhotosState, replyingTo, setPendingPhotos]);
 
   return {
     input,
     replyingTo,
     editingMsg,
-    pendingPhotos,
+    pendingPhotos: pendingPhotosState,
     setInput,
     setReplyingTo,
     setPendingPhotos,
@@ -144,7 +217,7 @@ export function useChatComposerState({
     clearReplyingTo,
     openEditDialog,
     closeEditDialog,
-    handlePhotoSelect,
+    addPhotoFiles,
     removePendingPhoto,
     consumeComposerState,
   };

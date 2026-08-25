@@ -22,7 +22,11 @@ import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReplyParents } from "./useChatReplyParents";
 import { useChatReportsSearch } from "./useChatReportsSearch";
-import { useChatComposerState, type PendingPhoto } from "./useChatComposerState";
+import {
+  useChatComposerState,
+  type AddPhotoFilesOptions,
+  type PendingPhoto,
+} from "./useChatComposerState";
 import { useChatMessageMutations } from "./useChatMessageMutations";
 import { useChatInteractions } from "./useChatInteractions";
 import { useChatAdminChannelActions } from "./useChatAdminChannelActions";
@@ -54,8 +58,9 @@ function getInitialUid(): string {
 }
 
 function compressImage(file: File, maxWidth: number, quality: number): Promise<{ blob: Blob; width: number; height: number }> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
+    const sourceUrl = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas");
       let w = img.width, h = img.height;
@@ -64,21 +69,43 @@ function compressImage(file: File, maxWidth: number, quality: number): Promise<{
       h = Math.round(h);
       canvas.width = w;
       canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      canvas.toBlob((blob) => resolve({ blob: blob!, width: w, height: h }), "image/jpeg", quality);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        URL.revokeObjectURL(sourceUrl);
+        reject(new Error("image_canvas_unavailable"));
+        return;
+      }
+      context.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(sourceUrl);
+        if (!blob) {
+          reject(new Error("image_compression_failed"));
+          return;
+        }
+        resolve({ blob, width: w, height: h });
+      }, "image/jpeg", quality);
     };
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(sourceUrl);
+      reject(new Error("image_decode_failed"));
+    };
+    img.src = sourceUrl;
   });
 }
 
 function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
+    const sourceUrl = URL.createObjectURL(file);
     img.onload = () => {
       resolve({ width: img.naturalWidth, height: img.naturalHeight });
-      URL.revokeObjectURL(img.src);
+      URL.revokeObjectURL(sourceUrl);
     };
-    img.src = URL.createObjectURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(sourceUrl);
+      reject(new Error("image_decode_failed"));
+    };
+    img.src = sourceUrl;
   });
 }
 
@@ -174,6 +201,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     actionLabel?: string;
     onAction?: () => void;
   } | null>(null);
+  const [isPhotoDragActive, setIsPhotoDragActive] = useState(false);
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
   useEffect(() => {
     setViewerAccess("standard");
@@ -181,9 +209,11 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const chatViewportRef = useRef<HTMLDivElement>(null);
   const galleryNavigationStageRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const photoDragDepthRef = useRef(0);
   const initRequestIdRef = useRef(0);
   const initialScrollDoneRef = useRef(false);
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
@@ -210,6 +240,64 @@ export function ChatView({ channelId }: { channelId: string }) {
       cancelAnimationFrame(reactionFrameRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    const root = chatViewportRef.current;
+    const textarea = textareaRef.current;
+    const viewport = window.visualViewport;
+    if (!root || !textarea || !viewport) return;
+
+    let frame = 0;
+    let scrollFrame = 0;
+    const resetViewport = () => {
+      root.style.removeProperty("--chat-viewport-height");
+      root.style.removeProperty("--chat-viewport-top");
+    };
+    const syncViewport = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (document.activeElement !== textarea) {
+          resetViewport();
+          return;
+        }
+
+        const scrollRoot = messagesContainerRef.current;
+        const bottomDistance = scrollRoot
+          ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
+          : null;
+        root.style.setProperty("--chat-viewport-height", `${viewport.height}px`);
+        root.style.setProperty("--chat-viewport-top", `${viewport.offsetTop}px`);
+
+        if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
+          cancelAnimationFrame(scrollFrame);
+          scrollFrame = requestAnimationFrame(() => {
+            scrollRoot.scrollTop =
+              scrollRoot.scrollHeight - scrollRoot.clientHeight - bottomDistance;
+          });
+        }
+      });
+    };
+    const handleBlur = () => {
+      requestAnimationFrame(() => {
+        if (document.activeElement !== textarea) resetViewport();
+      });
+    };
+
+    textarea.addEventListener("focus", syncViewport);
+    textarea.addEventListener("blur", handleBlur);
+    viewport.addEventListener("resize", syncViewport);
+    viewport.addEventListener("scroll", syncViewport);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(scrollFrame);
+      textarea.removeEventListener("focus", syncViewport);
+      textarea.removeEventListener("blur", handleBlur);
+      viewport.removeEventListener("resize", syncViewport);
+      viewport.removeEventListener("scroll", syncViewport);
+      resetViewport();
+    };
+  }, [loading]);
 
   useEffect(() => {
     const handleIdentityChanged = (event: Event) => {
@@ -256,7 +344,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     clearReplyingTo,
     openEditDialog,
     closeEditDialog,
-    handlePhotoSelect,
+    addPhotoFiles,
     removePendingPhoto,
     consumeComposerState,
   } = useChatComposerState({
@@ -856,6 +944,70 @@ export function ChatView({ channelId }: { channelId: string }) {
     },
   });
 
+  const viewerInputBlocked =
+    isUserBlocked && (hasPetitioned || !petitionEnabled);
+  const composerMediaDisabled =
+    ownerModerationBlocked ||
+    (!!channel?.is_frozen && !effectiveAdmin && !dmMode) ||
+    viewerInputBlocked;
+  const photoOptions = useMemo<AddPhotoFilesOptions | undefined>(
+    () => effectiveAdmin && !!replyingTo?.dm
+      ? { maxFiles: 1 }
+      : undefined,
+    [effectiveAdmin, replyingTo?.dm],
+  );
+
+  const addComposerPhotoFiles = useCallback(async (
+    files: Iterable<File>,
+    options = photoOptions,
+  ) => {
+    if (composerMediaDisabled) return;
+    const result = await addPhotoFiles(files, options);
+    const errorText = result.tooLarge > 0
+      ? t("mediaTooLarge")
+      : result.unsupported > 0
+        ? t("unsupportedPhoto")
+        : result.failed > 0
+          ? t("photoReadFailed")
+          : result.limitReached
+            ? t("dmReplyMediaLimit")
+            : null;
+    if (errorText) {
+      setBanner({ text: errorText, color: "#d97706" });
+    }
+  }, [addPhotoFiles, composerMediaDisabled, photoOptions, t]);
+
+  const handlePhotoDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+    event.preventDefault();
+    if (composerMediaDisabled) return;
+    photoDragDepthRef.current += 1;
+    setIsPhotoDragActive(true);
+  }, [composerMediaDisabled]);
+
+  const handlePhotoDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = composerMediaDisabled ? "none" : "copy";
+  }, [composerMediaDisabled]);
+
+  const handlePhotoDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+    photoDragDepthRef.current = Math.max(0, photoDragDepthRef.current - 1);
+    if (photoDragDepthRef.current === 0) {
+      setIsPhotoDragActive(false);
+    }
+  }, []);
+
+  const handlePhotoDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
+    event.preventDefault();
+    photoDragDepthRef.current = 0;
+    setIsPhotoDragActive(false);
+    if (composerMediaDisabled) return;
+    void addComposerPhotoFiles(Array.from(event.dataTransfer.files));
+  }, [addComposerPhotoFiles, composerMediaDisabled]);
+
   const contextMenuActions = useChatContextMenuActions({
     channelId,
     inLiveMode,
@@ -991,7 +1143,44 @@ export function ChatView({ channelId }: { channelId: string }) {
   const hasChannelRules = Boolean(channel?.notice && channel.notice !== "[]");
 
   return (
-    <div className="h-dvh max-w-[480px] mx-auto flex flex-col relative md:border-x" style={{ background: "var(--bg)", color: "var(--gray-text)", borderColor: "var(--hairline)" }}>
+    <div
+      ref={chatViewportRef}
+      className="fixed inset-x-0 max-w-[480px] mx-auto flex flex-col md:border-x"
+      style={{
+        top: "var(--chat-viewport-top, 0px)",
+        height: "var(--chat-viewport-height, 100dvh)",
+        background: "var(--bg)",
+        color: "var(--gray-text)",
+        borderColor: "var(--hairline)",
+      }}
+      onDragEnter={handlePhotoDragEnter}
+      onDragOver={handlePhotoDragOver}
+      onDragLeave={handlePhotoDragLeave}
+      onDrop={handlePhotoDrop}
+    >
+      {isPhotoDragActive && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[600] flex items-center justify-center p-6"
+          aria-hidden="true"
+          style={{
+            background: "color-mix(in srgb, var(--bg) 72%, transparent)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            className="flex h-full w-full items-center justify-center rounded-[24px] border-2 border-dashed font-semibold"
+            style={{
+              borderColor: "var(--tint)",
+              color: "var(--tint)",
+              background: "color-mix(in srgb, var(--tint) 8%, transparent)",
+              fontSize: "var(--bubble-font-size)",
+            }}
+          >
+            {t("dropPhotos")}
+          </div>
+        </div>
+      )}
       <ChatViewTopChrome
         channelId={inLiveMode ? `${channelId}_live` : channelId}
         channelName={channel?.name || ""}
@@ -1151,7 +1340,7 @@ export function ChatView({ channelId }: { channelId: string }) {
         viewerModerationBlocked={viewerModerationBlocked}
         moderationFrozenBannerLabel={t("moderationFrozenBanner")}
         photoInputRef={photoInputRef}
-        onPhotoSelect={handlePhotoSelect}
+        onPhotoFiles={addComposerPhotoFiles}
         onOpenPlusMenu={setPlusMenu}
         isUserBlocked={isUserBlocked}
         hasPetitioned={hasPetitioned}

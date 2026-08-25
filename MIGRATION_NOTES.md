@@ -4,6 +4,39 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Mobile keyboard keeps the chat header visible — 2026-08-25
+
+- The chat shell is now a fixed application viewport instead of a normal-flow
+  `100dvh` element that mobile browsers can pan above the visible screen while
+  focusing the composer.
+- While the message textarea is focused, `visualViewport` resize and scroll
+  events update the chat shell height and top offset to follow the visible area
+  above the keyboard. The normal `100dvh` layout is restored on blur.
+- If the user is already near the latest messages, keyboard animation preserves
+  the same distance from the bottom so keeping the header visible does not hide
+  the active conversation.
+
+Browsers without `visualViewport` retain the fixed `100dvh` fallback. No D1
+migration, Worker deployment, R2 change or secret update is required.
+
+### Chat-wide photo drop and clipboard paste — 2026-08-25
+
+- The entire chat surface now accepts dropped JPEG, PNG, GIF and WebP files,
+  while the message textarea accepts clipboard images without discarding text
+  carried by the same clipboard operation.
+- File picker, drop and paste entry points share one serialized ingestion path,
+  including image processing, the 10MB post-processing upload limit and the
+  one-photo limit for owner replies to private messages.
+- Frozen, suspended and blocked composers do not accept dropped or pasted
+  media. Unsupported, oversized and unreadable files produce localized
+  feedback, and file drops are intercepted so the browser cannot navigate away
+  from the chat.
+- Dragging a file over the chat shows one stable full-surface target; nested
+  child transitions are counted so the overlay does not flicker.
+
+No D1 migration, Worker deployment, R2 change or secret update is required.
+Only the frontend needs deployment.
+
 ### Cached public channel backgrounds transition without a repaint flash — 2026-08-24
 
 - Public channel appearance was already stored as a versioned `localStorage`

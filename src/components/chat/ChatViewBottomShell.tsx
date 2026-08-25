@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import type {
-  ChangeEvent,
   ChangeEventHandler,
+  ClipboardEventHandler,
   KeyboardEventHandler,
   RefObject,
 } from "react";
 import { EmojiBar } from "./EmojiBar";
 import { ReplyBar } from "./ReplyBar";
 import { ScrollToBottom } from "./ScrollToBottom";
-import type { PendingPhoto } from "./useChatComposerState";
+import type {
+  AddPhotoFilesOptions,
+  PendingPhoto,
+} from "./useChatComposerState";
 import type { Message } from "./chatTypes";
 import { CloseIcon } from "@/components/ui/CloseIcon";
 
@@ -139,8 +142,9 @@ interface ChatViewBottomShellProps {
   moderationFrozenBannerLabel: string;
 
   photoInputRef: RefObject<HTMLInputElement | null>;
-  onPhotoSelect: (
-    event: ChangeEvent<HTMLInputElement>,
+  onPhotoFiles: (
+    files: Iterable<File>,
+    options?: AddPhotoFilesOptions,
   ) => Promise<void>;
 
   onOpenPlusMenu: (rect: DOMRect) => void;
@@ -201,7 +205,7 @@ export function ChatViewBottomShell({
   viewerModerationBlocked,
   moderationFrozenBannerLabel,
   photoInputRef,
-  onPhotoSelect,
+  onPhotoFiles,
   onOpenPlusMenu,
   isUserBlocked,
   hasPetitioned,
@@ -286,6 +290,27 @@ export function ChatViewBottomShell({
     !!(input.trim() || pendingPhotos.length > 0) &&
     !ownerModerationBlocked &&
     !composerFrozenForViewer;
+  const photoOptions = allowMultiplePhotos
+    ? undefined
+    : { maxFiles: 1 };
+  const handlePaste: ClipboardEventHandler<HTMLTextAreaElement> = (event) => {
+    if (inputDisabled) return;
+
+    const itemFiles = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    const files = itemFiles.length > 0
+      ? itemFiles
+      : Array.from(event.clipboardData.files);
+    if (files.length === 0) return;
+
+    // Preserve normal text insertion when a clipboard carries text and images.
+    if (!event.clipboardData.getData("text/plain")) {
+      event.preventDefault();
+    }
+    void onPhotoFiles(files, photoOptions);
+  };
 
   return (
     <>
@@ -339,6 +364,7 @@ export function ChatViewBottomShell({
               >
                 <img
                   src={photo.previewUrl}
+                  alt=""
                   className="block rounded-[10px]"
                   style={{
                     width: "56px",
@@ -454,11 +480,13 @@ export function ChatViewBottomShell({
         <input
           ref={photoInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/gif,image/webp"
           multiple={allowMultiplePhotos}
           hidden
           onChange={(event) => {
-            void onPhotoSelect(event);
+            const files = Array.from(event.target.files || []);
+            event.target.value = "";
+            void onPhotoFiles(files, photoOptions);
           }}
         />
 
@@ -523,6 +551,7 @@ export function ChatViewBottomShell({
             ref={textareaRef}
             value={input}
             onChange={onInputChange}
+            onPaste={handlePaste}
             onKeyDown={onKeyDown}
             onBlur={() => {
               requestAnimationFrame(() =>
