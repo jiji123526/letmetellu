@@ -111,6 +111,25 @@ export function ChatViewTopChrome({
     return () => observer.disconnect();
   }, []);
 
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const viewport = window.visualViewport;
+    if (!header || !viewport) return;
+
+    const keepAtVisibleTop = () => {
+      header.style.top = `${viewport.offsetTop}px`;
+    };
+    keepAtVisibleTop();
+    viewport.addEventListener("resize", keepAtVisibleTop);
+    viewport.addEventListener("scroll", keepAtVisibleTop);
+
+    return () => {
+      viewport.removeEventListener("resize", keepAtVisibleTop);
+      viewport.removeEventListener("scroll", keepAtVisibleTop);
+      header.style.top = "0px";
+    };
+  }, []);
+
   return (
     <>
       <header

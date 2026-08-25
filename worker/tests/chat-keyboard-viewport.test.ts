@@ -20,14 +20,16 @@ test("focused chat composer follows the mobile visual viewport", () => {
   assert.match(chatViewSource, /document\.activeElement !== textarea/);
   assert.match(chatViewSource, /root\.style\.top = `\$\{viewport\.pageTop\}px`/);
   assert.match(chatViewSource, /root\.style\.height = `\$\{viewport\.height\}px`/);
-  assert.match(chatViewSource, /viewport\.addEventListener\("resize", syncViewport\)/);
-  assert.match(chatViewSource, /viewport\.removeEventListener\("resize", syncViewport\)/);
+  assert.match(chatViewSource, /requestAnimationFrame\(\(\) => \{\s*secondGeometryFrame = requestAnimationFrame\(syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.addEventListener\("resize", scheduleViewportSync\)/);
+  assert.match(chatViewSource, /viewport\.removeEventListener\("resize", scheduleViewportSync\)/);
   assert.doesNotMatch(chatViewSource, /--chat-keyboard-inset/);
   assert.doesNotMatch(chatViewSource, /--chat-header-offset/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-height/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-top/);
-  assert.match(chatViewSource, /viewport\.addEventListener\("scroll", syncViewport\)/);
-  assert.match(chatViewSource, /viewport\.removeEventListener\("scroll", syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.addEventListener\("scroll", scheduleViewportSync\)/);
+  assert.match(chatViewSource, /viewport\.removeEventListener\("scroll", scheduleViewportSync\)/);
+  assert.doesNotMatch(chatViewSource, /textarea\.addEventListener\("focus"/);
 });
 
 test("chat frame follows the visible viewport without header-specific compensation", () => {
@@ -47,7 +49,9 @@ test("header is an independent fixed layer with a measured layout spacer", () =>
   );
   assert.match(topChromeSource, /const observer = new ResizeObserver\(syncHeight\)/);
   assert.match(topChromeSource, /style=\{\{ height: `\$\{headerHeight\}px` \}\}/);
-  assert.doesNotMatch(topChromeSource, /visualViewport|keyboard/);
+  assert.match(topChromeSource, /const viewport = window\.visualViewport/);
+  assert.match(topChromeSource, /header\.style\.top = `\$\{viewport\.offsetTop\}px`/);
+  assert.match(topChromeSource, /viewport\.addEventListener\("scroll", keepAtVisibleTop\)/);
 });
 
 test("keyboard-aware content preserves the latest-message bottom distance", () => {

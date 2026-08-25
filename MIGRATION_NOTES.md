@@ -4,11 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
-### Header is fixed independently from all keyboard code — 2026-08-25
+### Keyboard animation no longer exposes transient chat geometry — 2026-08-25
+
+- The message/composer frame no longer resizes on the initial focus event or on
+  every intermediate keyboard animation value. Resize and scroll events are
+  coalesced across two animation frames, so only settled visual-viewport
+  geometry is applied and the composer cannot briefly collapse toward the top.
+- The independently fixed header now follows `visualViewport.offsetTop`
+  synchronously. This compensates for Safari panning its visual viewport while
+  keeping the header at the same physical top edge.
+- Header tracking and chat-frame settling are intentionally separate: header
+  visibility is immediate, while message/composer geometry favors stability.
+
+### Header layer is separated from chat-frame layout — 2026-08-25
 
 - The actual chat `<header>` is now a viewport-fixed `top: 0` layer. Keyboard
-  resize and scroll handlers update only the separate chat frame that contains
-  messages and the composer; they never translate or reposition the header.
+  frame resize handlers update only the separate chat frame that contains
+  messages and the composer.
 - A measured spacer preserves the header's normal layout height below the fixed
   layer. `ResizeObserver` handles font-size and content-height changes without
   hard-coding a device-specific header height.

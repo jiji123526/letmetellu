@@ -246,6 +246,8 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!root || !textarea || !viewport) return;
 
     let blurFrame = 0;
+    let firstGeometryFrame = 0;
+    let secondGeometryFrame = 0;
     let scrollFrame = 0;
     const resetViewport = () => {
       root.style.top = "0px";
@@ -272,8 +274,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         });
       }
     };
-    const handleFocus = () => {
-      syncViewport();
+    const scheduleViewportSync = () => {
+      cancelAnimationFrame(firstGeometryFrame);
+      cancelAnimationFrame(secondGeometryFrame);
+      firstGeometryFrame = requestAnimationFrame(() => {
+        secondGeometryFrame = requestAnimationFrame(syncViewport);
+      });
     };
     const handleBlur = () => {
       cancelAnimationFrame(blurFrame);
@@ -282,18 +288,18 @@ export function ChatView({ channelId }: { channelId: string }) {
       });
     };
 
-    textarea.addEventListener("focus", handleFocus);
     textarea.addEventListener("blur", handleBlur);
-    viewport.addEventListener("resize", syncViewport);
-    viewport.addEventListener("scroll", syncViewport);
+    viewport.addEventListener("resize", scheduleViewportSync);
+    viewport.addEventListener("scroll", scheduleViewportSync);
 
     return () => {
       cancelAnimationFrame(blurFrame);
+      cancelAnimationFrame(firstGeometryFrame);
+      cancelAnimationFrame(secondGeometryFrame);
       cancelAnimationFrame(scrollFrame);
-      textarea.removeEventListener("focus", handleFocus);
       textarea.removeEventListener("blur", handleBlur);
-      viewport.removeEventListener("resize", syncViewport);
-      viewport.removeEventListener("scroll", syncViewport);
+      viewport.removeEventListener("resize", scheduleViewportSync);
+      viewport.removeEventListener("scroll", scheduleViewportSync);
       resetViewport();
     };
   }, [loading]);
