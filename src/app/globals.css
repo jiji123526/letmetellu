@@ -110,12 +110,6 @@ body {
   }
 }
 
-@media (display-mode: standalone) {
-  .chat-composer:has(textarea:focus) {
-    padding-bottom: 8px !important;
-  }
-}
-
 .dashboard-font-scaled {
   --dashboard-font-offset: calc(var(--bubble-font-size, 17px) - 17px);
 }

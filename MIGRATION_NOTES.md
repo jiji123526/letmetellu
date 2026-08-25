@@ -4,6 +4,22 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Chat frame follows the visible keyboard viewport directly — 2026-08-25
+
+- The keyboard-specific header transform and content bottom padding have been
+  removed. They could duplicate browser positioning and create both header
+  movement and excess space below the composer.
+- While the textarea is focused, the absolute chat frame now synchronously uses
+  `visualViewport.pageTop` and `visualViewport.height`. The header therefore
+  occupies the visible screen's top edge and the composer occupies its bottom
+  edge without a second compensation layer.
+- Document overflow remains locked, but the body is no longer changed to
+  `position: fixed`; that body-level positioning could fight Safari's own
+  visual viewport.
+- Focused coarse-pointer layouts now use zero composer bottom padding in both
+  browser and standalone modes. Safe-area padding remains unchanged whenever
+  the textarea is not focused.
+
 ### Stationary mobile header is isolated from keyboard layout — 2026-08-25
 
 - The top chat chrome now occupies its own non-shrinking layer. Keyboard

@@ -245,66 +245,34 @@ export function ChatView({ channelId }: { channelId: string }) {
     const viewport = window.visualViewport;
     if (!root || !textarea || !viewport) return;
 
-    let frame = 0;
     let blurFrame = 0;
     let scrollFrame = 0;
-    let restingViewportHeight = 0;
-    let restingViewportOffsetTop = 0;
-    let restingRootHeight = 0;
     const resetViewport = () => {
-      restingViewportHeight = 0;
-      restingViewportOffsetTop = 0;
-      restingRootHeight = 0;
-      root.style.removeProperty("--chat-keyboard-inset");
-      root.style.removeProperty("--chat-header-offset");
-    };
-    const captureRestingViewport = () => {
-      restingViewportHeight = viewport.height;
-      restingViewportOffsetTop = viewport.offsetTop;
-      restingRootHeight = root.getBoundingClientRect().height;
+      root.style.top = "0px";
+      root.style.height = "100dvh";
     };
     const syncViewport = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (document.activeElement !== textarea) {
-          resetViewport();
-          return;
-        }
+      if (document.activeElement !== textarea) {
+        resetViewport();
+        return;
+      }
 
-        if (restingViewportHeight === 0 || restingRootHeight === 0) {
-          captureRestingViewport();
-        }
-        const scrollRoot = messagesContainerRef.current;
-        const bottomDistance = scrollRoot
-          ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
-          : null;
-        const visualShrink = Math.max(0, restingViewportHeight - viewport.height);
-        const layoutShrink = Math.max(
-          0,
-          restingRootHeight - root.getBoundingClientRect().height,
-        );
-        const viewportOffset = Math.max(
-          0,
-          viewport.offsetTop - restingViewportOffsetTop,
-        );
-        const keyboardInset = Math.max(
-          0,
-          visualShrink - layoutShrink - viewportOffset,
-        );
-        root.style.setProperty("--chat-keyboard-inset", `${keyboardInset}px`);
-        root.style.setProperty("--chat-header-offset", `${viewportOffset}px`);
+      const scrollRoot = messagesContainerRef.current;
+      const bottomDistance = scrollRoot
+        ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
+        : null;
+      root.style.top = `${viewport.pageTop}px`;
+      root.style.height = `${viewport.height}px`;
 
-        if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
-          cancelAnimationFrame(scrollFrame);
-          scrollFrame = requestAnimationFrame(() => {
-            scrollRoot.scrollTop =
-              scrollRoot.scrollHeight - scrollRoot.clientHeight - bottomDistance;
-          });
-        }
-      });
+      if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
+        cancelAnimationFrame(scrollFrame);
+        scrollFrame = requestAnimationFrame(() => {
+          scrollRoot.scrollTop =
+            scrollRoot.scrollHeight - scrollRoot.clientHeight - bottomDistance;
+        });
+      }
     };
     const handleFocus = () => {
-      captureRestingViewport();
       syncViewport();
     };
     const handleBlur = () => {
@@ -320,7 +288,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     viewport.addEventListener("scroll", syncViewport);
 
     return () => {
-      cancelAnimationFrame(frame);
       cancelAnimationFrame(blurFrame);
       cancelAnimationFrame(scrollFrame);
       textarea.removeEventListener("focus", handleFocus);
@@ -338,22 +305,13 @@ export function ChatView({ channelId }: { channelId: string }) {
     const body = document.body;
     const previousHtmlOverflow = html.style.overflow;
     const previousBodyOverflow = body.style.overflow;
-    const previousBodyPosition = body.style.position;
-    const previousBodyInset = body.style.inset;
-    const previousBodyWidth = body.style.width;
 
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.inset = "0";
-    body.style.width = "100%";
 
     return () => {
       html.style.overflow = previousHtmlOverflow;
       body.style.overflow = previousBodyOverflow;
-      body.style.position = previousBodyPosition;
-      body.style.inset = previousBodyInset;
-      body.style.width = previousBodyWidth;
     };
   }, [loading]);
 
@@ -1185,7 +1143,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   return (
     <div
       ref={chatViewportRef}
-      className="fixed inset-x-0 max-w-[480px] mx-auto flex flex-col overflow-hidden md:border-x"
+      className="absolute inset-x-0 max-w-[480px] mx-auto flex flex-col overflow-hidden md:border-x"
       style={{
         top: "0px",
         height: "100dvh",
@@ -1199,9 +1157,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       <div
         data-chat-stationary-header
         className="relative z-30 flex-none"
-        style={{
-          transform: "translate3d(0, var(--chat-header-offset, 0px), 0)",
-        }}
       >
         <ChatViewTopChrome
         channelId={inLiveMode ? `${channelId}_live` : channelId}
@@ -1266,9 +1221,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       <div
         data-chat-keyboard-content
         className="relative flex min-h-0 flex-1 flex-col"
-        style={{
-          paddingBottom: "var(--chat-keyboard-inset, 0px)",
-        }}
       >
         <ChatViewMessagePane
         channelId={channelId}
