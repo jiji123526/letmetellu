@@ -11,18 +11,33 @@ const bottomShellSource = readFileSync(
   "utf8",
 );
 
-test("live emoji controls anchor to the chat composer", () => {
-  assert.doesNotMatch(emojiBarSource, /createPortal/);
+test("portaled live emoji controls anchor to the composer trigger", () => {
+  assert.match(emojiBarSource, /createPortal/);
   assert.match(
     emojiBarSource,
-    /className="emoji-fx-grid"[\s\S]*position: "absolute"[\s\S]*bottom: "calc\(100% \+ 8px\)"[\s\S]*right: "0"/,
+    /setAnchorRect\(event\.currentTarget\.getBoundingClientRect\(\)\)/,
   );
   assert.match(
     emojiBarSource,
-    /className="emoji-fx-picker-wrap"[\s\S]*position: "absolute"[\s\S]*right: "0"/,
+    /const anchoredRight = Math\.max\(12, window\.innerWidth - anchorRect\.right\)/,
+  );
+  assert.match(
+    emojiBarSource,
+    /className="emoji-fx-grid"[\s\S]*position: "fixed"[\s\S]*bottom: `\$\{anchoredBottom\}px`[\s\S]*right: `\$\{anchoredRight\}px`/,
+  );
+  assert.match(
+    emojiBarSource,
+    /className="emoji-fx-picker-wrap"[\s\S]*position: "fixed"[\s\S]*right: `\$\{anchoredRight\}px`/,
   );
   assert.match(
     bottomShellSource,
     /className="flex-1 flex items-end relative"/,
+  );
+});
+
+test("emoji selection still spawns locally before realtime broadcast", () => {
+  assert.match(
+    emojiBarSource,
+    /const triggerEmoji = \(emoji: string\) => \{[\s\S]*spawnEmoji\(emoji, x, h\);[\s\S]*onBroadcast\(emoji, x, h\)/,
   );
 });

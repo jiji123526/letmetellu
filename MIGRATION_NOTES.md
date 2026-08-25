@@ -6,9 +6,10 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ### Live emoji controls stay inside the chat column — 2026-08-25
 
-- The live emoji shortcut row and full emoji picker now anchor to the relative
-  composer container instead of being portaled to `document.body` with a
-  viewport-level `right: 12px`.
+- The live emoji shortcut row and full emoji picker retain their body portal,
+  preserving the existing click, animation and realtime layers. Their fixed
+  coordinates now derive from the trigger button's bounding rectangle instead
+  of a viewport-level `right: 12px`.
 - Desktop layouts therefore keep both panels aligned with the centered 480px
   chat column. Mobile placement remains directly above the composer.
 

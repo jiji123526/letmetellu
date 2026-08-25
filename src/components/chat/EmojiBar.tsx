@@ -2,6 +2,7 @@
 
 import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { adminAction } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
 import { buildEmojiPicker } from "./emojiPickerData";
@@ -43,6 +44,7 @@ function getEmojiFxLayer(): HTMLDivElement | null {
 
 export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
   const [showGrid, setShowGrid] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const emojis = presets && presets.length > 0 ? presets : getPresetEmojis(channelId);
 
   const triggerEmoji = (emoji: string) => {
@@ -58,27 +60,47 @@ export function EmojiBar({ channelId, presets, onBroadcast }: EmojiBarProps) {
         type="button"
         className="emoji-fx-trigger"
         style={{ border: "none", background: "none", fontSize: "calc(var(--bubble-font-size) + 2px)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "calc(var(--bubble-font-size) + 13px)", height: "calc(var(--bubble-font-size) + 13px)", marginRight: "4px", marginBottom: "4.5px", lineHeight: 1 }}
-        onClick={(e) => { e.stopPropagation(); setShowGrid(!showGrid); }}
+        onClick={(event) => {
+          event.stopPropagation();
+          setAnchorRect(event.currentTarget.getBoundingClientRect());
+          setShowGrid((current) => !current);
+        }}
       >
         {emojis[0]}
       </button>
 
-      {showGrid && (
-        <EmojiGrid
-          emojis={emojis}
-          onSelect={triggerEmoji}
-          onClose={() => setShowGrid(false)}
-        />
-      )}
+      {showGrid && anchorRect && typeof document !== "undefined"
+        ? createPortal(
+          <EmojiGrid
+            anchorRect={anchorRect}
+            emojis={emojis}
+            onSelect={triggerEmoji}
+            onClose={() => setShowGrid(false)}
+          />,
+          document.body,
+        )
+        : null}
     </>
   );
 }
 
-function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: (emoji: string) => void; onClose: () => void }) {
+function EmojiGrid({
+  anchorRect,
+  emojis,
+  onSelect,
+  onClose,
+}: {
+  anchorRect: DOMRect;
+  emojis: string[];
+  onSelect: (emoji: string) => void;
+  onClose: () => void;
+}) {
   const [showFullPicker, setShowFullPicker] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const anchoredRight = Math.max(12, window.innerWidth - anchorRect.right);
+  const anchoredBottom = window.innerHeight - anchorRect.top + 8;
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -104,9 +126,9 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
         ref={gridRef}
         className="emoji-fx-grid"
         style={{
-          position: "absolute",
-          bottom: "calc(100% + 8px)",
-          right: "0",
+          position: "fixed",
+          bottom: `${anchoredBottom}px`,
+          right: `${anchoredRight}px`,
           display: "flex",
           gap: "4px",
           background: "rgba(255,255,255,.85)",
@@ -170,7 +192,7 @@ function EmojiGrid({ emojis, onSelect, onClose }: { emojis: string[]; onSelect: 
       {showFullPicker && (
         <div
           className="emoji-fx-picker-wrap"
-          style={{ position: "absolute", bottom: "calc(100% + 58px)", right: "0", zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
+          style={{ position: "fixed", bottom: `${anchoredBottom + 50}px`, right: `${anchoredRight}px`, zIndex: 301, borderRadius: "14px", overflow: "hidden", boxShadow: "0 8px 30px rgba(0,0,0,.2)" }}
           ref={(el) => {
             pickerRef.current = el;
             if (el && !el.dataset.pickerLoading && !el.querySelector("emoji-picker")) {
