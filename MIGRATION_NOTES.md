@@ -4,15 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### iOS focus cannot strand the chat above the keyboard — 2026-08-25
+
+- The composer now renders at a minimum of 16 pixels even when the user's
+  bubble font preference is smaller. This prevents Safari's input-focus zoom,
+  which could enlarge and pan the page until only the composer remained at the
+  top of the screen.
+- Safari can still move its visual viewport while presenting the keyboard.
+  The single chat frame now follows that viewport's `offsetTop` as one unit;
+  header, messages and composer therefore retain their relative positions.
+  No element has an independent keyboard offset or spacer.
+
+This is a frontend-only correction. It requires neither a D1 migration nor a
+Worker deployment.
+
 ### Mobile chat uses one keyboard-aware viewport frame — 2026-08-25
 
 - Header, messages and composer now remain in one fixed flex frame. The header
   is a normal non-shrinking row instead of an independently positioned layer,
   so keyboard animation cannot apply mismatched coordinates to the header and
   composer.
-- Visual viewport handling now updates height only on resize. All `pageTop`,
-  `offsetTop`, viewport-scroll tracking, delayed geometry frames and measured
-  header spacers were removed.
+- Visual viewport handling updates the frame as a unit. All `pageTop`, delayed
+  geometry frames and measured header spacers were removed.
 - Document panning is blocked on touch devices while scrolling remains enabled
   for the message list and any genuinely scrollable chat overlay.
 - Chromium receives `interactive-widget=resizes-content` as a progressive

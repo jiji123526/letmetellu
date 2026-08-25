@@ -568,7 +568,7 @@ export function ChatViewBottomShell({
             className="flex-1 border-none bg-transparent outline-none resize-none"
             style={{
               fontSize:
-                "var(--bubble-font-size)",
+                "max(16px, var(--bubble-font-size))",
               color: inputColor,
               padding: "8px 0",
               caretColor: "var(--tint)",

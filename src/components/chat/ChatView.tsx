@@ -250,6 +250,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       const bottomDistance = scrollRoot
         ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
         : null;
+      root.style.top = `${viewport.offsetTop}px`;
       root.style.height = `${viewport.height}px`;
 
       if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
@@ -263,10 +264,13 @@ export function ChatView({ channelId }: { channelId: string }) {
 
     syncViewport();
     viewport.addEventListener("resize", syncViewport);
+    viewport.addEventListener("scroll", syncViewport);
 
     return () => {
       cancelAnimationFrame(scrollFrame);
       viewport.removeEventListener("resize", syncViewport);
+      viewport.removeEventListener("scroll", syncViewport);
+      root.style.top = "0px";
       root.style.height = "100dvh";
     };
   }, [loading]);

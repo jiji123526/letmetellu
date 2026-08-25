@@ -10,24 +10,36 @@ const topChromeSource = readFileSync(
   new URL("../../src/components/chat/ChatViewTopChrome.tsx", import.meta.url),
   "utf8",
 );
+const bottomShellSource = readFileSync(
+  new URL("../../src/components/chat/ChatViewBottomShell.tsx", import.meta.url),
+  "utf8",
+);
 const globalStylesSource = readFileSync(
   new URL("../../src/app/globals.css", import.meta.url),
   "utf8",
 );
 
-test("chat uses only visual viewport height during keyboard resize", () => {
+test("one chat frame follows the complete mobile visual viewport", () => {
   assert.match(chatViewSource, /const viewport = window\.visualViewport/);
+  assert.match(chatViewSource, /root\.style\.top = `\$\{viewport\.offsetTop\}px`/);
   assert.match(chatViewSource, /root\.style\.height = `\$\{viewport\.height\}px`/);
   assert.match(chatViewSource, /viewport\.addEventListener\("resize", syncViewport\)/);
   assert.match(chatViewSource, /viewport\.removeEventListener\("resize", syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.addEventListener\("scroll", syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.removeEventListener\("scroll", syncViewport\)/);
   assert.doesNotMatch(chatViewSource, /viewport\.pageTop/);
-  assert.doesNotMatch(chatViewSource, /viewport\.offsetTop/);
-  assert.doesNotMatch(chatViewSource, /viewport\.addEventListener\("scroll"/);
   assert.doesNotMatch(chatViewSource, /document\.activeElement !== textarea/);
   assert.doesNotMatch(chatViewSource, /--chat-keyboard-inset/);
   assert.doesNotMatch(chatViewSource, /--chat-header-offset/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-height/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-top/);
+});
+
+test("mobile composer font cannot trigger iOS focus zoom", () => {
+  assert.match(
+    bottomShellSource,
+    /fontSize:\s*"max\(16px, var\(--bubble-font-size\)\)"/,
+  );
 });
 
 test("chat is one fixed flex frame containing header, messages, and composer", () => {
