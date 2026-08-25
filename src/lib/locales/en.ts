@@ -22,7 +22,6 @@ export const en: Record<LocaleKeys, string> = {
   block: "Block User",
   unblock: "Unblock",
   messageInput: "Type a message",
-  dropPhotos: "Drop photos to attach",
   unsupportedPhoto: "Supported photo formats are JPEG, PNG, GIF, and WebP",
   photoReadFailed: "Could not read the photo",
   frozenInput: "Chat is frozen",

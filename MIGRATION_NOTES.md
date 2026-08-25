@@ -4,6 +4,25 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Browser keyboard removes redundant composer bottom padding — 2026-08-25
+
+- Focused chat composers in coarse-pointer mobile browser mode no longer keep
+  the extra eight-pixel footer padding above the software keyboard.
+- Home Screen and other standalone displays retain the existing eight-pixel
+  focused padding so their installed-app spacing does not change.
+
+### Chat drop is invisible and keyboard focus cannot scroll the page — 2026-08-25
+
+- Drag-and-drop remains active across the full chat, but no border, dimming,
+  blur or instruction label is rendered. The pending-image tray provides
+  confirmation only after a valid file is dropped.
+- While the loaded chat is mounted, document scrolling is locked and restored
+  on cleanup. Mobile browsers can resize the visual viewport for the keyboard
+  but cannot pan the entire page away from the fixed header.
+- The chat shell still follows only the visual viewport height and keeps an
+  unconditional `top: 0`; latest-message bottom-distance preservation remains
+  unchanged.
+
 ### Mobile keyboard no longer moves the chat header — 2026-08-25
 
 - The fixed chat shell now keeps an unconditional `top: 0` while the keyboard

@@ -36,24 +36,15 @@ test("clipboard image paste preserves accompanying plain text", () => {
 });
 
 test("whole-chat drop prevents browser navigation and respects blocked composers", () => {
-  assert.match(chatViewSource, /onDragEnter=\{handlePhotoDragEnter\}/);
   assert.match(chatViewSource, /onDragOver=\{handlePhotoDragOver\}/);
-  assert.match(chatViewSource, /onDragLeave=\{handlePhotoDragLeave\}/);
   assert.match(chatViewSource, /onDrop=\{handlePhotoDrop\}/);
   assert.match(chatViewSource, /handlePhotoDragOver[\s\S]*event\.preventDefault\(\)/);
   assert.match(chatViewSource, /handlePhotoDrop[\s\S]*event\.preventDefault\(\)/);
-  assert.match(chatViewSource, /photoDragDepthRef\.current \+= 1/);
   assert.match(chatViewSource, /if \(composerMediaDisabled\) return/);
   assert.match(chatViewSource, /void addComposerPhotoFiles\(Array\.from\(event\.dataTransfer\.files\)\)/);
 });
 
-test("drop feedback is unobtrusive and follows the active bubble color", () => {
-  const dropIndicator = chatViewSource.match(
-    /\{isPhotoDragActive && \([\s\S]*?\n      \)\}/,
-  )?.[0] || "";
-  assert.match(dropIndicator, /absolute inset-2/);
-  assert.match(dropIndicator, /bottom: "calc\(68px \+ env\(safe-area-inset-bottom\)\)"/);
-  assert.match(dropIndicator, /\$\{bubbleColor\}/);
-  assert.doesNotMatch(dropIndicator, /backdropFilter|WebkitBackdropFilter/);
-  assert.doesNotMatch(dropIndicator, /background: "color-mix\(in srgb, var\(--bg\) 72%/);
+test("whole-chat drop has no visual range indicator", () => {
+  assert.doesNotMatch(chatViewSource, /isPhotoDragActive|photoDragDepthRef/);
+  assert.doesNotMatch(chatViewSource, /dropPhotos/);
 });

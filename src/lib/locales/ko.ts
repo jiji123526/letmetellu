@@ -20,7 +20,6 @@ export const ko = {
   block: "사용자 차단",
   unblock: "차단 해제",
   messageInput: "메시지를 입력하세요",
-  dropPhotos: "사진을 놓아 첨부",
   unsupportedPhoto: "지원하지 않는 사진 형식입니다",
   photoReadFailed: "사진을 불러오지 못했습니다",
   frozenInput: "채팅이 얼려져 있습니다",

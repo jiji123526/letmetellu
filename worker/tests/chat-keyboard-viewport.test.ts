@@ -6,6 +6,10 @@ const chatViewSource = readFileSync(
   new URL("../../src/components/chat/ChatView.tsx", import.meta.url),
   "utf8",
 );
+const globalStylesSource = readFileSync(
+  new URL("../../src/app/globals.css", import.meta.url),
+  "utf8",
+);
 
 test("focused chat composer follows the mobile visual viewport", () => {
   assert.match(chatViewSource, /const viewport = window\.visualViewport/);
@@ -25,5 +29,25 @@ test("chat shell stays fixed and preserves the latest-message bottom distance", 
   assert.match(
     chatViewSource,
     /scrollRoot\.scrollTop =\s*scrollRoot\.scrollHeight - scrollRoot\.clientHeight - bottomDistance/,
+  );
+});
+
+test("loaded chat locks document scrolling and restores prior styles", () => {
+  assert.match(chatViewSource, /html\.style\.overflow = "hidden"/);
+  assert.match(chatViewSource, /body\.style\.overflow = "hidden"/);
+  assert.match(chatViewSource, /body\.style\.position = "fixed"/);
+  assert.match(chatViewSource, /body\.style\.inset = "0"/);
+  assert.match(chatViewSource, /html\.style\.overflow = previousHtmlOverflow/);
+  assert.match(chatViewSource, /body\.style\.position = previousBodyPosition/);
+});
+
+test("mobile browser keyboard removes footer padding but standalone keeps it", () => {
+  assert.match(
+    globalStylesSource,
+    /@media \(hover: none\) and \(pointer: coarse\)[\s\S]*?padding-bottom: 0 !important/,
+  );
+  assert.match(
+    globalStylesSource,
+    /@media \(display-mode: standalone\)[\s\S]*?padding-bottom: 8px !important/,
   );
 });

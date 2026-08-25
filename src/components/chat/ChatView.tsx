@@ -201,7 +201,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     actionLabel?: string;
     onAction?: () => void;
   } | null>(null);
-  const [isPhotoDragActive, setIsPhotoDragActive] = useState(false);
   const [showModerationPetitionDialog, setShowModerationPetitionDialog] = useState(false);
   useEffect(() => {
     setViewerAccess("standard");
@@ -213,7 +212,6 @@ export function ChatView({ channelId }: { channelId: string }) {
   const galleryNavigationStageRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const photoDragDepthRef = useRef(0);
   const initRequestIdRef = useRef(0);
   const initialScrollDoneRef = useRef(false);
   const pendingReactionUpdatesRef = useRef(new Map<string, string>());
@@ -292,6 +290,32 @@ export function ChatView({ channelId }: { channelId: string }) {
       textarea.removeEventListener("blur", handleBlur);
       viewport.removeEventListener("resize", syncViewport);
       resetViewport();
+    };
+  }, [loading]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyPosition = body.style.position;
+    const previousBodyInset = body.style.inset;
+    const previousBodyWidth = body.style.width;
+
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.inset = "0";
+    body.style.width = "100%";
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+      body.style.position = previousBodyPosition;
+      body.style.inset = previousBodyInset;
+      body.style.width = previousBodyWidth;
     };
   }, [loading]);
 
@@ -973,33 +997,15 @@ export function ChatView({ channelId }: { channelId: string }) {
     }
   }, [addPhotoFiles, composerMediaDisabled, photoOptions, t]);
 
-  const handlePhotoDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
-    event.preventDefault();
-    if (composerMediaDisabled) return;
-    photoDragDepthRef.current += 1;
-    setIsPhotoDragActive(true);
-  }, [composerMediaDisabled]);
-
   const handlePhotoDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     if (!Array.from(event.dataTransfer.types).includes("Files")) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = composerMediaDisabled ? "none" : "copy";
   }, [composerMediaDisabled]);
 
-  const handlePhotoDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    if (!Array.from(event.dataTransfer.types).includes("Files")) return;
-    photoDragDepthRef.current = Math.max(0, photoDragDepthRef.current - 1);
-    if (photoDragDepthRef.current === 0) {
-      setIsPhotoDragActive(false);
-    }
-  }, []);
-
   const handlePhotoDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     if (!Array.from(event.dataTransfer.types).includes("Files")) return;
     event.preventDefault();
-    photoDragDepthRef.current = 0;
-    setIsPhotoDragActive(false);
     if (composerMediaDisabled) return;
     void addComposerPhotoFiles(Array.from(event.dataTransfer.files));
   }, [addComposerPhotoFiles, composerMediaDisabled]);
@@ -1149,35 +1155,9 @@ export function ChatView({ channelId }: { channelId: string }) {
         color: "var(--gray-text)",
         borderColor: "var(--hairline)",
       }}
-      onDragEnter={handlePhotoDragEnter}
       onDragOver={handlePhotoDragOver}
-      onDragLeave={handlePhotoDragLeave}
       onDrop={handlePhotoDrop}
     >
-      {isPhotoDragActive && (
-        <div
-          className="pointer-events-none absolute inset-2 z-[600] rounded-[20px] border border-dashed"
-          aria-hidden="true"
-          style={{
-            borderColor: `color-mix(in srgb, ${bubbleColor} 58%, transparent)`,
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${bubbleColor} 8%, transparent)`,
-          }}
-        >
-          <div
-            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1.5 font-semibold"
-            style={{
-              bottom: "calc(68px + env(safe-area-inset-bottom))",
-              color: bubbleColor,
-              background: `color-mix(in srgb, ${bubbleColor} 12%, var(--bg))`,
-              border: `1px solid color-mix(in srgb, ${bubbleColor} 22%, transparent)`,
-              boxShadow: "0 4px 14px rgba(0,0,0,.08)",
-              fontSize: "calc(var(--bubble-font-size) - 3px)",
-            }}
-          >
-            {t("dropPhotos")}
-          </div>
-        </div>
-      )}
       <ChatViewTopChrome
         channelId={inLiveMode ? `${channelId}_live` : channelId}
         channelName={channel?.name || ""}
