@@ -246,9 +246,22 @@ export function ChatView({ channelId }: { channelId: string }) {
     if (!root || !textarea || !viewport) return;
 
     let frame = 0;
+    let blurFrame = 0;
     let scrollFrame = 0;
+    let restingViewportHeight = 0;
+    let restingViewportOffsetTop = 0;
+    let restingRootHeight = 0;
     const resetViewport = () => {
-      root.style.removeProperty("--chat-viewport-height");
+      restingViewportHeight = 0;
+      restingViewportOffsetTop = 0;
+      restingRootHeight = 0;
+      root.style.removeProperty("--chat-keyboard-inset");
+      root.style.removeProperty("--chat-header-offset");
+    };
+    const captureRestingViewport = () => {
+      restingViewportHeight = viewport.height;
+      restingViewportOffsetTop = viewport.offsetTop;
+      restingRootHeight = root.getBoundingClientRect().height;
     };
     const syncViewport = () => {
       cancelAnimationFrame(frame);
@@ -258,11 +271,28 @@ export function ChatView({ channelId }: { channelId: string }) {
           return;
         }
 
+        if (restingViewportHeight === 0 || restingRootHeight === 0) {
+          captureRestingViewport();
+        }
         const scrollRoot = messagesContainerRef.current;
         const bottomDistance = scrollRoot
           ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
           : null;
-        root.style.setProperty("--chat-viewport-height", `${viewport.height}px`);
+        const visualShrink = Math.max(0, restingViewportHeight - viewport.height);
+        const layoutShrink = Math.max(
+          0,
+          restingRootHeight - root.getBoundingClientRect().height,
+        );
+        const viewportOffset = Math.max(
+          0,
+          viewport.offsetTop - restingViewportOffsetTop,
+        );
+        const keyboardInset = Math.max(
+          0,
+          visualShrink - layoutShrink - viewportOffset,
+        );
+        root.style.setProperty("--chat-keyboard-inset", `${keyboardInset}px`);
+        root.style.setProperty("--chat-header-offset", `${viewportOffset}px`);
 
         if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
           cancelAnimationFrame(scrollFrame);
@@ -273,22 +303,30 @@ export function ChatView({ channelId }: { channelId: string }) {
         }
       });
     };
+    const handleFocus = () => {
+      captureRestingViewport();
+      syncViewport();
+    };
     const handleBlur = () => {
-      requestAnimationFrame(() => {
+      cancelAnimationFrame(blurFrame);
+      blurFrame = requestAnimationFrame(() => {
         if (document.activeElement !== textarea) resetViewport();
       });
     };
 
-    textarea.addEventListener("focus", syncViewport);
+    textarea.addEventListener("focus", handleFocus);
     textarea.addEventListener("blur", handleBlur);
     viewport.addEventListener("resize", syncViewport);
+    viewport.addEventListener("scroll", syncViewport);
 
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(blurFrame);
       cancelAnimationFrame(scrollFrame);
-      textarea.removeEventListener("focus", syncViewport);
+      textarea.removeEventListener("focus", handleFocus);
       textarea.removeEventListener("blur", handleBlur);
       viewport.removeEventListener("resize", syncViewport);
+      viewport.removeEventListener("scroll", syncViewport);
       resetViewport();
     };
   }, [loading]);
@@ -1147,10 +1185,10 @@ export function ChatView({ channelId }: { channelId: string }) {
   return (
     <div
       ref={chatViewportRef}
-      className="fixed inset-x-0 max-w-[480px] mx-auto flex flex-col md:border-x"
+      className="fixed inset-x-0 max-w-[480px] mx-auto flex flex-col overflow-hidden md:border-x"
       style={{
         top: "0px",
-        height: "var(--chat-viewport-height, 100dvh)",
+        height: "100dvh",
         background: "var(--bg)",
         color: "var(--gray-text)",
         borderColor: "var(--hairline)",
@@ -1158,7 +1196,14 @@ export function ChatView({ channelId }: { channelId: string }) {
       onDragOver={handlePhotoDragOver}
       onDrop={handlePhotoDrop}
     >
-      <ChatViewTopChrome
+      <div
+        data-chat-stationary-header
+        className="relative z-30 flex-none"
+        style={{
+          transform: "translate3d(0, var(--chat-header-offset, 0px), 0)",
+        }}
+      >
+        <ChatViewTopChrome
         channelId={inLiveMode ? `${channelId}_live` : channelId}
         channelName={channel?.name || ""}
         channelProfileImage={channel?.profile_image || null}
@@ -1215,9 +1260,17 @@ export function ChatView({ channelId }: { channelId: string }) {
             void loadNormalChannelData().catch(() => {});
           }
         }}
-      />
+        />
+      </div>
 
-      <ChatViewMessagePane
+      <div
+        data-chat-keyboard-content
+        className="relative flex min-h-0 flex-1 flex-col"
+        style={{
+          paddingBottom: "var(--chat-keyboard-inset, 0px)",
+        }}
+      >
+        <ChatViewMessagePane
         channelId={channelId}
         inLiveMode={inLiveMode}
         backgroundType={channel?.background_type || "default"}
@@ -1262,11 +1315,11 @@ export function ChatView({ channelId }: { channelId: string }) {
         onExpand={openExpandedPost}
         onReaction={handleReaction}
         onEmojiPicker={openEmojiPicker}
-      />
+        />
 
-      <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
+        <ChatViewExpandedPostOverlay expandedPost={expandedPost} onClose={closeExpandedPost} />
 
-      {(isMessageNavigationPending || isOlderHistoryLoading) && (
+        {(isMessageNavigationPending || isOlderHistoryLoading) && (
         <div
           className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6"
           aria-live="polite"
@@ -1293,9 +1346,9 @@ export function ChatView({ channelId }: { channelId: string }) {
             </div>
           </div>
         </div>
-      )}
+        )}
 
-      <ChatViewBottomShell
+        <ChatViewBottomShell
         channelId={channelId}
         historyMode={historyMode}
         showScrollBtn={showScrollBtn}
@@ -1344,7 +1397,8 @@ export function ChatView({ channelId }: { channelId: string }) {
         onSend={handleSend}
         isSending={isSending}
         bubbleColor={bubbleColor}
-      />
+        />
+      </div>
 
       <ChatViewLayerStack
         channelId={channelId}

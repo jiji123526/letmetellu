@@ -14,17 +14,34 @@ const globalStylesSource = readFileSync(
 test("focused chat composer follows the mobile visual viewport", () => {
   assert.match(chatViewSource, /const viewport = window\.visualViewport/);
   assert.match(chatViewSource, /document\.activeElement !== textarea/);
-  assert.match(chatViewSource, /--chat-viewport-height/);
+  assert.match(chatViewSource, /--chat-keyboard-inset/);
   assert.match(chatViewSource, /viewport\.addEventListener\("resize", syncViewport\)/);
   assert.match(chatViewSource, /viewport\.removeEventListener\("resize", syncViewport\)/);
+  assert.match(chatViewSource, /restingViewportHeight - viewport\.height/);
+  assert.match(chatViewSource, /restingRootHeight - root\.getBoundingClientRect\(\)\.height/);
+  assert.match(chatViewSource, /viewport\.offsetTop - restingViewportOffsetTop/);
+  assert.match(chatViewSource, /visualShrink - layoutShrink - viewportOffset/);
+  assert.match(chatViewSource, /--chat-header-offset/);
+  assert.doesNotMatch(chatViewSource, /--chat-viewport-height/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-top/);
-  assert.doesNotMatch(chatViewSource, /viewport\.addEventListener\("scroll", syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.addEventListener\("scroll", syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.removeEventListener\("scroll", syncViewport\)/);
 });
 
-test("chat shell stays fixed and preserves the latest-message bottom distance", () => {
+test("stationary top chrome is isolated from keyboard-aware chat content", () => {
   assert.match(chatViewSource, /className="fixed inset-x-0 max-w-\[480px\]/);
   assert.match(chatViewSource, /top: "0px"/);
-  assert.match(chatViewSource, /height: "var\(--chat-viewport-height, 100dvh\)"/);
+  assert.match(chatViewSource, /height: "100dvh"/);
+  assert.match(chatViewSource, /data-chat-stationary-header/);
+  assert.match(chatViewSource, /data-chat-keyboard-content/);
+  assert.match(
+    chatViewSource,
+    /transform: "translate3d\(0, var\(--chat-header-offset, 0px\), 0\)"/,
+  );
+  assert.match(chatViewSource, /paddingBottom: "var\(--chat-keyboard-inset, 0px\)"/);
+});
+
+test("keyboard-aware content preserves the latest-message bottom distance", () => {
   assert.match(chatViewSource, /bottomDistance <= 120/);
   assert.match(
     chatViewSource,

@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Stationary mobile header is isolated from keyboard layout — 2026-08-25
+
+- The top chat chrome now occupies its own non-shrinking layer. Keyboard
+  compensation is applied only to a separate message-and-composer container,
+  so the header always remains at the root's unchanged `top: 0`.
+- Composer lift is calculated from visual-viewport shrink after subtracting any
+  shrink already performed by `100dvh`. This avoids double movement on browsers
+  that resize both layout and visual viewports.
+- If Safari pans its visual viewport despite the document lock, only the header
+  layer receives the equal opposite layout offset. Its physical screen position
+  stays constant while the rest of the chat is not translated.
+- Near-latest message positioning, document scroll locking and standalone
+  spacing remain unchanged. Focus and blur reset their viewport baselines so a
+  previous keyboard session cannot affect the next one.
+
+This work is isolated on `codex/stationary-mobile-header` for mobile device
+validation before merging.
+
 ### Browser keyboard removes redundant composer bottom padding — 2026-08-25
 
 - Focused chat composers in coarse-pointer mobile browser mode no longer keep
