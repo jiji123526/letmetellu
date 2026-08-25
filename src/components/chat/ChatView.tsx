@@ -251,7 +251,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     let scrollFrame = 0;
     const resetViewport = () => {
       root.style.removeProperty("--chat-viewport-height");
-      root.style.removeProperty("--chat-viewport-top");
     };
     const syncViewport = () => {
       cancelAnimationFrame(frame);
@@ -266,7 +265,6 @@ export function ChatView({ channelId }: { channelId: string }) {
           ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
           : null;
         root.style.setProperty("--chat-viewport-height", `${viewport.height}px`);
-        root.style.setProperty("--chat-viewport-top", `${viewport.offsetTop}px`);
 
         if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
           cancelAnimationFrame(scrollFrame);
@@ -286,7 +284,6 @@ export function ChatView({ channelId }: { channelId: string }) {
     textarea.addEventListener("focus", syncViewport);
     textarea.addEventListener("blur", handleBlur);
     viewport.addEventListener("resize", syncViewport);
-    viewport.addEventListener("scroll", syncViewport);
 
     return () => {
       cancelAnimationFrame(frame);
@@ -294,7 +291,6 @@ export function ChatView({ channelId }: { channelId: string }) {
       textarea.removeEventListener("focus", syncViewport);
       textarea.removeEventListener("blur", handleBlur);
       viewport.removeEventListener("resize", syncViewport);
-      viewport.removeEventListener("scroll", syncViewport);
       resetViewport();
     };
   }, [loading]);
@@ -1147,7 +1143,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       ref={chatViewportRef}
       className="fixed inset-x-0 max-w-[480px] mx-auto flex flex-col md:border-x"
       style={{
-        top: "var(--chat-viewport-top, 0px)",
+        top: "0px",
         height: "var(--chat-viewport-height, 100dvh)",
         background: "var(--bg)",
         color: "var(--gray-text)",
@@ -1160,21 +1156,22 @@ export function ChatView({ channelId }: { channelId: string }) {
     >
       {isPhotoDragActive && (
         <div
-          className="pointer-events-none absolute inset-0 z-[600] flex items-center justify-center p-6"
+          className="pointer-events-none absolute inset-2 z-[600] rounded-[20px] border border-dashed"
           aria-hidden="true"
           style={{
-            background: "color-mix(in srgb, var(--bg) 72%, transparent)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
+            borderColor: `color-mix(in srgb, ${bubbleColor} 58%, transparent)`,
+            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${bubbleColor} 8%, transparent)`,
           }}
         >
           <div
-            className="flex h-full w-full items-center justify-center rounded-[24px] border-2 border-dashed font-semibold"
+            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1.5 font-semibold"
             style={{
-              borderColor: "var(--tint)",
-              color: "var(--tint)",
-              background: "color-mix(in srgb, var(--tint) 8%, transparent)",
-              fontSize: "var(--bubble-font-size)",
+              bottom: "calc(68px + env(safe-area-inset-bottom))",
+              color: bubbleColor,
+              background: `color-mix(in srgb, ${bubbleColor} 12%, var(--bg))`,
+              border: `1px solid color-mix(in srgb, ${bubbleColor} 22%, transparent)`,
+              boxShadow: "0 4px 14px rgba(0,0,0,.08)",
+              fontSize: "calc(var(--bubble-font-size) - 3px)",
             }}
           >
             {t("dropPhotos")}

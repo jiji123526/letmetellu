@@ -4,14 +4,33 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Mobile keyboard no longer moves the chat header — 2026-08-25
+
+- The fixed chat shell now keeps an unconditional `top: 0` while the keyboard
+  opens and closes. Only its visible height follows `visualViewport`.
+- The previous top-offset synchronization reacted to every intermediate mobile
+  keyboard animation frame and could make the header visibly bounce.
+- Latest-message bottom-distance preservation remains active, so the message
+  pane and composer resize below the stationary header.
+
+### Photo drop indicator stays out of the conversation — 2026-08-25
+
+- The chat-wide drop target no longer dims or blurs the page. It uses a thin
+  inset dashed edge and a compact label above the composer, leaving messages
+  fully visible while retaining clear drop feedback.
+- The edge, label text and label tint now derive from the active bubble color
+  instead of the global accent color.
+
+The accepted file types, full-chat drop range and upload behavior are unchanged.
+
 ### Mobile keyboard keeps the chat header visible — 2026-08-25
 
 - The chat shell is now a fixed application viewport instead of a normal-flow
   `100dvh` element that mobile browsers can pan above the visible screen while
   focusing the composer.
-- While the message textarea is focused, `visualViewport` resize and scroll
-  events update the chat shell height and top offset to follow the visible area
-  above the keyboard. The normal `100dvh` layout is restored on blur.
+- While the message textarea is focused, `visualViewport` resize events update
+  the chat shell height to follow the visible area above the keyboard. The
+  normal `100dvh` layout is restored on blur.
 - If the user is already near the latest messages, keyboard animation preserves
   the same distance from the bottom so keeping the header visible does not hide
   the active conversation.

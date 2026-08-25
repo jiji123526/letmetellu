@@ -46,3 +46,14 @@ test("whole-chat drop prevents browser navigation and respects blocked composers
   assert.match(chatViewSource, /if \(composerMediaDisabled\) return/);
   assert.match(chatViewSource, /void addComposerPhotoFiles\(Array\.from\(event\.dataTransfer\.files\)\)/);
 });
+
+test("drop feedback is unobtrusive and follows the active bubble color", () => {
+  const dropIndicator = chatViewSource.match(
+    /\{isPhotoDragActive && \([\s\S]*?\n      \)\}/,
+  )?.[0] || "";
+  assert.match(dropIndicator, /absolute inset-2/);
+  assert.match(dropIndicator, /bottom: "calc\(68px \+ env\(safe-area-inset-bottom\)\)"/);
+  assert.match(dropIndicator, /\$\{bubbleColor\}/);
+  assert.doesNotMatch(dropIndicator, /backdropFilter|WebkitBackdropFilter/);
+  assert.doesNotMatch(dropIndicator, /background: "color-mix\(in srgb, var\(--bg\) 72%/);
+});
