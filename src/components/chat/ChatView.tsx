@@ -241,29 +241,15 @@ export function ChatView({ channelId }: { channelId: string }) {
 
   useEffect(() => {
     const root = chatViewportRef.current;
-    const textarea = textareaRef.current;
     const viewport = window.visualViewport;
-    if (!root || !textarea || !viewport) return;
+    if (!root || !viewport) return;
 
-    let blurFrame = 0;
-    let firstGeometryFrame = 0;
-    let secondGeometryFrame = 0;
     let scrollFrame = 0;
-    const resetViewport = () => {
-      root.style.top = "0px";
-      root.style.height = "100dvh";
-    };
     const syncViewport = () => {
-      if (document.activeElement !== textarea) {
-        resetViewport();
-        return;
-      }
-
       const scrollRoot = messagesContainerRef.current;
       const bottomDistance = scrollRoot
         ? scrollRoot.scrollHeight - scrollRoot.scrollTop - scrollRoot.clientHeight
         : null;
-      root.style.top = `${viewport.pageTop}px`;
       root.style.height = `${viewport.height}px`;
 
       if (scrollRoot && bottomDistance !== null && bottomDistance <= 120) {
@@ -274,33 +260,14 @@ export function ChatView({ channelId }: { channelId: string }) {
         });
       }
     };
-    const scheduleViewportSync = () => {
-      cancelAnimationFrame(firstGeometryFrame);
-      cancelAnimationFrame(secondGeometryFrame);
-      firstGeometryFrame = requestAnimationFrame(() => {
-        secondGeometryFrame = requestAnimationFrame(syncViewport);
-      });
-    };
-    const handleBlur = () => {
-      cancelAnimationFrame(blurFrame);
-      blurFrame = requestAnimationFrame(() => {
-        if (document.activeElement !== textarea) resetViewport();
-      });
-    };
 
-    textarea.addEventListener("blur", handleBlur);
-    viewport.addEventListener("resize", scheduleViewportSync);
-    viewport.addEventListener("scroll", scheduleViewportSync);
+    syncViewport();
+    viewport.addEventListener("resize", syncViewport);
 
     return () => {
-      cancelAnimationFrame(blurFrame);
-      cancelAnimationFrame(firstGeometryFrame);
-      cancelAnimationFrame(secondGeometryFrame);
       cancelAnimationFrame(scrollFrame);
-      textarea.removeEventListener("blur", handleBlur);
-      viewport.removeEventListener("resize", scheduleViewportSync);
-      viewport.removeEventListener("scroll", scheduleViewportSync);
-      resetViewport();
+      viewport.removeEventListener("resize", syncViewport);
+      root.style.height = "100dvh";
     };
   }, [loading]);
 
@@ -311,11 +278,35 @@ export function ChatView({ channelId }: { channelId: string }) {
     const body = document.body;
     const previousHtmlOverflow = html.style.overflow;
     const previousBodyOverflow = body.style.overflow;
+    const root = chatViewportRef.current;
+
+    const preventDocumentPan = (event: TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !root?.contains(target)) {
+        event.preventDefault();
+        return;
+      }
+
+      let element: Element | null = target;
+      while (element && element !== root) {
+        const style = window.getComputedStyle(element);
+        if (
+          /(auto|scroll)/.test(style.overflowY)
+          && element.scrollHeight > element.clientHeight
+        ) {
+          return;
+        }
+        element = element.parentElement;
+      }
+      event.preventDefault();
+    };
 
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
+    body.addEventListener("touchmove", preventDocumentPan, { passive: false });
 
     return () => {
+      body.removeEventListener("touchmove", preventDocumentPan);
       html.style.overflow = previousHtmlOverflow;
       body.style.overflow = previousBodyOverflow;
     };
@@ -1149,9 +1140,8 @@ export function ChatView({ channelId }: { channelId: string }) {
   return (
     <div
       ref={chatViewportRef}
-      className="absolute inset-x-0 max-w-[480px] mx-auto flex flex-col overflow-hidden md:border-x"
+      className="fixed inset-x-0 top-0 max-w-[480px] mx-auto flex flex-col overflow-hidden md:border-x"
       style={{
-        top: "0px",
         height: "100dvh",
         background: "var(--bg)",
         color: "var(--gray-text)",

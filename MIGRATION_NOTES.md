@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Mobile chat uses one keyboard-aware viewport frame — 2026-08-25
+
+- Header, messages and composer now remain in one fixed flex frame. The header
+  is a normal non-shrinking row instead of an independently positioned layer,
+  so keyboard animation cannot apply mismatched coordinates to the header and
+  composer.
+- Visual viewport handling now updates height only on resize. All `pageTop`,
+  `offsetTop`, viewport-scroll tracking, delayed geometry frames and measured
+  header spacers were removed.
+- Document panning is blocked on touch devices while scrolling remains enabled
+  for the message list and any genuinely scrollable chat overlay.
+- Chromium receives `interactive-widget=resizes-content` as a progressive
+  enhancement. The visual-viewport height fallback remains responsible for
+  iOS and browsers that ignore that viewport directive.
+
+This is a frontend-only change. It requires neither a D1 migration nor a Worker
+deployment.
+
 ### Keyboard animation no longer exposes transient chat geometry — 2026-08-25
 
 - The message/composer frame no longer resizes on the initial focus event or on

@@ -15,26 +15,23 @@ const globalStylesSource = readFileSync(
   "utf8",
 );
 
-test("focused chat composer follows the mobile visual viewport", () => {
+test("chat uses only visual viewport height during keyboard resize", () => {
   assert.match(chatViewSource, /const viewport = window\.visualViewport/);
-  assert.match(chatViewSource, /document\.activeElement !== textarea/);
-  assert.match(chatViewSource, /root\.style\.top = `\$\{viewport\.pageTop\}px`/);
   assert.match(chatViewSource, /root\.style\.height = `\$\{viewport\.height\}px`/);
-  assert.match(chatViewSource, /requestAnimationFrame\(\(\) => \{\s*secondGeometryFrame = requestAnimationFrame\(syncViewport\)/);
-  assert.match(chatViewSource, /viewport\.addEventListener\("resize", scheduleViewportSync\)/);
-  assert.match(chatViewSource, /viewport\.removeEventListener\("resize", scheduleViewportSync\)/);
+  assert.match(chatViewSource, /viewport\.addEventListener\("resize", syncViewport\)/);
+  assert.match(chatViewSource, /viewport\.removeEventListener\("resize", syncViewport\)/);
+  assert.doesNotMatch(chatViewSource, /viewport\.pageTop/);
+  assert.doesNotMatch(chatViewSource, /viewport\.offsetTop/);
+  assert.doesNotMatch(chatViewSource, /viewport\.addEventListener\("scroll"/);
+  assert.doesNotMatch(chatViewSource, /document\.activeElement !== textarea/);
   assert.doesNotMatch(chatViewSource, /--chat-keyboard-inset/);
   assert.doesNotMatch(chatViewSource, /--chat-header-offset/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-height/);
   assert.doesNotMatch(chatViewSource, /--chat-viewport-top/);
-  assert.match(chatViewSource, /viewport\.addEventListener\("scroll", scheduleViewportSync\)/);
-  assert.match(chatViewSource, /viewport\.removeEventListener\("scroll", scheduleViewportSync\)/);
-  assert.doesNotMatch(chatViewSource, /textarea\.addEventListener\("focus"/);
 });
 
-test("chat frame follows the visible viewport without header-specific compensation", () => {
-  assert.match(chatViewSource, /className="absolute inset-x-0 max-w-\[480px\]/);
-  assert.match(chatViewSource, /top: "0px"/);
+test("chat is one fixed flex frame containing header, messages, and composer", () => {
+  assert.match(chatViewSource, /className="fixed inset-x-0 top-0 max-w-\[480px\]/);
   assert.match(chatViewSource, /height: "100dvh"/);
   assert.doesNotMatch(chatViewSource, /data-chat-stationary-header/);
   assert.doesNotMatch(chatViewSource, /data-chat-keyboard-content/);
@@ -42,16 +39,14 @@ test("chat frame follows the visible viewport without header-specific compensati
   assert.doesNotMatch(chatViewSource, /paddingBottom: "var\(--chat-keyboard-inset/);
 });
 
-test("header is an independent fixed layer with a measured layout spacer", () => {
+test("header remains a normal non-shrinking row in the chat frame", () => {
   assert.match(
     topChromeSource,
-    /className="fixed left-1\/2 top-0 flex w-full max-w-\[480px\]/,
+    /className="relative flex w-full flex-none items-center/,
   );
-  assert.match(topChromeSource, /const observer = new ResizeObserver\(syncHeight\)/);
-  assert.match(topChromeSource, /style=\{\{ height: `\$\{headerHeight\}px` \}\}/);
-  assert.match(topChromeSource, /const viewport = window\.visualViewport/);
-  assert.match(topChromeSource, /header\.style\.top = `\$\{viewport\.offsetTop\}px`/);
-  assert.match(topChromeSource, /viewport\.addEventListener\("scroll", keepAtVisibleTop\)/);
+  assert.doesNotMatch(topChromeSource, /ResizeObserver/);
+  assert.doesNotMatch(topChromeSource, /headerHeight/);
+  assert.doesNotMatch(topChromeSource, /visualViewport/);
 });
 
 test("keyboard-aware content preserves the latest-message bottom distance", () => {
@@ -65,8 +60,19 @@ test("keyboard-aware content preserves the latest-message bottom distance", () =
 test("loaded chat locks document scrolling and restores prior styles", () => {
   assert.match(chatViewSource, /html\.style\.overflow = "hidden"/);
   assert.match(chatViewSource, /body\.style\.overflow = "hidden"/);
+  assert.match(chatViewSource, /body\.addEventListener\("touchmove", preventDocumentPan, \{ passive: false \}\)/);
+  assert.match(chatViewSource, /element\.scrollHeight > element\.clientHeight/);
+  assert.match(chatViewSource, /body\.removeEventListener\("touchmove", preventDocumentPan\)/);
   assert.match(chatViewSource, /html\.style\.overflow = previousHtmlOverflow/);
   assert.doesNotMatch(chatViewSource, /body\.style\.position = "fixed"/);
+});
+
+test("Chromium requests content resizing for interactive keyboards", () => {
+  const layoutSource = readFileSync(
+    new URL("../../src/app/layout.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(layoutSource, /interactiveWidget: "resizes-content"/);
 });
 
 test("focused mobile layouts remove footer padding in browser and standalone modes", () => {

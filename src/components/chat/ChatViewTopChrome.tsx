@@ -2,7 +2,6 @@
 
 import { useLocale } from "@/hooks/useLocale";
 import dynamic from "next/dynamic";
-import { useLayoutEffect, useRef, useState } from "react";
 import { LiveCountdownBanner, LiveExitBanner, LiveJoinBanner } from "./LiveMode";
 
 const EditDialog = dynamic(() => import("./EditDialog").then((module) => module.EditDialog));
@@ -89,52 +88,11 @@ export function ChatViewTopChrome({
   onExitLive,
 }: ChatViewTopChromeProps) {
   const { t } = useLocale();
-  const headerRef = useRef<HTMLElement>(null);
-  const [headerHeight, setHeaderHeight] = useState(76);
-
-  useLayoutEffect(() => {
-    const header = headerRef.current;
-    if (!header) return;
-
-    const syncHeight = () => {
-      setHeaderHeight(header.getBoundingClientRect().height);
-    };
-    syncHeight();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", syncHeight);
-      return () => window.removeEventListener("resize", syncHeight);
-    }
-
-    const observer = new ResizeObserver(syncHeight);
-    observer.observe(header);
-    return () => observer.disconnect();
-  }, []);
-
-  useLayoutEffect(() => {
-    const header = headerRef.current;
-    const viewport = window.visualViewport;
-    if (!header || !viewport) return;
-
-    const keepAtVisibleTop = () => {
-      header.style.top = `${viewport.offsetTop}px`;
-    };
-    keepAtVisibleTop();
-    viewport.addEventListener("resize", keepAtVisibleTop);
-    viewport.addEventListener("scroll", keepAtVisibleTop);
-
-    return () => {
-      viewport.removeEventListener("resize", keepAtVisibleTop);
-      viewport.removeEventListener("scroll", keepAtVisibleTop);
-      header.style.top = "0px";
-    };
-  }, []);
 
   return (
     <>
       <header
-        ref={headerRef}
-        className="fixed left-1/2 top-0 flex w-full max-w-[480px] -translate-x-1/2 items-center px-4"
+        className="relative flex w-full flex-none items-center px-4"
         style={{
           background: "var(--header-bg)",
           backdropFilter: "saturate(180%) blur(20px)",
@@ -240,12 +198,6 @@ export function ChatViewTopChrome({
           </svg>
         </button>
       </header>
-
-      <div
-        aria-hidden="true"
-        className="flex-none"
-        style={{ height: `${headerHeight}px` }}
-      />
 
       {showSearch && (
         <SearchBar
