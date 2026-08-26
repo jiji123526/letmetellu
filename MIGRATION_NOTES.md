@@ -4,6 +4,42 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Cached background stays mounted through the first authoritative paint — 2026-08-26
+
+- The initial background preload decoded the authoritative image before ending
+  loading, but React still replaced the loading tree and chat tree in one
+  commit. On some mobile browsers the new CSS background layer briefly painted
+  the default color even though the same image resource was already decoded.
+- Once channel data arrives, the real chat tree now mounts underneath the
+  existing loading surface. Loading remains non-interactive and fully covers
+  the chat while the authoritative background decodes and receives two bounded
+  animation-frame paint opportunities.
+- A 120 ms fallback prevents background paint synchronization from holding a
+  hidden or throttled tab indefinitely. The existing two-second image
+  preparation limit remains unchanged.
+
+This is a frontend-only rendering fix. It requires no Worker deployment, D1
+migration, R2 change or secret update.
+
+### Unified timeline production fan-out audit passed — 2026-08-26
+
+- The production audit found 1,150 public roots with replies. Average public
+  fan-out was 1.33, maximum fan-out was 15 and no root exceeded the provisional
+  300-item page warning budget.
+- Seven DM roots averaged 1.14 replies, had a maximum of two and stayed below
+  the 20-reply product limit. Current data does not justify an intra-root
+  continuation cursor.
+- Visitor DM, public-root and public-child plans used their intended indexes.
+  The owner DM plan used `dm_channel_created_idx` and performed a temporary sort
+  only for the final `id` tie-break term missing from that older index.
+- Owner candidate reads remain capped at 51. Do not add a replacement owner
+  index without production rows-read or latency evidence showing that the
+  bounded tie-break sort is material.
+
+Stage 6 still requires owner and signed-visitor runtime records for latest,
+older, context and reconnect reads plus D1 Insights review. This audit requires
+no migration or deployment.
+
 ### Maintenance-only health alerts no longer page as critical — 2026-08-26
 
 - A single `maintenance_failed` event now marks the 15-minute window as
@@ -1031,7 +1067,7 @@ without imposing permanent D1 writes or prematurely complicating the cursor.
 
 Deployment note: no D1 migration is required. Deploy the Worker, keep the
 production allowlist limited to explicit test channels, run
-`npx wrangler d1 execute letsplay-db --remote --file scripts/audit-unified-timeline-fanout.sql`,
+`npx wrangler d1 execute letsplay-db --remote --command "$(cat scripts/audit-unified-timeline-fanout.sql)"`,
 then compare owner and visitor records in Worker logs and query fingerprints in
 D1 Insights. Stage 6 remains open until those production measurements are
 reviewed.

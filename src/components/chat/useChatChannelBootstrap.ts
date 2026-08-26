@@ -16,6 +16,7 @@ import {
   prepareChannelBackground,
   readChannelAppearance,
   storeChannelAppearance,
+  waitForChannelBackgroundPaint,
 } from "@/lib/channel-background-cache";
 import { recordRecentChannel } from "@/lib/recent-channels";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
@@ -368,6 +369,11 @@ export function useChatChannelBootstrap({
           await backgroundReady;
         }
 
+        if (requestId !== initRequestIdRef.current) {
+          completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
+          return;
+        }
+        await waitForChannelBackgroundPaint();
         if (requestId !== initRequestIdRef.current) {
           completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
           return;

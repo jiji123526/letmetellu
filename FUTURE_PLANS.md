@@ -1,6 +1,6 @@
 # Future Plans
 
-Last reviewed: 2026-08-24 against `main` commit `8fc6c42`.
+Last reviewed: 2026-08-26 against deployed `main` commit `749df13`.
 
 This file provides a short current-state snapshot and orders the remaining
 product and platform work. Detailed shipped behavior belongs in
@@ -14,7 +14,9 @@ remains in the linked implementation documents.
 
 - Unified normal, live and reports timelines, source-qualified DM replies,
   bounded history mounting, stable prepend/navigation and the global rollback
-  switch are implemented. Stage 6 production fan-out calibration and Stage 8
+  switch are implemented. The Stage 6 production data-shape and index audit
+  passed with maximum public fan-out of 15, maximum DM fan-out of two and no
+  over-budget roots. Owner/visitor runtime calibration and Stage 8
   observation/legacy cleanup in
   [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) remain incomplete.
 - Authenticated Web Push supports role-aware `Important` and `All` modes,
@@ -23,12 +25,25 @@ remains in the linked implementation documents.
   retention.
 - Migration `0063_notification_ready_lookup.sql` and Worker commit `f515d5f`
   replace an empty-queue table scan with two exact partial-index probes.
-  Production migration/deployment and the post-deploy D1 fingerprint comparison
-  must still be explicitly confirmed.
+  Production migrations through `0063` and the current Worker are deployed.
+  The 2026-08-26 production audit found 742 delivered rows, zero ready/retry/dead
+  work, five active subscriptions and all seven required indexes. D1
+  fingerprints should still be compared with the recorded pre-rollout baseline
+  before changing delivery architecture.
 - Public channel appearance already uses a versioned browser snapshot and stable
   media paths. Commit `8fc6c42` additionally decodes the authoritative
-  background before replacing the cached loading surface; production mobile
-  re-entry should be verified after the frontend deploy.
+  background before replacing the cached loading surface. The frontend is
+  deployed; production mobile re-entry still needs explicit device verification.
+- The deployed chat accepts JPEG, PNG, GIF and WebP files through chat-wide
+  drag-and-drop and textarea clipboard paste without adding a visible drop-zone
+  overlay. File selection, drop and paste share the existing image validation,
+  processing and upload limits.
+- Live emoji controls are positioned relative to the chat composer, and flying
+  emoji broadcasts are accepted and delivered only for authenticated Live
+  viewers. Normal chat independently rejects stale flying-emoji events.
+- Production health monitoring recovered from the short 2026-08-26 D1 storage
+  timeout. The deployed alert policy keeps D1, request-5xx and exception bursts
+  critical while classifying an isolated maintenance failure as degraded.
 - Recent D1 inspection found no urgent main timeline or gallery query problem.
   The one/two-character substring search read about 30,040 rows across 12
   searches but remained at 1.4 ms P50/P99 and 0.07% of runtime, so it is not a
@@ -39,9 +54,9 @@ remains in the linked implementation documents.
 - Plus entitlement, expiry/channel-retention, image quota and Toss billing work
   exists only on `monetization-beta`; it is not part of `main`, and production
   legal text still states that paid plans are not operating.
-- The branches have diverged by more than 30 monetization-only commits and more
-  than 50 newer `main` commits. A wholesale merge would conflict with or remove
-  newer notification, timeline and background work.
+- As of this review, the branches have 33 monetization-only commits and 65
+  `main`-only commits. A wholesale merge would conflict with or remove newer
+  notification, timeline and background work.
 - Before any paid launch, make an explicit go/no-go decision based on expected
   conversion, the annual PG cost, legal readiness and support burden. If the
   answer is go, port the billing work onto a fresh branch from current `main`
@@ -49,48 +64,67 @@ remains in the linked implementation documents.
 
 ## Recommended Order
 
-1. Finish the pending notification migration/Worker rollout and verify the
-   background transition in production.
-2. Complete unified-timeline production calibration and remove legacy/shadow
+1. Run the focused production checks for chat media input, Live-only emoji
+   delivery, cached background transitions and notification query plans.
+2. Compare post-deploy notification and D1 behavior with the recorded baseline.
+3. Complete unified-timeline production calibration and remove legacy/shadow
    paths only after the observation gates pass.
-3. Add only the operational metrics and retention work justified by real beta
+4. Add only the operational metrics and retention work justified by real beta
    traffic.
-4. Decide whether Plus/Toss economics justify launch. If yes, re-port and
+5. Decide whether Plus/Toss economics justify launch. If yes, re-port and
    validate the monetization branch against current `main`.
-5. Improve guided support before adding another communication surface.
-6. Add notice comments only if channels demonstrate a real need for lightweight
+6. Improve guided support before adding another communication surface.
+7. Add notice comments only if channels demonstrate a real need for lightweight
    public discussion.
-7. Add rewarded media credits only after a viable ad provider and server-side
+8. Add rewarded media credits only after a viable ad provider and server-side
    reward verification are confirmed.
-8. Add delegated platform moderation only when one super admin is no longer
+9. Add delegated platform moderation only when one super admin is no longer
    operationally sufficient.
 
-## Immediate Rollout Checks
+## Immediate Production Checks
 
 ### Notification ready-query optimization
 
-1. Apply all pending D1 migrations, including `0063`.
-2. Deploy the Worker from current `main`.
-3. Run `worker/scripts/audit-notification-operations.sql`; the final result must
-   list both exact ready indexes and the five retention/subscription indexes.
-4. Confirm `EXPLAIN QUERY PLAN` reports
+Production migrations through `0063` and the current Worker deployment were
+confirmed on 2026-08-26. No additional schema or deployment step is pending.
+
+The 2026-08-26 read-only audit confirmed an empty ready backlog, no expired
+terminal rows, five active subscriptions and all seven required indexes.
+
+1. Confirm `EXPLAIN QUERY PLAN` reports
    `notification_outbox_attempt_ready_idx` and
    `notification_outbox_lease_ready_idx`, with no table scan or temporary
    ordering tree.
-5. Compare the next six-hour D1 window with the previous 1,555 probes and
+2. Compare a post-deploy six-hour D1 window with the previous 1,555 probes and
    479,570 rows-read baseline.
+3. Continue recording ready backlog, retry/dead counts, delivery latency and
+   active subscription volume. Do not add Queues or increase batch limits
+   unless these measurements show a real bottleneck.
 
 ### Cached channel appearance
 
-1. Deploy the frontend containing `8fc6c42`.
-2. Re-enter image-background public channels on iOS Safari and Android Chrome
+1. Re-enter image-background public channels on iOS Safari and Android Chrome
    both within and after the five-minute browser freshness window.
-3. Verify that cached loading and authoritative chat surfaces transition without
+2. Verify that cached loading and authoritative chat surfaces transition without
    a default-background flash.
-4. Change the background, overlay, blur and bubble color once and confirm that
+3. Change the background, overlay, blur and bubble color once and confirm that
    the new appearance version replaces the old snapshot.
-5. Confirm a broken or slow background cannot hold channel entry longer than
+4. Confirm a broken or slow background cannot hold channel entry longer than
    the two-second preparation limit.
+
+### Chat media and Live emoji regression
+
+1. On desktop, drop each supported image type onto the chat outside the
+   textarea and confirm the browser does not navigate away or show a page-wide
+   drop overlay.
+2. Paste an image into the textarea on desktop and mobile, then confirm any text
+   in the same clipboard operation is preserved.
+3. Confirm unsupported files, oversized images and blocked/frozen composers
+   fail with localized feedback and do not create pending uploads.
+4. In Live mode, confirm the shortcut row and picker stay aligned with the chat
+   composer and that a second authenticated Live viewer receives the animation.
+5. Keep another client in normal chat and confirm it never receives or renders
+   the Live flying emoji.
 
 ## Operational Improvements
 

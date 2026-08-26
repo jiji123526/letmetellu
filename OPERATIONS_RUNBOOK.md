@@ -81,7 +81,7 @@ after the first hourly maintenance pass, and when Push delivery appears delayed:
 
 ```bash
 npx wrangler d1 execute letsplay-db --remote \
-  --file scripts/audit-notification-operations.sql
+  --command "$(cat scripts/audit-notification-operations.sql)"
 ```
 
 Interpret the results as follows:
@@ -94,6 +94,10 @@ Interpret the results as follows:
   outbox references have expired.
 - The final result must list all seven ready, terminal, subscription-reference,
   active-subscription and revoked-subscription indexes.
+
+Use `--command` here because Wrangler's remote `--file` import mode reports only
+aggregate query and row counts instead of printing each read-only `SELECT`
+result.
 
 The audit intentionally does not select Push endpoints, `p256dh`, `auth` or
 payload JSON. Keep production audit output in the private operator workspace.

@@ -29,6 +29,7 @@ export interface ChannelAppearanceSource {
 const CACHE_VERSION = 2;
 const CACHE_PREFIX = "channelBackground_";
 const BACKGROUND_PREPARE_TIMEOUT_MS = 2_000;
+const BACKGROUND_PAINT_TIMEOUT_MS = 120;
 const backgroundPreparationCache = new Map<string, Promise<boolean>>();
 
 function cacheKey(channelId: string) {
@@ -95,6 +96,28 @@ export async function prepareChannelBackground(
     });
   }
   await preparation;
+}
+
+export async function waitForChannelBackgroundPaint(): Promise<void> {
+  if (typeof window === "undefined" || typeof requestAnimationFrame === "undefined") return;
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      if (firstFrame) cancelAnimationFrame(firstFrame);
+      if (secondFrame) cancelAnimationFrame(secondFrame);
+      resolve();
+    };
+    const timeoutId = window.setTimeout(finish, BACKGROUND_PAINT_TIMEOUT_MS);
+    firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(finish);
+    });
+  });
 }
 
 function isStableMediaUrl(value: unknown): value is string | null {

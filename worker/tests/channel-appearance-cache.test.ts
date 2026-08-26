@@ -80,7 +80,7 @@ test("bootstrap and realtime paths now preserve cached appearance until the serv
   assert.match(adminRouteSource, /appearance_version: appearanceVersion/);
 });
 
-test("chat entry decodes the stable cached background before replacing its loading surface", () => {
+test("chat entry paints the authoritative background beneath its retained loading surface", () => {
   const cacheSource = readFileSync(
     new URL("../../src/lib/channel-background-cache.ts", import.meta.url),
     "utf8",
@@ -98,9 +98,13 @@ test("chat entry decodes the stable cached background before replacing its loadi
   assert.match(cacheSource, /backgroundPreparationCache = new Map<string, Promise<boolean>>/);
   assert.match(cacheSource, /export async function prepareChannelBackground/);
   assert.match(cacheSource, /image\.decode\(\)\.catch/);
+  assert.match(cacheSource, /export async function waitForChannelBackgroundPaint/);
+  assert.match(cacheSource, /secondFrame = requestAnimationFrame\(finish\)/);
   assert.match(bootstrapSource, /const backgroundReady = prepareChannelBackground\(data\.channel\)/);
   assert.match(bootstrapSource, /await prepareChannelBackground\(normalData\.channel\)/);
-  assert.match(bootstrapSource, /await backgroundReady;[\s\S]*setLoading\(false\)/);
+  assert.match(bootstrapSource, /await backgroundReady;[\s\S]*await waitForChannelBackgroundPaint\(\);[\s\S]*setLoading\(false\)/);
   assert.match(chatViewSource, /const backgroundReady = prepareChannelBackground\(data\.channel\)/);
-  assert.match(chatViewSource, /await backgroundReady;[\s\S]*setLoading\(false\)/);
+  assert.match(chatViewSource, /if \(loading && !channel\)/);
+  assert.match(chatViewSource, /\{loading && \([\s\S]*<ChatViewLoadingState background=\{cachedBackground\} \/>/);
+  assert.match(chatViewSource, /await backgroundReady;[\s\S]*await waitForChannelBackgroundPaint\(\);[\s\S]*setLoading\(false\)/);
 });

@@ -1,4 +1,4 @@
--- Measure current reply fan-out without selecting message or DM content.
+/* Measure current reply fan-out without selecting message or DM content. */
 WITH public_fanout AS (
   SELECT channel_id, reply_to AS root_id, COUNT(*) AS child_count
   FROM messages
@@ -49,7 +49,7 @@ FROM combined_fanout
 GROUP BY source
 ORDER BY source;
 
--- Owner root candidates should use dm_channel_created_idx.
+/* Owner root candidates should use dm_channel_created_idx. */
 EXPLAIN QUERY PLAN
 SELECT *
 FROM dm
@@ -58,7 +58,7 @@ WHERE channel_id = '__index_audit__'
 ORDER BY created_at DESC, id DESC
 LIMIT 51;
 
--- Visitor root candidates should use dm_channel_uid_created_idx.
+/* Visitor root candidates should use dm_channel_uid_created_idx. */
 EXPLAIN QUERY PLAN
 SELECT *
 FROM dm
@@ -68,7 +68,7 @@ WHERE channel_id = '__index_audit__'
 ORDER BY created_at DESC, id DESC
 LIMIT 51;
 
--- Public root candidates and child expansion must remain indexed.
+/* Public root candidates and child expansion must remain indexed. */
 EXPLAIN QUERY PLAN
 SELECT *
 FROM messages

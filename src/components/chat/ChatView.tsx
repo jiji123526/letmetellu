@@ -14,6 +14,7 @@ import {
   prepareChannelBackground,
   readChannelAppearance,
   readChannelBackground,
+  waitForChannelBackgroundPaint,
 } from "@/lib/channel-background-cache";
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
@@ -1023,6 +1024,8 @@ export function ChatView({ channelId }: { channelId: string }) {
             applyInitData(data);
             await backgroundReady;
             if (requestId !== initRequestIdRef.current) return;
+            await waitForChannelBackgroundPaint();
+            if (requestId !== initRequestIdRef.current) return;
             setLoading(false);
           }).catch((error) => {
             if (requestId !== initRequestIdRef.current) return;
@@ -1057,7 +1060,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     );
   }
 
-  if (loading) {
+  if (loading && !channel) {
     return <ChatViewLoadingState background={cachedBackground} />;
   }
 
@@ -1311,6 +1314,12 @@ export function ChatView({ channelId }: { channelId: string }) {
         onCloseEmojiPicker={closeEmojiPicker}
         onCloseFullViewImage={closeFullViewImage}
       />
+
+      {loading && (
+        <div className="absolute inset-0 z-[600]">
+          <ChatViewLoadingState background={cachedBackground} />
+        </div>
+      )}
     </div>
   );
 }

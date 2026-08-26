@@ -286,7 +286,20 @@ large number of public replies or DM replies. Before broad rollout:
 - `worker/scripts/audit-unified-timeline-fanout.sql` reports public and DM fan-out
   distributions without selecting content and verifies owner DM, visitor DM,
   public-root and public-child query plans. Run it against production before
-  enabling non-test accounts.
+  enabling non-test accounts. Execute it with
+  `--command "$(cat scripts/audit-unified-timeline-fanout.sql)"`; Wrangler's
+  remote `--file` import mode prints only aggregate counts, not the individual
+  read-only query results.
+- **Production fan-out audit passed 2026-08-26.** Across 1,150 public roots with
+  replies, average fan-out was 1.33, maximum fan-out was 15 and no root exceeded
+  the 300-item warning budget. Seven DM roots averaged 1.14 replies, had a
+  maximum of two and did not exceed the 20-reply product limit. The visitor,
+  public-root and public-child plans used their intended indexes.
+- The owner DM plan used `dm_channel_created_idx` and created a temporary B-tree
+  only for the final `id` ordering term because the older index ends at
+  `created_at`. Candidate reads remain capped at 51. Do not add another owner
+  index solely for this bounded tie-break sort; reconsider it only if production
+  owner metrics show material rows-read or latency.
 - After deploying to an allowlisted test channel, run
   `npx wrangler tail --format json` while exercising latest, older, context and
   reconnect reads once as the owner and once as a signed visitor. Review the two
@@ -312,7 +325,8 @@ SLOs):
 - no D1 variable-limit errors;
 - unified P95 server duration no more than 50 ms above the comparable legacy read;
 - no page with unexplained root duplication or loss;
-- expanded-item distributions reviewed before enabling non-test accounts.
+- expanded-item distributions reviewed before enabling non-test accounts
+  (completed 2026-08-26).
 
 Trade-off: an intra-root continuation cursor makes the contract more complicated,
 but is safer than allowing one extremely popular root to produce an unbounded page.
