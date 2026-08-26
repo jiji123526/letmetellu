@@ -273,12 +273,12 @@ test("operational health status applies conservative 15-minute thresholds", () =
       request_5xx_count: 5,
       unhandled_exception_count: 3,
       d1_unavailable_count: 5,
-      maintenance_failure_count: 1,
     },
     degraded_15m: {
       request_5xx_count: 1,
       unhandled_exception_count: 1,
       d1_unavailable_count: 1,
+      maintenance_failure_count: 1,
       cleanup_failure_count: 1,
       realtime_failure_count: 1,
       rate_limited_count: 25,
@@ -289,13 +289,13 @@ test("operational health status applies conservative 15-minute thresholds", () =
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, preview_upstream_failure_count: 4 }), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, d1_unavailable_count: 1 }), "degraded");
+  assert.equal(deriveOperationalHealthStatus({ ...base, maintenance_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, cleanup_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, realtime_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, rate_limited_count: 25 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 5 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, unhandled_exception_count: 3 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, d1_unavailable_count: 5 }), "critical");
-  assert.equal(deriveOperationalHealthStatus({ ...base, maintenance_failure_count: 1 }), "critical");
 });
 
 test("operational event overrides stay internal to Worker bookkeeping", () => {

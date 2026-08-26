@@ -56,12 +56,12 @@ export const OPERATIONAL_HEALTH_THRESHOLDS = {
     request_5xx_count: 5,
     unhandled_exception_count: 3,
     d1_unavailable_count: 5,
-    maintenance_failure_count: 1,
   },
   degraded_15m: {
     request_5xx_count: 1,
     unhandled_exception_count: 1,
     d1_unavailable_count: 1,
+    maintenance_failure_count: 1,
     cleanup_failure_count: 1,
     realtime_failure_count: 1,
     rate_limited_count: 25,
@@ -71,8 +71,7 @@ export const OPERATIONAL_HEALTH_THRESHOLDS = {
 export function deriveOperationalHealthStatus(window: OperationalHealthWindow): OperationalHealthStatus {
   const { critical_15m: critical, degraded_15m: degraded } = OPERATIONAL_HEALTH_THRESHOLDS;
   if (
-    window.maintenance_failure_count >= critical.maintenance_failure_count
-    || window.request_5xx_count >= critical.request_5xx_count
+    window.request_5xx_count >= critical.request_5xx_count
     || window.unhandled_exception_count >= critical.unhandled_exception_count
     || window.d1_unavailable_count >= critical.d1_unavailable_count
   ) {
@@ -82,6 +81,7 @@ export function deriveOperationalHealthStatus(window: OperationalHealthWindow): 
     window.request_5xx_count >= degraded.request_5xx_count
     || window.unhandled_exception_count >= degraded.unhandled_exception_count
     || window.d1_unavailable_count >= degraded.d1_unavailable_count
+    || window.maintenance_failure_count >= degraded.maintenance_failure_count
     || window.cleanup_failure_count >= degraded.cleanup_failure_count
     || window.realtime_failure_count >= degraded.realtime_failure_count
     || window.rate_limited_count >= degraded.rate_limited_count

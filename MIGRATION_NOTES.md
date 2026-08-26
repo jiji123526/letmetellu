@@ -4,6 +4,21 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Maintenance-only health alerts no longer page as critical — 2026-08-26
+
+- A single `maintenance_failed` event now marks the 15-minute window as
+  `degraded` instead of `critical`.
+- Direct `critical` escalation remains unchanged for `d1_unavailable >= 5`,
+  `request_5xx >= 5`, and `unhandled_exception >= 3`, so real platform-wide
+  outages like the 2026-08-26 D1 timeout burst still alert at the highest
+  severity.
+- This removes duplicate severity escalation when scheduled maintenance is
+  only a downstream symptom of the same transient D1 problem already counted
+  by `d1_unavailable`.
+
+This is a Worker-only threshold change. It requires a Worker deployment but no
+D1 migration.
+
 ### Flying emoji broadcasts stay inside Live — 2026-08-25
 
 - The Durable Object now accepts flying-emoji events only from authenticated
