@@ -24,6 +24,38 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## Open-app push clicks navigate to the notified channel — 2026-08-26
+
+### Implementation and behavior
+
+- A notification click still focuses an already-open window that is already on
+  the exact target channel.
+- When the installed app or browser is open on a different page, the Service
+  Worker now selects the focused same-origin window first, navigates it to the
+  notification target, and then focuses it. A visible or other same-origin
+  window is used as a fallback before opening a new window.
+- This fixes iOS standalone behavior where `openWindow()` can reuse the existing
+  app window without changing its URL, leaving the user on the previous channel.
+
+### Safety, cost and trade-offs
+
+- `safeTargetPath()` continues to permit only same-origin `/ch/` paths; invalid
+  or external notification targets fall back to the dashboard.
+- Navigation replaces the current channel view, so transient unsaved composer
+  state in that window may be lost. This matches the explicit destination
+  change requested by tapping the notification.
+- The change adds no polling, Worker request, D1 read, migration or secret. It
+  only changes the installed Service Worker click path.
+
+### Verification and rollout
+
+- Static notification regression coverage verifies existing-client navigation,
+  post-navigation focus and the `openWindow()` fallback.
+- Frontend build and hardening test status are recorded with the rollout commit.
+- No Worker deployment is required. Installed clients may need to fully close
+  and reopen once after the frontend deployment so the updated Service Worker
+  controls the app.
+
 ## Indexed notification-ready probes — 2026-08-24
 
 ### Production diagnosis

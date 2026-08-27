@@ -559,6 +559,26 @@ test(
 );
 
 test(
+  "push clicks navigate an already-open app client to the notification target",
+  () => {
+    assert.match(
+      serviceWorker,
+      /reusableClient\.navigate\(absoluteTarget\)/,
+    );
+
+    assert.match(
+      serviceWorker,
+      /return navigatedClient\.focus\(\)/,
+    );
+
+    assert.match(
+      serviceWorker,
+      /clients\.openWindow\(absoluteTarget\)/,
+    );
+  },
+);
+
+test(
   "outbox delivery uses leases, bounded retries and permanent endpoint cleanup",
   () => {
     assert.match(

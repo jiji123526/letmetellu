@@ -4,6 +4,22 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Push clicks now retarget an already-open app window — 2026-08-26
+
+- If the exact notification channel is already open, the Service Worker focuses
+  that window as before.
+- If the app is open on another channel, it now navigates the focused or visible
+  same-origin app window to the notification target before focusing it. This
+  avoids iOS standalone `openWindow()` reusing the old window without changing
+  the displayed channel.
+- Notification targets remain restricted to same-origin `/ch/` paths, with the
+  dashboard as the safe fallback. New-window opening remains the fallback when
+  an existing client cannot be navigated.
+
+This is a frontend Service Worker fix with no Worker deployment, D1 migration,
+R2 change or secret update. The trade-off is that explicitly opening a push can
+replace transient unsaved composer state in the previously visible channel.
+
 ### Cached background stays mounted through the first authoritative paint — 2026-08-26
 
 - The initial background preload decoded the authoritative image before ending
