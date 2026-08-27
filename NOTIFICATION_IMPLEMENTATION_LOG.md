@@ -24,6 +24,39 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## Foreground iOS pushes use an in-app notification card — 2026-08-26
+
+### Production finding and behavior
+
+- Production retesting showed that iOS standalone may accept
+  `showNotification()` without presenting a system banner while the PWA is in
+  the foreground. This is platform presentation behavior, not notification
+  preference or channel-target suppression.
+- After probing the actual visible page, a push for a different channel is now
+  handed to that page and shown as a compact top notification card. Tapping the
+  card navigates to the notified channel and it dismisses automatically after
+  six seconds.
+- A push for the channel currently visible remains suppressed. When no visible
+  page responds, delivery continues through the normal OS notification path.
+
+### Cost, safety and trade-offs
+
+- Foreground delivery uses local Service Worker `postMessage` only and adds no
+  API call, Worker request, D1 read or storage write.
+- The app card replaces the OS banner only for a responding visible page, which
+  prevents duplicate foreground notices on browsers that do show Web Push in
+  the foreground.
+- The card contains the existing bounded title/body and independently validates
+  the same-origin channel target before navigation. Only the newest foreground
+  card is retained; a later push replaces the earlier card.
+
+### Verification and rollout
+
+- Regression coverage checks the foreground notification handoff and rendered
+  client state in addition to the existing live-path probe.
+- This is frontend-only and requires no Worker deployment, D1 migration or
+  secret change.
+
 ## Foreground suppression uses the page's actual channel — 2026-08-26
 
 ### Production finding and behavior

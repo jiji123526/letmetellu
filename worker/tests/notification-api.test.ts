@@ -623,6 +623,16 @@ test(
       pushNavigationListener,
       /target: `\$\{window\.location\.pathname\}\$\{window\.location\.search\}`/,
     );
+
+    assert.match(
+      serviceWorker,
+      /type: "push-foreground-notification"/,
+    );
+
+    assert.match(
+      pushNavigationListener,
+      /setNotification\(\{ title, body, target \}\)/,
+    );
   },
 );
 

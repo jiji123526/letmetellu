@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Foreground iOS pushes now show an in-app card — 2026-08-26
+
+- iOS standalone may not present an OS Web Push banner while the PWA is visible.
+- A notification for a different channel is now delivered to the visible page
+  as a compact, clickable top card that opens the target channel and dismisses
+  after six seconds. The currently visible channel remains suppressed.
+- Background delivery still uses the OS notification. Foreground handoff is
+  local `postMessage` traffic and adds no API, Worker or D1 cost.
+
+This is a frontend-only rollout with no migration, Worker deployment or secret
+change. A later foreground notification replaces the currently displayed card.
+
 ### Foreground pushes are suppressed only on the actual target channel — 2026-08-26
 
 - iOS may expose a stale Service Worker `WindowClient.url` after an in-app

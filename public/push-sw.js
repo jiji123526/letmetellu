@@ -15,7 +15,7 @@ function safeTargetPath(value) {
   }
 }
 
-async function isTargetChannelVisible(target) {
+async function deliverForegroundPush(target, notification) {
   try {
     const targetUrl = new URL(target, self.location.origin);
     if (targetUrl.origin !== self.location.origin || !targetUrl.pathname.startsWith("/ch/")) {
@@ -29,20 +29,20 @@ async function isTargetChannelVisible(target) {
     const visibleClients = clients.filter((client) => client.visibilityState === "visible");
     const currentTargets = await Promise.all(visibleClients.map((client) => new Promise((resolve) => {
       const channel = new MessageChannel();
-      const timeout = setTimeout(() => resolve(null), 200);
+      const timeout = setTimeout(() => resolve({ client, target: null }), 200);
       channel.port1.onmessage = (messageEvent) => {
         clearTimeout(timeout);
         const response = messageEvent.data;
         if (response?.visible !== true || typeof response?.target !== "string") {
-          resolve(null);
+          resolve({ client, target: null });
           return;
         }
-        resolve(response.target);
+        resolve({ client, target: response.target });
       };
       client.postMessage({ type: "push-visibility-probe" }, [channel.port2]);
     })));
 
-    return currentTargets.some((currentTarget) => {
+    const targetVisible = currentTargets.some(({ target: currentTarget }) => {
       if (typeof currentTarget !== "string") return false;
       try {
         const currentUrl = new URL(currentTarget, self.location.origin);
@@ -52,6 +52,18 @@ async function isTargetChannelVisible(target) {
         return false;
       }
     });
+    if (targetVisible) return true;
+
+    let deliveredInApp = false;
+    for (const { client, target: currentTarget } of currentTargets) {
+      if (typeof currentTarget !== "string") continue;
+      client.postMessage({
+        type: "push-foreground-notification",
+        notification,
+      });
+      deliveredInApp = true;
+    }
+    return deliveredInApp;
   } catch {
     return false;
   }
@@ -66,16 +78,22 @@ self.addEventListener("push", (event) => {
     return;
   }
   const target = safeTargetPath(payload.url);
+  const notification = {
+    title: typeof payload.title === "string" ? payload.title : "yap.",
+    body: typeof payload.body === "string" ? payload.body : "",
+    tag: typeof payload.tag === "string" ? payload.tag : undefined,
+    target,
+  };
   event.waitUntil((async () => {
-    if (await isTargetChannelVisible(target)) return;
+    if (await deliverForegroundPush(target, notification)) return;
 
     await self.registration.showNotification(
-      typeof payload.title === "string" ? payload.title : "yap.",
+      notification.title,
       {
-        body: typeof payload.body === "string" ? payload.body : "",
+        body: notification.body,
         icon: "/icons/yap-logo-192.png",
         badge: "/icons/yap-logo-192.png",
-        tag: typeof payload.tag === "string" ? payload.tag : undefined,
+        tag: notification.tag,
         data: { target },
       },
     );
