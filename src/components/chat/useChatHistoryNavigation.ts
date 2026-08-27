@@ -922,6 +922,21 @@ export function useChatHistoryNavigation({
     scheduleScrollPositionSave();
 
     if (
+      historyModeRef.current === "context"
+      && distanceFromBottom < 50
+      && !loadingMoreRef.current
+      && !hasMoreNewerMessagesRef.current
+    ) {
+      historyModeRef.current = "latest";
+      setHistoryMode("latest");
+      setNewerMessageCount(0);
+      updateNearBottom(true);
+      scrollAnchorRef.current = null;
+      setShowScrollBtn(false);
+      return;
+    }
+
+    if (
       element.scrollTop < 50
       && !loadingMoreRef.current
       && hasMoreMessagesRef.current

@@ -4,6 +4,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Scrolling to the newest context edge exits context mode — 2026-08-26
+
+- Context navigation previously cleared the `has more newer messages` flag at
+  the newest page but deliberately kept `historyMode` set to `context`. The
+  latest-message control therefore remained visible and disabled even after the
+  user manually scrolled all the way to the current end.
+- When the viewport reaches within 50 px of the bottom and no newer page remains,
+  the history controller now promotes the mounted window to `latest`, clears the
+  newer-message count and scroll anchor, and hides the bottom control.
+- Realtime refreshes that mark newer history available still prevent this
+  promotion, so context mode is not exited while unseen messages remain.
+
+This is a client-state fix with no API, Worker, D1 or storage change.
+
 ### Foreground iOS pushes now show an in-app card — 2026-08-26
 
 - iOS standalone may not present an OS Web Push banner while the PWA is visible.
