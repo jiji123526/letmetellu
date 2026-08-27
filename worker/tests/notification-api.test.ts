@@ -75,6 +75,14 @@ const serviceWorker = readFileSync(
   "utf8",
 );
 
+const pushNavigationListener = readFileSync(
+  new URL(
+    "../../src/components/PushNavigationListener.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
 const delivery = readFileSync(
   new URL(
     "../src/lib/notification-delivery.ts",
@@ -574,6 +582,21 @@ test(
     assert.match(
       serviceWorker,
       /clients\.openWindow\(absoluteTarget\)/,
+    );
+
+    assert.match(
+      serviceWorker,
+      /postMessage\(\{ type: "push-navigation", target \}\)/,
+    );
+
+    assert.match(
+      pushNavigationListener,
+      /navigator\.serviceWorker\.addEventListener\("message", handleMessage\)/,
+    );
+
+    assert.match(
+      pushNavigationListener,
+      /window\.location\.assign\(target\)/,
     );
   },
 );

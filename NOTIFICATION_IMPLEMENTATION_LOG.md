@@ -24,6 +24,40 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## iOS open-app push navigation uses a page handoff — 2026-08-26
+
+### Production finding and implementation
+
+- Production retesting showed that iOS standalone could reopen a background app
+  on its previous channel even after the Service Worker called
+  `WindowClient.navigate()` with the notification target.
+- The notification click handler now also posts a `push-navigation` message to
+  the selected same-origin app client. A root-mounted client listener validates
+  the target and performs a full same-origin navigation itself.
+- `WindowClient.navigate()` remains as the standard path and `openWindow()` as
+  the final fallback, so browsers with normal support retain their existing
+  behavior while iOS has an app-level handoff.
+
+### Safety, cost and trade-offs
+
+- Both the Service Worker and page listener independently accept only
+  same-origin `/ch/` targets. A compromised or unrelated worker message cannot
+  navigate the page to an external origin.
+- The listener is one passive global event handler with no polling, network
+  request or storage access. It adds negligible client cost and no Worker or D1
+  traffic.
+- A full navigation is intentional for reliability and resets transient state
+  in the previous channel. Tapping a push is treated as an explicit request to
+  leave that channel.
+
+### Verification and rollout
+
+- Regression coverage checks the worker-to-page message, global listener and
+  same-origin full-navigation fallback.
+- This remains a frontend-only rollout. No Worker deployment, migration or
+  secret is required; iOS clients must receive the new page bundle and Service
+  Worker before the handoff is available.
+
 ## Open-app push clicks navigate to the notified channel — 2026-08-26
 
 ### Implementation and behavior

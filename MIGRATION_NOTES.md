@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### iOS push clicks now hand the target to the open page — 2026-08-26
+
+- Production retesting found that iOS standalone could ignore
+  `WindowClient.navigate()` when reviving an existing background app window.
+- The Service Worker now also sends the validated channel target directly to
+  that app window. A root-mounted listener independently validates the
+  same-origin `/ch/` path and performs the page navigation.
+- Standard client navigation and new-window fallback remain in place. The
+  listener is passive and adds no polling, API request, D1 read or storage.
+
+This is a frontend-only reliability fix. Opening the notification intentionally
+leaves the prior channel and can discard transient composer state there.
+
 ### Push clicks now retarget an already-open app window — 2026-08-26
 
 - If the exact notification channel is already open, the Service Worker focuses

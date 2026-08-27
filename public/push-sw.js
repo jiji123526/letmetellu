@@ -95,14 +95,22 @@ self.addEventListener("notificationclick", (event) => {
       || clients.find((client) => client.visibilityState === "visible" && isSameOriginClient(client))
       || clients.find(isSameOriginClient);
 
-    if (reusableClient && "navigate" in reusableClient) {
+    if (reusableClient) {
+      reusableClient.postMessage({ type: "push-navigation", target });
+
       try {
-        const navigatedClient = await reusableClient.navigate(absoluteTarget);
-        if (navigatedClient && "focus" in navigatedClient) {
-          return navigatedClient.focus();
+        if ("navigate" in reusableClient) {
+          const navigatedClient = await reusableClient.navigate(absoluteTarget);
+          if (navigatedClient && "focus" in navigatedClient) {
+            return navigatedClient.focus();
+          }
         }
       } catch {
-        // Fall through to opening a new window when an existing client cannot navigate.
+        // The page-level message handles iOS clients that cannot be navigated here.
+      }
+
+      if ("focus" in reusableClient) {
+        return reusableClient.focus();
       }
     }
 

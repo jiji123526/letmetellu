@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import PushNavigationListener from "@/components/PushNavigationListener";
 import { getRequestLocale } from "@/lib/server-locale";
 import "./globals.css";
 
@@ -82,6 +83,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="antialiased">
+        <PushNavigationListener />
         {children}
       </body>
     </html>
