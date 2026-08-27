@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 const PUSH_NAVIGATION_TYPE = "push-navigation";
+const PUSH_VISIBILITY_PROBE_TYPE = "push-visibility-probe";
 
 function readSafeChannelTarget(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -23,6 +24,14 @@ export default function PushNavigationListener() {
     if (!("serviceWorker" in navigator)) return;
 
     const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === PUSH_VISIBILITY_PROBE_TYPE) {
+        event.ports[0]?.postMessage({
+          visible: document.visibilityState === "visible",
+          target: `${window.location.pathname}${window.location.search}`,
+        });
+        return;
+      }
+
       if (event.data?.type !== PUSH_NAVIGATION_TYPE) return;
       const target = readSafeChannelTarget(event.data?.target);
       if (!target) return;

@@ -26,14 +26,28 @@ async function isTargetChannelVisible(target) {
       type: "window",
       includeUncontrolled: true,
     });
+    const visibleClients = clients.filter((client) => client.visibilityState === "visible");
+    const currentTargets = await Promise.all(visibleClients.map((client) => new Promise((resolve) => {
+      const channel = new MessageChannel();
+      const timeout = setTimeout(() => resolve(null), 200);
+      channel.port1.onmessage = (messageEvent) => {
+        clearTimeout(timeout);
+        const response = messageEvent.data;
+        if (response?.visible !== true || typeof response?.target !== "string") {
+          resolve(null);
+          return;
+        }
+        resolve(response.target);
+      };
+      client.postMessage({ type: "push-visibility-probe" }, [channel.port2]);
+    })));
 
-    return clients.some((client) => {
-      if (client.visibilityState !== "visible") return false;
-
+    return currentTargets.some((currentTarget) => {
+      if (typeof currentTarget !== "string") return false;
       try {
-        const clientUrl = new URL(client.url);
-        return clientUrl.origin === self.location.origin
-          && clientUrl.pathname === targetUrl.pathname;
+        const currentUrl = new URL(currentTarget, self.location.origin);
+        return currentUrl.origin === self.location.origin
+          && currentUrl.pathname === targetUrl.pathname;
       } catch {
         return false;
       }

@@ -602,6 +602,31 @@ test(
 );
 
 test(
+  "foreground push suppression probes the page's current channel",
+  () => {
+    assert.match(
+      serviceWorker,
+      /client\.postMessage\(\{ type: "push-visibility-probe" \}, \[channel\.port2\]\)/,
+    );
+
+    assert.match(
+      serviceWorker,
+      /response\?\.visible !== true/,
+    );
+
+    assert.match(
+      pushNavigationListener,
+      /event\.ports\[0\]\?\.postMessage/,
+    );
+
+    assert.match(
+      pushNavigationListener,
+      /target: `\$\{window\.location\.pathname\}\$\{window\.location\.search\}`/,
+    );
+  },
+);
+
+test(
   "outbox delivery uses leases, bounded retries and permanent endpoint cleanup",
   () => {
     assert.match(

@@ -24,6 +24,37 @@ Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
 summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
+## Foreground suppression uses the page's actual channel — 2026-08-26
+
+### Production finding and behavior
+
+- iOS could retain a stale `WindowClient.url` after in-app channel navigation.
+  The Service Worker therefore sometimes treated a different visible channel
+  as the notification target and incorrectly suppressed the push.
+- Before suppressing a foreground push, the Service Worker now asks each
+  visible app page for its current `location`. The page also returns its actual
+  document visibility state.
+- A push is suppressed only when a responding, currently visible page reports
+  the exact target channel pathname. A different channel, hidden page, missing
+  response or older page bundle receives the notification normally.
+
+### Cost, safety and trade-offs
+
+- The probe is same-device `postMessage` traffic only. It performs no API call,
+  Worker request, D1 query or storage write.
+- Visible clients have a bounded 200 ms response window. The normal response is
+  immediate; an unresponsive old client can delay showing a push by at most
+  200 ms, after which the safe default is to show it.
+- The target comparison is parsed as same-origin and compares channel
+  pathnames. Notification click target validation remains unchanged.
+
+### Verification and rollout
+
+- Regression coverage checks both sides of the MessageChannel visibility probe
+  and the requirement that only visible responses can suppress delivery.
+- This is a frontend Service Worker rollout with no Worker deployment, D1
+  migration or secret change.
+
 ## iOS open-app push navigation uses a page handoff — 2026-08-26
 
 ### Production finding and implementation

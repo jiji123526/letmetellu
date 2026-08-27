@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Foreground pushes are suppressed only on the actual target channel — 2026-08-26
+
+- iOS may expose a stale Service Worker `WindowClient.url` after an in-app
+  channel transition, which could hide a notification while a different channel
+  was visible.
+- The Service Worker now probes visible pages for their live pathname and
+  document visibility. Only an immediate visible response for the same channel
+  suppresses the push; different channels and missing responses show it.
+- The probe uses local `postMessage` only and has a 200 ms upper bound. It adds
+  no server request, D1 read, migration or Worker deployment.
+
 ### iOS push clicks now hand the target to the open page — 2026-08-26
 
 - Production retesting found that iOS standalone could ignore
