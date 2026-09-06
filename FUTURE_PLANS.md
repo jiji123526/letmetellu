@@ -14,7 +14,7 @@ remains in the linked implementation documents.
 
 - Production measurements isolated the current long-tail channel-entry delay to the first D1 channel-state access: SQL execution remains sub-millisecond to single-digit milliseconds, while binding/queue wait has reached several seconds and returned `d1_unavailable` even for empty channels.
 - D1 Read Replication was confirmed disabled on `letsplay-db` on 2026-09-06. The code now uses security-aware Sessions API constraints: fresh access starts on primary, while reads behind a valid short-lived capability may start unconstrained and subsequent sequentially-consistent reads can use replicas.
-- Production still requires the operator to enable Read Replication in Cloudflare D1 settings. After activation, monitor primary/replica routing, init latency, 503 rate, and whether primary-bound first-entry checks remain unhealthy. If fresh channel access still takes multiple seconds with low traffic, continue the Cloudflare support escalation rather than weakening passcode or deletion freshness.
+- Read Replication was enabled and confirmed as `auto` on 2026-09-06. Capability-authorized repeat init fell to 0.30–0.49 seconds and a unified-timeline read completed in 0.48 seconds, but a fresh primary-bound init still took 9.1 seconds. Continue monitoring routing, init latency and 503 rate, and keep the Cloudflare support escalation open rather than weakening passcode or deletion freshness.
 
 ### Main branch
 

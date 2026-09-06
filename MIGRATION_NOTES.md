@@ -15,6 +15,8 @@ Trade-off: the first uncached channel entry still has to reach the primary becau
 
 Verification: enable Read Replication for `letsplay-db`, wait for replicas to become available, then compare repeated `/api/init`, `/api/unified-timeline`, and `/api/data?type=gallery` timings. Confirm channel entry still rejects a newly set passcode immediately on a fresh browser while repeated authorized reads no longer concentrate all query traffic on ENAM primary.
 
+Production validation: `read_replication.mode` was confirmed as `auto` after activation. A fresh `zziks` init still waited 9.1 seconds because its required primary channel lookup consumed 8.6 seconds. The next two init requests with the issued capability completed in 0.49 and 0.30 seconds, with `channel=0` and Worker totals of 116/74 ms. A capability-authorized unified-timeline read completed in 0.48 seconds end to end, with `access=0`, `read=139 ms`, and D1 SQL duration of 3.9 ms. Replication is therefore serving the intended repeat-read path, while the unhealthy first-primary wait remains an open Cloudflare infrastructure issue.
+
 ### Overload amplification safeguards — 2026-09-06
 
 - When normal-chat realtime is disconnected, the silent latest-timeline fallback now starts after a client-jittered 6–10 seconds and polls every 15 seconds instead of starting at 3.5 seconds and polling every 5 seconds. Existing visibility, latest-mode, and near-bottom gates remain in place, while reconnect storms create materially fewer synchronized D1 reads.
