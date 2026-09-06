@@ -4,6 +4,10 @@ import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie, setRoomTokenResponseCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
 function getParentChannelId(channelId: string) {
   return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
 }
@@ -11,7 +15,10 @@ function getParentChannelId(channelId: string) {
 // Init proxy for authenticated users — forwards session identity to Worker
 // Worker can use this to bypass passcode gate for channel owners
 export async function GET(request: Request) {
+  const requestStartedAt = performance.now();
+  const authStartedAt = performance.now();
   const session = await auth();
+  const authMs = roundedDuration(authStartedAt);
   const url = new URL(request.url);
   const channel = url.searchParams.get("channel");
 
@@ -39,8 +46,10 @@ export async function GET(request: Request) {
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
+  const workerStartedAt = performance.now();
   const res = await fetch(`${workerUrl}/api/init?channel=${channel}`, { headers });
   const data = await res.json() as Record<string, unknown>;
+  const workerMs = roundedDuration(workerStartedAt);
   const nextAnonymousToken = typeof data.anonymousToken === "string" ? data.anonymousToken : null;
   const nextDeviceToken = typeof data.deviceToken === "string" ? data.deviceToken : null;
   const nextRoomToken = typeof data.roomToken === "string" ? data.roomToken : null;
@@ -48,12 +57,20 @@ export async function GET(request: Request) {
   delete data.anonymousToken;
   delete data.deviceToken;
   delete data.roomToken;
+  const signingStartedAt = performance.now();
   const signedData = await signProtectedMediaInPayload(data, {
     roomToken,
     userId: session?.user?.id,
   });
+  const signingMs = roundedDuration(signingStartedAt);
 
   const response = NextResponse.json(signedData, { status: res.status });
+  response.headers.set("Server-Timing", [
+    `auth;dur=${authMs}`,
+    `worker;dur=${workerMs}`,
+    `media-signing;dur=${signingMs}`,
+    `total;dur=${roundedDuration(requestStartedAt)}`,
+  ].join(", "));
   setIdentityCookies(response, request, {
     anonymousToken: nextAnonymousToken,
     deviceToken: nextDeviceToken,

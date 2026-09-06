@@ -22,6 +22,14 @@ const bootstrapSource = readFileSync(
   new URL("../../src/components/chat/useChatChannelBootstrap.ts", import.meta.url),
   "utf8",
 );
+const initProxySource = readFileSync(
+  new URL("../../src/app/api/init/route.ts", import.meta.url),
+  "utf8",
+);
+const wsTokenProxySource = readFileSync(
+  new URL("../../src/app/api/ws-token/route.ts", import.meta.url),
+  "utf8",
+);
 
 test("init only reads live-channel frozen state when the live row is relevant", () => {
   assert.match(initSource, /function readSharedInitConfig/);
@@ -67,4 +75,12 @@ test("client session hydration does not restart the channel bootstrap", () => {
   assert.match(bootstrapEffectSource, /applyInitDataRef\.current\(data\)/);
   assert.match(bootstrapEffectSource, /applyInitDataRef\.current\(normalData\)/);
   assert.doesNotMatch(bootstrapEffectSource, /\[\s*applyInitData,/);
+});
+
+test("channel entry proxies expose auth and Worker timing stages", () => {
+  assert.match(initProxySource, /`auth;dur=\$\{authMs}`/);
+  assert.match(initProxySource, /`worker;dur=\$\{workerMs}`/);
+  assert.match(initProxySource, /`media-signing;dur=\$\{signingMs}`/);
+  assert.match(wsTokenProxySource, /`auth;dur=\$\{authMs}`/);
+  assert.match(wsTokenProxySource, /`worker;dur=\$\{workerMs}`/);
 });

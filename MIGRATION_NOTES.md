@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-entry proxy timing separates auth from Worker latency — 2026-09-06
+
+- Successful `/api/init` responses now expose authentication, Worker round-trip, protected-media signing, and total durations through `Server-Timing`.
+- Successful authenticated `/api/ws-token` responses expose authentication, Worker socket-authorization, and total durations through the same standard header.
+- Worker tail already reports unified-timeline and D1 durations. Combining those logs with these proxy timings identifies whether a slow entry occurs before the Worker, inside D1, during media signing, or in the browser after the response.
+
+Trade-off: the responses gain a small duration-only header. No identity, channel, token, or message value is exposed. Early authorization failures do not yet carry the full timing breakdown because the immediate objective is diagnosing successful-but-slow channel entry.
+
 ### Current-user bottleneck timing is exposed per response — 2026-09-06
 
 - The signed-in `GET /api/user` response now includes `Server-Timing` entries for Vercel-side authentication, the Worker round trip, and total proxy time.

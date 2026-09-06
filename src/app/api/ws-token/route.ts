@@ -3,6 +3,10 @@ import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity
 import { clearRoomTokenResponseCookie, readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
 function encodeBase64Url(value: string | Uint8Array): string {
   const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
   return Buffer.from(bytes).toString("base64url");
@@ -40,7 +44,10 @@ function getParentChannelId(channelId: string) {
 // Returns the WebSocket auth token for verified channel owners
 // This token is used to authenticate as admin on the DO WebSocket
 export async function GET(request: Request) {
+  const requestStartedAt = performance.now();
+  const authStartedAt = performance.now();
   const session = await auth();
+  const authMs = roundedDuration(authStartedAt);
   const url = new URL(request.url);
   const channelId = url.searchParams.get("channel");
   const expectedAuthentication = url.searchParams.get("authenticated");
@@ -71,10 +78,12 @@ export async function GET(request: Request) {
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
 
+  const workerStartedAt = performance.now();
   const authRes = await fetch(`${workerUrl}/api/socket-auth?channel=${channelId}`, {
     headers,
     cache: "no-store",
   });
+  const workerMs = roundedDuration(workerStartedAt);
   if (authRes.status === 204) {
     return new NextResponse(null, { status: 204 });
   }
@@ -98,6 +107,11 @@ export async function GET(request: Request) {
       : "room-viewer-ws";
   const token = await createWsToken(tokenType, channelId, authData.userId);
   const response = NextResponse.json({ token, mode: authData.mode });
+  response.headers.set("Server-Timing", [
+    `auth;dur=${authMs}`,
+    `worker;dur=${workerMs}`,
+    `total;dur=${roundedDuration(requestStartedAt)}`,
+  ].join(", "));
   setIdentityCookies(response, request, {
     anonymousToken: typeof authData.anonymousToken === "string" ? authData.anonymousToken : null,
     deviceToken: typeof authData.deviceToken === "string" ? authData.deviceToken : null,
