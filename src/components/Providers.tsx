@@ -3,7 +3,6 @@
 import { SessionProvider } from "next-auth/react";
 import { LocaleProvider } from "@/hooks/useLocale";
 import { UserPreferencesSync } from "@/components/UserPreferencesSync";
-import { ProductUpdateDialog } from "@/components/ProductUpdateDialog";
 
 export function Providers({
   children,
@@ -15,7 +14,6 @@ export function Providers({
       <UserPreferencesSync />
 
       <LocaleProvider>
-        <ProductUpdateDialog />
         {children}
       </LocaleProvider>
     </SessionProvider>
