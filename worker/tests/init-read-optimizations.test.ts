@@ -81,6 +81,10 @@ test("channel entry proxies expose auth and Worker timing stages", () => {
   assert.match(initProxySource, /`auth;dur=\$\{authMs}`/);
   assert.match(initProxySource, /`worker;dur=\$\{workerMs}`/);
   assert.match(initProxySource, /`media-signing;dur=\$\{signingMs}`/);
+  assert.match(initProxySource, /res\.headers\.get\("X-Yap-Worker-Timing"\)/);
+  assert.match(initProxySource, /response\.headers\.set\("X-Yap-Worker-Timing", workerTiming\)/);
+  assert.match(initSource, /withInitTiming\(response, \{/);
+  assert.match(initSource, /bootstrap: bootstrapMs/);
   assert.match(wsTokenProxySource, /`auth;dur=\$\{authMs}`/);
   assert.match(wsTokenProxySource, /`worker;dur=\$\{workerMs}`/);
 });

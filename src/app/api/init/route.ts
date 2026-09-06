@@ -71,6 +71,8 @@ export async function GET(request: Request) {
     `media-signing;dur=${signingMs}`,
     `total;dur=${roundedDuration(requestStartedAt)}`,
   ].join(", "));
+  const workerTiming = res.headers.get("X-Yap-Worker-Timing");
+  if (workerTiming) response.headers.set("X-Yap-Worker-Timing", workerTiming);
   setIdentityCookies(response, request, {
     anonymousToken: nextAnonymousToken,
     deviceToken: nextDeviceToken,

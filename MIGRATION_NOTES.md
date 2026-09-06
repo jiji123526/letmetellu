@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Cold channel entry exposes Worker stage timings — 2026-09-06
+
+- Successful `/api/init` responses now report Worker-internal durations for channel metadata, viewer identity, room/live access, the parallel message/config/block bootstrap, post-processing, and total execution through `X-Yap-Worker-Timing`.
+- The Vercel proxy forwards this duration-only header alongside its existing `Server-Timing` breakdown, allowing a slow uncached channel entry to be attributed without logging channel IDs, user IDs, tokens, or message content.
+- This is diagnostic instrumentation only. It does not cache viewer-specific data or alter channel-entry behavior while the active bottleneck is being measured.
+
+Trade-off: each successful init response gains a small header and a handful of `performance.now()` calls. The overhead is negligible compared with a network or D1 round trip, and the header can remain as a low-cost production safety net.
+
 ### Channel re-entry no longer restores a refresh-only scroll anchor — 2026-09-06
 
 - Saved chat positions now include a per-document identifier. A position is restored only after a real document reload, when the identifier belongs to the previous document.

@@ -36,6 +36,23 @@ type SharedInitConfig = {
 const sharedChannelRequests = new Map<string, Promise<SharedChannelRow | null>>();
 const sharedConfigRequests = new Map<string, Promise<SharedInitConfig>>();
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function withInitTiming(response: Response, timings: Record<string, number>) {
+  const headers = new Headers(response.headers);
+  headers.set(
+    "X-Yap-Worker-Timing",
+    Object.entries(timings).map(([stage, duration]) => `${stage}=${duration}`).join(","),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function shareInFlight<T>(
   requests: Map<string, Promise<T>>,
   key: string,
@@ -144,6 +161,7 @@ function markProtectedSenders<T extends Record<string, unknown>>(
 }
 
 export async function handleInit(request: Request, env: Env): Promise<Response> {
+  const requestStartedAt = performance.now();
   const url = new URL(request.url);
   const channelId = url.searchParams.get("channel");
 
@@ -156,16 +174,23 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   const reportsChannel = isReportsChannel(parentChannelId, env);
   const reportsChannelId = getReportsChannelId(env);
   let routeStage = "load_channel";
+  let channelMs = 0;
+  let identityMs = 0;
+  let accessMs = 0;
+  let bootstrapMs = 0;
 
   try {
     // Fetch channel config (always from parent)
+    const channelStartedAt = performance.now();
     const channel = await readSharedChannel(env, parentChannelId, reportsChannelId);
+    channelMs = roundedDuration(channelStartedAt);
 
     if (!channel) {
       return Response.json({ error: "channel not found" }, { status: 404 });
     }
 
     routeStage = "resolve_viewer_identity";
+    const identityStartedAt = performance.now();
 
     // Only the trusted app proxy can assert a user identity. Keep this check
     // independent of passcode state so public channels receive the same
@@ -197,8 +222,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const deviceIdentity = verifiedDevice
       ? { deviceId: verifiedDevice.device_id, token: deviceToken }
       : await createDeviceIdentity(env);
+    identityMs = roundedDuration(identityStartedAt);
 
     routeStage = "verify_room_access";
+    const accessStartedAt = performance.now();
 
     // Passcode gate: if channel has passcode, verify token or owner identity
     if ((channel as any).passcode) {
@@ -270,6 +297,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       : null;
     const unifiedTimelineEnabled = unifiedTimelineRequested
       && (!isLiveChannel || liveTimelineSession !== null);
+    accessMs = roundedDuration(accessStartedAt);
 
     routeStage = "prepare_bootstrap_batch";
 
@@ -302,6 +330,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "load_bootstrap_data";
 
+    const bootstrapStartedAt = performance.now();
     const [bootstrap, sharedConfig, batchResults] = await Promise.all([
       readSelectedBootstrap(unifiedTimelineEnabled, {
         legacy: async () => {
@@ -343,6 +372,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       readSharedInitConfig(env, channelId, parentChannelId, isLiveChannel),
       statements.length > 0 ? env.DB.batch(statements) : Promise.resolve([]),
     ]);
+    bootstrapMs = roundedDuration(bootstrapStartedAt);
 
     const messagePage = bootstrap.mode === "legacy"
       ? bootstrap.value.messagePage
@@ -453,7 +483,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "build_response";
 
-    return Response.json({
+    const response = Response.json({
       channel: safeChannel,
       hasPasscode: Boolean((channel as any).passcode),
       passcodeHint: (channel as any).passcode_hint || "",
@@ -492,6 +522,15 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       anonymousUid: anonymousIdentity.uid,
       anonymousToken: anonymousIdentity.token,
       deviceToken: deviceIdentity.token,
+    });
+    const totalMs = roundedDuration(requestStartedAt);
+    return withInitTiming(response, {
+      channel: channelMs,
+      identity: identityMs,
+      access: accessMs,
+      bootstrap: bootstrapMs,
+      post: Math.max(0, Math.round((totalMs - channelMs - identityMs - accessMs - bootstrapMs) * 10) / 10),
+      total: totalMs,
     });
   } catch (error) {
     throw withOperationalErrorContext(error, {
