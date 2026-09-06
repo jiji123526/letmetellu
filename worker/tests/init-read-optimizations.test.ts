@@ -141,6 +141,9 @@ test("message sends expose proxy and mutation-stage timings", () => {
   assert.match(messagesSource, /function withMessageTiming/);
   assert.match(messagesSource, /channel: 0,[\s\S]*idempotency: 0,[\s\S]*persist: 0/);
   assert.match(messagesSource, /return withMessageTiming\(/);
+  assert.match(messagesSource, /retrySafeD1Read/);
+  assert.match(messagesSource, /if \(!isTransientD1Error\(error\)\) throw error/);
+  assert.match(messagesSource, /retries: 0/);
   assert.match(messagesProxySource, /`auth;dur=\$\{authMs\}, worker;dur=\$\{workerMs\}/);
   assert.match(messagesProxySource, /res\.headers\.get\("X-Yap-Worker-Timing"\)/);
 });

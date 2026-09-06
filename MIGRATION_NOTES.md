@@ -8,6 +8,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 - Successful message sends now expose proxy authentication/Worker time through `Server-Timing` and channel authorization, identity, idempotency, rate limiting, policy checks, reply resolution, persistence, and total Worker time through `X-Yap-Worker-Timing`.
 - This is diagnostic-only: send authorization, fresh channel-state checks, idempotency, and authoritative persistence ordering are unchanged. In particular, read capabilities are not accepted for writes because deletion, suspension, passcode, and ownership changes must take effect immediately.
+- Confirmed D1 overloads during the side-effect-free channel-state and idempotency reads receive one 100–300 ms jittered retry. The response timing includes a `retries` count. Persistence, upload attachment, rate limiting, and later mutation stages are never automatically replayed, which bounds retry amplification and avoids duplicate side effects.
 
 ### Short-lived read capabilities remove repeated channel-access D1 waits — 2026-09-06
 

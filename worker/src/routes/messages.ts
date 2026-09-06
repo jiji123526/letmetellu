@@ -8,7 +8,11 @@ import { attachUploadTicket, deleteUploadTicketByAttachment } from "../lib/uploa
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
 import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
 import { syncMessageLink, syncNewMessageLink } from "../lib/message-links.ts";
-import { recordOperationalEvent, withOperationalErrorContext } from "../lib/operational-events.ts";
+import {
+  isTransientD1Error,
+  recordOperationalEvent,
+  withOperationalErrorContext,
+} from "../lib/operational-events.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
@@ -36,6 +40,21 @@ function withMessageTiming(response: Response, stages: Record<string, number>): 
     statusText: response.statusText,
     headers,
   });
+}
+
+async function retrySafeD1Read<T>(operation: () => Promise<T>): Promise<{ value: T; retried: boolean }> {
+  try {
+    return { value: await operation(), retried: false };
+  } catch (error) {
+    if (!isTransientD1Error(error)) throw error;
+  }
+
+  // A single jittered retry reduces synchronized retry bursts during a brief
+  // D1 queue overload. Call this only before rate-limit or mutation side effects.
+  await new Promise((resolve) => {
+    setTimeout(resolve, 100 + Math.floor(Math.random() * 201));
+  });
+  return { value: await operation(), retried: true };
 }
 
 type PersistedMessage = Record<string, unknown> & {
@@ -154,6 +173,7 @@ export async function handleMessages(
     policy: 0,
     reply: 0,
     persist: 0,
+    retries: 0,
     total: 0,
   };
   const routeAction = request.method === "POST"
@@ -219,12 +239,14 @@ export async function handleMessages(
       }
       routeStage = "load_channel_state";
       const channelStartedAt = performance.now();
-      const channel = await env.DB.prepare(`
-        SELECT id, is_frozen, owner_uid, passcode,
-          (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
-        FROM channels
-        WHERE id = ?
-      `).bind(requestChannelId, parentChannelId).first();
+      const channelRead = await retrySafeD1Read(() => env.DB.prepare(`
+          SELECT id, is_frozen, owner_uid, passcode,
+            (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
+          FROM channels
+          WHERE id = ?
+        `).bind(requestChannelId, parentChannelId).first());
+      const channel = channelRead.value;
+      if (channelRead.retried) sendTimings.retries += 1;
       sendTimings.channel = roundedDuration(channelStartedAt);
       if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
       const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
@@ -278,9 +300,11 @@ export async function handleMessages(
 
       routeStage = "check_idempotency";
       const idempotencyStartedAt = performance.now();
-      const existingMessage = await env.DB.prepare(
-        "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
-      ).bind(clientMessageId).first<PersistedMessage>();
+      const existingMessageRead = await retrySafeD1Read(() => env.DB.prepare(
+          "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
+        ).bind(clientMessageId).first<PersistedMessage>());
+      const existingMessage = existingMessageRead.value;
+      if (existingMessageRead.retried) sendTimings.retries += 1;
       sendTimings.idempotency = roundedDuration(idempotencyStartedAt);
       if (existingMessage) {
         if (existingMessage.uid !== requesterUid || existingMessage.channel_id !== requestChannelId) {
