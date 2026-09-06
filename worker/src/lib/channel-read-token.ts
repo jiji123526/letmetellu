@@ -4,12 +4,37 @@ import type { Env } from "../types.ts";
 
 type ChannelReadViewer = "owner" | "visitor";
 
+export interface ChannelReadSnapshot {
+  id: string;
+  owner_uid: string;
+  name: string;
+  profile_image: string | null;
+  bubble_color: string | null;
+  notice: string | null;
+  is_frozen: number;
+  created_at: string | null;
+  passcode_hint: string | null;
+  instance_id: string | null;
+  show_on_profile: number;
+  background_type: string | null;
+  background_color: string | null;
+  background_image: string | null;
+  background_overlay: number;
+  background_blur: number;
+  owner_name: string | null;
+  moderation_status: string | null;
+  moderation_petition_status: string | null;
+  owner_channel_count: number;
+  has_passcode: boolean;
+}
+
 export interface ChannelReadTokenPayload {
   type: "channel-read";
   version: 1;
   channel_id: string;
   viewer: ChannelReadViewer;
   subject: string;
+  channel: ChannelReadSnapshot;
   iat: number;
   exp: number;
 }
@@ -46,6 +71,7 @@ export async function createChannelReadToken(input: {
   viewer: ChannelReadViewer;
   subject: string;
   sensitive: boolean;
+  channel: ChannelReadSnapshot;
   env: Env;
 }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -56,6 +82,7 @@ export async function createChannelReadToken(input: {
     channel_id: input.channelId,
     viewer: input.viewer,
     subject: input.subject,
+    channel: input.channel,
     iat: now,
     exp: now + (input.sensitive ? SENSITIVE_READ_TTL_SECONDS : PUBLIC_READ_TTL_SECONDS),
   } satisfies ChannelReadTokenPayload));
@@ -95,8 +122,17 @@ async function verifyChannelReadToken(
       || typeof decoded.channel_id !== "string"
       || typeof decoded.subject !== "string"
       || !decoded.subject
+      || !decoded.channel
+      || decoded.channel.id !== decoded.channel_id.replace(/_live$/, "")
+      || typeof decoded.channel.owner_uid !== "string"
+      || typeof decoded.channel.name !== "string"
+      || typeof decoded.channel.has_passcode !== "boolean"
+      || !Number.isFinite(decoded.iat)
       || !Number.isFinite(decoded.exp)
-      || decoded.exp < now
+      || decoded.iat > now + 5
+      || decoded.exp <= now
+      || decoded.exp <= decoded.iat
+      || decoded.exp - decoded.iat > PUBLIC_READ_TTL_SECONDS
       || decoded.exp > now + PUBLIC_READ_TTL_SECONDS
     ) {
       return null;

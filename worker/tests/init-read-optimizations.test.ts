@@ -109,6 +109,15 @@ test("channel entry proxies expose auth and Worker timing stages", () => {
   assert.match(wsTokenProxySource, /`worker;dur=\$\{workerMs}`/);
 });
 
+test("init reuses but never renews a valid channel read capability", () => {
+  assert.match(initProxySource, /readChannelReadTokenCookie/);
+  assert.match(initProxySource, /headers\["X-Channel-Read-Token"\] = channelReadToken/);
+  assert.match(initSource, /authorizeChannelReadToken\(request, channelId, env\)/);
+  assert.match(initSource, /const channel = channelReadAccess[\s\S]*channelReadAccess\.channel[\s\S]*: await readSharedChannel/);
+  assert.match(initSource, /const channelReadTokenCandidate = !channelReadAccess/);
+  assert.match(initSource, /channelReadTokenCandidate\.length <= 3_500/);
+});
+
 test("gallery and unified timeline reads expose diagnostic timing stages", () => {
   assert.match(dataSource, /case "gallery"[\s\S]*withDataTiming\(/);
   assert.match(dataSource, /"X-Yap-D1-Meta"/);

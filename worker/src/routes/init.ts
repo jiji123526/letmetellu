@@ -25,7 +25,11 @@ import {
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
-import { createChannelReadToken } from "../lib/channel-read-token";
+import {
+  authorizeChannelReadToken,
+  createChannelReadToken,
+  type ChannelReadSnapshot,
+} from "../lib/channel-read-token";
 
 type SharedChannelRow = Record<string, unknown>;
 type SharedConfigRow = { id: string; text: string; updated_at?: string | null };
@@ -165,6 +169,37 @@ function markProtectedSenders<T extends Record<string, unknown>>(
   ));
 }
 
+function toReadSnapshot(channel: Record<string, unknown>): ChannelReadSnapshot {
+  const nullableString = (value: unknown) => typeof value === "string" ? value : null;
+  const numberValue = (value: unknown, fallback = 0) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  };
+  return {
+    id: String(channel.id || ""),
+    owner_uid: String(channel.owner_uid || ""),
+    name: String(channel.name || ""),
+    profile_image: nullableString(channel.profile_image),
+    bubble_color: nullableString(channel.bubble_color),
+    notice: nullableString(channel.notice),
+    is_frozen: numberValue(channel.is_frozen),
+    created_at: nullableString(channel.created_at),
+    passcode_hint: nullableString(channel.passcode_hint),
+    instance_id: nullableString(channel.instance_id),
+    show_on_profile: numberValue(channel.show_on_profile),
+    background_type: nullableString(channel.background_type),
+    background_color: nullableString(channel.background_color),
+    background_image: nullableString(channel.background_image),
+    background_overlay: numberValue(channel.background_overlay, 14),
+    background_blur: numberValue(channel.background_blur),
+    owner_name: nullableString(channel.owner_name),
+    moderation_status: nullableString(channel.moderation_status),
+    moderation_petition_status: nullableString(channel.moderation_petition_status),
+    owner_channel_count: Math.min(numberValue(channel.owner_channel_count), 2),
+    has_passcode: Boolean(channel.passcode),
+  };
+}
+
 export async function handleInit(request: Request, env: Env): Promise<Response> {
   const requestStartedAt = performance.now();
   const url = new URL(request.url);
@@ -185,9 +220,21 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
   let bootstrapMs = 0;
 
   try {
+    const internalToken = request.headers.get("X-Internal-Token");
+    const userId = request.headers.get("X-User-Id");
+    const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
+    const channelReadAccess = !reportsChannel
+      ? await authorizeChannelReadToken(request, channelId, env)
+      : null;
     // Fetch channel config (always from parent)
     const channelStartedAt = performance.now();
-    const channel = await readSharedChannel(env, parentChannelId, reportsChannelId);
+    const channel = channelReadAccess
+      ? {
+          ...channelReadAccess.channel,
+          passcode: channelReadAccess.channel.has_passcode ? "capability-authorized" : null,
+          reports_owner_id: null,
+        }
+      : await readSharedChannel(env, parentChannelId, reportsChannelId);
     channelMs = roundedDuration(channelStartedAt);
 
     if (!channel) {
@@ -200,10 +247,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     // Only the trusted app proxy can assert a user identity. Keep this check
     // independent of passcode state so public channels receive the same
     // owner-only data protection as private channels.
-    const internalToken = request.headers.get("X-Internal-Token");
-    const userId = request.headers.get("X-User-Id");
-    const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
-    const isOwner = trustedUserId === (channel as any).owner_uid;
+    const isOwner = channelReadAccess
+      ? channelReadAccess.viewer === "owner"
+      : trustedUserId === (channel as any).owner_uid;
     const isPlatformAdminViewer = !isOwner
       && Boolean((channel as any).passcode)
       && await isPlatformAdmin(trustedUserId, env);
@@ -233,7 +279,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const accessStartedAt = performance.now();
 
     // Passcode gate: if channel has passcode, verify token or owner identity
-    if ((channel as any).passcode) {
+    if ((channel as any).passcode && !channelReadAccess) {
       if (!isOwner && !isPlatformAdminViewer) {
         const token = request.headers.get("X-Room-Token");
         if (token) {
@@ -443,6 +489,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     delete safeChannel.passcode;
     delete safeChannel.reports_owner_id;
     delete safeChannel.moderation_petition_status;
+    delete safeChannel.has_passcode;
     safeChannel.owner_channel_count = Math.min(
       Number((channel as { owner_channel_count?: unknown }).owner_channel_count) || 0,
       2,
@@ -456,17 +503,25 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       background_blur?: number | boolean | null;
     });
 
-    const ownerRoomToken = isOwner && (channel as any).passcode
+    const ownerRoomToken = !channelReadAccess && isOwner && (channel as any).passcode
       ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
       : undefined;
-    const channelReadToken = !reportsChannel && !isPlatformAdminViewer
+    const channelReadTokenCandidate = !channelReadAccess && !reportsChannel && !isPlatformAdminViewer
       ? await createChannelReadToken({
           channelId,
           viewer: isOwner ? "owner" : "visitor",
           subject: isOwner ? trustedUserId : anonymousIdentity.uid,
           sensitive: isOwner || Boolean((channel as any).passcode),
+          channel: toReadSnapshot(channel as Record<string, unknown>),
           env,
         })
+      : undefined;
+    // Browsers commonly reject individual cookies around 4 KiB. A channel can
+    // have a long notice, so fail open to the authoritative D1 read instead of
+    // issuing a capability that the browser cannot reliably return.
+    const channelReadToken = channelReadTokenCandidate
+      && channelReadTokenCandidate.length <= 3_500
+      ? channelReadTokenCandidate
       : undefined;
     const ownerModeration = isOwner
       ? {

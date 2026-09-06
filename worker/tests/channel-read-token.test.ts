@@ -9,6 +9,29 @@ import {
 import type { Env } from "../src/types.ts";
 
 const env = { INTERNAL_SECRET: "channel-read-test-secret" } as Env;
+const channel = {
+  id: "channel-a",
+  owner_uid: "owner-a",
+  name: "Channel A",
+  profile_image: null,
+  bubble_color: "#3598fe",
+  notice: null,
+  is_frozen: 0,
+  created_at: "2026-09-06T00:00:00.000Z",
+  passcode_hint: null,
+  instance_id: null,
+  show_on_profile: 1,
+  background_type: "default",
+  background_color: null,
+  background_image: null,
+  background_overlay: 14,
+  background_blur: 0,
+  owner_name: "Owner A",
+  moderation_status: "active",
+  moderation_petition_status: "none",
+  owner_channel_count: 1,
+  has_passcode: false,
+};
 
 test("owner read capabilities are bound to channel and authenticated user", async () => {
   const token = await createChannelReadToken({
@@ -16,6 +39,7 @@ test("owner read capabilities are bound to channel and authenticated user", asyn
     viewer: "owner",
     subject: "owner-a",
     sensitive: true,
+    channel,
     env,
   });
   const authorized = await authorizeChannelReadToken(new Request("https://example.test", {
@@ -52,6 +76,7 @@ test("visitor read capabilities require the matching signed anonymous identity",
     viewer: "visitor",
     subject: visitor.uid,
     sensitive: false,
+    channel,
     env,
   });
   const request = (anonymousToken: string) => new Request("https://example.test", {
