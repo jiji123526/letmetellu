@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { recordAuthMonitoringEvent } from "../lib/auth-monitoring.ts";
+import { isReportsChannelOwner } from "../lib/special-channels.ts";
 
 // Cloudflare Workers Web Crypto currently caps PBKDF2 at 100,000 iterations.
 const PBKDF2_ITERATIONS = 100_000;
@@ -549,7 +550,13 @@ export async function handleAuth(request: Request, env: Env): Promise<Response> 
       "DELETE FROM email_auth_requests WHERE email_hash = ? AND action = 'login-failed'"
     ).bind(emailHash).run();
 
-    return Response.json({ ok: true, id: user.id, email: user.email, name: user.name });
+    return Response.json({
+      ok: true,
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      is_platform_admin: await isReportsChannelOwner(user.id, env),
+    });
   }
 
   return Response.json({ error: "unknown action" }, { status: 400 });

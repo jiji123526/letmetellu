@@ -30,3 +30,22 @@ test("prefetched recent-channel requests are not started a second time", () => {
     /const ownsRequestTiming = !options\?\.prefetchedRequest/,
   );
 });
+
+test("regular sessions reveal cached channels before the current-user round trip", () => {
+  const startupStart = dashboardSource.indexOf("const runDashboardStartup = useEffectEvent");
+  const startupEnd = dashboardSource.indexOf("useEffect(() => {", startupStart);
+  const startupSource = dashboardSource.slice(startupStart, startupEnd);
+  const cachedMilestone = startupSource.indexOf('markDashboardMilestone("cached-channels-ready")');
+  const cachedReveal = startupSource.indexOf("if (sessionPlatformAdminHint === false)");
+  const roleWait = startupSource.indexOf("await Promise.allSettled([loadChannels()])");
+
+  assert.ok(cachedMilestone >= 0);
+  assert.ok(cachedReveal > cachedMilestone);
+  assert.ok(cachedReveal < roleWait, "regular cached dashboards should not wait for /api/user");
+  assert.match(startupSource, /sessionPlatformAdminHint === true\s*\? loadPlatformDashboard\(\)/);
+});
+
+test("the authoritative current-user response refreshes the next-session role hint", () => {
+  assert.match(dashboardSource, /session\?\.user\?\.isPlatformAdmin !== isAdmin/);
+  assert.match(dashboardSource, /updateSession\(\{ isPlatformAdmin }\)/);
+});

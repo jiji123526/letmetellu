@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Cached regular-user dashboards no longer wait for the current-user round trip — 2026-09-06
+
+- Successful login and account synchronization now place a platform-admin role hint in the Auth.js JWT/session.
+- When that hint identifies a regular user and a cached recent-channel list exists, the dashboard removes its loading skeleton immediately and refreshes owned/recent channels in the background.
+- A platform-admin hint starts the protected admin-dashboard request in parallel with the authoritative `/api/user` refresh, while retaining the admin loading surface.
+- Every successful `/api/user` response refreshes the session hint for the next navigation. Existing sessions without the claim use the previous conservative loading path once, then gain the hint.
+- Password and OAuth login responses both obtain the hint from the same server-side reports-channel ownership check.
+
+Security boundary: this claim controls rendering only. All platform-admin reads and mutations remain authorized inside the Worker; changing or staling the client session hint cannot grant access to protected data.
+
+Trade-offs: a recently changed role can briefly select the stale dashboard shell until the background `/api/user` response corrects it. A stale regular hint may briefly show cached regular items to a newly promoted admin, and a stale admin hint may retain the admin loading shell for a revoked admin until protected APIs reject it. No privileged response is exposed through either case.
+
 ### Channel-entry proxy timing separates auth from Worker latency — 2026-09-06
 
 - Successful `/api/init` responses now expose authentication, Worker round-trip, protected-media signing, and total durations through `Server-Timing`.

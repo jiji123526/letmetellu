@@ -330,6 +330,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       channels: state.channels,
       font_size: state.font_size,
       locale: state.locale,
+      is_platform_admin: state.is_platform_admin,
     });
   }
 

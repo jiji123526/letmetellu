@@ -22,11 +22,18 @@ async function syncUserIdentity(user: {
     body: JSON.stringify(user),
     cache: "no-store",
   });
-  const data = await response.json() as { user_id?: string; error?: string };
+  const data = await response.json() as {
+    user_id?: string;
+    is_platform_admin?: boolean;
+    error?: string;
+  };
   if (!response.ok || !data.user_id) {
     throw new Error(data.error || "user identity sync failed");
   }
-  return data.user_id;
+  return {
+    userId: data.user_id,
+    isPlatformAdmin: data.is_platform_admin === true,
+  };
 }
 
 function oauthErrorRedirect(flow: UserSyncFlow, error?: string) {
@@ -76,13 +83,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }),
         });
 
-        const data = await res.json() as { ok?: boolean; id?: string; email?: string; name?: string; error?: string };
+        const data = await res.json() as {
+          ok?: boolean;
+          id?: string;
+          email?: string;
+          name?: string;
+          is_platform_admin?: boolean;
+          error?: string;
+        };
         if (!data.ok || !data.id) return null;
 
         return {
           id: data.id,
           email: data.email,
           name: data.name,
+          isPlatformAdmin: data.is_platform_admin === true,
         };
       },
     }),
@@ -103,34 +118,46 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return oauthErrorRedirect(googleFlow);
       }
       try {
-        user.id = await syncUserIdentity({
+        const identity = await syncUserIdentity({
           id: user.id,
           email: profile.email,
           name: user.name,
           image: user.image,
           flow: googleFlow,
         });
+        user.id = identity.userId;
+        user.isPlatformAdmin = identity.isPlatformAdmin;
         return true;
       } catch (error) {
         return oauthErrorRedirect(googleFlow, error instanceof Error ? error.message : undefined);
       }
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id;
         token.identityVersion = IDENTITY_VERSION;
+      }
+      if (typeof user?.isPlatformAdmin === "boolean") {
+        token.isPlatformAdmin = user.isPlatformAdmin;
+      }
+      // This value is a dashboard rendering hint only. Every privileged API
+      // continues to verify the platform-admin role inside the Worker.
+      if (trigger === "update" && typeof session?.isPlatformAdmin === "boolean") {
+        token.isPlatformAdmin = session.isPlatformAdmin;
       }
       const sourceId = token.id || token.sub;
       const email = token.email;
       if (!user && sourceId && email && token.identityVersion !== IDENTITY_VERSION) {
         try {
-          token.id = await syncUserIdentity({
+          const identity = await syncUserIdentity({
             id: sourceId as string,
             email,
             name: token.name,
             image: typeof token.picture === "string" ? token.picture : null,
             flow: "sync",
           });
+          token.id = identity.userId;
+          token.isPlatformAdmin = identity.isPlatformAdmin;
           token.identityVersion = IDENTITY_VERSION;
         } catch {}
       }
@@ -146,6 +173,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       const userId = token.id ?? token.sub;
       if (session.user && userId) {
         session.user.id = userId as string;
+        if (typeof token.isPlatformAdmin === "boolean") {
+          session.user.isPlatformAdmin = token.isPlatformAdmin;
+        }
       }
       return session;
     },

@@ -299,7 +299,7 @@ function DashboardLoadingSkeleton({ label }: { label: string }) {
 }
 
 function DashboardPageContent() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const router = useRouter();
   const { locale, setLocale, t } = useLocale();
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -390,10 +390,19 @@ function DashboardPageContent() {
   const hasSearchQuery = query.trim().length > 0;
   const isAddressQuery = looksLikeChannelAddress(query);
   const authenticatedUserId = session?.user?.id;
-  const hasResolvedPlatformRole = Boolean(
+  const sessionPlatformAdminHint = typeof session?.user?.isPlatformAdmin === "boolean"
+    ? session.user.isPlatformAdmin
+    : null;
+  const hasAuthoritativePlatformRole = Boolean(
     authenticatedUserId && platformAdminRole?.userId === authenticatedUserId
   );
-  const isPlatformAdmin = hasResolvedPlatformRole && platformAdminRole?.isAdmin === true;
+  const hasResolvedPlatformRole = Boolean(
+    authenticatedUserId
+    && (hasAuthoritativePlatformRole || sessionPlatformAdminHint !== null)
+  );
+  const isPlatformAdmin = hasAuthoritativePlatformRole
+    ? platformAdminRole?.isAdmin === true
+    : sessionPlatformAdminHint === true;
 
   useEffect(() => {
     listAnimationsEnabledRef.current = false;
@@ -471,6 +480,12 @@ function DashboardPageContent() {
         userId: data.user_id || authenticatedUserId || "",
         isAdmin,
       });
+      if (session?.user?.isPlatformAdmin !== isAdmin) {
+        void updateSession({ isPlatformAdmin }).catch(() => {
+          // The current response remains authoritative for this page even if
+          // persisting the next-navigation role hint fails.
+        });
+      }
       setChannels((data.channels || []).map((channel) => ({
         ...channel,
         profile_image: decorateMediaUrl(channel.profile_image),
@@ -485,7 +500,7 @@ function DashboardPageContent() {
     });
     loadChannelsInFlightRef.current = request;
     return request;
-  }, [authenticatedUserId]);
+  }, [authenticatedUserId, session?.user?.isPlatformAdmin, updateSession]);
 
   const loadLocalRecentChannels = useCallback(async () => {
     const stored = getRecentChannels();
@@ -907,6 +922,9 @@ function DashboardPageContent() {
           skipNextListAnimationRef.current = true;
           setRecentChannels(cachedRecentChannels);
           markDashboardMilestone("cached-channels-ready");
+          if (sessionPlatformAdminHint === false) {
+            setLoading(false);
+          }
         }
         startDashboardRequest("recent-channels");
         const prefetchedRecentChannels = fetchAccountRecentChannels();
@@ -914,10 +932,13 @@ function DashboardPageContent() {
           () => finishDashboardRequest("recent-channels"),
           () => finishDashboardRequest("recent-channels"),
         );
+        const hintedAdminDashboardRequest = sessionPlatformAdminHint === true
+          ? loadPlatformDashboard()
+          : null;
         const roleResult = await Promise.allSettled([loadChannels()]);
         const isAdmin = roleResult[0].status === "fulfilled" && roleResult[0].value;
         if (isAdmin) {
-          const platformDashboardRequest = loadPlatformDashboard();
+          const platformDashboardRequest = hintedAdminDashboardRequest || loadPlatformDashboard();
           await platformDashboardRequest;
           setLoading(false);
           return;

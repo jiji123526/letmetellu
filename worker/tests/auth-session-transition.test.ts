@@ -18,6 +18,10 @@ const providersSource = readFileSync(
   new URL("../../src/components/Providers.tsx", import.meta.url),
   "utf8",
 );
+const authSource = readFileSync(
+  new URL("../../src/lib/auth.ts", import.meta.url),
+  "utf8",
+);
 
 test("chat socket lifecycle is bound to the current authenticated identity", () => {
   assert.match(
@@ -39,4 +43,11 @@ test("chat socket lifecycle is bound to the current authenticated identity", () 
 
 test("chat remains inside the cross-tab-aware Auth.js session provider", () => {
   assert.match(providersSource, /<SessionProvider>/);
+});
+
+test("platform-admin session state remains a rendering hint", () => {
+  assert.match(authSource, /token\.isPlatformAdmin = user\.isPlatformAdmin/);
+  assert.match(authSource, /trigger === "update" && typeof session\?\.isPlatformAdmin === "boolean"/);
+  assert.match(authSource, /typeof token\.isPlatformAdmin === "boolean"/);
+  assert.match(authSource, /Every privileged API[\s\S]*verify the platform-admin role inside the Worker/);
 });
