@@ -25,6 +25,7 @@ import {
 import { hydrateReportInboxMessages } from "./channel-reports";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
+import { createChannelReadToken } from "../lib/channel-read-token";
 
 type SharedChannelRow = Record<string, unknown>;
 type SharedConfigRow = { id: string; text: string; updated_at?: string | null };
@@ -458,6 +459,15 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const ownerRoomToken = isOwner && (channel as any).passcode
       ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
       : undefined;
+    const channelReadToken = !reportsChannel && !isPlatformAdminViewer
+      ? await createChannelReadToken({
+          channelId,
+          viewer: isOwner ? "owner" : "visitor",
+          subject: isOwner ? trustedUserId : anonymousIdentity.uid,
+          sensitive: isOwner || Boolean((channel as any).passcode),
+          env,
+        })
+      : undefined;
     const ownerModeration = isOwner
       ? {
           status: moderationStatus || "active",
@@ -535,7 +545,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       anonymousUid: anonymousIdentity.uid,
       anonymousToken: anonymousIdentity.token,
       deviceToken: deviceIdentity.token,
-    });
+    }, channelReadToken
+      ? { headers: { "X-Channel-Read-Token": channelReadToken } }
+      : undefined);
     const totalMs = roundedDuration(requestStartedAt);
     return withInitTiming(response, {
       channel: channelMs,

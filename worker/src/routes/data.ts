@@ -28,6 +28,16 @@ import {
   createUnifiedTimelineMetricRecord,
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics";
+import { authorizeChannelReadToken } from "../lib/channel-read-token";
+
+const CHANNEL_READ_TOKEN_TYPES = new Set([
+  "messages",
+  "message-context",
+  "reply-parents",
+  "gallery",
+  "links",
+  "search",
+]);
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -69,12 +79,24 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   // Passcode gate for data endpoints
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const reportsChannel = isReportsChannel(parentChannelId, env);
-  const { exists, passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+  const channelReadAccess = type && CHANNEL_READ_TOKEN_TYPES.has(type) && !reportsChannel
+    ? await authorizeChannelReadToken(request, channelId, env)
+    : null;
+  const channelAccess = channelReadAccess
+    ? {
+        exists: true,
+        passcode: null,
+        owner_uid: channelReadAccess.viewer === "owner" ? channelReadAccess.subject : "",
+      }
+    : await getChannelPasscodeInfo(parentChannelId, env);
+  const { exists, passcode, owner_uid } = channelAccess;
   if (!exists) {
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
   const trustedUserId = getTrustedUserId(request, env) || "";
-  const isOwner = trustedUserId === owner_uid;
+  const isOwner = channelReadAccess
+    ? channelReadAccess.viewer === "owner"
+    : trustedUserId === owner_uid;
   const isPlatformAdminViewer = !isOwner
     && Boolean(passcode)
     && await isPlatformAdmin(trustedUserId, env);

@@ -58,7 +58,10 @@ test("privileged channel boundaries use the shared trusted identity helper", () 
 
 test("channel owner and platform admin checks remain server-side", () => {
   assert.match(adminSource, /channel\.owner_uid !== userId/);
-  assert.match(dataSource, /const isOwner = trustedUserId === owner_uid/);
+  assert.match(
+    dataSource,
+    /const isOwner = channelReadAccess[\s\S]*channelReadAccess\.viewer === "owner"[\s\S]*trustedUserId === owner_uid/,
+  );
   assert.match(socketAuthSource, /const isOwner = trustedUserId === channel\.owner_uid/);
   assert.match(supportSource, /isReportsChannelOwner\(userId, env\)/);
   assert.match(reportsSource, /isReportsChannelOwner\(userId, env\)/);

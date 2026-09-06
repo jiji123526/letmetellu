@@ -20,6 +20,7 @@ import { getChannelPasscodeInfo } from "../lib/validation.ts";
 import type { Env } from "../types.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
+import { authorizeChannelReadToken } from "../lib/channel-read-token.ts";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -57,16 +58,25 @@ export async function handleUnifiedTimeline(
   const parentChannelId = liveChannel
     ? channelId.replace(/_live$/, "")
     : channelId;
-  const { exists, passcode, owner_uid: ownerId } = await getChannelPasscodeInfo(
-    parentChannelId,
-    env,
-  );
+  const channelReadAccess = !isReportsChannel(parentChannelId, env)
+    ? await authorizeChannelReadToken(request, channelId, env)
+    : null;
+  const channelAccess = channelReadAccess
+    ? {
+        exists: true,
+        passcode: null,
+        owner_uid: channelReadAccess.viewer === "owner" ? channelReadAccess.subject : "",
+      }
+    : await getChannelPasscodeInfo(parentChannelId, env);
+  const { exists, passcode, owner_uid: ownerId } = channelAccess;
   if (!exists) {
     return Response.json({ error: "channel not found" }, { status: 404 });
   }
 
   const trustedUserId = getTrustedUserId(request, env);
-  const isOwner = Boolean(trustedUserId && trustedUserId === ownerId);
+  const isOwner = channelReadAccess
+    ? channelReadAccess.viewer === "owner"
+    : Boolean(trustedUserId && trustedUserId === ownerId);
   const isPlatformAdminViewer = !isOwner
     && Boolean(passcode)
     && await isPlatformAdmin(trustedUserId, env);

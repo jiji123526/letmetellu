@@ -3,6 +3,7 @@ import { readIdentityTokens, setIdentityCookies } from "@/lib/anonymous-identity
 import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie, setRoomTokenResponseCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
+import { setChannelReadTokenCookie } from "@/lib/channel-read-token-cookie";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -53,6 +54,7 @@ export async function GET(request: Request) {
   const nextAnonymousToken = typeof data.anonymousToken === "string" ? data.anonymousToken : null;
   const nextDeviceToken = typeof data.deviceToken === "string" ? data.deviceToken : null;
   const nextRoomToken = typeof data.roomToken === "string" ? data.roomToken : null;
+  const nextChannelReadToken = res.headers.get("X-Channel-Read-Token");
 
   delete data.anonymousToken;
   delete data.deviceToken;
@@ -79,6 +81,9 @@ export async function GET(request: Request) {
   });
   if (nextRoomToken) {
     setRoomTokenResponseCookie(response, request, parentChannelId, nextRoomToken);
+  }
+  if (nextChannelReadToken) {
+    setChannelReadTokenCookie(response, request, channel, nextChannelReadToken);
   }
 
   return response;

@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth";
 import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
+import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { NextResponse } from "next/server";
+import { readChannelReadTokenCookie } from "@/lib/channel-read-token-cookie";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -37,11 +39,18 @@ export async function GET(request: Request) {
   const roomToken = request.headers.get("X-Room-Token")
     || (parentChannelId ? readRoomTokenCookie(request.headers.get("cookie"), parentChannelId) : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
-  const anonymousToken = request.headers.get("X-Anonymous-Token");
+  const { anonymousToken: cookieAnonymousToken } = readIdentityTokens(
+    request.headers.get("cookie"),
+  );
+  const anonymousToken = request.headers.get("X-Anonymous-Token") || cookieAnonymousToken;
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
   if (request.headers.get("X-Unified-Timeline-Shadow") === "1") {
     headers["X-Unified-Timeline-Shadow"] = "1";
   }
+  const channelReadToken = requestedChannelId
+    ? readChannelReadTokenCookie(request.headers.get("cookie"), requestedChannelId)
+    : null;
+  if (channelReadToken) headers["X-Channel-Read-Token"] = channelReadToken;
 
   const workerStartedAt = performance.now();
   const response = await fetch(targetUrl, { headers, cache: "no-store" });

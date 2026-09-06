@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { signProtectedMediaInPayload } from "../../src/lib/media-access-token.ts";
 import { createAnonymousIdentity } from "../src/lib/anonymous-identity.ts";
+import { createChannelReadToken } from "../src/lib/channel-read-token.ts";
 import type { UnifiedTimelineCursor } from "../src/lib/unified-timeline.ts";
 import { getUnifiedTimelineRolloutBucket } from "../src/lib/unified-timeline-rollout.ts";
 import { createRoomToken } from "../src/routes/passcode.ts";
@@ -294,6 +295,31 @@ test("unified route returns a versioned owner page containing every DM root", as
   assert.equal(body.has_more, false);
   assert.equal(body.page_start_cursor?.id, "m1");
   assert.equal(body.page_end_cursor?.id, "d2");
+});
+
+test("a valid owner read capability skips the repeated channel metadata lookup", async () => {
+  const fixture = createFixture({
+    messageRoots: [{ id: "m1", created_at: "2026-08-18T00:00:00.000Z" }],
+  });
+  const readToken = await createChannelReadToken({
+    channelId: CHANNEL_ID,
+    viewer: "owner",
+    subject: OWNER_ID,
+    sensitive: true,
+    env: fixture.env,
+  });
+  const response = await handleUnifiedTimeline(unifiedRequest({
+    headers: {
+      ...ownerHeaders(),
+      "X-Channel-Read-Token": readToken,
+    },
+  }), fixture.env);
+
+  assert.equal(response.status, 200);
+  assert.equal(
+    fixture.calls.some(({ sql }) => sql.includes("SELECT passcode, owner_uid FROM channels")),
+    false,
+  );
 });
 
 test("normal unified pages require the current server allowlist", async () => {

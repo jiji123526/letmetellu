@@ -3,6 +3,7 @@ import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
+import { readChannelReadTokenCookie } from "@/lib/channel-read-token-cookie";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -45,6 +46,10 @@ export async function GET(request: Request) {
   const { anonymousToken } = readIdentityTokens(request.headers.get("cookie"));
   const forwardedAnonymousToken = request.headers.get("X-Anonymous-Token") || anonymousToken;
   if (forwardedAnonymousToken) headers["X-Anonymous-Token"] = forwardedAnonymousToken;
+  const channelReadToken = channelId
+    ? readChannelReadTokenCookie(request.headers.get("cookie"), channelId)
+    : null;
+  if (channelReadToken) headers["X-Channel-Read-Token"] = channelReadToken;
 
   const workerStartedAt = performance.now();
   const response = await fetch(targetUrl, { headers, cache: "no-store" });

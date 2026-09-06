@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Short-lived read capabilities remove repeated channel-access D1 waits — 2026-09-06
+
+- Production pagination measurements showed `access=3554–5358 ms`, while timeline assembly took `38–79 ms` and D1 reported only `2.5–6.3 ms` of SQL execution. Message volume and the sliding window were therefore not the long-tail source.
+- A successful channel init now issues an HMAC-signed, channel- and viewer-bound read capability through an internal response header that the same-origin proxy converts into an HttpOnly, SameSite cookie. Unified timeline pages and the legacy message, context, reply-parent, gallery, link, and search reads can validate this capability without repeating the authoritative channel metadata query.
+- Public visitor capabilities live for two minutes; owner and passcode-authorized capabilities live for 30 seconds. Reports channels and platform-admin bypasses never receive one. Writes, moderation, reports, settings, blocking, and owner-only collection reads continue to perform current D1 authorization.
+- Expired, malformed, cross-channel, cross-user, and cross-anonymous-identity capabilities fall back to the existing authoritative D1 path, so expiry does not break scrolling.
+
+Trade-off: channel deletion, passcode rotation, or ownership changes can take up to the capability lifetime to affect already-authorized read-only requests. Sensitive capabilities are limited to 30 seconds, privileged/report paths are excluded, and all mutations remain immediately authoritative. The cookie is not available to client JavaScript and contains no message content or credential hash.
+
 ### Gallery and timeline latency stages are observable — 2026-09-06
 
 - Gallery-list responses now expose access-control, indexed gallery-query, and total Worker time through `X-Yap-Worker-Timing`, plus D1-reported duration and rows read through `X-Yap-D1-Meta`.
