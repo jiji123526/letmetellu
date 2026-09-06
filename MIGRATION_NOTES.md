@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Normal reconnects use incremental unified-timeline reads — 2026-09-06
+
+- Normal-channel reconnect, disconnected fallback polling, and long background-resume refreshes no longer reload the full `/api/init` bootstrap when unified pagination is active.
+- Those paths now fetch only the latest `/api/unified-timeline` page and merge it into the mounted timeline. Channel metadata, config, moderation, and the remaining bootstrap reads are not repeated.
+- Live-mode recovery still uses `/api/init` because it must verify whether the active live session ended or was replaced before rejoining.
+- Existing request single-flight behavior is retained, and the unified page client also coalesces identical in-flight page requests.
+
+Trade-off: normal reconnects no longer use `init` as a periodic repair mechanism for missed channel-setting events. Realtime setting events remain authoritative; a full reload still reconciles all state. This materially reduces D1 reads during reconnect storms while preserving live-session correctness.
+
 ### D1 overload retries are classified and jittered — 2026-09-06
 
 - Production operational events recorded nine `GET /api/init` failures during a concentrated traffic window with `D1 DB is overloaded. Requests queued for too long`.

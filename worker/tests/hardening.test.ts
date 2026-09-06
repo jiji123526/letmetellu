@@ -435,3 +435,16 @@ test("init retries one transient D1 failure before surfacing d1_unavailable", ()
   assert.match(workerSource, /transient_retry_attempted: true/);
   assert.match(workerSource, /url\.pathname\.startsWith\("\/api\/init"\)[\s\S]*handleInitWithRetry\(request, env\)/);
 });
+
+test("normal reconnect refreshes the unified timeline without reloading init", () => {
+  const source = readFileSync(
+    new URL("../../src/components/chat/useChatRealtimeSync.ts", import.meta.url),
+    "utf8",
+  );
+  const refreshBody = source.match(
+    /const refreshLatestTimeline = useCallback\([\s\S]*?\n  \}, \[/,
+  )?.[0] || "";
+  assert.match(refreshBody, /fetchUnifiedTimelinePage\(getViewingChannelId\(\)\)/);
+  assert.doesNotMatch(refreshBody, /fetchTrackedInit/);
+  assert.match(source, /inLiveModeRef\.current[\s\S]*synchronizeLiveSession/);
+});

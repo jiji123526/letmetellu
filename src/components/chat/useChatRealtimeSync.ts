@@ -11,6 +11,7 @@ import {
   fetchDmThreads,
   fetchInit,
   fetchMessages,
+  fetchUnifiedTimelinePage,
 } from "@/lib/api-chat";
 import {
   completeChatPerformanceCycle,
@@ -26,7 +27,9 @@ import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import { shareInFlightRequest } from "./chatSingleFlight";
 import type { Message, PetitionMeta, ReportMeta } from "./chatTypes";
 import type {
+  ChatTimelineItem,
   ChatTimelineSource,
+  UnifiedTimelineCursor,
 } from "./chatTimelineState";
 import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 
@@ -81,6 +84,13 @@ interface UseChatRealtimeSyncArgs {
   applyInitData: (
     data: InitData,
     options?: { preserveHistory?: boolean; skipTimeline?: boolean },
+  ) => void;
+  applyUnifiedTimelineBootstrap: (
+    items: ChatTimelineItem[],
+    pageStartCursor: UnifiedTimelineCursor | null,
+    pageEndCursor: UnifiedTimelineCursor | null,
+    hasMoreBefore: boolean,
+    preserveHistory: boolean,
   ) => void;
   applyLiveSnapshot: (live: InitData["live"]) => void;
   liveActive: boolean;
@@ -141,6 +151,7 @@ export function useChatRealtimeSync({
   pendingReactionUpdatesRef,
   reactionFrameRef,
   applyInitData,
+  applyUnifiedTimelineBootstrap,
   applyLiveSnapshot,
   liveActive,
   liveSessionId,
@@ -283,14 +294,29 @@ export function useChatRealtimeSync({
 
   const refreshLatestTimeline = useCallback(async (traceCycleId?: string) => {
     if (unifiedTimelineEnabled) {
-      const data = await fetchTrackedInit(getViewingChannelId(), traceCycleId);
-      applyReconnectInitData(data);
+      if (traceCycleId) {
+        startChatPerformanceRequest(channelId, traceCycleId, "messages");
+      }
+      try {
+        const page = await fetchUnifiedTimelinePage(getViewingChannelId());
+        applyUnifiedTimelineBootstrap(
+          page.items as unknown as ChatTimelineItem[],
+          page.page_start_cursor,
+          page.page_end_cursor,
+          page.has_more,
+          true,
+        );
+      } finally {
+        if (traceCycleId) {
+          finishChatPerformanceRequest(channelId, traceCycleId, "messages");
+        }
+      }
       return;
     }
     await refreshLatestMessages(traceCycleId);
   }, [
-    applyReconnectInitData,
-    fetchTrackedInit,
+    applyUnifiedTimelineBootstrap,
+    channelId,
     getViewingChannelId,
     refreshLatestMessages,
     unifiedTimelineEnabled,

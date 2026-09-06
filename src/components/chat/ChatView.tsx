@@ -701,6 +701,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     pendingReactionUpdatesRef,
     reactionFrameRef,
     applyInitData,
+    applyUnifiedTimelineBootstrap,
     applyLiveSnapshot,
     liveActive,
     liveSessionId,
