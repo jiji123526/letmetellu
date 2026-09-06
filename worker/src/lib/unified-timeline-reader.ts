@@ -71,6 +71,23 @@ const SOURCE_RANK: Record<UnifiedTimelineSource, number> = {
 };
 const REPLY_LOOKUP_BUCKETS = [1, 2, 4, 8, 16, 32, 50] as const;
 export const UNIFIED_TIMELINE_FANOUT_WARNING_ITEMS = 300;
+const sharedMessageRootRequests = new Map<string, Promise<D1Result<RootRow>>>();
+
+function shareMessageRootRequest(
+  key: string,
+  load: () => Promise<D1Result<RootRow>>,
+): Promise<D1Result<RootRow>> {
+  const existing = sharedMessageRootRequests.get(key);
+  if (existing) return existing;
+  const request = load();
+  sharedMessageRootRequests.set(key, request);
+  void request.finally(() => {
+    if (sharedMessageRootRequests.get(key) === request) {
+      sharedMessageRootRequests.delete(key);
+    }
+  }).catch(() => {});
+  return request;
+}
 
 export interface UnifiedTimelineReadMetrics {
   queryCount: number;
@@ -224,7 +241,16 @@ async function readMessageRootCandidates(
     direction,
     limit: candidateLimit,
   });
-  const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
+  const requestKey = JSON.stringify([
+    channelId,
+    cursor,
+    direction,
+    candidateLimit,
+  ]);
+  const result = await shareMessageRootRequest(
+    requestKey,
+    () => env.DB.prepare(query).bind(...params).all<RootRow>(),
+  );
   recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({
     source: "message",

@@ -26,6 +26,105 @@ import { hydrateReportInboxMessages } from "./channel-reports";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter";
 import { authorizeRoomToken, createRoomToken } from "./passcode";
 
+type SharedChannelRow = Record<string, unknown>;
+type SharedConfigRow = { id: string; text: string; updated_at?: string | null };
+type SharedInitConfig = {
+  configRows: SharedConfigRow[];
+  liveRow?: { is_frozen?: number };
+};
+
+const sharedChannelRequests = new Map<string, Promise<SharedChannelRow | null>>();
+const sharedConfigRequests = new Map<string, Promise<SharedInitConfig>>();
+
+function shareInFlight<T>(
+  requests: Map<string, Promise<T>>,
+  key: string,
+  load: () => Promise<T>,
+): Promise<T> {
+  const existing = requests.get(key);
+  if (existing) return existing;
+  const request = load();
+  requests.set(key, request);
+  void request.finally(() => {
+    if (requests.get(key) === request) requests.delete(key);
+  }).catch(() => {});
+  return request;
+}
+
+function readSharedChannel(
+  env: Env,
+  parentChannelId: string,
+  reportsChannelId: string | null,
+): Promise<SharedChannelRow | null> {
+  const key = `${reportsChannelId || ""}:${parentChannelId}`;
+  return shareInFlight(sharedChannelRequests, key, () => env.DB.prepare(
+    `SELECT
+       channels.*,
+       users.name AS owner_name,
+       channel_moderation.status AS moderation_status,
+       CASE
+         WHEN channels.show_on_profile = 1 THEN
+           CASE
+             WHEN EXISTS(
+               SELECT 1
+               FROM channels AS owner_channels
+               WHERE owner_channels.owner_uid = channels.owner_uid
+                 AND owner_channels.show_on_profile = 1
+                 AND owner_channels.id NOT LIKE '%_live'
+                 AND owner_channels.id != channels.id
+                 ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
+               LIMIT 1
+             ) THEN 2
+             ELSE 1
+           END
+         ELSE 0
+       END AS owner_channel_count
+     FROM channels
+     LEFT JOIN users ON users.id = channels.owner_uid
+     LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
+     WHERE channels.id = ?`,
+  ).bind(
+    ...(reportsChannelId ? [reportsChannelId] : []),
+    parentChannelId,
+  ).first<SharedChannelRow>());
+}
+
+function readSharedInitConfig(
+  env: Env,
+  channelId: string,
+  parentChannelId: string,
+  isLiveChannel: boolean,
+): Promise<SharedInitConfig> {
+  const key = `${channelId}:${isLiveChannel ? "live" : "normal"}`;
+  return shareInFlight(sharedConfigRequests, key, async () => {
+    const statements = [
+      env.DB.prepare(`
+        SELECT id, text, updated_at FROM config
+        WHERE id IN (?, ?, ?, ?, ?, ?)
+      `).bind(
+        `notice_${channelId}`,
+        `welcome_${parentChannelId}`,
+        `live_${parentChannelId}`,
+        `liveEmojis_${parentChannelId}`,
+        `petition_${parentChannelId}`,
+        `dm_${parentChannelId}`,
+      ),
+    ];
+    if (isLiveChannel) {
+      statements.push(
+        env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId),
+      );
+    }
+    const results = await env.DB.batch(statements);
+    return {
+      configRows: (results[0].results || []) as SharedConfigRow[],
+      liveRow: isLiveChannel
+        ? results[1].results?.[0] as { is_frozen?: number } | undefined
+        : undefined,
+    };
+  });
+}
+
 function markProtectedSenders<T extends Record<string, unknown>>(
   rows: T[],
   protectedUid: string | null,
@@ -60,37 +159,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
   try {
     // Fetch channel config (always from parent)
-    const channel = await env.DB.prepare(
-      `SELECT
-         channels.*,
-         users.name AS owner_name,
-         channel_moderation.status AS moderation_status,
-         CASE
-           WHEN channels.show_on_profile = 1 THEN
-             CASE
-               WHEN EXISTS(
-                 SELECT 1
-                 FROM channels AS owner_channels
-                 WHERE owner_channels.owner_uid = channels.owner_uid
-                   AND owner_channels.show_on_profile = 1
-                   AND owner_channels.id NOT LIKE '%_live'
-                   AND owner_channels.id != channels.id
-                   ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
-                 LIMIT 1
-               ) THEN 2
-               ELSE 1
-             END
-           ELSE 0
-         END AS owner_channel_count
-       FROM channels
-       LEFT JOIN users ON users.id = channels.owner_uid
-       LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
-       WHERE channels.id = ?`
-    )
-      .bind(
-        ...(reportsChannelId ? [reportsChannelId] : []),
-        parentChannelId,
-      ).first();
+    const channel = await readSharedChannel(env, parentChannelId, reportsChannelId);
 
     if (!channel) {
       return Response.json({ error: "channel not found" }, { status: 404 });
@@ -206,25 +275,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     // Collect independent reads into one D1 batch. This removes the accumulated
     // latency of issuing messages, settings and moderation queries one by one.
-    const statements: D1PreparedStatement[] = [
-      env.DB.prepare(`
-        SELECT id, text, updated_at FROM config
-        WHERE id IN (?, ?, ?, ?, ?, ?)
-      `).bind(
-        `notice_${channelId}`,
-        `welcome_${parentChannelId}`,
-        `live_${parentChannelId}`,
-        `liveEmojis_${parentChannelId}`,
-        `petition_${parentChannelId}`,
-        `dm_${parentChannelId}`,
-      ),
-    ];
-    const liveChannelFrozenIndex = isLiveChannel ? statements.length : null;
-    if (isLiveChannel) {
-      statements.push(
-        env.DB.prepare("SELECT is_frozen FROM channels WHERE id = ?").bind(channelId)
-      );
-    }
+    const statements: D1PreparedStatement[] = [];
 
     routeStage = "prepare_viewer_block_lookup";
 
@@ -251,7 +302,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
 
     routeStage = "load_bootstrap_data";
 
-    const [bootstrap, batchResults] = await Promise.all([
+    const [bootstrap, sharedConfig, batchResults] = await Promise.all([
       readSelectedBootstrap(unifiedTimelineEnabled, {
         legacy: async () => {
           const [messagePage, dmMessages] = await Promise.all([
@@ -289,7 +340,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           return page;
         },
       }),
-      env.DB.batch(statements),
+      readSharedInitConfig(env, channelId, parentChannelId, isLiveChannel),
+      statements.length > 0 ? env.DB.batch(statements) : Promise.resolve([]),
     ]);
 
     const messagePage = bootstrap.mode === "legacy"
@@ -312,11 +364,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       }
     }
     const rawMessages = messagePage?.messages || [];
-    const configRows = (batchResults[0].results || []) as { id: string; text: string; updated_at?: string | null }[];
+    const configRows = sharedConfig.configRows;
     const config = new Map(configRows.map((row) => [row.id, row.text]));
-    const liveRow = liveChannelFrozenIndex === null
-      ? undefined
-      : batchResults[liveChannelFrozenIndex].results?.[0] as { is_frozen?: number } | undefined;
+    const liveRow = sharedConfig.liveRow;
     const blocked = blockedIndex === null ? [] : batchResults[blockedIndex].results || [];
     const viewerBlocked = viewerBlockedIndex === null
       ? false

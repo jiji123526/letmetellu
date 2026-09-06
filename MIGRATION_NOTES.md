@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Concurrent bootstrap reads are coalesced without caching viewer data — 2026-09-06
+
+- Concurrent `/api/init` requests in the same Worker isolate now share identical in-flight channel metadata and public config reads.
+- Unified-timeline reads also share identical in-flight public message-root queries. This targets concentrated channel-entry and reconnect bursts, where many visitors previously issued the same D1 query simultaneously.
+- Entries are removed as soon as the shared promise settles. There is no time-based stale cache, so subsequent requests still see new messages and settings immediately.
+- DM rows, anonymous identity, block status, owner moderation, room access, and other viewer-specific state remain outside the shared maps and are read independently for every authorized request.
+
+Trade-off: coalescing works only for overlapping requests handled by the same Worker isolate, so it cannot eliminate all D1 reads across Cloudflare locations. It is deliberately narrower than a TTL/CDN cache to avoid stale chat data and cross-user privacy leaks.
+
 ### Normal reconnects use incremental unified-timeline reads — 2026-09-06
 
 - Normal-channel reconnect, disconnected fallback polling, and long background-resume refreshes no longer reload the full `/api/init` bootstrap when unified pagination is active.

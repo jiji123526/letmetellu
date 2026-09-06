@@ -24,11 +24,22 @@ const bootstrapSource = readFileSync(
 );
 
 test("init only reads live-channel frozen state when the live row is relevant", () => {
-  assert.match(initSource, /const liveChannelFrozenIndex = isLiveChannel \? statements\.length : null/);
+  assert.match(initSource, /function readSharedInitConfig/);
   assert.match(initSource, /if \(isLiveChannel\) \{\s*statements\.push\(/);
+  assert.match(initSource, /liveRow: isLiveChannel/);
   assert.match(initSource, /LEFT JOIN channel_moderation ON channel_moderation\.channel_id = channels\.id/);
   assert.match(initSource, /WHERE id IN \(\?, \?, \?, \?, \?, \?\)/);
   assert.doesNotMatch(initSource, /SELECT status FROM channel_moderation WHERE channel_id = \? LIMIT 1/);
+});
+
+test("init shares only public in-flight reads and keeps viewer state separate", () => {
+  assert.match(initSource, /const sharedChannelRequests = new Map/);
+  assert.match(initSource, /const sharedConfigRequests = new Map/);
+  assert.match(initSource, /readSharedChannel\(env, parentChannelId, reportsChannelId\)/);
+  assert.match(initSource, /readSharedInitConfig\(env, channelId, parentChannelId, isLiveChannel\)/);
+  assert.match(initSource, /readDmThreads\([\s\S]*anonymousUid: anonymousIdentity\.uid/);
+  assert.match(initSource, /viewerBlockedIndex = statements\.length/);
+  assert.doesNotMatch(initSource, /shared(?:Channel|Config)Requests\.set\([^\n]*anonymousIdentity/);
 });
 
 test("owner moderation refresh uses a dedicated narrow channel-state route", () => {
