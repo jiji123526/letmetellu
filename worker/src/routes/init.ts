@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
 import { getBlockedDeviceLookup } from "../lib/actor-identities";
-import { getChannelModeration, getUserLocale } from "../lib/channel-moderation";
+import { getUserLocale } from "../lib/channel-moderation";
 import {
   endLiveSession,
   isLiveSessionExpired,
@@ -10,7 +10,7 @@ import {
   type LiveSessionState,
 } from "../lib/live-sessions";
 import { withOperationalErrorContext } from "../lib/operational-events";
-import { getReportsChannelId, getReportsChannelOwnerId, isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
+import { getReportsChannelId, isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import { readVisibleMessagePage } from "../lib/visible-messages";
 import { readDmThreads } from "../lib/dm-threads";
 import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout";
@@ -79,6 +79,10 @@ function readSharedChannel(
        channels.*,
        users.name AS owner_name,
        channel_moderation.status AS moderation_status,
+       channel_moderation.petition_status AS moderation_petition_status,
+       ${reportsChannelId
+         ? "(SELECT owner_uid FROM channels WHERE id = ?)"
+         : "NULL"} AS reports_owner_id,
        CASE
          WHEN channels.show_on_profile = 1 THEN
            CASE
@@ -101,7 +105,7 @@ function readSharedChannel(
      LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
      WHERE channels.id = ?`,
   ).bind(
-    ...(reportsChannelId ? [reportsChannelId] : []),
+    ...(reportsChannelId ? [reportsChannelId, reportsChannelId] : []),
     parentChannelId,
   ).first<SharedChannelRow>());
 }
@@ -436,6 +440,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     // need to know whether a gate exists, never the hash itself.
     const safeChannel = { ...(responseChannel as Record<string, unknown>) };
     delete safeChannel.passcode;
+    delete safeChannel.reports_owner_id;
+    delete safeChannel.moderation_petition_status;
     safeChannel.owner_channel_count = Math.min(
       Number((channel as { owner_channel_count?: unknown }).owner_channel_count) || 0,
       2,
@@ -453,9 +459,16 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       ? await createRoomToken(parentChannelId, (channel as any).passcode, env)
       : undefined;
     const ownerModeration = isOwner
-      ? await getChannelModeration(parentChannelId, env)
+      ? {
+          status: moderationStatus || "active",
+          petition_status: typeof (channel as { moderation_petition_status?: unknown }).moderation_petition_status === "string"
+            ? (channel as { moderation_petition_status: string }).moderation_petition_status
+            : "none",
+        }
       : null;
-    const reportsOwnerId = await getReportsChannelOwnerId(env);
+    const reportsOwnerId = typeof (channel as { reports_owner_id?: unknown }).reports_owner_id === "string"
+      ? (channel as { reports_owner_id: string }).reports_owner_id
+      : null;
     const reportsOwnerLocale = reportsChannel && isOwner
       ? await getUserLocale(trustedUserId, env)
       : "ko";

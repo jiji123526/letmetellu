@@ -48,6 +48,10 @@ test("init shares only public in-flight reads and keeps viewer state separate", 
   assert.match(initSource, /readDmThreads\([\s\S]*anonymousUid: anonymousIdentity\.uid/);
   assert.match(initSource, /viewerBlockedIndex = statements\.length/);
   assert.doesNotMatch(initSource, /shared(?:Channel|Config)Requests\.set\([^\n]*anonymousIdentity/);
+  assert.match(initSource, /channel_moderation\.petition_status AS moderation_petition_status/);
+  assert.match(initSource, /AS reports_owner_id/);
+  assert.doesNotMatch(initSource, /await getChannelModeration\(parentChannelId, env\)/);
+  assert.doesNotMatch(initSource, /await getReportsChannelOwnerId\(env\)/);
 });
 
 test("owner moderation refresh uses a dedicated narrow channel-state route", () => {

@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel init removes redundant serial metadata reads — 2026-09-06
+
+- Production timing showed highly bimodal D1 binding latency: normal init requests completed in 80–163 ms, while intermittent requests waited 5–15 seconds in whichever D1 call happened to encounter the infrastructure queue.
+- The channel query itself completed directly against production D1 in 0.39 ms while reading two rows, so indexes and message volume were ruled out as the source of the long tail.
+- The initial channel metadata query now also selects the reports-channel owner and the existing moderation petition status. Init no longer performs a separate reports-owner read for every visitor or a duplicate moderation read for channel owners after the main bootstrap.
+- Internal helper columns are removed from the client channel payload. Authorization, passcode freshness, DM visibility, and moderation behavior remain unchanged.
+- After deployment, five production samples completed in 69–249 ms on the normal path and the former post-bootstrap metadata stage stayed at 0 ms. One sample still took 15.38 seconds because the first required channel D1 binding call alone waited 15.26 seconds, confirming that the remaining long tail is upstream of the removed reads rather than message expansion or post-processing.
+
+Trade-off: the first metadata query gains two indexed scalar values, but removes one serial D1 round trip for every init and a second one for owner init. This reduces total reads and the number of opportunities to hit an intermittent D1 queue. It cannot eliminate latency in the first required authoritative channel read; D1 read replication remains a separate consistency-sensitive option.
+
 ### Cold channel entry exposes Worker stage timings — 2026-09-06
 
 - Successful `/api/init` responses now report Worker-internal durations for channel metadata, viewer identity, room/live access, the parallel message/config/block bootstrap, post-processing, and total execution through `X-Yap-Worker-Timing`.
