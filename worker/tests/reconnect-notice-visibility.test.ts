@@ -77,8 +77,10 @@ test("normal latest chat uses silent HTTP refresh instead of a reconnect banner"
     new URL("../../src/components/chat/useChatRealtimeSync.ts", import.meta.url),
     "utf8",
   );
-  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS = 3_500/);
-  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS = 5_000/);
+  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS = 6_000/);
+  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_JITTER_MS = 4_000/);
+  assert.match(realtimeSource, /NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS = 15_000/);
+  assert.match(realtimeSource, /Math\.random\(\) \* NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_JITTER_MS/);
   assert.match(realtimeSource, /if \(inLiveModeRef\.current\) return Promise\.resolve\(\)/);
   assert.match(realtimeSource, /if \(historyModeRef\.current !== "latest"\) return Promise\.resolve\(\)/);
   assert.match(realtimeSource, /if \(!isNearBottomRef\.current\) return Promise\.resolve\(\)/);

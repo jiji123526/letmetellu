@@ -39,11 +39,11 @@ test("D1 overloads are transient and init retry jitter stays bounded", () => {
     isTransientD1Error(new Error("D1_ERROR: D1 DB is overloaded. Requests queued for too long.")),
     true,
   );
-  assert.equal(getInitD1RetryDelayMs(-1), 250);
-  assert.equal(getInitD1RetryDelayMs(0), 250);
-  assert.equal(getInitD1RetryDelayMs(0.5), 500);
-  assert.equal(getInitD1RetryDelayMs(1), 750);
-  assert.equal(getInitD1RetryDelayMs(2), 750);
+  assert.equal(getInitD1RetryDelayMs(-1), 1000);
+  assert.equal(getInitD1RetryDelayMs(0), 1000);
+  assert.equal(getInitD1RetryDelayMs(0.5), 2000);
+  assert.equal(getInitD1RetryDelayMs(1), 3000);
+  assert.equal(getInitD1RetryDelayMs(2), 3000);
 });
 
 function expectPreviewError(fn: () => unknown, message: string): void {
@@ -434,6 +434,12 @@ test("init retries one transient D1 failure before surfacing d1_unavailable", ()
   assert.match(workerSource, /if \(!isTransientD1Error\(error\)\) throw error/);
   assert.match(workerSource, /transient_retry_attempted: true/);
   assert.match(workerSource, /url\.pathname\.startsWith\("\/api\/init"\)[\s\S]*handleInitWithRetry\(request, env\)/);
+});
+
+test("scheduled operational health aggregation runs at most every five minutes", () => {
+  const workerSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.match(workerSource, /new Date\(controller\.scheduledTime\)\.getUTCMinutes\(\)/);
+  assert.match(workerSource, /if \(scheduledMinute % 5 === 0\)/);
 });
 
 test("normal reconnect refreshes the unified timeline without reloading init", () => {

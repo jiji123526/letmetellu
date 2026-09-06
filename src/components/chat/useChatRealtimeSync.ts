@@ -60,8 +60,9 @@ interface RealtimeEvent {
   [key: string]: unknown;
 }
 
-const NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS = 3_500;
-const NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS = 5_000;
+const NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS = 6_000;
+const NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_JITTER_MS = 4_000;
+const NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS = 15_000;
 
 interface UseChatRealtimeSyncArgs {
   channelId: string;
@@ -414,12 +415,14 @@ export function useChatRealtimeSync({
   useEffect(() => {
     clearDisconnectRefreshTimers();
     if (connected || !reconnectPending) return;
+    const initialDelay = NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS
+      + Math.floor(Math.random() * NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_JITTER_MS);
     disconnectRefreshTimeoutRef.current = setTimeout(() => {
       void refreshDisconnectedLatestView();
       disconnectRefreshIntervalRef.current = setInterval(() => {
         void refreshDisconnectedLatestView();
       }, NORMAL_CHAT_DISCONNECT_REFRESH_INTERVAL_MS);
-    }, NORMAL_CHAT_DISCONNECT_REFRESH_DELAY_MS);
+    }, initialDelay);
     return clearDisconnectRefreshTimers;
   }, [clearDisconnectRefreshTimers, connected, reconnectPending, refreshDisconnectedLatestView]);
 

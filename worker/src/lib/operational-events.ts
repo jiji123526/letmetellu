@@ -17,8 +17,8 @@ const TRANSIENT_D1_ERROR_FRAGMENTS = [
   "d1 db is overloaded. requests queued for too long",
 ] as const;
 
-const INIT_D1_RETRY_MIN_DELAY_MS = 250;
-const INIT_D1_RETRY_JITTER_MS = 500;
+const INIT_D1_RETRY_MIN_DELAY_MS = 1_000;
+const INIT_D1_RETRY_JITTER_MS = 2_000;
 
 export function getInitD1RetryDelayMs(randomValue = Math.random()): number {
   const boundedRandom = Math.min(1, Math.max(0, randomValue));

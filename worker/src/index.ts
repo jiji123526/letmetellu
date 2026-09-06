@@ -399,21 +399,24 @@ export default {
       })());
     }
 
-    ctx.waitUntil((async () => {
-      try {
-        await runOperationalHealthAlerts(env);
-      } catch (error) {
-        console.error("operational health alert evaluation failed", error);
-        await recordOperationalEvent({
-          env,
-          severity: "error",
-          route: "scheduled operational health alert",
-          eventType: "operational_alert_delivery_failed",
-          detail: {
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-      }
-    })());
+    const scheduledMinute = new Date(controller.scheduledTime).getUTCMinutes();
+    if (scheduledMinute % 5 === 0) {
+      ctx.waitUntil((async () => {
+        try {
+          await runOperationalHealthAlerts(env);
+        } catch (error) {
+          console.error("operational health alert evaluation failed", error);
+          await recordOperationalEvent({
+            env,
+            severity: "error",
+            route: "scheduled operational health alert",
+            eventType: "operational_alert_delivery_failed",
+            detail: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        }
+      })());
+    }
   },
 };

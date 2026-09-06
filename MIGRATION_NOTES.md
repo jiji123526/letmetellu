@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Overload amplification safeguards — 2026-09-06
+
+- When normal-chat realtime is disconnected, the silent latest-timeline fallback now starts after a client-jittered 6–10 seconds and polls every 15 seconds instead of starting at 3.5 seconds and polling every 5 seconds. Existing visibility, latest-mode, and near-bottom gates remain in place, while reconnect storms create materially fewer synchronized D1 reads.
+- The one application-level retry for a transient `/api/init` D1 overload now waits a randomized 1–3 seconds instead of 250–750 ms. This lowers synchronized retry pressure at the cost of a longer recovery wait for the small set of init requests that already failed once.
+- Operational health aggregation now runs once every five minutes rather than on every minute cron event. Notification delivery still runs every minute and hourly maintenance remains unchanged.
+
+Trade-off: during a realtime outage, a user who remains at the latest edge can see HTTP-fallback messages up to roughly 15 seconds later than before. Normal WebSocket delivery is unchanged, and the reduced polling only applies while disconnected.
+
 ### One-time global infrastructure notice — 2026-09-06
 
 - Every entry route now mounts the same service-status dialog from the root layout, regardless of authentication state. The Korean and English notice explains that the current infrastructure issue can slow channel entry and message delivery or cause temporary failures.
