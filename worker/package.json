@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:probe": "wrangler deploy --config wrangler.probe.toml",
     "db:migrate": "wrangler d1 migrations apply letsplay-db --local",
     "db:migrate:prod": "wrangler d1 migrations apply letsplay-db --remote",
+    "db:migrate:probe": "wrangler d1 migrations apply letsplay-db-probe-20260906 --remote --config wrangler.probe.toml",
     "test:hardening": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "devDependencies": {

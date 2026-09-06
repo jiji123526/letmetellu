@@ -1,0 +1,33 @@
+name = "letsplay-api-d1-probe"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat", "enable_nodejs_http_modules"]
+
+# Intentionally no cron triggers. The probe must not duplicate production
+# notification delivery, health alerts, or retention maintenance.
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "letsplay-db-probe-20260906"
+database_id = "1065cdec-9277-41f8-b971-93faf6092091"
+remote = true
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "letmetellu-media-probe-20260906"
+remote = true
+
+[vars]
+# Server-to-server Vercel proxy calls do not require an Origin header. Add the
+# exact generated Vercel Preview origin before testing direct WebSockets.
+ALLOWED_ORIGIN = "https://yapndot.com,https://www.yapndot.com,https://letmetellu.vercel.app,http://localhost:3000"
+REPORTS_CHANNEL_ID = "reports"
