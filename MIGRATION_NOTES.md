@@ -4,6 +4,11 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message-send stage timings isolate slow write-path bindings — 2026-09-06
+
+- Successful message sends now expose proxy authentication/Worker time through `Server-Timing` and channel authorization, identity, idempotency, rate limiting, policy checks, reply resolution, persistence, and total Worker time through `X-Yap-Worker-Timing`.
+- This is diagnostic-only: send authorization, fresh channel-state checks, idempotency, and authoritative persistence ordering are unchanged. In particular, read capabilities are not accepted for writes because deletion, suspension, passcode, and ownership changes must take effect immediately.
+
 ### Short-lived read capabilities remove repeated channel-access D1 waits — 2026-09-06
 
 - Production pagination measurements showed `access=3554–5358 ms`, while timeline assembly took `38–79 ms` and D1 reported only `2.5–6.3 ms` of SQL execution. Message volume and the sliding window were therefore not the long-tail source.

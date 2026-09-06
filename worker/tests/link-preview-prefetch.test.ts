@@ -78,7 +78,7 @@ test("successful sends warm previews without delaying acknowledgement", () => {
     "ctx.waitUntil(warmPreviewCache(request, text as string | undefined))",
   );
   const response = messageRouteSource.indexOf(
-    "return Response.json({ id, created_at, message: newMessage })",
+    "return withMessageTiming(",
   );
   assert.ok(waitUntilWarm >= 0);
   assert.ok(response > waitUntilWarm);

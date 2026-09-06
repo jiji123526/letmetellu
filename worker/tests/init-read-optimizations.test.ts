@@ -46,6 +46,14 @@ const unifiedTimelineProxySource = readFileSync(
   new URL("../../src/app/api/unified-timeline/route.ts", import.meta.url),
   "utf8",
 );
+const messagesSource = readFileSync(
+  new URL("../src/routes/messages.ts", import.meta.url),
+  "utf8",
+);
+const messagesProxySource = readFileSync(
+  new URL("../../src/app/api/messages/route.ts", import.meta.url),
+  "utf8",
+);
 
 test("init only reads live-channel frozen state when the live row is relevant", () => {
   assert.match(initSource, /function readSharedInitConfig/);
@@ -127,4 +135,12 @@ test("gallery and unified timeline reads expose diagnostic timing stages", () =>
   assert.match(unifiedTimelineSource, /withTimelineTiming\(/);
   assert.match(unifiedTimelineSource, /d1: Math\.round\(contextPage\.metrics\.d1DurationMs/);
   assert.match(unifiedTimelineProxySource, /response\.headers\.get\("X-Yap-Worker-Timing"\)/);
+});
+
+test("message sends expose proxy and mutation-stage timings", () => {
+  assert.match(messagesSource, /function withMessageTiming/);
+  assert.match(messagesSource, /channel: 0,[\s\S]*idempotency: 0,[\s\S]*persist: 0/);
+  assert.match(messagesSource, /return withMessageTiming\(/);
+  assert.match(messagesProxySource, /`auth;dur=\$\{authMs\}, worker;dur=\$\{workerMs\}/);
+  assert.match(messagesProxySource, /res\.headers\.get\("X-Yap-Worker-Timing"\)/);
 });

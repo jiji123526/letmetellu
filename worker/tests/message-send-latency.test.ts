@@ -66,6 +66,6 @@ test("successful sends acknowledge persistence before post-commit delivery settl
   assert.match(source, /POST_COMMIT_DELIVERY_ATTEMPTS = 2/);
   assert.match(source, /eventType: "message_post_commit_failed"/);
   assert.ok(
-    source.indexOf("ctx.waitUntil(postCommitDelivery)") < source.indexOf("return Response.json({ id, created_at, message: newMessage })"),
+    source.indexOf("ctx.waitUntil(postCommitDelivery)") < source.indexOf("return withMessageTiming("),
   );
 });

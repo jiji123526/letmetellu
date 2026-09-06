@@ -19,6 +19,25 @@ const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
 const POST_COMMIT_DELIVERY_ATTEMPTS = 2;
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function withMessageTiming(response: Response, stages: Record<string, number>): Response {
+  const headers = new Headers(response.headers);
+  headers.set(
+    "X-Yap-Worker-Timing",
+    Object.entries(stages)
+      .map(([name, duration]) => `${name}=${Math.round(duration)}`)
+      .join(","),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 type PersistedMessage = Record<string, unknown> & {
   id: string;
   uid: string;
@@ -126,6 +145,17 @@ export async function handleMessages(
   ctx?: ExecutionContext,
   warmPreviewCache?: (request: Request, text: string | null | undefined) => Promise<void>,
 ): Promise<Response> {
+  const requestStartedAt = performance.now();
+  const sendTimings = {
+    channel: 0,
+    identity: 0,
+    idempotency: 0,
+    rateLimit: 0,
+    policy: 0,
+    reply: 0,
+    persist: 0,
+    total: 0,
+  };
   const routeAction = request.method === "POST"
     ? "send"
     : request.method === "DELETE"
@@ -188,12 +218,14 @@ export async function handleMessages(
         }
       }
       routeStage = "load_channel_state";
+      const channelStartedAt = performance.now();
       const channel = await env.DB.prepare(`
         SELECT id, is_frozen, owner_uid, passcode,
           (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
         FROM channels
         WHERE id = ?
       `).bind(requestChannelId, parentChannelId).first();
+      sendTimings.channel = roundedDuration(channelStartedAt);
       if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
       const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
       if (isChannelOwner) {
@@ -228,12 +260,14 @@ export async function handleMessages(
       }
 
       routeStage = "resolve_actor_identity";
+      const identityStartedAt = performance.now();
       const [anonymousUid, requesterDeviceId] = isChannelOwner
         ? [null, null]
         : await Promise.all([
           getAnonymousRequesterUid(request, env),
           getRequesterDeviceId(request, env),
         ]);
+      sendTimings.identity = roundedDuration(identityStartedAt);
       if (!isChannelOwner && !anonymousUid) {
         return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
       }
@@ -243,9 +277,11 @@ export async function handleMessages(
       const requesterUid = isChannelOwner ? verifiedUserId! : anonymousUid!;
 
       routeStage = "check_idempotency";
+      const idempotencyStartedAt = performance.now();
       const existingMessage = await env.DB.prepare(
         "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
       ).bind(clientMessageId).first<PersistedMessage>();
+      sendTimings.idempotency = roundedDuration(idempotencyStartedAt);
       if (existingMessage) {
         if (existingMessage.uid !== requesterUid || existingMessage.channel_id !== requestChannelId) {
           return Response.json({ error: "client_message_id_conflict" }, { status: 409 });
@@ -261,6 +297,7 @@ export async function handleMessages(
       }
 
       routeStage = "apply_rate_limit";
+      const rateLimitStartedAt = performance.now();
       const doId = env.CHAT_ROOM.idFromName(parentChannelId);
       const chatRoom = env.CHAT_ROOM.get(doId);
       const messageRateLimitResponse = await chatRoom.fetch(new Request("http://internal/channel-rate-limit", {
@@ -276,6 +313,7 @@ export async function handleMessages(
         return Response.json({ error: "rate_limit_unavailable" }, { status: 503 });
       }
       const messageRateLimit = await messageRateLimitResponse.json() as { ok: boolean };
+      sendTimings.rateLimit = roundedDuration(rateLimitStartedAt);
       if (!messageRateLimit.ok) {
         return Response.json({ error: "rate_limited" }, { status: 429 });
       }
@@ -286,6 +324,7 @@ export async function handleMessages(
       }
 
       routeStage = "check_block_and_banned_words";
+      const policyStartedAt = performance.now();
       const [blocked, allowedByBannedWords] = await Promise.all([
         isBlockedActor({
           env,
@@ -297,6 +336,7 @@ export async function handleMessages(
           ? checkBannedWords(text as string, parentChannelId, env)
           : Promise.resolve(true),
       ]);
+      sendTimings.policy = roundedDuration(policyStartedAt);
       if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
 
       if (!allowedByBannedWords) {
@@ -304,9 +344,11 @@ export async function handleMessages(
       }
 
       routeStage = "resolve_reply_target";
+      const replyStartedAt = performance.now();
       const resolvedReplyTo = requestedReplyTo
         ? await resolveReplyRootId(env, requestChannelId, requestedReplyTo)
         : null;
+      sendTimings.reply = roundedDuration(replyStartedAt);
       if (requestedReplyTo && !resolvedReplyTo) {
         return Response.json({ error: "invalid_reply_target" }, { status: 400 });
       }
@@ -434,8 +476,10 @@ export async function handleMessages(
         );
       }
       routeStage = "persist_message_batch";
+      const persistStartedAt = performance.now();
       try {
         await env.DB.batch(stmts);
+        sendTimings.persist = roundedDuration(persistStartedAt);
       } catch (error) {
         routeStage = "resolve_batch_conflict";
         const duplicate = await env.DB.prepare(
@@ -514,7 +558,11 @@ export async function handleMessages(
       }
 
       routeStage = "build_response";
-      return Response.json({ id, created_at, message: newMessage });
+      sendTimings.total = roundedDuration(requestStartedAt);
+      return withMessageTiming(
+        Response.json({ id, created_at, message: newMessage }),
+        sendTimings,
+      );
     }
 
     // DELETE — hard delete (remove message) or soft delete (mark as deleted)

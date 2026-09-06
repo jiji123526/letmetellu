@@ -24,7 +24,10 @@ export async function DELETE(request: Request) {
 }
 
 async function forwardMessageRequest(request: Request, method: "POST" | "PATCH" | "PUT" | "DELETE") {
+  const requestStartedAt = performance.now();
+  const authStartedAt = performance.now();
   const session = await auth();
+  const authMs = Math.round((performance.now() - authStartedAt) * 10) / 10;
   const anonymousMode = request.headers.get("X-Auth-Mode") === "anonymous";
   const proxyTarget = request.headers.get("X-Proxy-Target") === "dm" ? "dm" : "messages";
 
@@ -58,12 +61,21 @@ async function forwardMessageRequest(request: Request, method: "POST" | "PATCH" 
     headers["X-Notification-Actor-User-Id"] = session.user.id;
   }
 
+  const workerStartedAt = performance.now();
   const res = await fetch(`${workerUrl}/api/${proxyTarget}`, {
     method,
     headers,
     body: JSON.stringify(body),
   });
+  const workerMs = Math.round((performance.now() - workerStartedAt) * 10) / 10;
 
   const data = await res.json();
-  return NextResponse.json(data, { status: res.status });
+  const response = NextResponse.json(data, { status: res.status });
+  response.headers.set(
+    "Server-Timing",
+    `auth;dur=${authMs}, worker;dur=${workerMs}, total;dur=${Math.round((performance.now() - requestStartedAt) * 10) / 10}`,
+  );
+  const workerTiming = res.headers.get("X-Yap-Worker-Timing");
+  if (workerTiming) response.headers.set("X-Yap-Worker-Timing", workerTiming);
+  return response;
 }
