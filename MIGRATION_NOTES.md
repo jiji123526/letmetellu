@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel re-entry no longer restores a refresh-only scroll anchor — 2026-09-06
+
+- Saved chat positions now include a per-document identifier. A position is restored only after a real document reload, when the identifier belongs to the previous document.
+- Dashboard-to-channel navigation, channel switching, and returning to a channel inside the same browser document discard the saved anchor and start at the newest messages.
+- This closes a false-positive case where `PerformanceNavigationTiming.type` remained `reload` for the lifetime of an SPA document after one refresh and later channel re-entry was mistaken for another refresh.
+
+Trade-off: scroll positions saved by older deployed clients do not contain the document identifier and are intentionally ignored once. Refresh preservation continues to work for positions saved by the updated client; no Worker, D1, or API change is required.
+
 ### Cached regular-user dashboards no longer wait for the current-user round trip — 2026-09-06
 
 - Successful login and account synchronization now place a platform-admin role hint in the Auth.js JWT/session.

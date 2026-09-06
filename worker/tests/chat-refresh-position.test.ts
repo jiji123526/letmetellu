@@ -17,6 +17,8 @@ test("in-channel refresh snapshots a bounded source-qualified scroll anchor", ()
   assert.match(historyNavigationSource, /window\.addEventListener\("beforeunload", handlePageExit\)/);
   assert.match(historyNavigationSource, /window\.addEventListener\("pagehide", handlePageExit\)/);
   assert.match(historyNavigationSource, /if \(navigation\?\.type !== "reload"\) return false/);
+  assert.match(historyNavigationSource, /documentId: CHAT_DOCUMENT_ID/);
+  assert.match(historyNavigationSource, /position\.documentId === CHAT_DOCUMENT_ID/);
   assert.match(historyNavigationSource, /position\.live !== inLiveModeRef\.current/);
   assert.match(historyNavigationSource, /Date\.now\(\) - position\.savedAt > SCROLL_POSITION_MAX_AGE_MS/);
 });

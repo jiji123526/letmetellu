@@ -100,12 +100,14 @@ interface SavedScrollPosition {
   offset: number;
   live: boolean;
   savedAt: number;
+  documentId: string;
 }
 
 const SCROLL_POSITION_MAX_AGE_MS = 30 * 60 * 1000;
 const SCROLL_POSITION_SAVE_INTERVAL_MS = 150;
 const PREPEND_LAYOUT_MARGIN_PX = 720;
 const PREPEND_LAYOUT_TIMEOUT_MS = 1_800;
+const CHAT_DOCUMENT_ID = crypto.randomUUID();
 
 function messageCursor(message: Message | undefined): MessagePageCursor | null {
   return message?.id && message.created_at
@@ -683,6 +685,7 @@ export function useChatHistoryNavigation({
       offset: anchor.top,
       live: inLiveModeRef.current,
       savedAt: Date.now(),
+      documentId: CHAT_DOCUMENT_ID,
     };
     sessionStorage.setItem(scrollStorageKey, JSON.stringify(position));
   }, [inLiveModeRef, messagesContainerRef, scrollStorageKey]);
@@ -1499,6 +1502,8 @@ export function useChatHistoryNavigation({
       !position.messageId
       || !Number.isFinite(position.offset)
       || !Number.isFinite(position.savedAt)
+      || !position.documentId
+      || position.documentId === CHAT_DOCUMENT_ID
       || position.live !== inLiveModeRef.current
       || Date.now() - position.savedAt > SCROLL_POSITION_MAX_AGE_MS
     ) return false;
