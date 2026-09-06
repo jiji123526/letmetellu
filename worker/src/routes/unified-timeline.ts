@@ -20,7 +20,7 @@ import { getChannelPasscodeInfo } from "../lib/validation.ts";
 import type { Env } from "../types.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
-import { authorizeChannelReadToken } from "../lib/channel-read-token.ts";
+import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token.ts";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session.ts";
 
 function roundedDuration(startedAt: number) {
@@ -33,6 +33,17 @@ function withTimelineTiming(response: Response, timings: Record<string, number>)
     "X-Yap-Worker-Timing",
     Object.entries(timings).map(([stage, duration]) => `${stage}=${duration}`).join(","),
   );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function withChannelReadToken(response: Response, token: string | null) {
+  if (!token) return response;
+  const headers = new Headers(response.headers);
+  headers.set("X-Channel-Read-Token", token);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -139,6 +150,21 @@ export async function handleUnifiedTimeline(
       { status: 401 },
     );
   }
+  const refreshedChannelReadSubject = "anonymousUid" in viewer
+    ? viewer.anonymousUid
+    : trustedUserId;
+  const refreshedChannelReadToken = !channelReadAccess
+    && !reportsChannel
+    && !isPlatformAdminViewer
+    && refreshedChannelReadSubject
+      ? await createChannelAccessToken({
+          channelId,
+          viewer: viewer.owner ? "owner" : "visitor",
+          subject: refreshedChannelReadSubject,
+          sensitive: viewer.owner || Boolean(passcode),
+          env,
+        })
+      : null;
   const requestedLiveSessionId = liveChannel
     ? url.searchParams.get("live_session_id") || ""
     : "";
@@ -218,7 +244,7 @@ export async function handleUnifiedTimeline(
       }));
     }
     const readMs = roundedDuration(startedAt);
-    return withTimelineTiming(
+    return withChannelReadToken(withTimelineTiming(
       Response.json({
         ...serializeUnifiedTimelinePage(contextPage),
         target_id: contextPage.targetId,
@@ -232,7 +258,7 @@ export async function handleUnifiedTimeline(
         d1: Math.round(contextPage.metrics.d1DurationMs * 10) / 10,
         total: roundedDuration(requestStartedAt),
       },
-    );
+    ), refreshedChannelReadToken);
   }
 
   const startedAt = performance.now();
@@ -271,7 +297,7 @@ export async function handleUnifiedTimeline(
     }));
   }
   const readMs = roundedDuration(startedAt);
-  return withTimelineTiming(
+  return withChannelReadToken(withTimelineTiming(
     Response.json(serializeUnifiedTimelinePage(page)),
     {
       access: accessMs,
@@ -279,5 +305,5 @@ export async function handleUnifiedTimeline(
       d1: Math.round(page.metrics.d1DurationMs * 10) / 10,
       total: roundedDuration(requestStartedAt),
     },
-  );
+  ), refreshedChannelReadToken);
 }

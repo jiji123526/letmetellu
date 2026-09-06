@@ -28,7 +28,7 @@ import {
   createUnifiedTimelineMetricRecord,
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics";
-import { authorizeChannelReadToken } from "../lib/channel-read-token";
+import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session";
 
 const CHANNEL_READ_TOKEN_TYPES = new Set([
@@ -60,6 +60,17 @@ function withDataTiming(
       `rows_read=${d1Meta.rowsRead},duration=${d1Meta.durationMs}`,
     );
   }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function withChannelReadToken(response: Response, token: string | null) {
+  if (!token) return response;
+  const headers = new Headers(response.headers);
+  headers.set("X-Channel-Read-Token", token);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -130,6 +141,22 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
   }
+  const tokenViewer = !channelReadAccess
+    && type
+    && CHANNEL_READ_TOKEN_TYPES.has(type)
+    && !reportsChannel
+    && !isPlatformAdminViewer
+      ? await resolveUnifiedTimelineViewer(request, readEnv, isOwner)
+      : null;
+  const refreshedChannelReadToken = tokenViewer
+    ? await createChannelAccessToken({
+        channelId,
+        viewer: tokenViewer.owner ? "owner" : "visitor",
+        subject: tokenViewer.owner ? trustedUserId : tokenViewer.anonymousUid,
+        sensitive: tokenViewer.owner || Boolean(passcode),
+        env,
+      })
+    : null;
   const accessMs = roundedDuration(requestStartedAt);
 
   switch (type) {
@@ -169,16 +196,16 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         && !channelId.endsWith("_live")
         && !reportsChannel;
       if (!shadowEligible) {
-        return Response.json(responsePayload, shadowRequested
+        return withChannelReadToken(Response.json(responsePayload, shadowRequested
           ? { headers: { "X-Unified-Timeline-Shadow": "skipped" } }
-          : undefined);
+          : undefined), refreshedChannelReadToken);
       }
 
       const viewer = await resolveUnifiedTimelineViewer(request, readEnv, isOwner);
       if (!viewer) {
-        return Response.json(responsePayload, {
+        return withChannelReadToken(Response.json(responsePayload, {
           headers: { "X-Unified-Timeline-Shadow": "identity-required" },
-        });
+        }), refreshedChannelReadToken);
       }
 
       try {
@@ -222,11 +249,11 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
             },
           });
         }
-        return Response.json(responsePayload, {
+        return withChannelReadToken(Response.json(responsePayload, {
           headers: {
             "X-Unified-Timeline-Shadow": comparison.matches ? "match" : "mismatch",
           },
-        });
+        }), refreshedChannelReadToken);
       } catch (error) {
         await recordOperationalEvent({
           env,
@@ -240,9 +267,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
             error_name: error instanceof Error ? error.name : "unknown",
           },
         });
-        return Response.json(responsePayload, {
+        return withChannelReadToken(Response.json(responsePayload, {
           headers: { "X-Unified-Timeline-Shadow": "failed" },
-        });
+        }), refreshedChannelReadToken);
       }
     }
 
@@ -300,7 +327,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const responseMessages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : messages;
-      return Response.json({
+      return withChannelReadToken(Response.json({
         messages: responseMessages,
         target_id: messageId,
         has_older: hasOlder,
@@ -311,7 +338,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         page_end_cursor: pageEnd?.id && pageEnd.created_at
           ? { id: pageEnd.id, created_at: pageEnd.created_at }
           : null,
-      });
+      }), refreshedChannelReadToken);
     }
 
     case "reply-parents": {
@@ -339,10 +366,10 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         ? await hydrateReportInboxMessages(foundMessages as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : foundMessages;
 
-      return Response.json({
+      return withChannelReadToken(Response.json({
         messages: responseMessages,
         missing_ids: parentIds.filter((parentId) => !foundIds.has(parentId)),
-      });
+      }), refreshedChannelReadToken);
     }
 
     case "blocked": {
@@ -376,7 +403,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const queryStartedAt = performance.now();
       const result = await readEnv.DB.prepare(query).bind(...params).all();
       const queryMs = roundedDuration(queryStartedAt);
-      return withDataTiming(
+      return withChannelReadToken(withDataTiming(
         Response.json({ gallery: result.results }),
         {
           access: accessMs,
@@ -387,7 +414,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           rowsRead: Number(result.meta?.rows_read || 0),
           durationMs: Math.round(Number(result.meta?.duration || 0) * 1000) / 1000,
         },
-      );
+      ), refreshedChannelReadToken);
     }
 
     case "dm": {
@@ -412,7 +439,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       }
       query += " ORDER BY ml.created_at DESC, ml.message_id DESC LIMIT 30";
       const { results } = await readEnv.DB.prepare(query).bind(...params).all();
-      return Response.json({ links: results });
+      return withChannelReadToken(Response.json({ links: results }), refreshedChannelReadToken);
     }
 
     case "search": {
@@ -552,7 +579,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         visual_root_id?: unknown;
         visual_depth?: unknown;
       } | undefined;
-      return Response.json({
+      return withChannelReadToken(Response.json({
         results: page,
         has_more: hasMore,
         next_cursor: hasMore && last
@@ -564,7 +591,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
               id: String(last.id || ""),
             }
           : null,
-      });
+      }), refreshedChannelReadToken);
     }
 
     case "banned-words": {

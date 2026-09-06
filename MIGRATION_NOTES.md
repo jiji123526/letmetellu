@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Successful panel and timeline reads refresh expired read access — 2026-09-06
+
+- A long-lived channel tab previously received its short-lived channel-read capability only from `/api/init`. After the capability expired, gallery loading, gallery-to-message navigation, and the latest-message button each repeated the primary-bound channel access lookup, but those successful reads never installed a replacement capability.
+- Production evidence isolated the delay: an expired-capability gallery request took 18.45 seconds, of which `access=18081 ms`; the indexed gallery query took 139 ms and D1 reported 2.878 ms of SQL execution. The same access stage also preceded unified-timeline context and latest-page reads.
+- After an authoritative access check succeeds, eligible `/api/data` and `/api/unified-timeline` responses now issue an access-only version of the signed capability. The same-origin Vercel proxies store it in the existing HttpOnly, SameSite channel cookie. Gallery, links, search, message pages, message context, reply-parent reads, centered navigation, history pagination, and latest-page reads therefore share the refreshed authorization window.
+- Version 2 capabilities deliberately contain no channel presentation snapshot. `/api/init` accepts only the version 1 snapshot token for its channel-metadata fast path, while both versions may skip repeated access lookup on read-only data/timeline routes.
+- Capabilities are issued only after current channel existence, passcode/room-token, ownership, moderation, and signed viewer identity checks succeed. Error responses, reports channels, platform-admin bypasses, writes, moderation routes, and owner-only collections do not refresh them.
+
+Trade-off: the first eligible read after a capability has actually expired still performs one authoritative primary lookup and can inherit the current D1 incident latency. Once that read succeeds, subsequent panel and navigation actions stop paying the same delay independently. Tokens are not blindly renewed from an already-valid token, so public access remains bounded to two minutes and owner/passcode access to 30 seconds rather than becoming an indefinitely sliding authorization session.
+
+Verification: leave a public channel open beyond two minutes, load the gallery once, then use gallery navigation and the latest-message button. The first expired read may show a large `access` duration; subsequent `/api/unified-timeline` responses should show `access=0`. Repeat with an owner/passcode channel after 30 seconds, and confirm changing the passcode or deleting the channel still takes effect after the existing bounded capability lifetime.
+
 ### Security-aware D1 read-replication sessions — 2026-09-06
 
 - Channel init, unified timeline pagination/context, and legacy message, gallery, link, search, reply-parent, DM, and moderation collection reads now run through the D1 Sessions API.

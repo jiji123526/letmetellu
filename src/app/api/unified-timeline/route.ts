@@ -3,7 +3,10 @@ import { readIdentityTokens } from "@/lib/anonymous-identity-cookie";
 import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
-import { readChannelReadTokenCookie } from "@/lib/channel-read-token-cookie";
+import {
+  readChannelReadTokenCookie,
+  setChannelReadTokenCookie,
+} from "@/lib/channel-read-token-cookie";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -70,5 +73,9 @@ export async function GET(request: Request) {
   ].join(", "));
   const workerTiming = response.headers.get("X-Yap-Worker-Timing");
   if (workerTiming) nextResponse.headers.set("X-Yap-Worker-Timing", workerTiming);
+  const nextChannelReadToken = response.headers.get("X-Channel-Read-Token");
+  if (nextChannelReadToken && channelId) {
+    setChannelReadTokenCookie(nextResponse, request, channelId, nextChannelReadToken);
+  }
   return nextResponse;
 }

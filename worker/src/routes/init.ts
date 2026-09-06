@@ -226,8 +226,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const internalToken = request.headers.get("X-Internal-Token");
     const userId = request.headers.get("X-User-Id");
     const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
-    const channelReadAccess = !reportsChannel
+    const authorizedChannelRead = !reportsChannel
       ? await authorizeChannelReadToken(request, channelId, env)
+      : null;
+    const channelReadAccess = authorizedChannelRead?.version === 1
+      ? authorizedChannelRead
       : null;
     const readConstraint: D1ReadConstraint = channelReadAccess
       ? "first-unconstrained"

@@ -4,6 +4,7 @@ import test from "node:test";
 import { createAnonymousIdentity } from "../src/lib/anonymous-identity.ts";
 import {
   authorizeChannelReadToken,
+  createChannelAccessToken,
   createChannelReadToken,
 } from "../src/lib/channel-read-token.ts";
 import type { Env } from "../src/types.ts";
@@ -92,6 +93,26 @@ test("visitor read capabilities require the matching signed anonymous identity",
   assert.equal(await authorizeChannelReadToken(request(other.token), "channel-a", env), null);
 });
 
+test("access-only capabilities authorize subsequent reads without carrying channel presentation", async () => {
+  const visitor = await createAnonymousIdentity(env, "visitor-access-token");
+  const token = await createChannelAccessToken({
+    channelId: "channel-a",
+    viewer: "visitor",
+    subject: visitor.uid,
+    sensitive: false,
+    env,
+  });
+  const authorized = await authorizeChannelReadToken(new Request("https://example.test", {
+    headers: {
+      "X-Channel-Read-Token": token,
+      "X-Anonymous-Token": visitor.token,
+    },
+  }), "channel-a", env);
+  assert.equal(authorized?.version, 2);
+  assert.equal(authorized?.viewer, "visitor");
+  assert.equal("channel" in (authorized || {}), false);
+});
+
 test("read capabilities stay confined to read-only routes and HttpOnly cookies", () => {
   const initSource = readFileSync(new URL("../src/routes/init.ts", import.meta.url), "utf8");
   const dataSource = readFileSync(new URL("../src/routes/data.ts", import.meta.url), "utf8");
@@ -102,15 +123,24 @@ test("read capabilities stay confined to read-only routes and HttpOnly cookies",
   );
   const initProxySource = readFileSync(new URL("../../src/app/api/init/route.ts", import.meta.url), "utf8");
   const dataProxySource = readFileSync(new URL("../../src/app/api/data/route.ts", import.meta.url), "utf8");
+  const timelineProxySource = readFileSync(
+    new URL("../../src/app/api/unified-timeline/route.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(initSource, /!reportsChannel && !isPlatformAdminViewer/);
   assert.match(dataSource, /const CHANNEL_READ_TOKEN_TYPES = new Set/);
   assert.doesNotMatch(dataSource, /CHANNEL_READ_TOKEN_TYPES[\s\S]{0,250}"dm"/);
   assert.match(timelineSource, /authorizeChannelReadToken\(request, channelId, env\)/);
+  assert.match(timelineSource, /createChannelAccessToken\(/);
+  assert.match(dataSource, /createChannelAccessToken\(/);
+  assert.match(initSource, /authorizedChannelRead\?\.version === 1/);
   assert.match(cookieSource, /httpOnly: true/);
   assert.match(cookieSource, /sameSite: "lax"/);
   assert.match(initProxySource, /res\.headers\.get\("X-Channel-Read-Token"\)/);
   assert.doesNotMatch(initSource, /channelReadToken,\s*anonymousUid/);
   assert.match(dataProxySource, /readIdentityTokens\(/);
   assert.match(dataProxySource, /request\.headers\.get\("X-Anonymous-Token"\) \|\| cookieAnonymousToken/);
+  assert.match(dataProxySource, /setChannelReadTokenCookie\(/);
+  assert.match(timelineProxySource, /setChannelReadTokenCookie\(/);
 });

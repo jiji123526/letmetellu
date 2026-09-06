@@ -39,6 +39,18 @@ export interface ChannelReadTokenPayload {
   exp: number;
 }
 
+export interface ChannelAccessTokenPayload {
+  type: "channel-read";
+  version: 2;
+  channel_id: string;
+  viewer: ChannelReadViewer;
+  subject: string;
+  iat: number;
+  exp: number;
+}
+
+export type AuthorizedChannelRead = ChannelReadTokenPayload | ChannelAccessTokenPayload;
+
 const PUBLIC_READ_TTL_SECONDS = 2 * 60;
 const SENSITIVE_READ_TTL_SECONDS = 30;
 
@@ -95,10 +107,37 @@ export async function createChannelReadToken(input: {
   return `${header}.${payload}.${toBase64Url(new Uint8Array(signature))}`;
 }
 
+export async function createChannelAccessToken(input: {
+  channelId: string;
+  viewer: ChannelReadViewer;
+  subject: string;
+  sensitive: boolean;
+  env: Env;
+}): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = toBase64Url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const payload = toBase64Url(JSON.stringify({
+    type: "channel-read",
+    version: 2,
+    channel_id: input.channelId,
+    viewer: input.viewer,
+    subject: input.subject,
+    iat: now,
+    exp: now + (input.sensitive ? SENSITIVE_READ_TTL_SECONDS : PUBLIC_READ_TTL_SECONDS),
+  } satisfies ChannelAccessTokenPayload));
+  const key = await importSigningKey(input.env, "sign");
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${header}.${payload}`),
+  );
+  return `${header}.${payload}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
 async function verifyChannelReadToken(
   token: string,
   env: Env,
-): Promise<ChannelReadTokenPayload | null> {
+): Promise<AuthorizedChannelRead | null> {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
@@ -113,20 +152,15 @@ async function verifyChannelReadToken(
     if (!valid) return null;
     const decoded = JSON.parse(
       new TextDecoder().decode(fromBase64Url(payload)),
-    ) as ChannelReadTokenPayload;
+    ) as AuthorizedChannelRead;
     const now = Math.floor(Date.now() / 1000);
     if (
       decoded.type !== "channel-read"
-      || decoded.version !== 1
+      || (decoded.version !== 1 && decoded.version !== 2)
       || (decoded.viewer !== "owner" && decoded.viewer !== "visitor")
       || typeof decoded.channel_id !== "string"
       || typeof decoded.subject !== "string"
       || !decoded.subject
-      || !decoded.channel
-      || decoded.channel.id !== decoded.channel_id.replace(/_live$/, "")
-      || typeof decoded.channel.owner_uid !== "string"
-      || typeof decoded.channel.name !== "string"
-      || typeof decoded.channel.has_passcode !== "boolean"
       || !Number.isFinite(decoded.iat)
       || !Number.isFinite(decoded.exp)
       || decoded.iat > now + 5
@@ -134,6 +168,18 @@ async function verifyChannelReadToken(
       || decoded.exp <= decoded.iat
       || decoded.exp - decoded.iat > PUBLIC_READ_TTL_SECONDS
       || decoded.exp > now + PUBLIC_READ_TTL_SECONDS
+    ) {
+      return null;
+    }
+    if (
+      decoded.version === 1
+      && (
+        !decoded.channel
+        || decoded.channel.id !== decoded.channel_id.replace(/_live$/, "")
+        || typeof decoded.channel.owner_uid !== "string"
+        || typeof decoded.channel.name !== "string"
+        || typeof decoded.channel.has_passcode !== "boolean"
+      )
     ) {
       return null;
     }
@@ -147,7 +193,7 @@ export async function authorizeChannelReadToken(
   request: Request,
   channelId: string,
   env: Env,
-): Promise<ChannelReadTokenPayload | null> {
+): Promise<AuthorizedChannelRead | null> {
   const token = request.headers.get("X-Channel-Read-Token") || "";
   if (!token) return null;
   const payload = await verifyChannelReadToken(token, env);
