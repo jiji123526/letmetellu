@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Current-user bottleneck timing is exposed per response — 2026-09-06
+
+- The signed-in `GET /api/user` response now includes `Server-Timing` entries for Vercel-side authentication, the Worker round trip, and total proxy time.
+- The Worker also returns an `X-Yap-Worker-Timing` response header separating user-identity lookup from dashboard-state reads.
+- These timings contain durations only—no user IDs, email addresses, channel IDs, or message data—and avoid persistent per-request log volume.
+
+Trade-off: two small diagnostic headers are added to signed-in current-user responses. They are intentionally retained as a low-cost production diagnostic because browser timing alone cannot distinguish Vercel authentication delay from Worker or D1 delay.
+
+Verification: in browser DevTools, inspect the `/api/user` response headers. Compare `auth`, `worker`, and `total` in `Server-Timing`, then inspect `X-Yap-Worker-Timing` for `identity`, `state`, and Worker `total`. The largest value identifies the next optimization target.
+
 ### Duplicate channel bootstrap after client session hydration removed — 2026-09-06
 
 - The initial channel bootstrap now applies its response through the latest callback ref instead of making the bootstrap effect depend on the client-side authentication callback identity.

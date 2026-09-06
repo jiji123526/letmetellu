@@ -4,6 +4,27 @@ import { NextResponse } from "next/server";
 const MISSING_USER_SYNC_BACKOFF_MS = 5_000;
 const recentMissingUserSyncs = new Map<string, number>();
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function userReadResponse(
+  data: unknown,
+  status: number,
+  timings: { authMs: number; workerMs: number; totalMs: number },
+  workerTiming?: string | null,
+) {
+  const headers = new Headers({
+    "Server-Timing": [
+      `auth;dur=${timings.authMs}`,
+      `worker;dur=${timings.workerMs}`,
+      `total;dur=${timings.totalMs}`,
+    ].join(", "),
+  });
+  if (workerTiming) headers.set("X-Yap-Worker-Timing", workerTiming);
+  return NextResponse.json(data, { status, headers });
+}
+
 function getWorkerUrl() {
   return process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
 }
@@ -22,6 +43,7 @@ function missingUserSyncCacheKey(user: { id: string; email?: string | null }) {
 }
 
 export async function GET(request: Request) {
+  const requestStartedAt = performance.now();
   const workerUrl = getWorkerUrl();
   const url = new URL(request.url);
   const channelId = url.searchParams.get("channel");
@@ -39,11 +61,17 @@ export async function GET(request: Request) {
     return NextResponse.json(readData, { status: readRes.status });
   }
 
+  const authStartedAt = performance.now();
   const session = await auth();
+  const authMs = roundedDuration(authStartedAt);
   const user = session?.user;
 
   if (!user?.id) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return userReadResponse(
+      { error: "unauthorized" },
+      401,
+      { authMs, workerMs: 0, totalMs: roundedDuration(requestStartedAt) },
+    );
   }
 
   const authenticatedUser = {
@@ -54,24 +82,42 @@ export async function GET(request: Request) {
   };
   const headers = getInternalHeaders({ user: authenticatedUser });
 
+  const workerStartedAt = performance.now();
   const readRes = await fetch(`${workerUrl}/api/user`, {
     method: "GET",
     headers,
     cache: "no-store",
   });
   const readData = await readRes.json();
+  const workerMs = roundedDuration(workerStartedAt);
+  const workerTiming = readRes.headers.get("X-Yap-Worker-Timing");
   if (readRes.ok) {
-    return NextResponse.json(readData, { status: readRes.status });
+    return userReadResponse(
+      readData,
+      readRes.status,
+      { authMs, workerMs, totalMs: roundedDuration(requestStartedAt) },
+      workerTiming,
+    );
   }
 
   if (readRes.status !== 404 || readData?.error !== "user_not_found") {
-    return NextResponse.json(readData, { status: readRes.status });
+    return userReadResponse(
+      readData,
+      readRes.status,
+      { authMs, workerMs, totalMs: roundedDuration(requestStartedAt) },
+      workerTiming,
+    );
   }
 
   const syncCacheKey = missingUserSyncCacheKey(authenticatedUser);
   const nextSyncAttemptAt = recentMissingUserSyncs.get(syncCacheKey) || 0;
   if (nextSyncAttemptAt > Date.now()) {
-    return NextResponse.json(readData, { status: readRes.status });
+    return userReadResponse(
+      readData,
+      readRes.status,
+      { authMs, workerMs, totalMs: roundedDuration(requestStartedAt) },
+      workerTiming,
+    );
   }
   if (nextSyncAttemptAt) {
     recentMissingUserSyncs.delete(syncCacheKey);
@@ -99,7 +145,16 @@ export async function GET(request: Request) {
   } else {
     recentMissingUserSyncs.delete(syncCacheKey);
   }
-  return NextResponse.json(syncData, { status: syncRes.status });
+  return userReadResponse(
+    syncData,
+    syncRes.status,
+    {
+      authMs,
+      workerMs: roundedDuration(workerStartedAt),
+      totalMs: roundedDuration(requestStartedAt),
+    },
+    syncRes.headers.get("X-Yap-Worker-Timing") || workerTiming,
+  );
 }
 
 export async function PATCH(request: Request) {

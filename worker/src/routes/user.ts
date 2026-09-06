@@ -6,6 +6,26 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function withUserTiming(
+  response: Response,
+  timings: { identityMs: number; stateMs: number; totalMs: number },
+) {
+  const headers = new Headers(response.headers);
+  headers.set(
+    "X-Yap-Worker-Timing",
+    `identity=${timings.identityMs},state=${timings.stateMs},total=${timings.totalMs}`,
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function resolveUserIdentity(
   env: Env,
   userId: string,
@@ -116,6 +136,7 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
 
     const channelId = url.searchParams.get("channel");
     if (!channelId && !ownerUid) {
+      const requestStartedAt = performance.now();
       if (request.headers.get("X-Internal-Token") !== env.INTERNAL_SECRET) {
         return Response.json({ error: "unauthorized" }, { status: 401 });
       }
@@ -124,16 +145,29 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
       if (!userId && !userEmail) {
         return Response.json({ error: "missing user identity" }, { status: 400 });
       }
+      const identityStartedAt = performance.now();
       const user = await resolveUserIdentity(env, userId, userEmail);
-      if (!user) return Response.json({ error: "user_not_found" }, { status: 404 });
+      const identityMs = roundedDuration(identityStartedAt);
+      if (!user) {
+        return withUserTiming(
+          Response.json({ error: "user_not_found" }, { status: 404 }),
+          { identityMs, stateMs: 0, totalMs: roundedDuration(requestStartedAt) },
+        );
+      }
+      const stateStartedAt = performance.now();
       const state = await readUserState(env, user.id, reportsChannelId);
-      return Response.json({
+      const stateMs = roundedDuration(stateStartedAt);
+      return withUserTiming(Response.json({
         ok: true,
         user_id: user.id,
         channels: state.channels,
         font_size: state.font_size,
         locale: state.locale,
         is_platform_admin: state.is_platform_admin,
+      }), {
+        identityMs,
+        stateMs,
+        totalMs: roundedDuration(requestStartedAt),
       });
     }
 
