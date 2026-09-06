@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### D1 overload retries are classified and jittered — 2026-09-06
+
+- Production operational events recorded nine `GET /api/init` failures during a concentrated traffic window with `D1 DB is overloaded. Requests queued for too long`.
+- That overload signature is now classified as a transient D1 failure, so exhausted requests return the existing `503 d1_unavailable` response instead of an unclassified `500`.
+- `/api/init` now waits a randomized 250–750 ms before its single read-only retry. This spreads reconnect/resume requests instead of immediately repeating them in lockstep while D1 is still overloaded.
+- Mutation routes are unchanged and are not automatically retried, avoiding duplicate writes.
+- Hardening coverage verifies both overload classification and the bounded retry-delay range.
+
+Trade-off: a request that encounters an overload can take 250–750 ms longer before recovering or returning `503`. The bounded delay lowers synchronized retry pressure without hiding sustained overload behind repeated retries.
+
 ### Scrolling to the newest context edge exits context mode — 2026-08-26
 
 - Context navigation previously cleared the `has more newer messages` flag at

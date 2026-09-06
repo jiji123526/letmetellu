@@ -13,7 +13,17 @@ const TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS = [
 const TRANSIENT_D1_ERROR_FRAGMENTS = [
   "d1_error: d1 db storage operation exceeded timeout which caused object to be reset",
   "d1 db storage operation exceeded timeout which caused object to be reset",
+  "d1_error: d1 db is overloaded. requests queued for too long",
+  "d1 db is overloaded. requests queued for too long",
 ] as const;
+
+const INIT_D1_RETRY_MIN_DELAY_MS = 250;
+const INIT_D1_RETRY_JITTER_MS = 500;
+
+export function getInitD1RetryDelayMs(randomValue = Math.random()): number {
+  const boundedRandom = Math.min(1, Math.max(0, randomValue));
+  return INIT_D1_RETRY_MIN_DELAY_MS + Math.floor(boundedRandom * INIT_D1_RETRY_JITTER_MS);
+}
 
 function matchesErrorChain(
   error: unknown,

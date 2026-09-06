@@ -22,6 +22,7 @@ import {
   getOperationalRouteDetail,
   getOperationalErrorDetail,
   getOperationalEventOverride,
+  getInitD1RetryDelayMs,
   isTransientD1Error,
   isTransientDurableObjectError,
   normalizeOperationalRoute,
@@ -122,6 +123,10 @@ async function handleInitWithRetry(request: Request, env: Env): Promise<Response
   } catch (error) {
     if (!isTransientD1Error(error)) throw error;
   }
+
+  await new Promise((resolve) => {
+    setTimeout(resolve, getInitD1RetryDelayMs());
+  });
 
   try {
     return await handleInit(request, env);

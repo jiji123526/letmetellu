@@ -12,6 +12,7 @@ import {
   normalizeOperationalRoute,
   OPERATIONAL_EVENT_OVERRIDE_HEADER,
   getOperationalEventOverride,
+  getInitD1RetryDelayMs,
   isTransientD1Error,
   isTransientDurableObjectError,
   stripOperationalEventHeaders,
@@ -32,6 +33,18 @@ import { getPreviewFailureCacheTtl } from "../src/lib/preview-cache-policy.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 import { buildManagedMediaPath, extractMediaKey, normalizeManagedMediaUrl } from "../src/lib/media.ts";
 import { extractYouTubeVideoId } from "../src/lib/youtube-preview.ts";
+
+test("D1 overloads are transient and init retry jitter stays bounded", () => {
+  assert.equal(
+    isTransientD1Error(new Error("D1_ERROR: D1 DB is overloaded. Requests queued for too long.")),
+    true,
+  );
+  assert.equal(getInitD1RetryDelayMs(-1), 250);
+  assert.equal(getInitD1RetryDelayMs(0), 250);
+  assert.equal(getInitD1RetryDelayMs(0.5), 500);
+  assert.equal(getInitD1RetryDelayMs(1), 750);
+  assert.equal(getInitD1RetryDelayMs(2), 750);
+});
 
 function expectPreviewError(fn: () => unknown, message: string): void {
   let thrown: unknown;
