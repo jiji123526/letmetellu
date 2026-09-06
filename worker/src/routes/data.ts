@@ -29,7 +29,35 @@ import {
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics";
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function withDataTiming(
+  response: Response,
+  timings: Record<string, number>,
+  d1Meta?: { rowsRead: number; durationMs: number },
+) {
+  const headers = new Headers(response.headers);
+  headers.set(
+    "X-Yap-Worker-Timing",
+    Object.entries(timings).map(([stage, duration]) => `${stage}=${duration}`).join(","),
+  );
+  if (d1Meta) {
+    headers.set(
+      "X-Yap-D1-Meta",
+      `rows_read=${d1Meta.rowsRead},duration=${d1Meta.durationMs}`,
+    );
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export async function handleData(request: Request, env: Env): Promise<Response> {
+  const requestStartedAt = performance.now();
   const url = new URL(request.url);
   const type = url.searchParams.get("type");
   const channelId = url.searchParams.get("channel");
@@ -75,6 +103,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
   }
+  const accessMs = roundedDuration(requestStartedAt);
 
   switch (type) {
     case "messages": {
@@ -317,8 +346,21 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         params.push(cursor);
       }
       query += " ORDER BY created_at DESC, message_id DESC LIMIT 50";
-      const { results } = await env.DB.prepare(query).bind(...params).all();
-      return Response.json({ gallery: results });
+      const queryStartedAt = performance.now();
+      const result = await env.DB.prepare(query).bind(...params).all();
+      const queryMs = roundedDuration(queryStartedAt);
+      return withDataTiming(
+        Response.json({ gallery: result.results }),
+        {
+          access: accessMs,
+          query: queryMs,
+          total: roundedDuration(requestStartedAt),
+        },
+        {
+          rowsRead: Number(result.meta?.rows_read || 0),
+          durationMs: Math.round(Number(result.meta?.duration || 0) * 1000) / 1000,
+        },
+      );
     }
 
     case "dm": {

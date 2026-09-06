@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery and timeline latency stages are observable — 2026-09-06
+
+- Gallery-list responses now expose access-control, indexed gallery-query, and total Worker time through `X-Yap-Worker-Timing`, plus D1-reported duration and rows read through `X-Yap-D1-Meta`.
+- Unified timeline page and context responses now expose access-control, timeline-read, D1 SQL, and total Worker time. The same-origin Vercel proxies forward these headers and add `Server-Timing` for Auth.js, Worker fetch, media signing, and total proxy time.
+- This instrumentation separates intermittent first-D1 binding waits from SQL execution, response signing, media loading, and the client-side gallery layout-stability wait without changing pagination or rendering behavior.
+
+Trade-off: successful diagnostic responses gain a few short headers. No message content, identity, query parameter, or credential is included, and the overhead is negligible compared with the network request.
+
 ### Channel init removes redundant serial metadata reads — 2026-09-06
 
 - Production timing showed highly bimodal D1 binding latency: normal init requests completed in 80–163 ms, while intermittent requests waited 5–15 seconds in whichever D1 call happened to encounter the infrastructure queue.

@@ -3,6 +3,10 @@ import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
 function getParentChannelId(channelId: string) {
   return channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
 }
@@ -10,7 +14,10 @@ function getParentChannelId(channelId: string) {
 // Authenticated data proxy. Channel owners are identified from the server-side
 // session; non-admin viewers continue to use their channel-bound room token.
 export async function GET(request: Request) {
+  const requestStartedAt = performance.now();
+  const authStartedAt = performance.now();
   const session = await auth();
+  const authMs = roundedDuration(authStartedAt);
   const incomingUrl = new URL(request.url);
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
   const targetUrl = new URL("/api/data", workerUrl);
@@ -36,13 +43,27 @@ export async function GET(request: Request) {
     headers["X-Unified-Timeline-Shadow"] = "1";
   }
 
+  const workerStartedAt = performance.now();
   const response = await fetch(targetUrl, { headers, cache: "no-store" });
   const data = await response.json();
+  const workerMs = roundedDuration(workerStartedAt);
+  const signingStartedAt = performance.now();
   const signedData = await signProtectedMediaInPayload(data, {
     roomToken,
     userId: session?.user?.id,
   });
+  const signingMs = roundedDuration(signingStartedAt);
   const nextResponse = NextResponse.json(signedData, { status: response.status });
+  nextResponse.headers.set("Server-Timing", [
+    `auth;dur=${authMs}`,
+    `worker;dur=${workerMs}`,
+    `media-signing;dur=${signingMs}`,
+    `total;dur=${roundedDuration(requestStartedAt)}`,
+  ].join(", "));
+  const workerTiming = response.headers.get("X-Yap-Worker-Timing");
+  if (workerTiming) nextResponse.headers.set("X-Yap-Worker-Timing", workerTiming);
+  const d1Meta = response.headers.get("X-Yap-D1-Meta");
+  if (d1Meta) nextResponse.headers.set("X-Yap-D1-Meta", d1Meta);
   const shadowStatus = response.headers.get("X-Unified-Timeline-Shadow");
   if (shadowStatus) nextResponse.headers.set("X-Unified-Timeline-Shadow", shadowStatus);
   return nextResponse;

@@ -21,10 +21,28 @@ import type { Env } from "../types.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function withTimelineTiming(response: Response, timings: Record<string, number>) {
+  const headers = new Headers(response.headers);
+  headers.set(
+    "X-Yap-Worker-Timing",
+    Object.entries(timings).map(([stage, duration]) => `${stage}=${duration}`).join(","),
+  );
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export async function handleUnifiedTimeline(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  const requestStartedAt = performance.now();
   if (request.method !== "GET") {
     return Response.json({ error: "method not allowed" }, { status: 405 });
   }
@@ -131,6 +149,7 @@ export async function handleUnifiedTimeline(
     const current = await resolveActiveLiveSession(env, parentChannelId);
     return current?.sessionId === liveSessionId;
   };
+  const accessMs = roundedDuration(requestStartedAt);
 
   const targetId = url.searchParams.get("target_id");
   if (targetId) {
@@ -183,13 +202,22 @@ export async function handleUnifiedTimeline(
         workerDurationMs: performance.now() - startedAt,
       }));
     }
-    return Response.json({
-      ...serializeUnifiedTimelinePage(contextPage),
-      target_id: contextPage.targetId,
-      target_source: contextPage.targetSource,
-      has_older: contextPage.hasOlder,
-      has_newer: contextPage.hasNewer,
-    });
+    const readMs = roundedDuration(startedAt);
+    return withTimelineTiming(
+      Response.json({
+        ...serializeUnifiedTimelinePage(contextPage),
+        target_id: contextPage.targetId,
+        target_source: contextPage.targetSource,
+        has_older: contextPage.hasOlder,
+        has_newer: contextPage.hasNewer,
+      }),
+      {
+        access: accessMs,
+        read: readMs,
+        d1: Math.round(contextPage.metrics.d1DurationMs * 10) / 10,
+        total: roundedDuration(requestStartedAt),
+      },
+    );
   }
 
   const startedAt = performance.now();
@@ -227,5 +255,14 @@ export async function handleUnifiedTimeline(
       workerDurationMs: performance.now() - startedAt,
     }));
   }
-  return Response.json(serializeUnifiedTimelinePage(page));
+  const readMs = roundedDuration(startedAt);
+  return withTimelineTiming(
+    Response.json(serializeUnifiedTimelinePage(page)),
+    {
+      access: accessMs,
+      read: readMs,
+      d1: Math.round(page.metrics.d1DurationMs * 10) / 10,
+      total: roundedDuration(requestStartedAt),
+    },
+  );
 }

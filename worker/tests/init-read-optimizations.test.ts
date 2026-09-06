@@ -30,6 +30,22 @@ const wsTokenProxySource = readFileSync(
   new URL("../../src/app/api/ws-token/route.ts", import.meta.url),
   "utf8",
 );
+const dataSource = readFileSync(
+  new URL("../src/routes/data.ts", import.meta.url),
+  "utf8",
+);
+const dataProxySource = readFileSync(
+  new URL("../../src/app/api/data/route.ts", import.meta.url),
+  "utf8",
+);
+const unifiedTimelineSource = readFileSync(
+  new URL("../src/routes/unified-timeline.ts", import.meta.url),
+  "utf8",
+);
+const unifiedTimelineProxySource = readFileSync(
+  new URL("../../src/app/api/unified-timeline/route.ts", import.meta.url),
+  "utf8",
+);
 
 test("init only reads live-channel frozen state when the live row is relevant", () => {
   assert.match(initSource, /function readSharedInitConfig/);
@@ -91,4 +107,15 @@ test("channel entry proxies expose auth and Worker timing stages", () => {
   assert.match(initSource, /bootstrap: bootstrapMs/);
   assert.match(wsTokenProxySource, /`auth;dur=\$\{authMs}`/);
   assert.match(wsTokenProxySource, /`worker;dur=\$\{workerMs}`/);
+});
+
+test("gallery and unified timeline reads expose diagnostic timing stages", () => {
+  assert.match(dataSource, /case "gallery"[\s\S]*withDataTiming\(/);
+  assert.match(dataSource, /"X-Yap-D1-Meta"/);
+  assert.match(dataSource, /rowsRead: Number\(result\.meta\?\.rows_read/);
+  assert.match(dataProxySource, /`auth;dur=\$\{authMs}`/);
+  assert.match(dataProxySource, /response\.headers\.get\("X-Yap-D1-Meta"\)/);
+  assert.match(unifiedTimelineSource, /withTimelineTiming\(/);
+  assert.match(unifiedTimelineSource, /d1: Math\.round\(contextPage\.metrics\.d1DurationMs/);
+  assert.match(unifiedTimelineProxySource, /response\.headers\.get\("X-Yap-Worker-Timing"\)/);
 });

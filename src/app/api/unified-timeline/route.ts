@@ -4,6 +4,10 @@ import { signProtectedMediaInPayload } from "@/lib/media-access-token";
 import { readRoomTokenCookie } from "@/lib/room-token-cookie";
 import { NextResponse } from "next/server";
 
+function roundedDuration(startedAt: number) {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
 function getParentChannelId(channelId: string) {
   return channelId.endsWith("_live")
     ? channelId.replace(/_live$/, "")
@@ -11,7 +15,10 @@ function getParentChannelId(channelId: string) {
 }
 
 export async function GET(request: Request) {
+  const requestStartedAt = performance.now();
+  const authStartedAt = performance.now();
   const session = await auth();
+  const authMs = roundedDuration(authStartedAt);
   const incomingUrl = new URL(request.url);
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
   const targetUrl = new URL("/api/unified-timeline", workerUrl);
@@ -39,11 +46,24 @@ export async function GET(request: Request) {
   const forwardedAnonymousToken = request.headers.get("X-Anonymous-Token") || anonymousToken;
   if (forwardedAnonymousToken) headers["X-Anonymous-Token"] = forwardedAnonymousToken;
 
+  const workerStartedAt = performance.now();
   const response = await fetch(targetUrl, { headers, cache: "no-store" });
   const payload = await response.json();
+  const workerMs = roundedDuration(workerStartedAt);
+  const signingStartedAt = performance.now();
   const signedPayload = await signProtectedMediaInPayload(payload, {
     roomToken,
     userId: session?.user?.id,
   });
-  return NextResponse.json(signedPayload, { status: response.status });
+  const signingMs = roundedDuration(signingStartedAt);
+  const nextResponse = NextResponse.json(signedPayload, { status: response.status });
+  nextResponse.headers.set("Server-Timing", [
+    `auth;dur=${authMs}`,
+    `worker;dur=${workerMs}`,
+    `media-signing;dur=${signingMs}`,
+    `total;dur=${roundedDuration(requestStartedAt)}`,
+  ].join(", "));
+  const workerTiming = response.headers.get("X-Yap-Worker-Timing");
+  if (workerTiming) nextResponse.headers.set("X-Yap-Worker-Timing", workerTiming);
+  return nextResponse;
 }
