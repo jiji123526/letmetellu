@@ -67,8 +67,8 @@ test("init only reads live-channel frozen state when the live row is relevant", 
 test("init shares only public in-flight reads and keeps viewer state separate", () => {
   assert.match(initSource, /const sharedChannelRequests = new Map/);
   assert.match(initSource, /const sharedConfigRequests = new Map/);
-  assert.match(initSource, /readSharedChannel\(env, parentChannelId, reportsChannelId\)/);
-  assert.match(initSource, /readSharedInitConfig\(env, channelId, parentChannelId, isLiveChannel\)/);
+  assert.match(initSource, /readSharedChannel\(readEnv, parentChannelId, reportsChannelId, readConstraint\)/);
+  assert.match(initSource, /readSharedInitConfig\(readEnv, channelId, parentChannelId, isLiveChannel, readConstraint\)/);
   assert.match(initSource, /readDmThreads\([\s\S]*anonymousUid: anonymousIdentity\.uid/);
   assert.match(initSource, /viewerBlockedIndex = statements\.length/);
   assert.doesNotMatch(initSource, /shared(?:Channel|Config)Requests\.set\([^\n]*anonymousIdentity/);
@@ -76,6 +76,13 @@ test("init shares only public in-flight reads and keeps viewer state separate", 
   assert.match(initSource, /AS reports_owner_id/);
   assert.doesNotMatch(initSource, /await getChannelModeration\(parentChannelId, env\)/);
   assert.doesNotMatch(initSource, /await getReportsChannelOwnerId\(env\)/);
+});
+
+test("channel reads use one D1 session with a security-aware first constraint", () => {
+  assert.match(initSource, /channelReadAccess[\s\S]*\? "first-unconstrained"[\s\S]*: "first-primary"/);
+  assert.match(initSource, /createD1ReadSessionEnv\(env, readConstraint\)/);
+  assert.match(dataSource, /createD1ReadSessionEnv\([\s\S]*channelReadAccess \? "first-unconstrained" : "first-primary"/);
+  assert.match(unifiedTimelineSource, /createD1ReadSessionEnv\([\s\S]*channelReadAccess \? "first-unconstrained" : "first-primary"/);
 });
 
 test("owner moderation refresh uses a dedicated narrow channel-state route", () => {

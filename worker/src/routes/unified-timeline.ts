@@ -21,6 +21,7 @@ import type { Env } from "../types.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
 import { authorizeChannelReadToken } from "../lib/channel-read-token.ts";
+import { createD1ReadSessionEnv } from "../lib/d1-read-session.ts";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -61,13 +62,17 @@ export async function handleUnifiedTimeline(
   const channelReadAccess = !isReportsChannel(parentChannelId, env)
     ? await authorizeChannelReadToken(request, channelId, env)
     : null;
+  const readEnv = createD1ReadSessionEnv(
+    env,
+    channelReadAccess ? "first-unconstrained" : "first-primary",
+  );
   const channelAccess = channelReadAccess
     ? {
         exists: true,
         passcode: null,
         owner_uid: channelReadAccess.viewer === "owner" ? channelReadAccess.subject : "",
       }
-    : await getChannelPasscodeInfo(parentChannelId, env);
+    : await getChannelPasscodeInfo(parentChannelId, readEnv);
   const { exists, passcode, owner_uid: ownerId } = channelAccess;
   if (!exists) {
     return Response.json({ error: "channel not found" }, { status: 404 });
@@ -79,7 +84,7 @@ export async function handleUnifiedTimeline(
     : Boolean(trustedUserId && trustedUserId === ownerId);
   const isPlatformAdminViewer = !isOwner
     && Boolean(passcode)
-    && await isPlatformAdmin(trustedUserId, env);
+    && await isPlatformAdmin(trustedUserId, readEnv);
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
@@ -127,7 +132,7 @@ export async function handleUnifiedTimeline(
     return Response.json({ error: pageRequest.error }, { status: 400 });
   }
 
-  const viewer = await resolveUnifiedTimelineViewer(request, env, isOwner);
+  const viewer = await resolveUnifiedTimelineViewer(request, readEnv, isOwner);
   if (!viewer) {
     return Response.json(
       { error: "anonymous_identity_required" },
@@ -145,7 +150,7 @@ export async function handleUnifiedTimeline(
         { status: 400 },
       );
     }
-    const liveSession = await resolveActiveLiveSession(env, parentChannelId);
+    const liveSession = await resolveActiveLiveSession(readEnv, parentChannelId);
     if (!liveSession) {
       return Response.json({ error: "live_session_ended" }, { status: 409 });
     }
@@ -156,7 +161,7 @@ export async function handleUnifiedTimeline(
   }
   const liveSessionStillCurrent = async () => {
     if (!liveChannel) return true;
-    const current = await resolveActiveLiveSession(env, parentChannelId);
+    const current = await resolveActiveLiveSession(readEnv, parentChannelId);
     return current?.sessionId === liveSessionId;
   };
   const accessMs = roundedDuration(requestStartedAt);
@@ -173,7 +178,7 @@ export async function handleUnifiedTimeline(
     }
     const startedAt = performance.now();
     const selectedContextPage = await readUnifiedTimelineContextPage(
-      env,
+      readEnv,
       channelId,
       viewer,
       targetSource,
@@ -187,14 +192,14 @@ export async function handleUnifiedTimeline(
       return Response.json({ error: "live_session_changed" }, { status: 409 });
     }
     const reportsOwnerLocale = reportsChannel && trustedUserId
-      ? await getUserLocale(trustedUserId, env)
+      ? await getUserLocale(trustedUserId, readEnv)
       : "ko";
     const contextPage = reportsChannel
       ? {
           ...selectedContextPage,
           items: await hydrateUnifiedReportTimeline(
             selectedContextPage.items,
-            env,
+            readEnv,
             reportsOwnerLocale,
           ),
         }
@@ -231,7 +236,7 @@ export async function handleUnifiedTimeline(
   }
 
   const startedAt = performance.now();
-  const selectedPage = await readUnifiedTimelinePage(env, channelId, viewer, {
+  const selectedPage = await readUnifiedTimelinePage(readEnv, channelId, viewer, {
     cursor: pageRequest.cursor,
     direction: pageRequest.direction,
     limit: pageRequest.limit,
@@ -240,14 +245,14 @@ export async function handleUnifiedTimeline(
     return Response.json({ error: "live_session_changed" }, { status: 409 });
   }
   const reportsOwnerLocale = reportsChannel && trustedUserId
-    ? await getUserLocale(trustedUserId, env)
+    ? await getUserLocale(trustedUserId, readEnv)
     : "ko";
   const page = reportsChannel
     ? {
         ...selectedPage,
         items: await hydrateUnifiedReportTimeline(
           selectedPage.items,
-          env,
+          readEnv,
           reportsOwnerLocale,
         ),
       }

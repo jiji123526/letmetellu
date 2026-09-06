@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Security-aware D1 read-replication sessions — 2026-09-06
+
+- Channel init, unified timeline pagination/context, and legacy message, gallery, link, search, reply-parent, DM, and moderation collection reads now run through the D1 Sessions API.
+- Requests without a valid signed channel-read capability use `first-primary`. The authoritative channel/passcode/owner state is therefore read from the primary first; later reads in the same session remain sequentially consistent and may be served by replicas.
+- Requests with the existing short-lived, channel- and viewer-bound read capability use `first-unconstrained`, allowing repeat timeline and panel reads to start at a nearby replica without repeating the primary authorization lookup.
+- The helper falls back to the ordinary D1 binding in local tests or environments without Sessions API support. Enabling database read replication is an independent Cloudflare dashboard setting; deploying this code before enabling it remains valid and continues to use the primary.
+
+Trade-off: the first uncached channel entry still has to reach the primary because channel deletion, passcode changes, ownership, moderation, and access state must be current. Read replication primarily reduces the remaining reads behind that gate and distributes repeat reads. Capability-authorized requests retain the already-documented 30-second/two-minute staleness bound; this change does not extend it. If replication is disabled, this release changes consistency plumbing but cannot improve primary saturation by itself.
+
+Verification: enable Read Replication for `letsplay-db`, wait for replicas to become available, then compare repeated `/api/init`, `/api/unified-timeline`, and `/api/data?type=gallery` timings. Confirm channel entry still rejects a newly set passcode immediately on a fresh browser while repeated authorized reads no longer concentrate all query traffic on ENAM primary.
+
 ### Overload amplification safeguards — 2026-09-06
 
 - When normal-chat realtime is disconnected, the silent latest-timeline fallback now starts after a client-jittered 6–10 seconds and polls every 15 seconds instead of starting at 3.5 seconds and polling every 5 seconds. Existing visibility, latest-mode, and near-bottom gates remain in place, while reconnect storms create materially fewer synchronized D1 reads.

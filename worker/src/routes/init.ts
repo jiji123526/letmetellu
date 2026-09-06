@@ -30,6 +30,7 @@ import {
   createChannelReadToken,
   type ChannelReadSnapshot,
 } from "../lib/channel-read-token";
+import { createD1ReadSessionEnv, type D1ReadConstraint } from "../lib/d1-read-session";
 
 type SharedChannelRow = Record<string, unknown>;
 type SharedConfigRow = { id: string; text: string; updated_at?: string | null };
@@ -77,8 +78,9 @@ function readSharedChannel(
   env: Env,
   parentChannelId: string,
   reportsChannelId: string | null,
+  constraint: D1ReadConstraint,
 ): Promise<SharedChannelRow | null> {
-  const key = `${reportsChannelId || ""}:${parentChannelId}`;
+  const key = `${constraint}:${reportsChannelId || ""}:${parentChannelId}`;
   return shareInFlight(sharedChannelRequests, key, () => env.DB.prepare(
     `SELECT
        channels.*,
@@ -120,8 +122,9 @@ function readSharedInitConfig(
   channelId: string,
   parentChannelId: string,
   isLiveChannel: boolean,
+  constraint: D1ReadConstraint,
 ): Promise<SharedInitConfig> {
-  const key = `${channelId}:${isLiveChannel ? "live" : "normal"}`;
+  const key = `${constraint}:${channelId}:${isLiveChannel ? "live" : "normal"}`;
   return shareInFlight(sharedConfigRequests, key, async () => {
     const statements = [
       env.DB.prepare(`
@@ -226,6 +229,10 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const channelReadAccess = !reportsChannel
       ? await authorizeChannelReadToken(request, channelId, env)
       : null;
+    const readConstraint: D1ReadConstraint = channelReadAccess
+      ? "first-unconstrained"
+      : "first-primary";
+    const readEnv = createD1ReadSessionEnv(env, readConstraint);
     // Fetch channel config (always from parent)
     const channelStartedAt = performance.now();
     const channel = channelReadAccess
@@ -234,7 +241,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           passcode: channelReadAccess.channel.has_passcode ? "capability-authorized" : null,
           reports_owner_id: null,
         }
-      : await readSharedChannel(env, parentChannelId, reportsChannelId);
+      : await readSharedChannel(readEnv, parentChannelId, reportsChannelId, readConstraint);
     channelMs = roundedDuration(channelStartedAt);
 
     if (!channel) {
@@ -252,7 +259,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       : trustedUserId === (channel as any).owner_uid;
     const isPlatformAdminViewer = !isOwner
       && Boolean((channel as any).passcode)
-      && await isPlatformAdmin(trustedUserId, env);
+      && await isPlatformAdmin(trustedUserId, readEnv);
     const adminDataStatus = userId === (channel as any).owner_uid
       ? (isOwner ? "authorized" : "unauthorized")
       : undefined;
@@ -344,7 +351,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     );
     const unifiedTimelineRequested = unifiedTimelineRollout.enabled;
     const liveTimelineSession = isLiveChannel && unifiedTimelineRequested
-      ? await resolveActiveLiveSession(env, parentChannelId)
+      ? await resolveActiveLiveSession(readEnv, parentChannelId)
       : null;
     const unifiedTimelineEnabled = unifiedTimelineRequested
       && (!isLiveChannel || liveTimelineSession !== null);
@@ -363,7 +370,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     if (isOwner) {
       blockedIndex = statements.length;
       statements.push(
-        env.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?").bind(parentChannelId)
+        readEnv.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?").bind(parentChannelId)
       );
     } else {
       const viewerUid = anonymousIdentity.uid;
@@ -372,7 +379,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         const viewerDeviceLookup = await getBlockedDeviceLookup(viewerDeviceId, env);
         viewerBlockedIndex = statements.length;
         statements.push(
-          env.DB.prepare(
+          readEnv.DB.prepare(
             "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
           ).bind(parentChannelId, viewerUid, viewerDeviceLookup.raw, viewerDeviceLookup.hashed, viewerDeviceLookup.raw)
         );
@@ -386,9 +393,9 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       readSelectedBootstrap(unifiedTimelineEnabled, {
         legacy: async () => {
           const [messagePage, dmMessages] = await Promise.all([
-            readVisibleMessagePage(env, channelId, { limit: 50 }),
+            readVisibleMessagePage(readEnv, channelId, { limit: 50 }),
             readDmThreads(
-              env,
+              readEnv,
               channelId,
               isOwner
                 ? { owner: true }
@@ -400,7 +407,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         unified: async () => {
           const startedAt = performance.now();
           const page = await readUnifiedTimelinePage(
-            env,
+            readEnv,
             channelId,
             isOwner
               ? { owner: true }
@@ -420,8 +427,8 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           return page;
         },
       }),
-      readSharedInitConfig(env, channelId, parentChannelId, isLiveChannel),
-      statements.length > 0 ? env.DB.batch(statements) : Promise.resolve([]),
+      readSharedInitConfig(readEnv, channelId, parentChannelId, isLiveChannel, readConstraint),
+      statements.length > 0 ? readEnv.DB.batch(statements) : Promise.resolve([]),
     ]);
     bootstrapMs = roundedDuration(bootstrapStartedAt);
 
@@ -437,7 +444,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     let responseUnifiedTimelineEnabled = unifiedTimelineEnabled;
     let liveTimelineSessionAfterRead: LiveSessionState | null | undefined;
     if (unifiedPage && liveTimelineSession) {
-      const currentLiveSession = await resolveActiveLiveSession(env, parentChannelId);
+      const currentLiveSession = await resolveActiveLiveSession(readEnv, parentChannelId);
       liveTimelineSessionAfterRead = currentLiveSession;
       if (currentLiveSession?.sessionId !== liveTimelineSession.sessionId) {
         unifiedPage = null;

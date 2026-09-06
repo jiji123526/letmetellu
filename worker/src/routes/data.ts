@@ -29,6 +29,7 @@ import {
   logUnifiedTimelineMetric,
 } from "../lib/unified-timeline-metrics";
 import { authorizeChannelReadToken } from "../lib/channel-read-token";
+import { createD1ReadSessionEnv } from "../lib/d1-read-session";
 
 const CHANNEL_READ_TOKEN_TYPES = new Set([
   "messages",
@@ -82,13 +83,17 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   const channelReadAccess = type && CHANNEL_READ_TOKEN_TYPES.has(type) && !reportsChannel
     ? await authorizeChannelReadToken(request, channelId, env)
     : null;
+  const readEnv = createD1ReadSessionEnv(
+    env,
+    channelReadAccess ? "first-unconstrained" : "first-primary",
+  );
   const channelAccess = channelReadAccess
     ? {
         exists: true,
         passcode: null,
         owner_uid: channelReadAccess.viewer === "owner" ? channelReadAccess.subject : "",
       }
-    : await getChannelPasscodeInfo(parentChannelId, env);
+    : await getChannelPasscodeInfo(parentChannelId, readEnv);
   const { exists, passcode, owner_uid } = channelAccess;
   if (!exists) {
     return Response.json({ error: "channel not found" }, { status: 404 });
@@ -99,9 +104,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     : trustedUserId === owner_uid;
   const isPlatformAdminViewer = !isOwner
     && Boolean(passcode)
-    && await isPlatformAdmin(trustedUserId, env);
+    && await isPlatformAdmin(trustedUserId, readEnv);
   const reportsOwnerLocale = reportsChannel && isOwner && trustedUserId
-    ? await getUserLocale(trustedUserId, env)
+    ? await getUserLocale(trustedUserId, readEnv)
     : "ko";
   if (reportsChannel && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
@@ -137,14 +142,14 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         hasMore,
         pageStartCursor,
         pageEndCursor,
-      } = await readVisibleMessagePage(env, channelId, {
+      } = await readVisibleMessagePage(readEnv, channelId, {
         cursor,
         cursorId,
         direction,
         limit: 50,
       });
       const messages = reportsChannel && isOwner
-        ? await hydrateReportInboxMessages(expandedResults as Array<{ id: string }>, env, reportsOwnerLocale)
+        ? await hydrateReportInboxMessages(expandedResults as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : expandedResults;
       const responsePayload = {
         messages,
@@ -169,7 +174,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           : undefined);
       }
 
-      const viewer = await resolveUnifiedTimelineViewer(request, env, isOwner);
+      const viewer = await resolveUnifiedTimelineViewer(request, readEnv, isOwner);
       if (!viewer) {
         return Response.json(responsePayload, {
           headers: { "X-Unified-Timeline-Shadow": "identity-required" },
@@ -179,7 +184,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       try {
         const readMeasuredUnifiedPage = async () => {
           const startedAt = performance.now();
-          const page = await readUnifiedTimelinePage(env, channelId, viewer, { limit: 50 });
+          const page = await readUnifiedTimelinePage(readEnv, channelId, viewer, { limit: 50 });
           logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
             metrics: page.metrics,
             owner: viewer.owner,
@@ -190,7 +195,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           return page;
         };
         const [dmMessages, unifiedPage] = await Promise.all([
-          readDmThreads(env, channelId, viewer),
+          readDmThreads(readEnv, channelId, viewer),
           readMeasuredUnifiedPage(),
         ]);
         const comparison = compareUnifiedTimelineShadow({
@@ -247,7 +252,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         return Response.json({ error: "missing message id" }, { status: 400 });
       }
 
-      const target = await readVisibleTargetRoot(env, channelId, messageId);
+      const target = await readVisibleTargetRoot(readEnv, channelId, messageId);
       if (!target) {
         return Response.json({ error: "message not found" }, { status: 404 });
       }
@@ -255,7 +260,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const threadRootCreatedAt = String(target.created_at || "");
 
       const [beforeResult, afterResult] = await Promise.all([
-        env.DB.prepare(`
+        readEnv.DB.prepare(`
           SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM messages
           WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
             AND (created_at, id) <= (?, ?)
@@ -267,7 +272,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
           threadRootCreatedAt,
           threadRootId,
         ).all<VisibleMessageRow>(),
-        env.DB.prepare(`
+        readEnv.DB.prepare(`
           SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM messages
           WHERE ${VISIBLE_ROOT_MESSAGE_CONDITION}
             AND (created_at, id) > (?, ?)
@@ -291,9 +296,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       );
       const pageStart = contextPageRows[0] as { id?: string; created_at?: string } | undefined;
       const pageEnd = contextPageRows.at(-1) as { id?: string; created_at?: string } | undefined;
-      const messages = await expandVisibleRootThreads(env, channelId, contextPageRows);
+      const messages = await expandVisibleRootThreads(readEnv, channelId, contextPageRows);
       const responseMessages = reportsChannel && isOwner
-        ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, env, reportsOwnerLocale)
+        ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : messages;
       return Response.json({
         messages: responseMessages,
@@ -321,7 +326,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       }
 
       const placeholders = parentIds.map(() => "?").join(", ");
-      const parentResult = await env.DB.prepare(`
+      const parentResult = await readEnv.DB.prepare(`
         SELECT ${VISIBLE_MESSAGE_SELECT_COLUMNS} FROM messages
         WHERE id IN (${placeholders})
           AND ${VISIBLE_MESSAGE_CONDITION}
@@ -331,7 +336,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const foundMessages = parentResult.results || [];
       const foundIds = new Set(foundMessages.map((message) => String(message.id)));
       const responseMessages = reportsChannel && isOwner
-        ? await hydrateReportInboxMessages(foundMessages as Array<{ id: string }>, env, reportsOwnerLocale)
+        ? await hydrateReportInboxMessages(foundMessages as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : foundMessages;
 
       return Response.json({
@@ -341,7 +346,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     }
 
     case "blocked": {
-      const { results } = await env.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?")
+      const { results } = await readEnv.DB.prepare("SELECT * FROM blocked WHERE channel_id = ?")
         .bind(channelId).all();
       return Response.json({ blocked: results });
     }
@@ -369,7 +374,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       }
       query += " ORDER BY created_at DESC, message_id DESC LIMIT 50";
       const queryStartedAt = performance.now();
-      const result = await env.DB.prepare(query).bind(...params).all();
+      const result = await readEnv.DB.prepare(query).bind(...params).all();
       const queryMs = roundedDuration(queryStartedAt);
       return withDataTiming(
         Response.json({ gallery: result.results }),
@@ -386,7 +391,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     }
 
     case "dm": {
-      const { results } = await env.DB.prepare(
+      const { results } = await readEnv.DB.prepare(
         "SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC LIMIT 100"
       ).bind(channelId).all();
       return Response.json({ dm: results });
@@ -406,7 +411,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         params.push(cursor);
       }
       query += " ORDER BY ml.created_at DESC, ml.message_id DESC LIMIT 30";
-      const { results } = await env.DB.prepare(query).bind(...params).all();
+      const { results } = await readEnv.DB.prepare(query).bind(...params).all();
       return Response.json({ links: results });
     }
 
@@ -429,7 +434,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         && cursorId
         && (!cursorRootCreatedAt || !cursorRootId || !Number.isInteger(cursorDepth))
       ) {
-        const legacyCursor = await env.DB.prepare(`
+        const legacyCursor = await readEnv.DB.prepare(`
           SELECT
             COALESCE(root.created_at, m.created_at) AS visual_root_created_at,
             COALESCE(root.id, m.id) AS visual_root_id,
@@ -537,7 +542,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       `;
       params.push(limit + 1);
 
-      const { results } = await env.DB.prepare(searchQuery).bind(...params).all();
+      const { results } = await readEnv.DB.prepare(searchQuery).bind(...params).all();
       const page = results.slice(0, limit);
       const hasMore = results.length > limit;
       const last = page.at(-1) as {
@@ -563,7 +568,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     }
 
     case "banned-words": {
-      const { results } = await env.DB.prepare(
+      const { results } = await readEnv.DB.prepare(
         "SELECT * FROM banned_words WHERE channel_id = ? AND (expires IS NULL OR expires > datetime('now'))"
       ).bind(channelId).all();
       return Response.json({ bannedWords: results });

@@ -12,12 +12,12 @@ const visibleMessagesSource = readFileSync(
 );
 
 test("message context centers a root-indexed window and expands its threads", () => {
-  assert.match(dataRouteSource, /readVisibleTargetRoot\(env, channelId, messageId\)/);
+  assert.match(dataRouteSource, /readVisibleTargetRoot\(readEnv, channelId, messageId\)/);
   assert.match(visibleMessagesSource, /FROM messages target/);
   assert.match(visibleMessagesSource, /COALESCE\(target\.root_id, target\.reply_to\)/);
   assert.doesNotMatch(visibleMessagesSource, /WITH RECURSIVE ancestors/);
   assert.match(dataRouteSource, /VISIBLE_ROOT_MESSAGE_CONDITION/);
-  assert.match(dataRouteSource, /expandVisibleRootThreads\(env, channelId, contextPageRows\)/);
+  assert.match(dataRouteSource, /expandVisibleRootThreads\(readEnv, channelId, contextPageRows\)/);
   assert.match(dataRouteSource, /\(created_at, id\) <= \(\?, \?\)/);
   assert.match(dataRouteSource, /\(created_at, id\) > \(\?, \?\)/);
   assert.doesNotMatch(dataRouteSource, /WITH RECURSIVE thread/);

@@ -76,9 +76,9 @@ test("owner-only collections are denied before their data switch", () => {
 });
 
 test("platform admin passcode bypass remains read-only and server-verified", () => {
-  assert.match(initSource, /await isPlatformAdmin\(trustedUserId, env\)/);
-  assert.match(dataSource, /await isPlatformAdmin\(trustedUserId, env\)/);
-  assert.match(unifiedTimelineSource, /await isPlatformAdmin\(trustedUserId, env\)/);
+  assert.match(initSource, /await isPlatformAdmin\(trustedUserId, readEnv\)/);
+  assert.match(dataSource, /await isPlatformAdmin\(trustedUserId, readEnv\)/);
+  assert.match(unifiedTimelineSource, /await isPlatformAdmin\(trustedUserId, readEnv\)/);
   assert.match(dataSource, /type === "blocked" \|\| type === "dm" \|\| type === "banned-words"/);
   assert.doesNotMatch(messagesSource, /\bisPlatformAdmin\b/);
   assert.doesNotMatch(dmSource, /\bisPlatformAdmin\b/);
