@@ -353,7 +353,7 @@ export function useChatChannelBootstrap({
 
         setPasscodeGate(null);
         const backgroundReady = prepareChannelBackground(data.channel);
-        applyInitData(data);
+        applyInitDataRef.current(data);
 
         if (!data.live?.active && initChannel !== channelId) {
           startChatPerformanceRequest(channelId, traceCycleId, "init");
@@ -364,7 +364,7 @@ export function useChatChannelBootstrap({
             return;
           }
           await prepareChannelBackground(normalData.channel);
-          applyInitData(normalData);
+          applyInitDataRef.current(normalData);
         } else {
           await backgroundReady;
         }
@@ -402,8 +402,8 @@ export function useChatChannelBootstrap({
       completeChatPerformanceCycle(channelId, traceCycleId, "superseded");
     };
   }, [
-    applyInitData,
     channelId,
+    applyInitDataRef,
     initRequestIdRef,
     setLoading,
     setPasscodeGate,

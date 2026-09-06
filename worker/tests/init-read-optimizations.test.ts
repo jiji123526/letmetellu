@@ -58,3 +58,13 @@ test("owner moderation refresh uses a dedicated narrow channel-state route", () 
   assert.match(refreshOwnerModerationSource, /fetchOwnerModerationState\(fetchChannel\)/);
   assert.doesNotMatch(refreshOwnerModerationSource, /fetchInit\(fetchChannel\)/);
 });
+
+test("client session hydration does not restart the channel bootstrap", () => {
+  const bootstrapEffectStart = bootstrapSource.indexOf("const shouldResumeLive =");
+  const bootstrapEffectEnd = bootstrapSource.indexOf("const showPasscodeGate", bootstrapEffectStart);
+  const bootstrapEffectSource = bootstrapSource.slice(bootstrapEffectStart, bootstrapEffectEnd);
+
+  assert.match(bootstrapEffectSource, /applyInitDataRef\.current\(data\)/);
+  assert.match(bootstrapEffectSource, /applyInitDataRef\.current\(normalData\)/);
+  assert.doesNotMatch(bootstrapEffectSource, /\[\s*applyInitData,/);
+});

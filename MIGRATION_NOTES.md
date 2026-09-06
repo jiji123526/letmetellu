@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Duplicate channel bootstrap after client session hydration removed — 2026-09-06
+
+- The initial channel bootstrap now applies its response through the latest callback ref instead of making the bootstrap effect depend on the client-side authentication callback identity.
+- `/api/init` already resolves the signed-in user from the request cookie on the server, so waiting for `SessionProvider` hydration does not add authority to the original request.
+- Previously, when the client session changed from loading to authenticated, the callback identity changed and the whole bootstrap effect ran again. This produced a second `/api/init`, another timeline page read, and visible reconciliation work several seconds after entry.
+
+Trade-off: account-only client conveniences such as recording the visit into the signed-in recent-channel list may not run from the first `applyInitData` call when client session hydration is unusually late. `UserPreferencesSync` and the existing account recent-channel paths still synchronize signed-in state independently; channel permissions and owner data remain correct because the server-side init uses the auth cookie.
+
+Verification: enter a channel while signed in and inspect Worker tail or the Network panel. A normal entry should issue one `/api/init`; session hydration alone must not issue another. Live-mode fallback may still intentionally request the normal channel once when a stored live session has already ended.
+
 ### Normal WebSocket reconnect no longer triggers a second init — 2026-09-06
 
 - The `reconnected` event previously called live-session synchronization for every channel, including normal channels, which caused a second full `/api/init` request shortly after entry.
