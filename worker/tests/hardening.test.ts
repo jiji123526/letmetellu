@@ -447,4 +447,12 @@ test("normal reconnect refreshes the unified timeline without reloading init", (
   assert.match(refreshBody, /fetchUnifiedTimelinePage\(getViewingChannelId\(\)\)/);
   assert.doesNotMatch(refreshBody, /fetchTrackedInit/);
   assert.match(source, /inLiveModeRef\.current[\s\S]*synchronizeLiveSession/);
+  assert.match(
+    source,
+    /event\.type === "reconnected"[\s\S]*refreshUnifiedTimelineOnce\(/,
+  );
+  assert.doesNotMatch(
+    source.match(/if \(event\.type === "reconnected"\)[\s\S]*?\n      \}/)?.[0] || "",
+    /synchronizeLiveSession/,
+  );
 });

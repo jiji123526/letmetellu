@@ -371,12 +371,12 @@ export function useChatRealtimeSync({
       send({ type: "join-live", sessionId: result.sessionId });
     }
   }, [reconcileCurrentLiveSession, send]);
-  const refreshUnifiedTimelineOnce = useCallback(() => {
+  const refreshUnifiedTimelineOnce = useCallback((traceCycleId?: string) => {
     return shareInFlightRequest(
       unifiedRefreshPromiseRef,
       () => inLiveModeRef.current
-        ? synchronizeLiveSession()
-        : refreshLatestTimeline(),
+        ? synchronizeLiveSession(traceCycleId)
+        : refreshLatestTimeline(traceCycleId),
     );
   }, [inLiveModeRef, refreshLatestTimeline, synchronizeLiveSession]);
 
@@ -511,7 +511,7 @@ export function useChatRealtimeSync({
         const traceCycleId = typeof event.traceCycleId === "string" ? event.traceCycleId : null;
         settleTraceRequest(
           traceCycleId,
-          synchronizeLiveSession(traceCycleId || undefined),
+          refreshUnifiedTimelineOnce(traceCycleId || undefined),
         );
       }
 

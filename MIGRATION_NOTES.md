@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Normal WebSocket reconnect no longer triggers a second init — 2026-09-06
+
+- The `reconnected` event previously called live-session synchronization for every channel, including normal channels, which caused a second full `/api/init` request shortly after entry.
+- Reconnect now goes through the shared incremental refresh path: normal channels request only the latest unified timeline page, while an active live-mode view still performs full live-session validation.
+- The existing single-flight guard continues to merge overlapping reconnect and message-sync refreshes.
+
+Trade-off: a normal-channel reconnect no longer polls `init` merely to rediscover live metadata. Live-start realtime events remain authoritative, and users already inside live mode retain the stronger session reconciliation path.
+
 ### Concurrent bootstrap reads are coalesced without caching viewer data — 2026-09-06
 
 - Concurrent `/api/init` requests in the same Worker isolate now share identical in-flight channel metadata and public config reads.
