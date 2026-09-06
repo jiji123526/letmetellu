@@ -4,6 +4,11 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### One-time global infrastructure notice — 2026-09-06
+
+- Every entry route now mounts the same service-status dialog from the root layout, regardless of authentication state. The Korean and English notice explains that the current infrastructure issue can slow channel entry and message delivery or cause temporary failures.
+- Dismissal is stored under a versioned browser-local key, so each browser sees this incident notice once while a future incident can use a new version. This is intentionally per browser/device rather than per account and does not require a server read.
+
 ### Message-send stage timings isolate slow write-path bindings — 2026-09-06
 
 - Successful message sends now expose proxy authentication/Worker time through `Server-Timing` and channel authorization, identity, idempotency, rate limiting, policy checks, reply resolution, persistence, and total Worker time through `X-Yap-Worker-Timing`.
