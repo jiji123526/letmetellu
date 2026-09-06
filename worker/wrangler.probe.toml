@@ -29,5 +29,5 @@ remote = true
 [vars]
 # Server-to-server Vercel proxy calls do not require an Origin header. Direct
 # WebSockets are restricted to the exact generated probe Preview origin.
-ALLOWED_ORIGIN = "https://yapndot.com,https://www.yapndot.com,https://letmetellu.vercel.app,https://letplay-platform-8ka9vxj9v-jiwoos-projects-455a5123.vercel.app,http://localhost:3000"
+ALLOWED_ORIGIN = "https://yapndot.com,https://www.yapndot.com,https://letmetellu.vercel.app,https://letplay-platform-git-codex-d1-f-321dee-jiwoos-projects-455a5123.vercel.app,http://localhost:3000"
 REPORTS_CHANNEL_ID = "reports"
