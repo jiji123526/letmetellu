@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import PushNavigationListener from "@/components/PushNavigationListener";
-import GlobalInfrastructureNotice from "@/components/GlobalInfrastructureNotice";
 import { getRequestLocale } from "@/lib/server-locale";
 import "./globals.css";
 
@@ -85,7 +84,6 @@ export default async function RootLayout({
       </head>
       <body className="antialiased">
         <PushNavigationListener />
-        <GlobalInfrastructureNotice locale={locale} />
         {children}
       </body>
     </html>
