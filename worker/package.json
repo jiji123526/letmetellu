@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:cutover-preview": "wrangler deploy --config wrangler.cutover-preview.toml",
     "db:migrate": "wrangler d1 migrations apply letsplay-db --local",
     "db:migrate:prod": "wrangler d1 migrations apply letsplay-db --remote",
+    "db:migrate:cutover-preview": "wrangler d1 migrations apply letsplay-db-prod-20260906-v2 --remote --config wrangler.cutover-preview.toml",
     "test:hardening": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "devDependencies": {

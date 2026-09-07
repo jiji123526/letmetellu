@@ -1,0 +1,34 @@
+name = "letsplay-api-d1-cutover-preview"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat", "enable_nodejs_http_modules"]
+
+# No cron triggers: staging the database must not duplicate production
+# notification delivery, operational alerts, or retention jobs.
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "letsplay-db-prod-20260906-v2"
+database_id = "70df52e9-07b3-4cdc-b9f7-1488d081c65f"
+remote = true
+
+# Keep Preview media writes isolated from production. Existing production
+# objects are intentionally not copied during the database latency test.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "letmetellu-media-probe-20260906"
+remote = true
+
+[vars]
+ALLOWED_ORIGIN = "https://letplay-platform-git-codex-d1-f-321dee-jiwoos-projects-455a5123.vercel.app"
+APP_ORIGIN = "https://letplay-platform-git-codex-d1-f-321dee-jiwoos-projects-455a5123.vercel.app"
+REPORTS_CHANNEL_ID = "reports"
