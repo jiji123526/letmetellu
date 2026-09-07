@@ -154,6 +154,18 @@ export default {
       }), origin, env.ALLOWED_ORIGIN);
     }
 
+    // Keep read-only access available during a database cutover while
+    // preventing any new state from being written to the source database.
+    if (env.WRITE_MAINTENANCE_MODE === "true" && request.method !== "GET") {
+      return buildResponse(request, Response.json({
+        error: "maintenance_write_disabled",
+        message: "데이터 이전 중입니다. 잠시 후 다시 시도해 주세요.",
+      }, {
+        status: 503,
+        headers: { "Retry-After": "300" },
+      }), origin, env.ALLOWED_ORIGIN);
+    }
+
     // WebSocket upgrade → route to Durable Object
     if (url.pathname.startsWith("/ws/")) {
       let response: Response;
@@ -364,6 +376,8 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (env.WRITE_MAINTENANCE_MODE === "true") return;
+
     if (controller.cron === "* * * * *") {
       ctx.waitUntil((async () => {
         try {

@@ -30,5 +30,6 @@ remote = true
 [vars]
 ALLOWED_ORIGIN = "https://yapndot.com,https://www.yapndot.com,https://letmetellu.vercel.app,http://localhost:3000"
 REPORTS_CHANNEL_ID = "reports"
+WRITE_MAINTENANCE_MODE = "true"
 # For development, temporarily use "*" if needed:
 # ALLOWED_ORIGIN = "*"
