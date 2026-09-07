@@ -107,6 +107,9 @@ Rollback database (retain unchanged):
 - name: `letsplay-db`
 - id: `66a364d6-b00a-42df-b1b4-004e284dd686`
 
-Rollback means restoring those two values in `worker/wrangler.toml` and
-redeploying `letsplay-api`. Do not delete the rollback database during the
-observation period.
+Before any post-cutover writes, rollback means restoring those two values in
+`worker/wrangler.toml` and redeploying `letsplay-api`. After production accepts
+writes on the new database, a blind binding rollback would lose those newer
+changes. In that case, first freeze writes and preserve or synchronize the new
+database delta, then restore the old binding. Do not delete either database
+during the observation period.
