@@ -4,6 +4,14 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Project documentation is organized by purpose — 2026-09-06
+
+- Added `docs/README.md` as the documentation entry point and moved product plans, architecture/security references, operational procedures, and implementation history into `docs/product`, `docs/architecture`, `docs/operations`, and `docs/history` respectively.
+- Kept the root `README.md`, `AGENTS.md`, and `CLAUDE.md` in place because they are repository and tooling entry points. The misplaced notification optimization note was removed from `src/lib/locales`, given a descriptive filename, and normalized from a pasted outer code block into valid Markdown.
+- Updated README navigation, cross-document relative links, and the production operational-alert email's GitHub runbook URL. Local-link validation reports no broken documentation links.
+
+Runtime impact: application routes, database schema, API behavior, and user-visible UI are unchanged. The Worker code change only updates the destination URL embedded in future operational alert emails; it requires a Worker deployment but no D1 migration or frontend-specific rollout.
+
 ### Production D1 database cutover after database-scoped degradation — 2026-09-06
 
 - Production requests against the former `letsplay-db` database (`66a364d6-b00a-42df-b1b4-004e284dd686`, observed primary IAD) intermittently waited 4–18 seconds and sometimes returned D1 error `7429` (`D1 DB is overloaded`). Stage timing consistently placed the delay around the first required D1 binding/access call while the reported SQL execution itself remained in the low-millisecond range.
@@ -457,7 +465,7 @@ Deployment note: apply migration `0062`, deploy the Worker, run the audit, then 
 - Worker TypeScript, the production build and all 318 hardening tests pass.
   Migration `0058` and Worker version
   `c605b065-dc19-4f2e-aedb-1dd167241743` are live; device verification is
-  tracked in `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+  tracked in [`NOTIFICATION_IMPLEMENTATION_LOG.md`](./NOTIFICATION_IMPLEMENTATION_LOG.md).
 
 ### Web Push Worker HTTPS compatibility — 2026-08-22
 
@@ -474,7 +482,7 @@ Deployment note: apply migration `0062`, deploy the Worker, run the audit, then 
   Safari self-test subsequently completed as `delivered` on its third bounded
   attempt, confirming the server-to-Push-service path in production.
 - Detailed diagnosis, verification and rollout evidence is recorded in
-  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+  [`NOTIFICATION_IMPLEMENTATION_LOG.md`](./NOTIFICATION_IMPLEMENTATION_LOG.md).
 
 ### iOS Home Screen Web Push onboarding — 2026-08-22
 
@@ -492,7 +500,7 @@ Deployment note: apply migration `0062`, deploy the Worker, run the audit, then 
 - Trade-offs: Home Screen installation cannot be automated, browser storage may
   be separate, and users may need to sign in again after opening the installed
   app. Full notes and the physical-device verification checklist are in
-  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+  [`NOTIFICATION_IMPLEMENTATION_LOG.md`](./NOTIFICATION_IMPLEMENTATION_LOG.md).
 
 ### Explicit important-notification opt-in UI — 2026-08-22
 
@@ -533,7 +541,7 @@ Deployment note: apply migration `0062`, deploy the Worker, run the audit, then 
   one indexed D1 probe every five minutes; delivered/dead retention remains a
   prerequisite before fanout is enabled.
 - Full verification and deferred concerns are recorded in
-  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+  [`NOTIFICATION_IMPLEMENTATION_LOG.md`](./NOTIFICATION_IMPLEMENTATION_LOG.md).
 - Production D1 migration `0057` is applied and Worker version
   `c0e75d85-d1e8-48d9-8acd-49a5cb248179` is deployed. The public endpoint
   rejects unauthenticated self-test requests with `401`; real browser delivery
@@ -556,7 +564,7 @@ Deployment note: apply migration `0062`, deploy the Worker, run the audit, then 
   passes 308 tests and frontend/Worker type checks plus the production build
   pass.
 - Detailed verification, risks and next steps are recorded in
-  `NOTIFICATION_IMPLEMENTATION_LOG.md`.
+  [`NOTIFICATION_IMPLEMENTATION_LOG.md`](./NOTIFICATION_IMPLEMENTATION_LOG.md).
 
 ### Authenticated notification preference and device APIs — 2026-08-22
 
@@ -1469,7 +1477,7 @@ does not change client behavior until Stage 5 enables it behind a kill switch.
 
 ### Unified chat pagination remaining rollout plan documented — 2026-08-18
 
-- Expanded `UNIFIED_CHAT_PAGINATION.md` from two broad follow-up steps into separately shippable API, client-state, bootstrap, history/navigation, mutation/realtime, query-validation, special-channel and controlled-rollout stages.
+- Expanded [`UNIFIED_CHAT_PAGINATION.md`](../architecture/UNIFIED_CHAT_PAGINATION.md) from two broad follow-up steps into separately shippable API, client-state, bootstrap, history/navigation, mutation/realtime, query-validation, special-channel and controlled-rollout stages.
 - Each stage now has explicit authorization requirements, exit criteria, rollback behavior and regression targets. The plan keeps one canonical `(source, id)` client state and uses temporary derived selectors instead of independently mutating public, DM and unified arrays.
 - Added a required fan-out review because a 50-root page can still expand into many replies. Production measurements must cover expanded items, maximum children per root, D1 rows read and owner/visitor latency before broad enablement; incomplete replies must never be silently truncated.
 - Added provisional rollout and rollback thresholds, including immediate rollback for any private-DM exposure, cursor duplication/loss, passcode or live-session regression, repeated scroll oscillation, D1 variable-limit errors or a sustained material latency/error regression.
@@ -1503,7 +1511,7 @@ Deployment note: do not deploy this feature branch to the production Worker. No 
 - Work started on the isolated `codex/unified-chat-pagination` branch; production message and DM reads remain unchanged.
 - Added a deterministic six-part visual cursor covering root time, source, root ID, depth, item time and item ID. The explicit source discriminator prevents ambiguous boundaries across the `messages`, `dm` and `dm_replies` tables.
 - Added strict cursor parsing, a default page size of 50, a hard maximum of 100 and focused tests for root/reply order, source collisions, malformed cursors and bounded sizes.
-- Added `UNIFIED_CHAT_PAGINATION.md` with authorization invariants, rollout gates, expected query bottlenecks, inefficiencies and rollback requirements.
+- Added [`UNIFIED_CHAT_PAGINATION.md`](../architecture/UNIFIED_CHAT_PAGINATION.md) with authorization invariants, rollout gates, expected query bottlenecks, inefficiencies and rollback requirements.
 - Trade-off: this stage adds code and documentation without immediate UI improvement. Freezing the ordering and privacy contract first avoids rebuilding the server query around an ambiguous cursor or exposing private DMs during later stages.
 
 ### Deleting an admin-closed support ticket now acknowledges it — 2026-08-17
@@ -1718,7 +1726,7 @@ Deployment note: deploy the Worker before the frontend. No D1 migration is requi
 - Verification email delivery/completion, password-reset delivery/completion and one-time legacy SHA-256-to-PBKDF2 login upgrades now record bounded operational outcomes.
 - Events retain only the opaque user ID needed for investigation. They exclude email addresses, passwords, tokens, hashes, provider responses and exception text.
 - The platform health card shows rolling 24-hour sent, completed and failed counts plus the number of credential users whose hash still uses the legacy format. These counts are informational and do not change calibrated core-health thresholds; actual email-delivery `502`s still flow through existing `5xx` health alerts.
-- `worker/scripts/audit-auth-monitoring.sql` reports aggregate outcomes, remaining legacy hashes and recent failure timestamps without selecting account identifiers. `OPERATIONS_RUNBOOK.md` defines a precondition-guarded disposable-account rehearsal.
+- `worker/scripts/audit-auth-monitoring.sql` reports aggregate outcomes, remaining legacy hashes and recent failure timestamps without selecting account identifiers. The [`OPERATIONS_RUNBOOK.md`](../operations/OPERATIONS_RUNBOOK.md) defines a precondition-guarded disposable-account rehearsal.
 - Focused regression coverage preserves every event boundary, aggregate normalization and dashboard contract.
 
 Trade-off: each actual email send, token completion or one-time legacy upgrade adds one best-effort D1 operational-event write. Normal PBKDF2 logins add no write, and monitoring failure cannot reject an otherwise valid account action.
@@ -1808,7 +1816,7 @@ Deployment note: apply migration `0039`, set the `OPERATIONAL_ALERT_EMAIL` Worke
 
 - Health thresholds now have one shared Worker definition used by both status derivation and the platform-admin API response, preventing displayed thresholds from drifting from runtime behavior.
 - `worker/scripts/audit-operational-health-baseline.sql` provides a read-only seven-day baseline with zero-filled 15-minute windows, percentile/max signal counts, daily event totals, route concentration and pending cleanup jobs.
-- `OPERATIONS_RUNBOOK.md` documents critical/degraded triage, route-stage investigation, realtime fallback, cleanup retries, preview failures, abuse signals, media misses, rollback decisions and recovery confirmation.
+- The [`OPERATIONS_RUNBOOK.md`](../operations/OPERATIONS_RUNBOOK.md) documents critical/degraded triage, route-stage investigation, realtime fallback, cleanup retries, preview failures, abuse signals, media misses, rollback decisions and recovery confirmation.
 - The runbook explicitly separates failure-count baselines from true error-rate and latency SLOs because `operational_events` does not record successful requests or request durations.
 - The first production run reviewed 672 fifteen-minute windows. Core 5xx and exception p50/p95/p99 values were zero, only five windows were nonzero, the maximum burst was four, and no cleanup jobs were pending. Existing thresholds were retained: isolated core failures remain degraded, exception bursts of three remain critical, and preview/forbidden signals remain contextual.
 
@@ -4976,4 +4984,4 @@ Trade-offs:
 - use the new dashboard timing entries before pursuing precomputed channel activity or another broad performance redesign;
 - continue mobile and accessibility testing for widgets, dialogs, support flows and dashboard gestures.
 
-The authoritative remaining-work list is maintained in [FUTURE_PLANS.md](./FUTURE_PLANS.md).
+The authoritative remaining-work list is maintained in the [future plans](../product/FUTURE_PLANS.md).

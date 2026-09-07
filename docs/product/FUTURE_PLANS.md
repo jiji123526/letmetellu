@@ -4,8 +4,8 @@ Last reviewed: 2026-09-06 against current `main`.
 
 This file provides a short current-state snapshot and orders the remaining
 product and platform work. Detailed shipped behavior belongs in
-[MIGRATION_NOTES.md](./MIGRATION_NOTES.md), launch requirements belong in
-[LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md), and subsystem-specific evidence
+[migration notes](../history/MIGRATION_NOTES.md), launch requirements belong in
+the [launch checklist](../operations/LAUNCH_CHECKLIST.md), and subsystem-specific evidence
 remains in the linked implementation documents.
 
 ## Current Status
@@ -25,7 +25,7 @@ remains in the linked implementation documents.
   passed with maximum public fan-out of 15, maximum DM fan-out of two and no
   over-budget roots. Owner/visitor runtime calibration and Stage 8
   observation/legacy cleanup in
-  [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) remain incomplete.
+  [unified chat pagination plan](../architecture/UNIFIED_CHAT_PAGINATION.md) remain incomplete.
 - Authenticated Web Push supports role-aware `Important` and `All` modes,
   immediate individual message events, live starts, DMs and private DM replies.
   Delivery has leases, retries, endpoint revocation and bounded terminal-row
@@ -138,7 +138,7 @@ terminal rows, five active subscriptions and all seven required indexes.
 - Complete production fan-out/query calibration and the global observation
   window for the implemented unified normal/live/reports timeline. After the
   exit criteria in
-  [UNIFIED_CHAT_PAGINATION.md](./UNIFIED_CHAT_PAGINATION.md) pass, remove shadow
+  [unified chat pagination plan](../architecture/UNIFIED_CHAT_PAGINATION.md) pass, remove shadow
   double reads and legacy compatibility state while retaining the global
   rollback until the cleanup release is stable.
 

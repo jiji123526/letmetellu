@@ -66,7 +66,7 @@ Before changing thresholds:
 4. Compare p95/p99 with the current threshold and check whether affected users
    could enter rooms, send messages or use owner/admin functions.
 5. Record the old value, new value, evidence window and rollback condition in
-   `MIGRATION_NOTES.md`.
+   [`MIGRATION_NOTES.md`](../history/MIGRATION_NOTES.md).
 
 `operational_events` does not contain successful-request volume or latency.
 Counts therefore cannot produce a true error rate or latency SLO. Use

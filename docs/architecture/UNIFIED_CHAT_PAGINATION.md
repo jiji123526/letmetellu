@@ -547,7 +547,8 @@ Cleanup after stable rollout:
 - remove temporary compatibility selectors only after all mutation/search/context
   consumers use the unified source contract;
 - retain cursor/authorization regression tests permanently;
-- update `README.md`, `MIGRATION_NOTES.md`, `FUTURE_PLANS.md` and operational runbooks
+- update the root `README.md`, [`MIGRATION_NOTES.md`](../history/MIGRATION_NOTES.md),
+  [`FUTURE_PLANS.md`](../product/FUTURE_PLANS.md), and operational runbooks
   with the final contract and rollback history.
 
 ## Expected bottlenecks and inefficiencies

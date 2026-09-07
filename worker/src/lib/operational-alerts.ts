@@ -10,7 +10,7 @@ import {
 const ALERT_KEY = "core_health";
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 const ALERT_FROM = "yap. alerts <noreply@send.yapndot.com>";
-const RUNBOOK_URL = "https://github.com/jiji123526/letmetellu/blob/main/OPERATIONS_RUNBOOK.md";
+const RUNBOOK_URL = "https://github.com/jiji123526/letmetellu/blob/main/docs/operations/OPERATIONS_RUNBOOK.md";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const WINDOW_SUMMARY_SQL = `

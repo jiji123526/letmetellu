@@ -8,10 +8,10 @@ Production: [yapndot.com](https://yapndot.com)
 
 The service is running as a monitored limited beta. The production deployment includes the main chat experience, account dashboard, media and link previews, owner moderation, platform reports, guided support, and temporary live sessions.
 
-Work remaining before a broad public launch is primarily operational hardening: wider regression coverage, calibrated alerts, stricter CSP enforcement, retryable cross-store cleanup, and broader abuse controls. See [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md) for the current release gate.
+Work remaining before a broad public launch is primarily operational hardening: wider regression coverage, calibrated alerts, stricter CSP enforcement, retryable cross-store cleanup, and broader abuse controls. See the [launch checklist](./docs/operations/LAUNCH_CHECKLIST.md) for the current release gate.
 
 Production health investigation and response procedures are documented in
-[OPERATIONS_RUNBOOK.md](./OPERATIONS_RUNBOOK.md).
+the [operations runbook](./docs/operations/OPERATIONS_RUNBOOK.md).
 
 ## Product Overview
 
@@ -109,7 +109,7 @@ Normal chat and live-session clients connect through the parent channel's Durabl
 - Moderation and support actions produce audit records; operational failures are retained in bounded event storage.
 - Next.js and the Worker send explicit security headers and origin restrictions.
 
-The production CSP currently permits `script-src 'unsafe-inline'` for required startup behavior. This is an accepted limited-beta trade-off documented in [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md).
+The production CSP currently permits `script-src 'unsafe-inline'` for required startup behavior. This is an accepted limited-beta trade-off documented in the [launch checklist](./docs/operations/LAUNCH_CHECKLIST.md).
 
 ## Technology
 
@@ -281,7 +281,7 @@ Schema-dependent releases should be deployed in this order:
 2. Deploy the Worker.
 3. Deploy the Next.js frontend.
 
-Frontend-only changes do not require a migration or Worker deployment. Check [MIGRATION_NOTES.md](./MIGRATION_NOTES.md) for change-specific deployment requirements.
+Frontend-only changes do not require a migration or Worker deployment. Check the [migration notes](./docs/history/MIGRATION_NOTES.md) for change-specific deployment requirements.
 
 ## Verification
 
@@ -322,11 +322,12 @@ Use the narrowest deployment required:
 - Schema and Worker change: migrate D1, then deploy the Worker.
 - Mixed change: migrate if needed, deploy the Worker, then deploy the frontend.
 
-After production changes, run the relevant smoke tests in [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md), especially for authentication, locked channels, media, previews, live sessions, support, and moderation.
+After production changes, run the relevant smoke tests in the [launch checklist](./docs/operations/LAUNCH_CHECKLIST.md), especially for authentication, locked channels, media, previews, live sessions, support, and moderation.
 
 ## Project Documentation
 
-- [LAUNCH_CHECKLIST.md](./LAUNCH_CHECKLIST.md): release gates, production checks, and rollback readiness
-- [MIGRATION_NOTES.md](./MIGRATION_NOTES.md): schema inventory, implementation history, and deployment notes
-- [FUTURE_PLANS.md](./FUTURE_PLANS.md): planned product and platform work
-- [SECURITY_AUTHORIZATION_MATRIX.md](./SECURITY_AUTHORIZATION_MATRIX.md): identity evidence and privileged route boundaries
+- [Documentation index](./docs/README.md): purpose-based guide to all project documents
+- [Launch checklist](./docs/operations/LAUNCH_CHECKLIST.md): release gates, production checks, and rollback readiness
+- [Migration notes](./docs/history/MIGRATION_NOTES.md): schema inventory, implementation history, and deployment notes
+- [Future plans](./docs/product/FUTURE_PLANS.md): planned product and platform work
+- [Security authorization matrix](./docs/architecture/SECURITY_AUTHORIZATION_MATRIX.md): identity evidence and privileged route boundaries

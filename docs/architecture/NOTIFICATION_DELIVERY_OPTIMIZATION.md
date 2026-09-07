@@ -1,6 +1,3 @@
-아래 그대로 `FUTURE_PLANS.md` 같은 문서 상단에 붙이면 돼.
-
-```md
 # Notification Query / Delivery Optimization Notes
 
 > Status: Future optimization candidate  
@@ -902,4 +899,3 @@ They are:
 ```
 
 Until notification volume becomes significantly larger, the existing architecture should remain in place and optimization should focus only on low-risk maintenance improvements.
-```

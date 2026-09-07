@@ -1,7 +1,7 @@
 # Notification Implementation Log
 
 This is the chronological implementation record for the authenticated-user Web
-Push project defined in [NOTIFICATION_PLAN.md](./NOTIFICATION_PLAN.md).
+Push project defined in the [notification plan](../product/NOTIFICATION_PLAN.md).
 
 ## Logging rule
 
@@ -22,7 +22,7 @@ Each entry must record:
 
 Do not mark a phase complete while required migrations, secrets, deployment or
 production verification remain outstanding. Shipped behavior must also be
-summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
+summarized in the [migration notes](./MIGRATION_NOTES.md).
 
 ## Foreground iOS pushes use an in-app notification card — 2026-08-26
 
@@ -937,7 +937,7 @@ summarized in [MIGRATION_NOTES.md](./MIGRATION_NOTES.md).
 
 - Created the dedicated `codex/web-push-notifications` branch from `main` at
   commit `e10aa28`.
-- Adopted [NOTIFICATION_PLAN.md](./NOTIFICATION_PLAN.md) as the product and
+- Adopted the [notification plan](../product/NOTIFICATION_PLAN.md) as the product and
   architecture source of truth.
 - Added this newest-first implementation log before changing application,
   Worker, Service Worker or database behavior.

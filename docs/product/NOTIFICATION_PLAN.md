@@ -2,7 +2,7 @@
 
 This document defines the current notification design and remaining work for
 yap. Shipped behavior must be recorded in
-[MIGRATION_NOTES.md](./MIGRATION_NOTES.md) as each phase is completed.
+[migration notes](../history/MIGRATION_NOTES.md) as each phase is completed.
 
 ## Product Decisions
 

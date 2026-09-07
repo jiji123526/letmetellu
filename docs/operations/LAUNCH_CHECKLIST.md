@@ -1,8 +1,8 @@
 # Launch Checklist
 
 Core launch status for **yap.**, reviewed 2026-08-20. Detailed implementation
-history belongs in `MIGRATION_NOTES.md`; longer-term work belongs in
-`FUTURE_PLANS.md`.
+history belongs in [`MIGRATION_NOTES.md`](../history/MIGRATION_NOTES.md);
+longer-term work belongs in [`FUTURE_PLANS.md`](../product/FUTURE_PLANS.md).
 
 ## Core Tasks Done
 
