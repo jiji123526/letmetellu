@@ -58,6 +58,19 @@ Safe choices for the final switch:
 The optional `WRITE_MAINTENANCE_MODE` guard exists for choice 1 but is disabled
 unless the environment variable is explicitly set to `true`.
 
+After Preview validation, the source and Preview both had 16,605 messages but
+different latest timestamps. Preview test writes and newer production writes
+therefore diverged even though the counts matched. The Preview database must
+not be promoted directly.
+
+A clean final database, `letsplay-db-prod-cutover-20260906-v3`
+(`bda67bc6-0b9f-4785-a63b-8e30c50b51a7`), has all 63 migrations applied and no
+application data. It is reserved for the final source snapshot. Cloudflare
+documents that D1 export blocks other requests while it runs and Time Travel
+cannot yet clone into another database, so a correct immediate cutover requires
+a brief maintenance interval. The alternative is a separately implemented and
+validated dual-write rollout.
+
 ## Rollback
 
 Keep the old production D1 unchanged after cutover. If health checks or writes

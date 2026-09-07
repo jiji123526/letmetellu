@@ -1,0 +1,29 @@
+name = "letsplay-api-d1-cutover-final-staging"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat", "enable_nodejs_http_modules"]
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOM", class_name = "ChatRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "letsplay-db-prod-cutover-20260906-v3"
+database_id = "bda67bc6-0b9f-4785-a63b-8e30c50b51a7"
+remote = true
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "letmetellu-media-probe-20260906"
+remote = true
+
+[vars]
+ALLOWED_ORIGIN = "https://yapndot.com"
+APP_ORIGIN = "https://yapndot.com"
+REPORTS_CHANNEL_ID = "reports"
