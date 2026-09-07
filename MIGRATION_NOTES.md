@@ -4,6 +4,19 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Production D1 database cutover after database-scoped degradation — 2026-09-06
+
+- Production requests against the former `letsplay-db` database (`66a364d6-b00a-42df-b1b4-004e284dd686`, observed primary IAD) intermittently waited 4–18 seconds and sometimes returned D1 error `7429` (`D1 DB is overloaded`). Stage timing consistently placed the delay around the first required D1 binding/access call while the reported SQL execution itself remained in the low-millisecond range.
+- The slowdown remained reproducible in empty channels and during near-zero traffic. A fresh probe database, followed by a full production-data copy using the same Worker code, schema, routes, and query shapes, stayed fast. This isolated the long tail to the former D1 resource or its primary path rather than message count, SQL complexity, media signing, Vercel authentication, or current concurrency.
+- Production now binds `DB` to `letsplay-db-prod-cutover-20260906-v3` (`bda67bc6-0b9f-4785-a63b-8e30c50b51a7`, observed primary EWR). The existing production R2 bucket, secrets, Durable Objects, routes, and application behavior were retained.
+- The final copy was validated before release: all 63 migrations were applied; source and target counts matched for 42 users, 36 channels, 16,606 messages, 74 DMs, 242 gallery rows, 420 message links, 16,606 FTS rows, 2,304 notification-outbox rows, and 7 push subscriptions; the latest message timestamp also matched. `PRAGMA quick_check` returned `ok`, `PRAGMA foreign_key_check` returned no violations, and gallery missing/orphan checks returned zero.
+- Post-cutover production measurements returned to the expected range: channel initialization took about 80 ms inside the Worker, gallery loading about 38 ms inside the Worker, and a direct no-op D1 write about 0.46 ms. Writes, scheduled notification delivery, and maintenance jobs were resumed after verification.
+- The operational-health monitor follows the Worker's current `env.DB` binding and therefore now evaluates the replacement database. One degraded email immediately after cutover was caused by still-recent historical `d1_unavailable` events copied from the old database, not by a confirmed failure on the replacement; no new operational events were found after the production cutover timestamp.
+
+Trade-offs and rollback: the old `letsplay-db` is retained temporarily as a rollback snapshot, while the intermediate `letsplay-db-prod-20260906-v2` and probe database are non-production validation resources. Because production writes resumed on v3, a blind switch back to the old database would now lose post-cutover changes; any rollback must first stop or gate writes and reconcile the delta. Keeping the old and validation databases during the observation period adds temporary operational clutter and storage, but preserves evidence for Cloudflare support and a controlled recovery option. Do not delete them until stability and backup retention have been confirmed.
+
+Operational follow-up: monitor v3 latency, `7429`/`d1_unavailable` events, message-send failures, scheduled push delivery, and count drift during the observation period. The Cloudflare support ticket should reference both database IDs and the stage-timing evidence so the former database-specific degradation can be investigated independently of the now-mitigated production service.
+
 ### Successful panel and timeline reads refresh expired read access — 2026-09-06
 
 - A long-lived channel tab previously received its short-lived channel-read capability only from `/api/init`. After the capability expired, gallery loading, gallery-to-message navigation, and the latest-message button each repeated the primary-bound channel access lookup, but those successful reads never installed a replacement capability.
@@ -41,6 +54,7 @@ Trade-off: during a realtime outage, a user who remains at the latest edge can s
 
 - Every entry route now mounts the same service-status dialog from the root layout, regardless of authentication state. The Korean and English notice explains that the current infrastructure issue can slow channel entry and message delivery or cause temporary failures.
 - Dismissal is stored under a versioned browser-local key, so each browser sees this incident notice once while a future incident can use a new version. This is intentionally per browser/device rather than per account and does not require a server read.
+- Resolution follow-up: after production moved to the validated replacement D1 and latency returned to normal, the incident-specific dialog was removed from the root layout. No infrastructure warning is currently shown to users; this section remains only as incident history.
 
 ### Message-send stage timings isolate slow write-path bindings — 2026-09-06
 
