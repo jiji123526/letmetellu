@@ -29,6 +29,6 @@ bucket_name = "letmetellu-media-probe-20260906"
 remote = true
 
 [vars]
-ALLOWED_ORIGIN = "https://letplay-platform-git-codex-d1-f-321dee-jiwoos-projects-455a5123.vercel.app"
-APP_ORIGIN = "https://letplay-platform-git-codex-d1-f-321dee-jiwoos-projects-455a5123.vercel.app"
+ALLOWED_ORIGIN = "https://letplay-platform-git-codex-d1-p-6e6930-jiwoos-projects-455a5123.vercel.app"
+APP_ORIGIN = "https://letplay-platform-git-codex-d1-p-6e6930-jiwoos-projects-455a5123.vercel.app"
 REPORTS_CHANNEL_ID = "reports"
