@@ -76,3 +76,37 @@ validated dual-write rollout.
 Keep the old production D1 unchanged after cutover. If health checks or writes
 fail, restore the previous database ID in `worker/wrangler.toml` and redeploy
 the Worker. Do not delete the old D1 until the observation period is complete.
+
+## 2026-09-06 — Production cutover completed
+
+The final source snapshot was taken with HTTP mutations and scheduled jobs
+temporarily disabled. The final target contained 16,606 messages and matched
+the source on users, channels, messages, latest message timestamp, DMs,
+gallery, message links, FTS rows, notification outbox rows, and push
+subscriptions. The target passed `PRAGMA quick_check`, foreign-key validation,
+and gallery orphan/missing-row checks.
+
+Production Worker `letsplay-api` now binds `DB` to:
+
+- name: `letsplay-db-prod-cutover-20260906-v3`
+- id: `bda67bc6-0b9f-4785-a63b-8e30c50b51a7`
+
+The production R2 bucket, Worker secrets, Durable Object binding, origins, and
+cron schedules were retained. Write maintenance mode was removed after the new
+database passed read checks. Final Worker version:
+`b8225640-50f2-42f8-b30f-7752d40d4506`.
+
+Post-cutover measurements through `https://yapndot.com`:
+
+- `/api/init?channel=zziks`: 0.68 seconds end-to-end, 80 ms Worker stages
+- gallery data: 0.27 seconds end-to-end, 38 ms Worker stages
+- direct no-op D1 write: 0.46 ms
+
+Rollback database (retain unchanged):
+
+- name: `letsplay-db`
+- id: `66a364d6-b00a-42df-b1b4-004e284dd686`
+
+Rollback means restoring those two values in `worker/wrangler.toml` and
+redeploying `letsplay-api`. Do not delete the rollback database during the
+observation period.

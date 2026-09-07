@@ -17,8 +17,8 @@ new_sqlite_classes = ["ChatRoom"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "letsplay-db"
-database_id = "66a364d6-b00a-42df-b1b4-004e284dd686"
+database_name = "letsplay-db-prod-cutover-20260906-v3"
+database_id = "bda67bc6-0b9f-4785-a63b-8e30c50b51a7"
 remote = true
 
 # R2 Storage
