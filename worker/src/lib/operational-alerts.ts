@@ -17,6 +17,7 @@ const WINDOW_SUMMARY_SQL = `
   SELECT
     COUNT(*) AS tracked_event_count,
     SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+    SUM(CASE WHEN event_type = 'slow_core_request' THEN 1 ELSE 0 END) AS slow_core_request_count,
     SUM(CASE WHEN event_type = 'preview_upstream_failed' THEN 1 ELSE 0 END) AS preview_upstream_failure_count,
     SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
     SUM(CASE WHEN event_type = 'd1_unavailable' THEN 1 ELSE 0 END) AS d1_unavailable_count,
@@ -79,6 +80,7 @@ export function isOperationalAlertingEnabled(env: Env): boolean {
 function formatWindow(window: OperationalHealthWindow): string {
   return [
     `5xx=${window.request_5xx_count}`,
+    `slow=${window.slow_core_request_count}`,
     `exceptions=${window.unhandled_exception_count}`,
     `d1=${window.d1_unavailable_count}`,
     `maintenance=${window.maintenance_failure_count}`,
@@ -178,6 +180,7 @@ export async function runOperationalHealthAlerts(
       WHERE created_at >= ? AND created_at < ?
         AND (
           (event_type = 'request_failed' AND status_code >= 500)
+          OR event_type = 'slow_core_request'
           OR event_type IN (
             'unhandled_exception',
             'd1_unavailable',

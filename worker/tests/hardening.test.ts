@@ -7,6 +7,7 @@ import { getCleanupRetryDelayMs, parseCleanupMediaKeys } from "../src/lib/cleanu
 import { matchesImageSignature } from "../src/lib/image-signature.ts";
 import { getMediaCacheControl } from "../src/lib/media-cache-control.ts";
 import {
+  getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
   getOperationalErrorDetail,
   normalizeOperationalRoute,
@@ -256,6 +257,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
   assert.deepEqual(serializeOperationalHealthWindow({
     tracked_event_count: "12",
     request_5xx_count: 2,
+    slow_core_request_count: "5",
     preview_upstream_failure_count: "4",
     unhandled_exception_count: null,
     d1_unavailable_count: "3",
@@ -268,6 +270,7 @@ test("operational health windows normalize D1 values and missing counts", () => 
   }), {
     tracked_event_count: 12,
     request_5xx_count: 2,
+    slow_core_request_count: 5,
     preview_upstream_failure_count: 4,
     unhandled_exception_count: 0,
     d1_unavailable_count: 3,
@@ -284,11 +287,13 @@ test("operational health status applies conservative 15-minute thresholds", () =
   assert.deepEqual(OPERATIONAL_HEALTH_THRESHOLDS, {
     critical_15m: {
       request_5xx_count: 5,
+      slow_core_request_count: 3,
       unhandled_exception_count: 3,
       d1_unavailable_count: 5,
     },
     degraded_15m: {
       request_5xx_count: 1,
+      slow_core_request_count: 1,
       unhandled_exception_count: 1,
       d1_unavailable_count: 1,
       maintenance_failure_count: 1,
@@ -300,6 +305,7 @@ test("operational health status applies conservative 15-minute thresholds", () =
   const base = serializeOperationalHealthWindow(null);
   assert.equal(deriveOperationalHealthStatus(base), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 1 }), "degraded");
+  assert.equal(deriveOperationalHealthStatus({ ...base, slow_core_request_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, preview_upstream_failure_count: 4 }), "healthy");
   assert.equal(deriveOperationalHealthStatus({ ...base, d1_unavailable_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, maintenance_failure_count: 1 }), "degraded");
@@ -307,8 +313,18 @@ test("operational health status applies conservative 15-minute thresholds", () =
   assert.equal(deriveOperationalHealthStatus({ ...base, realtime_failure_count: 1 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, rate_limited_count: 25 }), "degraded");
   assert.equal(deriveOperationalHealthStatus({ ...base, request_5xx_count: 5 }), "critical");
+  assert.equal(deriveOperationalHealthStatus({ ...base, slow_core_request_count: 3 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, unhandled_exception_count: 3 }), "critical");
   assert.equal(deriveOperationalHealthStatus({ ...base, d1_unavailable_count: 5 }), "critical");
+});
+
+test("slow core request thresholds cover primary interactive routes only", () => {
+  assert.equal(getSlowCoreRequestThresholdMs("GET /api/init"), 2000);
+  assert.equal(getSlowCoreRequestThresholdMs("GET /api/data"), 2000);
+  assert.equal(getSlowCoreRequestThresholdMs("GET /api/unified-timeline"), 2000);
+  assert.equal(getSlowCoreRequestThresholdMs("POST /api/messages"), 1500);
+  assert.equal(getSlowCoreRequestThresholdMs("POST /api/dm"), 1500);
+  assert.equal(getSlowCoreRequestThresholdMs("GET /api/preview"), null);
 });
 
 test("operational event overrides stay internal to Worker bookkeeping", () => {

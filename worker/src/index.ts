@@ -20,6 +20,7 @@ import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
 import { handleNotifications } from "./routes/notifications";
 import {
+  getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
   getOperationalErrorDetail,
   getOperationalEventOverride,
@@ -142,6 +143,7 @@ async function handleInitWithRetry(request: Request, env: Env): Promise<Response
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const requestStartedAt = performance.now();
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") || "";
     const route = normalizeOperationalRoute(request.method, url.pathname);
@@ -372,6 +374,33 @@ export default {
         statusCode: response.status,
         actorUserId: request.headers.get("X-User-Id"),
         detail: routeDetail || undefined,
+      }));
+    }
+
+    const requestDurationMs = Math.round((performance.now() - requestStartedAt) * 10) / 10;
+    const slowCoreThresholdMs = getSlowCoreRequestThresholdMs(route);
+    if (
+      !capturedException
+      && response.ok
+      && slowCoreThresholdMs !== null
+      && requestDurationMs >= slowCoreThresholdMs
+    ) {
+      ctx.waitUntil(recordOperationalEvent({
+        env,
+        severity: "warn",
+        route,
+        eventType: "slow_core_request",
+        statusCode: response.status,
+        actorUserId: request.headers.get("X-User-Id"),
+        detail: {
+          path: url.pathname,
+          method: request.method,
+          duration_ms: requestDurationMs,
+          slow_threshold_ms: slowCoreThresholdMs,
+          worker_timing: response.headers.get("X-Yap-Worker-Timing"),
+          d1_meta: response.headers.get("X-Yap-D1-Meta"),
+          ...(routeDetail || {}),
+        },
       }));
     }
 

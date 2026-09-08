@@ -149,6 +149,7 @@ export interface PlatformDashboardVersionResponse {
 export interface PlatformOperationalHealthWindow {
   tracked_event_count: number;
   request_5xx_count: number;
+  slow_core_request_count: number;
   preview_upstream_failure_count: number;
   unhandled_exception_count: number;
   d1_unavailable_count: number;
@@ -176,12 +177,13 @@ export interface PlatformOperationalHealthResponse {
   thresholds: {
     critical_15m: {
       request_5xx_count: number;
+      slow_core_request_count: number;
       unhandled_exception_count: number;
       d1_unavailable_count: number;
-      maintenance_failure_count: number;
     };
     degraded_15m: {
       request_5xx_count: number;
+      slow_core_request_count: number;
       unhandled_exception_count: number;
       d1_unavailable_count: number;
       cleanup_failure_count: number;

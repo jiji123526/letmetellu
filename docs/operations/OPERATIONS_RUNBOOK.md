@@ -10,8 +10,8 @@ The super-admin dashboard summarizes the last 15 minutes and 24 hours. Current
 
 | Status | Trigger |
 | --- | --- |
-| Critical | `request_failed` 5xx >= 5, unhandled exceptions >= 3, `d1_unavailable` >= 5, or any scheduled-maintenance failure |
-| Degraded | Any request 5xx, exception, unrecovered `d1_unavailable`, cleanup failure or realtime fallback, or rate limits >= 25 |
+| Critical | `request_failed` 5xx >= 5, `slow_core_request` >= 3, unhandled exceptions >= 3, `d1_unavailable` >= 5, or any scheduled-maintenance failure |
+| Degraded | Any request 5xx, any `slow_core_request`, exception, unrecovered `d1_unavailable`, cleanup failure or realtime fallback, or rate limits >= 25 |
 | Context only | Preview upstream failures, forbidden requests and media 404s do not independently change core health |
 
 These are conservative beta thresholds. Do not raise them merely to make a
@@ -28,8 +28,10 @@ signals were all zero, and there were no pending cleanup jobs.
 The existing thresholds were retained:
 
 - one core failure remains degraded because normal windows are quiet;
+- one successful but 2s+ core request also remains degraded because a user can already feel it on low-volume beta traffic;
 - three exceptions remain critical because the observed exception bursts were
   real Durable Object incidents, not normal traffic;
+- three slow core requests in one window are critical because that indicates a repeating latency incident rather than one isolated stall;
 - one unrecovered D1 failure remains degraded because room entry can be
   affected, while five in one window is critical because that indicates a
   sustained storage outage rather than a momentary reset;
@@ -68,10 +70,14 @@ Before changing thresholds:
 5. Record the old value, new value, evidence window and rollback condition in
    [`MIGRATION_NOTES.md`](../history/MIGRATION_NOTES.md).
 
-`operational_events` does not contain successful-request volume or latency.
-Counts therefore cannot produce a true error rate or latency SLO. Use
-Cloudflare/Vercel request analytics for denominators until bounded success and
-latency telemetry is added.
+`operational_events` still does not contain full successful-request volume, so
+counts cannot produce a true error rate. It now does record bounded
+`slow_core_request` latency incidents for the most user-visible core routes:
+`GET /api/init`, `GET /api/data`, `GET /api/unified-timeline`,
+`POST /api/messages`, and `POST /api/dm`. Each incident records the normalized
+route, total Worker duration, the route threshold, and any available timing
+headers without storing content or raw identities. Use Cloudflare/Vercel
+request analytics for broader denominators and percentile dashboards.
 
 ## Notification Operations
 
@@ -266,10 +272,20 @@ minutes and delivers transition emails through Resend when
 - the same incident does not resend on every scheduled evaluation;
 - recovery sends only after two consecutive healthy windows;
 - preview failures, expected 403s and media misses remain excluded from severity.
+- a successful but slow core request can therefore alert even when 5xx stays at zero.
 
 Alert emails include bounded counts, up to five dominant routes, and links to
 this runbook and the super-admin dashboard. They intentionally exclude raw
 error text, user IDs and the configured recipient.
+
+If `OPERATIONAL_ALERT_EMAIL` is set, alerts reach you as a Resend email from
+`yap. alerts <noreply@send.yapndot.com>`. The existing schedule evaluates every
+five minutes, so the fastest alert arrives within one evaluation window. In
+practice:
+
+- a critical latency or failure incident emails on the first qualifying evaluation;
+- a degraded latency incident emails only after two consecutive non-healthy windows, which avoids paging on one isolated stall;
+- a later recovery emails only after two healthy windows.
 
 ### Enable Alert Delivery
 

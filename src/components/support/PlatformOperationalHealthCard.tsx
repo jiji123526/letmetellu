@@ -30,6 +30,7 @@ export function PlatformOperationalHealthCard({
   const authMonitoring = health?.auth_monitoring;
   const problemRoutes = (health?.routes || []).filter((route) => (
     route.request_5xx_count
+    || route.slow_core_request_count
     || route.preview_upstream_failure_count
     || route.unhandled_exception_count
     || route.d1_unavailable_count
@@ -98,6 +99,7 @@ export function PlatformOperationalHealthCard({
             <div className="grid grid-cols-3 gap-1.5 mt-3">
               {[
                 [t("operationalHealth5xx"), recent.request_5xx_count],
+                [t("operationalHealthSlowCore"), recent.slow_core_request_count],
                 [t("operationalHealthPreviewFailures"), recent.preview_upstream_failure_count],
                 [t("operationalHealthExceptions"), recent.unhandled_exception_count],
                 [t("operationalHealthD1Failures"), recent.d1_unavailable_count],
@@ -168,6 +170,7 @@ export function PlatformOperationalHealthCard({
                       <span className="shrink-0 tabular-nums" style={{ color: "var(--meta)" }}>
                         {t("operationalHealthRouteCounts")
                           .replace("{errors}", String(route.request_5xx_count + route.preview_upstream_failure_count + route.unhandled_exception_count + route.d1_unavailable_count + route.maintenance_failure_count + route.cleanup_failure_count + route.realtime_failure_count))
+                          .replace("{slow}", String(route.slow_core_request_count))
                           .replace("{missing}", String(route.media_not_found_count))
                           .replace("{limited}", String(route.rate_limited_count))}
                       </span>

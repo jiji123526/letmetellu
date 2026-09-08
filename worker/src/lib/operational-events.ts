@@ -3,6 +3,14 @@ import type { Env } from "../types.ts";
 export const OPERATIONAL_EVENT_OVERRIDE_HEADER = "X-Letmetellu-Operational-Event";
 const OPERATIONAL_ERROR_DETAIL = Symbol("letmetellu.operational-error-detail");
 
+const SLOW_CORE_REQUEST_THRESHOLDS_MS: Record<string, number> = {
+  "GET /api/init": 2_000,
+  "GET /api/data": 2_000,
+  "GET /api/unified-timeline": 2_000,
+  "POST /api/messages": 1_500,
+  "POST /api/dm": 1_500,
+};
+
 export type OperationalErrorDetail = Record<string, unknown>;
 
 const TRANSIENT_DURABLE_OBJECT_ERROR_FRAGMENTS = [
@@ -118,6 +126,11 @@ export function normalizeOperationalRoute(method: string, pathname: string): str
     return `${normalizedMethod} /api/media/:key`;
   }
   return `${normalizedMethod} ${pathname}`;
+}
+
+export function getSlowCoreRequestThresholdMs(route: string): number | null {
+  const threshold = SLOW_CORE_REQUEST_THRESHOLDS_MS[route];
+  return typeof threshold === "number" ? threshold : null;
 }
 
 export function getOperationalRouteDetail(pathname: string): OperationalErrorDetail | null {

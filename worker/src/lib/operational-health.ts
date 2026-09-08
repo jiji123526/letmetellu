@@ -1,6 +1,7 @@
 export interface OperationalHealthWindowRow {
   tracked_event_count?: number | string | null;
   request_5xx_count?: number | string | null;
+  slow_core_request_count?: number | string | null;
   preview_upstream_failure_count?: number | string | null;
   unhandled_exception_count?: number | string | null;
   d1_unavailable_count?: number | string | null;
@@ -15,6 +16,7 @@ export interface OperationalHealthWindowRow {
 export interface OperationalHealthWindow {
   tracked_event_count: number;
   request_5xx_count: number;
+  slow_core_request_count: number;
   preview_upstream_failure_count: number;
   unhandled_exception_count: number;
   d1_unavailable_count: number;
@@ -37,6 +39,7 @@ export function serializeOperationalHealthWindow(
   return {
     tracked_event_count: count(row?.tracked_event_count),
     request_5xx_count: count(row?.request_5xx_count),
+    slow_core_request_count: count(row?.slow_core_request_count),
     preview_upstream_failure_count: count(row?.preview_upstream_failure_count),
     unhandled_exception_count: count(row?.unhandled_exception_count),
     d1_unavailable_count: count(row?.d1_unavailable_count),
@@ -54,11 +57,13 @@ export type OperationalHealthStatus = "healthy" | "degraded" | "critical";
 export const OPERATIONAL_HEALTH_THRESHOLDS = {
   critical_15m: {
     request_5xx_count: 5,
+    slow_core_request_count: 3,
     unhandled_exception_count: 3,
     d1_unavailable_count: 5,
   },
   degraded_15m: {
     request_5xx_count: 1,
+    slow_core_request_count: 1,
     unhandled_exception_count: 1,
     d1_unavailable_count: 1,
     maintenance_failure_count: 1,
@@ -72,6 +77,7 @@ export function deriveOperationalHealthStatus(window: OperationalHealthWindow): 
   const { critical_15m: critical, degraded_15m: degraded } = OPERATIONAL_HEALTH_THRESHOLDS;
   if (
     window.request_5xx_count >= critical.request_5xx_count
+    || window.slow_core_request_count >= critical.slow_core_request_count
     || window.unhandled_exception_count >= critical.unhandled_exception_count
     || window.d1_unavailable_count >= critical.d1_unavailable_count
   ) {
@@ -79,6 +85,7 @@ export function deriveOperationalHealthStatus(window: OperationalHealthWindow): 
   }
   if (
     window.request_5xx_count >= degraded.request_5xx_count
+    || window.slow_core_request_count >= degraded.slow_core_request_count
     || window.unhandled_exception_count >= degraded.unhandled_exception_count
     || window.d1_unavailable_count >= degraded.d1_unavailable_count
     || window.maintenance_failure_count >= degraded.maintenance_failure_count

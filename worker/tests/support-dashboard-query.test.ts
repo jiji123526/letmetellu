@@ -18,6 +18,10 @@ const platformThreadSource = readFileSync(
   new URL("../../src/components/support/PlatformSupportThreadPanel.tsx", import.meta.url),
   "utf8",
 );
+const cardSource = readFileSync(
+  new URL("../../src/components/support/PlatformOperationalHealthCard.tsx", import.meta.url),
+  "utf8",
+);
 const workerIndexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
@@ -120,6 +124,14 @@ test("operational health groups websocket routes by normalized channel path", ()
   assert.match(
     workerIndexSource,
     /response\.status === 404 && route === "GET \/api\/media\/:key"/,
+  );
+  assert.match(
+    supportRouteSource,
+    /SUM\(CASE WHEN event_type = 'slow_core_request' THEN 1 ELSE 0 END\) AS slow_core_request_count/,
+  );
+  assert.match(
+    cardSource,
+    /operationalHealthSlowCore/,
   );
   assert.match(
     supportRouteSource,

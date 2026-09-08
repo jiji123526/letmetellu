@@ -1510,6 +1510,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
     SELECT
       COUNT(*) AS tracked_event_count,
       SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+      SUM(CASE WHEN event_type = 'slow_core_request' THEN 1 ELSE 0 END) AS slow_core_request_count,
       SUM(CASE WHEN event_type = 'preview_upstream_failed' THEN 1 ELSE 0 END) AS preview_upstream_failure_count,
       SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
       SUM(CASE WHEN event_type = 'd1_unavailable' THEN 1 ELSE 0 END) AS d1_unavailable_count,
@@ -1538,11 +1539,12 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
           created_at
         FROM operational_events
         WHERE created_at >= ?
-          AND event_type IN ('request_failed', 'preview_upstream_failed', 'unhandled_exception', 'd1_unavailable', 'maintenance_failed', 'cleanup_failed', 'realtime_unavailable', 'rate_limited', 'forbidden', 'media_not_found')
+          AND event_type IN ('request_failed', 'slow_core_request', 'preview_upstream_failed', 'unhandled_exception', 'd1_unavailable', 'maintenance_failed', 'cleanup_failed', 'realtime_unavailable', 'rate_limited', 'forbidden', 'media_not_found')
       )
       SELECT
         normalized_route AS route,
         SUM(CASE WHEN event_type = 'request_failed' AND status_code >= 500 THEN 1 ELSE 0 END) AS request_5xx_count,
+        SUM(CASE WHEN event_type = 'slow_core_request' THEN 1 ELSE 0 END) AS slow_core_request_count,
         SUM(CASE WHEN event_type = 'preview_upstream_failed' THEN 1 ELSE 0 END) AS preview_upstream_failure_count,
         SUM(CASE WHEN event_type = 'unhandled_exception' THEN 1 ELSE 0 END) AS unhandled_exception_count,
         SUM(CASE WHEN event_type = 'd1_unavailable' THEN 1 ELSE 0 END) AS d1_unavailable_count,
@@ -1555,7 +1557,7 @@ async function fetchPlatformOperationalHealth(env: Env): Promise<Response> {
         MAX(created_at) AS last_event_at
       FROM normalized_events
       GROUP BY normalized_route
-      ORDER BY request_5xx_count DESC, preview_upstream_failure_count DESC, unhandled_exception_count DESC,
+      ORDER BY request_5xx_count DESC, slow_core_request_count DESC, preview_upstream_failure_count DESC, unhandled_exception_count DESC,
                d1_unavailable_count DESC,
                maintenance_failure_count DESC, cleanup_failure_count DESC, realtime_failure_count DESC,
                rate_limited_count DESC, forbidden_count DESC,

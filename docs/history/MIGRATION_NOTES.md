@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Slow core requests can now trigger operational alerts — 2026-09-08
+
+- Successful but slow core Worker routes now record `slow_core_request` in `operational_events` when the total Worker duration crosses a bounded threshold on `GET /api/init`, `GET /api/data`, `GET /api/unified-timeline`, `POST /api/messages`, or `POST /api/dm`.
+- Each event stores the normalized route, response status, total duration, threshold, and any existing timing headers such as `X-Yap-Worker-Timing` or `X-Yap-D1-Meta`. This keeps the production signal focused on user-visible latency without storing content or raw identities.
+- Operational health windows, route summaries, the super-admin health card, and five-minute external alert evaluation now include slow-core counts alongside existing failure counts. A single slow-core event degrades the dashboard immediately; three in one 15-minute window are critical.
+- This directly targets the 2026-09-06 database-scoped degradation class, where requests often succeeded but still stalled for several seconds before the first D1 access completed.
+
+Trade-off: low-volume beta traffic can mark the dashboard degraded from one successful but slow core request even when there is no 5xx. That is intentional because the user already feels the latency. The signal is route-allowlisted to avoid paging on slow third-party preview fetches or less important background paths.
+
+Deployment note: no D1 migration is required. Deploy the Worker and frontend together so the new health-card fields and alert evaluation use the same event model.
+
 ### Project documentation is organized by purpose — 2026-09-06
 
 - Added `docs/README.md` as the documentation entry point and moved product plans, architecture/security references, operational procedures, and implementation history into `docs/product`, `docs/architecture`, `docs/operations`, and `docs/history` respectively.
