@@ -65,6 +65,7 @@ test("next proxy keeps reads public and forwards writes through the internal ide
 });
 
 test("dashboard shows the editor only from the platform-admin account menu and keys dismissal by notice version", () => {
+  assert.match(dashboardSource, /setGlobalNotice\(await fetchGlobalNotice\(\)\)/);
   assert.match(dashboardSource, /setShowGlobalNoticeEditor\(true\)/);
   assert.match(dashboardSource, /isPlatformAdmin && \(/);
   assert.match(providersSource, /<GlobalNoticeGate \/>/);
@@ -72,4 +73,7 @@ test("dashboard shows the editor only from the platform-admin account menu and k
   assert.match(gateSource, /yap_global_notice_seen_/);
   assert.match(gateSource, /notice\.version/);
   assert.match(editorSource, /GlobalNoticeSurface/);
+  assert.match(editorSource, /useState<"current" \| "compose" \| "preview">\(notice \? "current" : "compose"\)/);
+  assert.match(editorSource, /onClick=\{\(\) => void onClear\(\)\}/);
+  assert.match(editorSource, /t\("globalNoticeEdit"\)/);
 });

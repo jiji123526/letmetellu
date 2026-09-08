@@ -25,7 +25,7 @@ export function GlobalNoticeEditorDialog({
   const { t } = useLocale();
   const [title, setTitle] = useState(notice?.title || "");
   const [body, setBody] = useState(notice?.body || "");
-  const [step, setStep] = useState<"compose" | "preview">("compose");
+  const [step, setStep] = useState<"current" | "compose" | "preview">(notice ? "current" : "compose");
   const trimmedTitle = title.trim();
   const trimmedBody = body.trim();
   const canPreview = trimmedTitle.length > 0;
@@ -44,7 +44,46 @@ export function GlobalNoticeEditorDialog({
       }}
       role="presentation"
     >
-      {step === "preview" ? (
+      {step === "current" && notice ? (
+        <GlobalNoticeSurface
+          notice={notice}
+          titleId="global-notice-current-title"
+          footer={(
+            <div
+              className="flex items-center gap-2 px-5 py-4"
+              style={{ borderTop: "0.5px solid var(--hairline, rgba(60,60,67,.22))" }}
+            >
+              <button
+                type="button"
+                disabled={saving}
+                className="flex-1 rounded-[12px] border-none py-3 text-[14px] font-semibold cursor-pointer"
+                style={{ background: "#fff1f2", color: "#dc2626", fontFamily: "inherit" }}
+                onClick={() => void onClear()}
+              >
+                {t("globalNoticeClear")}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                className="flex-1 rounded-[12px] border-none py-3 text-[14px] font-semibold cursor-pointer"
+                style={{ background: "var(--card, #f2f2f7)", color: "var(--gray-text)", fontFamily: "inherit" }}
+                onClick={onClose}
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                className="flex-1 rounded-[12px] border-none py-3 text-[14px] font-semibold text-white cursor-pointer"
+                style={{ background: saving ? "#9ec9f5" : "#007aff", fontFamily: "inherit" }}
+                onClick={() => setStep("compose")}
+              >
+                {t("globalNoticeEdit")}
+              </button>
+            </div>
+          )}
+        />
+      ) : step === "preview" ? (
         <GlobalNoticeSurface
           notice={previewNotice}
           titleId="global-notice-preview-title"

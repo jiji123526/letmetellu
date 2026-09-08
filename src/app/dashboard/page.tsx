@@ -1088,6 +1088,20 @@ function DashboardPageContent() {
     }
   }, []);
 
+  const openGlobalNoticeEditor = useCallback(async () => {
+    setShowAccount(false);
+    setGlobalNoticeError("");
+    setGlobalNoticeSaving(true);
+    try {
+      setGlobalNotice(await fetchGlobalNotice());
+    } catch {
+      setGlobalNoticeError(t("globalNoticeLoadFailed"));
+    } finally {
+      setGlobalNoticeSaving(false);
+      setShowGlobalNoticeEditor(true);
+    }
+  }, [t]);
+
   const handleSaveGlobalNotice = useCallback(async (draft: { title: string; body: string }) => {
     setGlobalNoticeSaving(true);
     setGlobalNoticeError("");
@@ -1852,11 +1866,7 @@ function DashboardPageContent() {
                               color: "var(--gray-text)",
                               borderBottom: "0.5px solid var(--hairline)",
                             }}
-                            onClick={() => {
-                              setShowAccount(false);
-                              setGlobalNoticeError("");
-                              setShowGlobalNoticeEditor(true);
-                            }}
+                            onClick={() => void openGlobalNoticeEditor()}
                           >
                             {t("globalNoticeMenu")}
                           </button>
