@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { GlobalNoticeGate } from "@/components/GlobalNoticeGate";
 import { LocaleProvider } from "@/hooks/useLocale";
 import { UserPreferencesSync } from "@/components/UserPreferencesSync";
 
@@ -14,6 +15,7 @@ export function Providers({
       <UserPreferencesSync />
 
       <LocaleProvider>
+        <GlobalNoticeGate />
         {children}
       </LocaleProvider>
     </SessionProvider>

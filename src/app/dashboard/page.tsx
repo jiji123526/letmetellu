@@ -35,6 +35,7 @@ import { DashboardHelpMenu } from "@/components/dashboard/DashboardHelpMenu";
 import { PlatformOperationalHealthCard } from "@/components/support/PlatformOperationalHealthCard";
 import { LoginDialog } from "@/components/dashboard/LoginDialog";
 import { BetaNoticeDialog } from "@/components/dashboard/BetaNoticeDialog";
+import { GlobalNoticeEditorDialog } from "@/components/dashboard/GlobalNoticeEditorDialog";
 import { LegalFooter } from "@/components/legal/LegalFooter";
 import { ThemeLogo } from "@/components/ThemeLogo";
 import { VisitSurvey } from "@/components/VisitSurvey";
@@ -53,6 +54,13 @@ import {
   startDashboardRequest,
 } from "@/lib/dashboard-performance";
 import { fetchCurrentUserState } from "@/lib/current-user-state";
+import {
+  clearGlobalNotice,
+  fetchGlobalNotice,
+  notifyGlobalNoticeUpdated,
+  saveGlobalNotice,
+  type GlobalNotice,
+} from "@/lib/api-global-notice";
 
 interface Channel {
   id: string;
@@ -314,6 +322,10 @@ function DashboardPageContent() {
   const [showAccount, setShowAccount] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showBetaNotice, setShowBetaNotice] = useState(false);
+  const [globalNotice, setGlobalNotice] = useState<GlobalNotice | null>(null);
+  const [showGlobalNoticeEditor, setShowGlobalNoticeEditor] = useState(false);
+  const [globalNoticeSaving, setGlobalNoticeSaving] = useState(false);
+  const [globalNoticeError, setGlobalNoticeError] = useState("");
   const [showBetaCapacityNotice, setShowBetaCapacityNotice] = useState(false);
   const [checkingChannelCapacity, setCheckingChannelCapacity] = useState(false);
   const [showUserGuide, setShowUserGuide] = useState(false);
@@ -1068,6 +1080,44 @@ function DashboardPageContent() {
     setShowBetaNotice(false);
   }, [session?.user?.id]);
 
+  const loadGlobalDashboardNotice = useCallback(async () => {
+    try {
+      setGlobalNotice(await fetchGlobalNotice());
+    } catch {
+      // Global notice failures must not block dashboard use.
+    }
+  }, []);
+
+  const handleSaveGlobalNotice = useCallback(async (draft: { title: string; body: string }) => {
+    setGlobalNoticeSaving(true);
+    setGlobalNoticeError("");
+    try {
+      const nextNotice = await saveGlobalNotice(draft);
+      setGlobalNotice(nextNotice);
+      notifyGlobalNoticeUpdated();
+      setShowGlobalNoticeEditor(false);
+    } catch {
+      setGlobalNoticeError(t("globalNoticeSaveFailed"));
+    } finally {
+      setGlobalNoticeSaving(false);
+    }
+  }, [t]);
+
+  const handleClearGlobalNotice = useCallback(async () => {
+    setGlobalNoticeSaving(true);
+    setGlobalNoticeError("");
+    try {
+      await clearGlobalNotice();
+      setGlobalNotice(null);
+      notifyGlobalNoticeUpdated();
+      setShowGlobalNoticeEditor(false);
+    } catch {
+      setGlobalNoticeError(t("globalNoticeClearFailed"));
+    } finally {
+      setGlobalNoticeSaving(false);
+    }
+  }, [t]);
+
   useEffect(() => {
     if (!showAccount) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -1078,6 +1128,13 @@ function DashboardPageContent() {
     document.addEventListener("click", closeOnOutsideClick);
     return () => document.removeEventListener("click", closeOnOutsideClick);
   }, [showAccount]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadGlobalDashboardNotice();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadGlobalDashboardNotice]);
 
   useEffect(() => {
     setLinkedChannel(null);
@@ -1787,6 +1844,23 @@ function DashboardPageContent() {
                     {isLoggedIn ? (
                       <>
                         <div className="px-4 py-3 text-[12px] truncate" style={{ color: "var(--meta)", borderBottom: "0.5px solid var(--hairline)" }}>{session.user?.email}</div>
+                        {isPlatformAdmin && (
+                          <button
+                            className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]"
+                            style={{
+                              background: "transparent",
+                              color: "var(--gray-text)",
+                              borderBottom: "0.5px solid var(--hairline)",
+                            }}
+                            onClick={() => {
+                              setShowAccount(false);
+                              setGlobalNoticeError("");
+                              setShowGlobalNoticeEditor(true);
+                            }}
+                          >
+                            {t("globalNoticeMenu")}
+                          </button>
+                        )}
                         <button
                           className="w-full border-none cursor-pointer text-left px-4 py-3 text-[14px]"
                           style={{
@@ -2330,6 +2404,22 @@ function DashboardPageContent() {
 
       {showBetaNotice && isLoggedIn && !showFirstOnboarding && !pendingLocalChannels && (
         <BetaNoticeDialog onClose={closeBetaNotice} />
+      )}
+
+      {showGlobalNoticeEditor && isPlatformAdmin && (
+        <GlobalNoticeEditorDialog
+          key={globalNotice?.version || "empty"}
+          notice={globalNotice}
+          saving={globalNoticeSaving}
+          error={globalNoticeError}
+          onClose={() => {
+            if (globalNoticeSaving) return;
+            setShowGlobalNoticeEditor(false);
+            setGlobalNoticeError("");
+          }}
+          onSave={handleSaveGlobalNotice}
+          onClear={handleClearGlobalNotice}
+        />
       )}
 
       {showBetaCapacityNotice && (

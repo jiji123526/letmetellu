@@ -6,6 +6,7 @@ import { handleInit } from "./routes/init";
 import { handleChannelState } from "./routes/channel-state";
 import { handleAdmin } from "./routes/admin";
 import { handleUser } from "./routes/user";
+import { handleGlobalNotice } from "./routes/global-notice";
 import { handleSocketAuth } from "./routes/socket-auth";
 import { handleAuth } from "./routes/auth";
 import { handleDm } from "./routes/dm";
@@ -273,6 +274,8 @@ export default {
         response = await handleAdmin(request, env, ctx);
       } else if (url.pathname.startsWith("/api/user")) {
         response = await handleUser(request, env);
+      } else if (url.pathname.startsWith("/api/global-notice")) {
+        response = await handleGlobalNotice(request, env);
       } else if (url.pathname.startsWith("/api/socket-auth")) {
         response = await handleSocketAuth(request, env);
       } else if (url.pathname.startsWith("/api/recent-channels")) {
