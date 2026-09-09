@@ -2,8 +2,8 @@
 
 This log records incremental work toward the proposed
 [D1 partitioning strategy](../architecture/D1_PARTITIONING_STRATEGY.md).
-Production still uses one D1 database. No shard databases, routing directory,
-data migration, or cutover have been created.
+Production still uses one D1 database. No shard databases, virtual-bucket map,
+placement overrides, data migration, or cutover have been created.
 
 ## 2026-09-09: implementation branch started
 
@@ -24,8 +24,9 @@ Commit: `c488400` (`docs: refine D1 partitioning rollout`)
 Commit: `bc62ad7` (`Add channel database resolution boundary`)
 
 - Added `resolveChannelDatabase()` as the single channel placement seam.
-- The resolver is asynchronous so a later implementation can consult a cached
-  channel directory without changing all callers again.
+- The resolver is asynchronous so exceptional override recovery can perform
+  edge or control-plane I/O without changing all callers again; ordinary
+  virtual-bucket routing remains synchronous local work inside that boundary.
 - Resolution returns the normalized partition key, logical shard ID, and D1
   binding.
 - The current implementation always returns `env.DB` and shard `primary`.
@@ -89,9 +90,33 @@ After the four implementation commits:
 - `npx tsc --noEmit` passed in `worker/`;
 - documentation links and whitespace checks passed.
 
+### Latency-first routing decision
+
+The target routing design was refined after reviewing the migration's primary
+goal: reducing service latency.
+
+- Ordinary channels will use a stable local hash and versioned virtual-bucket
+  map embedded in the Worker deployment.
+- The hash algorithm, seed, encoding, bucket count, and map version will be
+  treated as a stable routing protocol with fixed test vectors.
+- Normal channel requests will not query Cache API, KV, or the control D1 to
+  discover a shard.
+- Signed hints and edge/control lookups are reserved for moved or hot-channel
+  overrides and stale-route recovery.
+- Source shards will retain bounded movement tombstones so stale clients fail
+  closed instead of writing to retired data.
+- Tombstones will also protect non-atomic Worker deployments while old and new
+  bucket-map versions coexist at the edge.
+- The two-shard canary will use a static local allowlist before the general
+  virtual-bucket implementation.
+- Canary success requires improved end-to-end p95/p99 latency; lower SQL or
+  queue timing alone is insufficient.
+
 ## Next implementation step
 
 Migrate one channel-only read path at a time to resolve its database before
 opening a D1 read session. Mixed routes must separate control-plane reads from
 channel-local reads before they are switched. Durable source events remain
-required before notification storage can be physically separated.
+required before notification storage can be physically separated. The resolver
+will remain single-database during this phase; virtual-bucket routing is enabled
+only in the canary after all channel-local paths use the resolver.

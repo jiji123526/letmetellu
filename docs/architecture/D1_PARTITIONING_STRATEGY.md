@@ -24,15 +24,16 @@ The recommended path is:
 4. When measurements justify partitioning, start with a small, bounded pool of
    Chat D1 shards.
 5. Keep all strongly consistent data for a channel in its selected Chat shard.
-6. Assign channels by measured load and available capacity, not by a fixed
-   channel count.
-7. Promote hot or unusually large channels to dedicated databases.
-8. Add a time bucket to message storage only when a single channel's history
+6. Route ordinary channels locally through a stable virtual-bucket map, without
+   a control-database lookup.
+7. Use explicit overrides only for moved, hot, or unusually large channels.
+8. Promote those exceptional channels to dedicated databases when justified.
+9. Add a time bucket to message storage only when a single channel's history
    becomes too large or too hot as one partition.
-9. Keep global account and routing data in a control plane.
-10. Use shard-local durable events and idempotent consumers for cross-database
+10. Keep global account and exceptional routing state in a control plane.
+11. Use shard-local durable events and idempotent consumers for cross-database
    effects.
-11. Avoid synchronous scatter-gather across D1 databases on user-facing paths.
+12. Avoid synchronous scatter-gather across D1 databases on user-facing paths.
 
 The first production experiment should use two Chat D1 databases and a small
 allowlist of channels. It should not begin with a broad functional split or
@@ -55,6 +56,11 @@ cannot be assumed to fix:
 - network distance to a primary;
 - a slow Worker path outside D1;
 - a hot Durable Object or external dependency.
+
+Routing must not add a mandatory control-D1 or cache lookup before every channel
+query. That would add another remote operation to the exact first-entry path
+this work is intended to improve. Local hash and capability verification are
+acceptable; network-backed routing is an exceptional recovery path.
 
 Before implementation, correlate D1 queue wait and overload errors with write
 rate, query duration, database size, and maintenance activity. A two-shard
@@ -142,14 +148,14 @@ The control plane owns account-global and routing records:
 - users and account authentication state;
 - deleted-account and verification state;
 - global administrators;
-- `channel_directory`;
+- virtual-bucket map versions and exceptional channel overrides;
+- channel lifecycle and movement records;
 - owner-channel and recent-channel read projections;
 - shard schema and migration state;
 - platform-wide support and operational summaries.
 
-The control database must not be queried on every repeat channel request. It is
-the authoritative directory, not a mandatory synchronous hop for every data
-operation.
+The control database is authoritative for lifecycle and exceptional placement.
+It is not part of the normal channel request path.
 
 ### Chat shard
 
@@ -163,6 +169,7 @@ includes:
 - moderator, block, banned-word, and moderation state;
 - upload tickets and channel-local cleanup state;
 - message ownership and actor-identity records;
+- local placement state and bounded movement tombstones;
 - shard-local domain events.
 
 Foreign keys and transactions remain useful inside this boundary.
@@ -199,47 +206,92 @@ views. They remain entirely in the selected channel's Chat shard. The unified
 timeline only combines public messages and authorized DMs for one `channel_id`.
 Gallery navigation and message search are also filtered by that channel.
 
-## Channel directory and routing
+## Latency-first routing
 
-An explicit directory permits controlled movement:
+Ordinary channels use deterministic local routing:
+
+```text
+partition_key = parentChannelId
+bucket = stableHash(partition_key) % VIRTUAL_BUCKET_COUNT
+shard_id = ACTIVE_BUCKET_MAP[bucket]
+```
+
+`VIRTUAL_BUCKET_COUNT` is fixed independently of the number of physical shards.
+The bucket map is a versioned Worker deployment artifact, so normal routing
+requires no network lookup. Adding a shard moves selected buckets and their data
+instead of changing a `hash(channel_id) % shard_count` formula that remaps most
+channels.
+
+The hash algorithm, text encoding, seed, bucket count, and map version are
+explicit protocol values. They must not depend on a runtime-specific hash whose
+output can change after a deployment.
+
+The control database records exceptional placement and lifecycle state:
 
 ```sql
-CREATE TABLE channel_directory (
+CREATE TABLE channel_placement_overrides (
   channel_id TEXT PRIMARY KEY,
   shard_id TEXT NOT NULL,
   state TEXT NOT NULL CHECK (
-    state IN ('creating', 'active', 'moving', 'deleting', 'deleted')
+    state IN ('active', 'moving', 'deleting', 'deleted')
   ),
   version INTEGER NOT NULL,
-  assigned_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 ```
 
-The routing sequence is:
+The normal routing sequence is:
 
 1. Normalize the request channel to `parentChannelId`.
-2. Read a verified shard hint from a short-lived channel capability when
-   available.
-3. Otherwise use an edge cache or KV copy of the directory.
-4. Fall back to the authoritative control database on a cache miss.
-5. Open a D1 session on the selected shard with the same security-aware
+2. Apply a verified override from a short-lived channel capability or a small
+   deployed override map when available.
+3. Otherwise compute the virtual bucket and shard locally.
+4. Open a D1 session on the selected shard with the same security-aware
    consistency constraint used today.
-6. Validate current owner, passcode, deletion, and moderation state in the Chat
-   shard.
+5. Validate current placement version, owner, passcode, deletion, and moderation
+   state in the Chat shard.
 
-A shard hint grants no access. It only selects the database on which normal
+Edge Cache API and the control D1 are recovery paths for an exceptional channel
+whose hint is absent or stale. They must not be queried for every ordinary
+request. A retired source shard keeps a movement tombstone; if a request follows
+the base bucket to that source, the source rejects authoritative reads and
+writes and triggers override resolution. It never forwards or accepts a mutation
+speculatively.
+
+An override hint grants no access. It only selects the database on which normal
 authorization runs. The signed hint should include:
 
 - `channel_id`;
-- `shard_id`;
-- directory `version`;
+- override `shard_id`;
+- placement `version`;
 - expiry;
 - the existing viewer and sensitivity claims where applicable.
 
-Changing the directory version invalidates stale routing hints. Known channels
-can continue through cached routing during a control-plane incident, while new
-channel creation, deletion, and movement should stop.
+Signature verification proves that a hint was issued by the service, not that
+it is current. The selected shard must compare the hint version with its local
+active placement record or tombstone. Unknown mappings, stale versions, and
+`moving` state fail closed and refresh through the exceptional routing path.
+
+Known ordinary channels continue using local bucket routing during a
+control-plane incident. New channel creation, bucket movement, exceptional
+channel movement, and deletion should stop.
+
+### Routing latency budget
+
+Measure routing separately from D1 access:
+
+- local partition normalization and bucket selection;
+- signed override verification;
+- edge override recovery;
+- control-D1 recovery;
+- first selected-shard binding wait;
+- selected-shard SQL execution;
+- total route latency.
+
+The normal path should perform only local routing before opening the selected
+Chat D1. A canary fails if lower shard queueing does not produce a meaningful
+improvement in end-to-end p95 and p99 latency, or if additional cold-binding
+cost offsets that improvement.
 
 ### Binding implications
 
@@ -268,15 +320,18 @@ shard_load =
   + maintenance_cost
 ```
 
-The exact weights must come from production calibration. Do not set a fixed
-channels-per-database target. Channel count may be recorded as inventory data,
-but it is not a useful capacity unit when channel activity varies.
+The exact weights must come from production calibration. They determine which
+virtual buckets should move and which exceptional channels need dedicated
+placement. Do not set a fixed channels-per-database target. Channel count may be
+recorded as inventory data, but it is not a useful capacity unit when channel
+activity varies.
 
 Recommended behavior:
 
-- pack many cold channels together;
+- distribute ordinary channels through virtual buckets;
 - stop assigning new channels before a shard approaches its service objective;
-- move a hot channel to a dedicated D1;
+- rebalance selected buckets rather than changing the hash modulus;
+- override a hot channel to a dedicated D1;
 - preserve spare capacity for bursts and maintenance;
 - never add a new shard without migration and observability automation.
 
@@ -353,25 +408,27 @@ production evidence shows their current post-commit retry is insufficient.
 
 ### Channel creation
 
-1. Select a shard and create a `creating` directory row.
-2. Idempotently create the channel in the selected Chat shard.
-3. Create or refresh control-plane projections.
-4. Mark the directory row `active`.
+1. Compute the virtual bucket and selected shard locally.
+2. Create a `creating` lifecycle record in the control database.
+3. Idempotently create the channel in the selected Chat shard.
+4. Create or refresh control-plane projections.
+5. Mark the lifecycle record `active`.
 
 Reads must reject or return a bounded retry response while the channel is not
 active.
 
 ### Channel deletion
 
-1. Mark the directory row `deleting` and invalidate routing capabilities.
+1. Mark the lifecycle or override record `deleting` and invalidate routing
+   capabilities.
 2. Reject new channel mutations.
 3. Create a retryable cleanup job in the Chat shard.
 4. Delete Chat-shard records and associated R2 objects using existing bounded
    cleanup behavior.
 5. Remove notification preferences and global projections idempotently.
-6. Mark the directory row `deleted`.
+6. Mark the lifecycle or override record `deleted`.
 
-Do not remove the directory tombstone until stale route hints and rollback
+Do not remove the source-shard tombstone until stale route hints and rollback
 windows have expired.
 
 ### Account deletion
@@ -387,19 +444,30 @@ reconciliation pass, not one distributed transaction.
 The first movement implementation should use a short write freeze rather than
 dual writes:
 
-1. Set directory state to `moving` and invalidate route capabilities.
+1. Create or update an override with state `moving`, increment its version, and
+   invalidate route capabilities.
 2. Reject new writes with a retryable maintenance response.
 3. Copy all channel-local tables to the destination shard.
 4. Verify row counts, latest IDs and timestamps, media references, search rows,
    and required invariants.
-5. Atomically update the directory shard and increment its version.
-6. Resume writes on the destination.
-7. Retain the source copy read-only for the rollback window.
-8. Delete the source copy through a recorded cleanup job.
+5. Write an active placement record to the destination and a moved tombstone to
+   the source.
+6. Mark the control-plane override active and distribute a new signed hint.
+7. Resume writes on the destination.
+8. Retain the source copy read-only for the rollback window.
+9. Delete the source copy through a recorded cleanup job while retaining the
+   bounded tombstone.
 
 Dual writing both shards can reduce the freeze but introduces ordering,
 deduplication, and divergent-success problems. Add it only when measured channel
 traffic makes a brief write freeze unacceptable.
+
+Moving a virtual bucket follows the same freeze, copy, verify, and cutover
+pattern for every channel in that bucket. Publish the new bucket-map version
+only after destination validation; do not change the map before its data is
+ready. Worker deployments are not globally atomic, so old and new map versions
+will coexist during rollout. Source tombstones must reject writes from stale
+Worker versions until the old deployment and rollback windows have expired.
 
 ## Very large channels
 
@@ -463,7 +531,7 @@ Costs:
 This is useful for demonstrated workload isolation, not as the default first
 step.
 
-### Fixed number of hash shards
+### Direct modulo hash shards
 
 Example: `hash(parentChannelId) % N`.
 
@@ -480,8 +548,10 @@ Costs:
 - movement and rollback require hash overrides;
 - shard count becomes embedded in routing behavior.
 
-This is appropriate for a short canary, but an explicit directory is better for
-long-lived movable placement.
+Do not use direct modulo hashing for the long-lived topology. The recommended
+virtual-bucket variant preserves local routing while allowing selected buckets
+to move without remapping every channel. Individual hot channels still use
+explicit overrides.
 
 ### One D1 per channel
 
@@ -695,31 +765,38 @@ Exit gate:
 Status: not started.
 
 1. Add two Chat D1 bindings with identical channel-local schema.
-2. Add directory state and a small explicit canary allowlist.
+2. Add a small static canary allowlist that routes locally without a control
+   lookup.
 3. Backfill selected low-risk channels.
 4. Shadow-read and compare canonical rows before cutover.
-5. Freeze writes briefly, copy the final delta, switch directory version, and
-   resume.
-6. Retain source rows for rollback.
+5. Freeze writes briefly, copy the final delta, install a source tombstone, then
+   deploy the allowlist cutover and resume on the destination.
+6. Verify stale Worker versions cannot write to the source.
+7. Retain source rows for rollback.
 
 Exit gate:
 
-- canary channels meet correctness checks and show measurable queue, latency,
-  or isolation improvement without increasing error rate.
+- canary channels meet correctness checks and improve end-to-end channel entry
+  and message-send p95/p99 latency without increasing error rate;
+- resolver, first-binding, SQL, and total route timing show that routing and
+  additional cold bindings do not offset reduced database queueing.
 
 ### Phase 4: pooled production shards
 
 Status: not started.
 
 1. Automate database creation, schema application, validation, and inventory.
-2. Add load-aware placement.
-3. Add shard-level dashboards and alerting.
-4. Move additional channels in bounded cohorts.
-5. Add hot-channel detection and dedicated-shard promotion.
+2. Add versioned virtual-bucket routing as a Worker deployment artifact.
+3. Add measured bucket rebalancing and exceptional channel overrides.
+4. Add shard-level dashboards and alerting.
+5. Move additional channels in bounded cohorts.
+6. Add hot-channel detection and dedicated-shard promotion.
 
 Exit gate:
 
 - shard creation and movement are routine, observable, reversible operations;
+- ordinary channel requests do not query edge cache or the control database for
+  routing;
 - no user-facing route performs unbounded shard fanout.
 
 ### Phase 5: large-channel time buckets
@@ -744,9 +821,13 @@ The partitioning implementation needs coverage beyond ordinary route tests:
 
 - every channel-local mutation selects exactly one Chat shard;
 - normal and live channel IDs resolve to the intended common partition;
-- forged shard hints do not bypass authorization;
-- stale directory versions refresh safely;
-- a control-plane outage does not block cached active-channel routing;
+- stable hash fixtures always select the same virtual bucket;
+- hash protocol changes require an explicit version and migration;
+- bucket-map versions select the expected bound D1 without network lookup;
+- forged override hints do not bypass authorization;
+- stale override versions fail closed at source and destination shards;
+- ordinary routing does not access Cache API, KV, or the control D1;
+- a control-plane outage does not block ordinary bucket-routed channels;
 - source events survive consumer failure;
 - duplicate event delivery is idempotent;
 - channel creation and deletion recover after every intermediate failure;
@@ -764,6 +845,7 @@ Before more than two production shards exist, provide:
 
 - a shard inventory with database ID, schema version, state, size, and assigned
   channel count;
+- versioned virtual-bucket maps and a record of every moved bucket;
 - automated migration application with bounded concurrency;
 - read-only audit queries for every schema version;
 - per-shard queue, SQL duration, rows read/written, error, and storage metrics;
@@ -790,6 +872,7 @@ Proceed with Chat D1 partitioning when at least one condition is sustained:
 Do not proceed when:
 
 - the dominant delay is platform-wide first-binding latency;
+- routing or additional shard cold-binding cost offsets reduced queueing;
 - query duration or missing indexes explain the queue;
 - read replication or caching resolves the measured read problem;
 - migration and shard operations are not automated;
