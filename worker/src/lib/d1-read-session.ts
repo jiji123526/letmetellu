@@ -1,3 +1,4 @@
+import { withDatabase } from "./database-access.ts";
 import type { Env } from "../types.ts";
 
 export type D1ReadConstraint = "first-primary" | "first-unconstrained";
@@ -13,14 +14,17 @@ export type D1ReadConstraint = "first-primary" | "first-unconstrained";
 export function createD1ReadSessionEnv(
   env: Env,
   constraint: D1ReadConstraint,
+  selectedDatabase: D1Database = env.DB,
 ): Env {
-  const database = env.DB as D1Database & {
+  const database = selectedDatabase as D1Database & {
     withSession?: (constraint?: D1ReadConstraint) => D1DatabaseSession;
   };
-  if (typeof database.withSession !== "function") return env;
+  if (typeof database.withSession !== "function") {
+    return withDatabase(env, selectedDatabase);
+  }
 
-  return {
-    ...env,
-    DB: database.withSession(constraint) as unknown as D1Database,
-  };
+  return withDatabase(
+    env,
+    database.withSession(constraint) as unknown as D1Database,
+  );
 }

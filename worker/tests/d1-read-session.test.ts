@@ -27,3 +27,44 @@ test("D1 read sessions fall back for local bindings without Sessions API", () =>
   const env = { DB: { prepare() {}, batch() {} } } as unknown as Env;
   assert.equal(createD1ReadSessionEnv(env, "first-primary"), env);
 });
+
+test("D1 read sessions use a selected channel database", () => {
+  const session = { prepare() {}, batch() {} };
+  const selectedDatabase = {
+    withSession(constraint: string) {
+      assert.equal(constraint, "first-primary");
+      return session;
+    },
+  } as unknown as D1Database;
+  const env = {
+    DB: { prepare() {}, batch() {} },
+  } as unknown as Env;
+
+  const readEnv = createD1ReadSessionEnv(
+    env,
+    "first-primary",
+    selectedDatabase,
+  );
+
+  assert.equal(readEnv.DB, session);
+  assert.notEqual(readEnv, env);
+});
+
+test("selected local databases remain selected without Sessions API", () => {
+  const env = {
+    DB: { prepare() {}, batch() {} },
+  } as unknown as Env;
+  const selectedDatabase = {
+    prepare() {},
+    batch() {},
+  } as unknown as D1Database;
+
+  const readEnv = createD1ReadSessionEnv(
+    env,
+    "first-unconstrained",
+    selectedDatabase,
+  );
+
+  assert.equal(readEnv.DB, selectedDatabase);
+  assert.notEqual(readEnv, env);
+});
