@@ -1,4 +1,5 @@
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
+import { resolveChannelDatabase } from "../lib/database-access";
 import { getParentChannelId, isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import type { Env } from "../types";
 import { authorizeRoomToken } from "./passcode";
@@ -12,7 +13,9 @@ export async function handleSocketAuth(request: Request, env: Env): Promise<Resp
   }
 
   const parentChannelId = getParentChannelId(channelId);
-  const channel = await env.DB.prepare("SELECT id, owner_uid, passcode FROM channels WHERE id = ?")
+  const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+  const channel = await resolvedDatabase.database
+    .prepare("SELECT id, owner_uid, passcode FROM channels WHERE id = ?")
     .bind(parentChannelId)
     .first<{ id: string; owner_uid: string; passcode: string | null }>();
   if (!channel) {
