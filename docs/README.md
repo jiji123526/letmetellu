@@ -13,6 +13,7 @@ Markdown files to the repository root.
 ## Architecture and security
 
 - [Unified chat pagination](./architecture/UNIFIED_CHAT_PAGINATION.md): timeline model, rollout stages, and query constraints
+- [D1 partitioning strategy](./architecture/D1_PARTITIONING_STRATEGY.md): channel sharding trade-offs, rollout plan, and platform case studies
 - [Security authorization matrix](./architecture/SECURITY_AUTHORIZATION_MATRIX.md): identity evidence and privileged boundaries
 - [Notification delivery optimization](./architecture/NOTIFICATION_DELIVERY_OPTIMIZATION.md): notification query costs and scaling priorities
 
