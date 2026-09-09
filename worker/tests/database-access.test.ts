@@ -4,6 +4,7 @@ import {
   getControlDatabase,
   PRIMARY_DATABASE_SHARD_ID,
   resolveChannelDatabase,
+  withDatabase,
 } from "../src/lib/database-access.ts";
 import type { Env } from "../src/types.ts";
 
@@ -35,4 +36,15 @@ test("normal and live channel variants resolve to the same partition", async () 
   assert.equal(normal.partitionKey, live.partitionKey);
   assert.equal(normal.shardId, live.shardId);
   assert.equal(normal.database, live.database);
+});
+
+test("database-scoped environments preserve non-database bindings", () => {
+  const env = createEnv();
+  const database = { prepare() {}, batch() {} } as unknown as D1Database;
+  const scoped = withDatabase(env, database);
+
+  assert.notEqual(scoped, env);
+  assert.equal(scoped.DB, database);
+  assert.equal(scoped.MEDIA, env.MEDIA);
+  assert.equal(withDatabase(env, env.DB), env);
 });

@@ -13,6 +13,11 @@ export function getControlDatabase(env: Env): D1Database {
   return env.DB;
 }
 
+export function withDatabase(env: Env, database: D1Database): Env {
+  if (database === env.DB) return env;
+  return { ...env, DB: database };
+}
+
 /**
  * Centralize channel placement before introducing physical shards. Keeping this
  * async allows a future implementation to consult a cached channel directory

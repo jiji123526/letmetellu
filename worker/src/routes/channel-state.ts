@@ -1,4 +1,5 @@
 import { getChannelModeration } from "../lib/channel-moderation";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access";
 import { getParentChannelId } from "../lib/special-channels";
 import type { Env } from "../types";
 
@@ -23,7 +24,9 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
   }
 
   const parentChannelId = getParentChannelId(channelId);
-  const parentChannel = await env.DB.prepare(`
+  const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+  const channelEnv = withDatabase(env, resolvedDatabase.database);
+  const parentChannel = await resolvedDatabase.database.prepare(`
     SELECT owner_uid, is_frozen
     FROM channels
     WHERE id = ?
@@ -37,14 +40,14 @@ export async function handleChannelState(request: Request, env: Env): Promise<Re
   }
 
   const liveChannel = channelId !== parentChannelId
-    ? await env.DB.prepare(`
+    ? await resolvedDatabase.database.prepare(`
       SELECT is_frozen
       FROM channels
       WHERE id = ?
       LIMIT 1
     `).bind(channelId).first<{ is_frozen: number }>()
     : null;
-  const moderation = await getChannelModeration(parentChannelId, env);
+  const moderation = await getChannelModeration(parentChannelId, channelEnv);
 
   return Response.json({
     channel: {
