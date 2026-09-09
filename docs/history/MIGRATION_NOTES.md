@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Global-notice reads use layered short-lived caches — 2026-09-08
+
+- Public global notices are not realtime-sensitive, so the root notice gate now reuses its last successful result for one hour in browser-local storage. Route transitions and refreshes inside that window still evaluate the cached notice and its versioned dismissal key, but no longer create another Vercel, Worker, or D1 request.
+- Expired browser entries are refreshed through the same non-blocking request. Concurrent refreshes in one page share a single in-flight promise so rapid route changes cannot fan out duplicate reads.
+- The same-origin Vercel proxy caches the public Worker response for five minutes. Expired responses must be revalidated instead of serving stale data, so clients whose one-hour browser cache expires around the same time share a server result without accidentally caching a stale response for another hour.
+- Saving or clearing a notice updates the current admin browser cache immediately. Opening the editor forces a fresh read so administrative state is not hidden by the viewer cache; other browsers discover the change on their next cache refresh.
+
+Trade-off: a newly published or cleared notice can remain stale for approximately sixty-five minutes in the worst alignment between the one-hour browser cache and five-minute shared server cache. This is accepted because the notice is informational rather than an emergency broadcast. Server revalidation may make the first request after each five-minute cache window slightly slower, while failed browser refreshes remain non-blocking and are not cached as successful results.
+
+Deployment note: frontend-only. No Worker deployment or D1 migration is required. Verify repeated pathname changes and reloads within one hour do not create additional `/api/global-notice` requests, an expired entry performs one request, and the response carries `s-maxage=300`.
+
 ### Super-admin global notices cover every entry route — 2026-09-08
 
 - The dynamic global-notice gate previously mounted only inside page-level providers and explicitly returned outside `/dashboard`, so direct channel, support, password-reset, legal, and email-verification entry points could not show a published notice.

@@ -12,7 +12,12 @@ export async function GET() {
     cache: "no-store",
   });
   const data = await response.json();
-  return NextResponse.json(data, { status: response.status });
+  return NextResponse.json(data, {
+    status: response.status,
+    headers: {
+      "Cache-Control": "public, s-maxage=300, must-revalidate",
+    },
+  });
 }
 
 export async function POST(request: Request) {

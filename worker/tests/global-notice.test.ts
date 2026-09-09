@@ -63,6 +63,9 @@ test("global notice values are bounded and versioned", () => {
 test("next proxy keeps reads public and forwards writes through the internal identity path", () => {
   assert.match(nextProxy, /export async function GET\(\)/);
   assert.match(nextProxy, /fetch\(`\$\{workerUrl\}\/api\/global-notice`/);
+  assert.match(nextProxy, /s-maxage=300/);
+  assert.match(nextProxy, /must-revalidate/);
+  assert.doesNotMatch(nextProxy, /stale-while-revalidate/);
   assert.match(nextProxy, /export async function POST\(request: Request\)/);
   assert.match(nextProxy, /"X-Internal-Token": process\.env\.INTERNAL_SECRET \|\| ""/);
   assert.match(nextProxy, /"X-User-Id": session\.user\.id/);
@@ -82,6 +85,11 @@ test("the editor stays admin-only while the notice gate covers every entry route
   assert.match(gateSource, /status === "loading"/);
   assert.match(gateSource, /yap_global_notice_seen_/);
   assert.match(gateSource, /notice\.version/);
+  assert.match(gateSource, /fetchGlobalNotice\(\)/);
+  assert.match(
+    readFileSync(new URL("../../src/lib/api-global-notice.ts", import.meta.url), "utf8"),
+    /GLOBAL_NOTICE_BROWSER_CACHE_TTL_MS = 60 \* 60 \* 1_000/,
+  );
   assert.match(editorSource, /GlobalNoticeSurface/);
   assert.match(editorSource, /useState<"current" \| "compose" \| "preview">\(notice \? "current" : "compose"\)/);
   assert.match(editorSource, /onClick=\{\(\) => void onClear\(\)\}/);

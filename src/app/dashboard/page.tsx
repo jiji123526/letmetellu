@@ -1093,7 +1093,7 @@ function DashboardPageContent() {
     setGlobalNoticeError("");
     setGlobalNoticeSaving(true);
     try {
-      setGlobalNotice(await fetchGlobalNotice());
+      setGlobalNotice(await fetchGlobalNotice({ force: true }));
     } catch {
       setGlobalNoticeError(t("globalNoticeLoadFailed"));
     } finally {
