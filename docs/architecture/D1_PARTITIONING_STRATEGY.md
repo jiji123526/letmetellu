@@ -14,19 +14,25 @@ databases. Partition only after measurements show that one database's write
 serialization, queueing, storage growth, maintenance work, or failure domain is
 violating a defined service objective.
 
-When partitioning becomes justified, use a hybrid design:
+The recommended path is:
 
-1. Keep strongly consistent channel-local data together.
-2. Place multiple low-volume channels in a pooled Chat D1 shard.
-3. Treat a target such as 50 channels per database as a soft packing hint, not
-   a permanent invariant.
-4. Promote hot or unusually large channels to dedicated databases.
-5. Add a time bucket to message storage only when a single channel's history
+1. Keep the current single D1 while it meets measured service objectives.
+2. Introduce explicit control-plane and channel-data access boundaries without
+   moving data.
+3. Make post-commit effects durable and idempotent before creating a
+   cross-database boundary.
+4. When measurements justify partitioning, start with a small, bounded pool of
+   Chat D1 shards.
+5. Keep all strongly consistent data for a channel in its selected Chat shard.
+6. Assign channels by measured load and available capacity, not by a fixed
+   channel count.
+7. Promote hot or unusually large channels to dedicated databases.
+8. Add a time bucket to message storage only when a single channel's history
    becomes too large or too hot as one partition.
-6. Keep global account and routing data in a control plane.
-7. Use shard-local durable events and idempotent consumers for cross-database
+9. Keep global account and routing data in a control plane.
+10. Use shard-local durable events and idempotent consumers for cross-database
    effects.
-8. Avoid synchronous scatter-gather across D1 databases on user-facing paths.
+11. Avoid synchronous scatter-gather across D1 databases on user-facing paths.
 
 The first production experiment should use two Chat D1 databases and a small
 allowlist of channels. It should not begin with a broad functional split or
@@ -262,8 +268,9 @@ shard_load =
   + maintenance_cost
 ```
 
-The exact weights must come from production calibration. Channel count can be a
-guardrail, but not the primary capacity signal.
+The exact weights must come from production calibration. Do not set a fixed
+channels-per-database target. Channel count may be recorded as inventory data,
+but it is not a useful capacity unit when channel activity varies.
 
 Recommended behavior:
 
@@ -273,8 +280,8 @@ Recommended behavior:
 - preserve spare capacity for bursts and maintenance;
 - never add a new shard without migration and observability automation.
 
-`50 channels per database` is acceptable as an initial operational target if the
-channels are similar and low-volume. It must be allowed to vary substantially.
+The placement system should answer "which shard has safe capacity for this
+channel?" rather than "which shard has fewer channels?".
 
 ## Strong consistency boundary
 
