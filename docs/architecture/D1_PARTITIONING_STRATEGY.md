@@ -653,13 +653,23 @@ Exit gate:
 
 ### Phase 1: database access abstraction
 
-Status: not started.
+Status: in progress on `feature/d1-channel-db-abstraction`.
 
 1. Replace route-level assumptions that every operation uses `env.DB` with
    explicit account, channel, notification, and operations data accessors.
 2. Preserve one physical database behind all accessors.
 3. Generalize the D1 session helper to accept a selected database.
 4. Update test doubles to verify database selection without changing behavior.
+
+Implemented so far:
+
+- added an asynchronous channel database resolver that preserves the current
+  single-D1 deployment;
+- made normal and live channel IDs resolve to one partition key;
+- routed channel-state and socket-authorization channel reads through the
+  resolver;
+- allowed D1 read sessions to start from a selected channel database;
+- kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
 

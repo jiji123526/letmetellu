@@ -27,6 +27,7 @@ Markdown files to the repository root.
 
 - [Migration notes](./history/MIGRATION_NOTES.md): shipped changes, trade-offs, migrations, and deployment notes
 - [Notification implementation log](./history/NOTIFICATION_IMPLEMENTATION_LOG.md): chronological Web Push implementation record
+- [D1 partitioning implementation log](./history/D1_PARTITIONING_IMPLEMENTATION_LOG.md): channel database routing rollout and verification record
 
 ## Placement rules
 
