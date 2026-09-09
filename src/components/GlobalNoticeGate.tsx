@@ -15,16 +15,13 @@ function getViewerKey(userId: string | undefined) {
 }
 
 export function GlobalNoticeGate() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const pathname = usePathname();
   const [notice, setNotice] = useState<GlobalNotice | null>(null);
   const [visible, setVisible] = useState(false);
   const viewerKey = getViewerKey(session?.user?.id);
-  const isPlatformAdmin = session?.user?.isPlatformAdmin === true;
-  const isDashboardPath = pathname === "/dashboard";
 
   const loadNotice = useCallback(async () => {
-    if (!isDashboardPath) return;
     try {
       const nextNotice = await fetchGlobalNotice();
       setNotice(nextNotice);
@@ -34,7 +31,7 @@ export function GlobalNoticeGate() {
     } catch {
       // Global notice failures must not block page usage.
     }
-  }, [isDashboardPath]);
+  }, []);
 
   const closeNotice = useCallback(() => {
     if (notice) {
@@ -61,7 +58,7 @@ export function GlobalNoticeGate() {
   }, [loadNotice]);
 
   useEffect(() => {
-    if (!isDashboardPath || !notice || isPlatformAdmin) return;
+    if (status === "loading" || !notice) return;
     let shouldShow = true;
     try {
       shouldShow = localStorage.getItem(`yap_global_notice_seen_${viewerKey}_${notice.version}`) !== "seen";
@@ -72,9 +69,9 @@ export function GlobalNoticeGate() {
     }
     const timer = window.setTimeout(() => setVisible(true), 0);
     return () => window.clearTimeout(timer);
-  }, [isDashboardPath, isPlatformAdmin, notice, viewerKey]);
+  }, [notice, status, viewerKey]);
 
-  if (!isDashboardPath || !visible || !notice || isPlatformAdmin) {
+  if (!visible || !notice) {
     return null;
   }
 

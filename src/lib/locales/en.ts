@@ -221,7 +221,7 @@ export const en: Record<LocaleKeys, string> = {
   globalNoticeMenu: "Global Notice",
   globalNoticeBadge: "NOTICE",
   globalNoticeEditorTitle: "Global Notice",
-  globalNoticeEditorDescription: "Publish a one-time notice dialog for dashboard visitors. Editing it creates a new version, so previously dismissed notices appear again.",
+  globalNoticeEditorDescription: "Publish a one-time notice dialog to users entering anywhere in the service. Editing it creates a new version, so previously dismissed notices appear again.",
   globalNoticeTitleLabel: "Title",
   globalNoticeBodyLabel: "Body",
   globalNoticeTitlePlaceholder: "Enter a short title",

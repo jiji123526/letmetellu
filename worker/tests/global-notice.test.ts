@@ -27,6 +27,11 @@ const providersSource = readFileSync(
   "utf8",
 );
 
+const rootLayoutSource = readFileSync(
+  new URL("../../src/app/layout.tsx", import.meta.url),
+  "utf8",
+);
+
 const gateSource = readFileSync(
   new URL("../../src/components/GlobalNoticeGate.tsx", import.meta.url),
   "utf8",
@@ -64,12 +69,17 @@ test("next proxy keeps reads public and forwards writes through the internal ide
   assert.match(nextProxy, /export async function DELETE\(\)/);
 });
 
-test("dashboard shows the editor only from the platform-admin account menu and keys dismissal by notice version", () => {
+test("the editor stays admin-only while the notice gate covers every entry route", () => {
   assert.match(dashboardSource, /setGlobalNotice\(await fetchGlobalNotice\(\)\)/);
   assert.match(dashboardSource, /setShowGlobalNoticeEditor\(true\)/);
   assert.match(dashboardSource, /isPlatformAdmin && \(/);
+  assert.match(rootLayoutSource, /<RootProviders>/);
+  assert.match(providersSource, /export function RootProviders/);
   assert.match(providersSource, /<GlobalNoticeGate \/>/);
-  assert.match(gateSource, /const isDashboardPath = pathname === "\/dashboard"/);
+  assert.doesNotMatch(gateSource, /isDashboardPath/);
+  assert.match(gateSource, /const pathname = usePathname\(\)/);
+  assert.match(gateSource, /\[loadNotice, pathname\]/);
+  assert.match(gateSource, /status === "loading"/);
   assert.match(gateSource, /yap_global_notice_seen_/);
   assert.match(gateSource, /notice\.version/);
   assert.match(editorSource, /GlobalNoticeSurface/);

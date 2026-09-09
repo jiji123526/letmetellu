@@ -219,7 +219,7 @@ export const ko = {
   globalNoticeMenu: "전체 공지",
   globalNoticeBadge: "NOTICE",
   globalNoticeEditorTitle: "전체 공지",
-  globalNoticeEditorDescription: "대시보드 방문자에게 한 번만 보이는 공지 다이얼로그를 게시합니다. 내용을 수정하면 새 버전으로 저장되어, 이전에 닫았던 사용자에게도 다시 표시됩니다.",
+  globalNoticeEditorDescription: "서비스의 모든 진입 경로에서 사용자에게 한 번만 보이는 공지 다이얼로그를 게시합니다. 내용을 수정하면 새 버전으로 저장되어, 이전에 닫았던 사용자에게도 다시 표시됩니다.",
   globalNoticeTitleLabel: "제목",
   globalNoticeBodyLabel: "내용",
   globalNoticeTitlePlaceholder: "짧은 제목을 입력하세요",

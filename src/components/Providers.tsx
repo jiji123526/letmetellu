@@ -5,19 +5,30 @@ import { GlobalNoticeGate } from "@/components/GlobalNoticeGate";
 import { LocaleProvider } from "@/hooks/useLocale";
 import { UserPreferencesSync } from "@/components/UserPreferencesSync";
 
-export function Providers({
+export function RootProviders({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <SessionProvider>
-      <UserPreferencesSync />
-
       <LocaleProvider>
         <GlobalNoticeGate />
         {children}
       </LocaleProvider>
     </SessionProvider>
+  );
+}
+
+export function Providers({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <UserPreferencesSync />
+      {children}
+    </>
   );
 }

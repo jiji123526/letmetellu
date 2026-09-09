@@ -4,6 +4,15 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Super-admin global notices cover every entry route — 2026-09-08
+
+- The dynamic global-notice gate previously mounted only inside page-level providers and explicitly returned outside `/dashboard`, so direct channel, support, password-reset, legal, and email-verification entry points could not show a published notice.
+- Session and locale providers now mount once around the application children in the root layout. Existing page-level providers retain only authenticated preference synchronization, avoiding duplicate session/locale providers on dashboard, channel, support, and reset-password pages.
+- The global gate checks on full document load and on client-side pathname changes, then waits for session hydration before selecting the versioned dismissal key. It does not use WebSocket or push broadcast, so a user who remains on one page is not interrupted; an unseen notice is discovered on refresh or the next page transition. Published notices therefore appear once for authenticated users and guests from any entry route, including the platform-admin account itself.
+- The super-admin editor remains available only through the protected platform-admin dashboard flow, and Worker writes still require trusted internal identity plus the authoritative platform-admin role check. Public reads reveal only the intentionally published notice.
+
+Trade-off: legal and email-verification entry points now initialize the lightweight client session provider, and each full load or pathname change performs one small public global-notice read. The versioned local dismissal prevents the same notice from reopening, but the read is still required to discover a newly published version without realtime broadcast. Notice-read failure remains non-blocking. No D1 migration or Worker deployment is required; deploy the frontend only.
+
 ### Slow core requests can now trigger operational alerts — 2026-09-08
 
 - Successful but slow core Worker routes now record `slow_core_request` in `operational_events` when the total Worker duration crosses a bounded threshold on `GET /api/init`, `GET /api/data`, `GET /api/unified-timeline`, `POST /api/messages`, or `POST /api/dm`.
