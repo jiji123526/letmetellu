@@ -95,7 +95,7 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(globalStylesSource, /\.preview-media-skeleton/);
   assert.match(
     globalStylesSource,
-    /\[data-bubble\]:has\(\.message-embeds\)\s*\{[\s\S]*width: min\(100%, calc\(320px \+ var\(--bubble-font-size\) \* 1\.176\)\)/,
+    /\[data-bubble\]:has\(\.message-embeds\)\s*\{[\s\S]*width: calc\(320px \+ var\(--bubble-font-size\) \* 1\.176\);[\s\S]*max-width: 100%/,
   );
   assert.match(
     globalStylesSource,

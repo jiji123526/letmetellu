@@ -334,7 +334,8 @@ body {
 
 /* Link previews use the same available width regardless of message length. */
 [data-bubble]:has(.message-embeds) {
-  width: min(100%, calc(320px + var(--bubble-font-size) * 1.176));
+  width: calc(320px + var(--bubble-font-size) * 1.176);
+  max-width: 100%;
 }
 
 [data-bubble]:has(.message-embeds) .message-embeds,
