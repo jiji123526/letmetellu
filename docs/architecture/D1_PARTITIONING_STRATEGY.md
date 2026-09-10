@@ -748,6 +748,9 @@ Implemented so far:
 - bound read capabilities to signed parent partition, logical shard, and
   placement version claims while retaining legacy capabilities only on the
   original primary placement;
+- added an explicit non-authoritative control channel projection, maintained by
+  same-database triggers during preparation and designed to transition to
+  versioned shard events before canary;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:

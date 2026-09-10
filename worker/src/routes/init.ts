@@ -146,8 +146,8 @@ function readSharedChannel(
       controlEnv.DB.prepare(
         `WITH target AS (
            SELECT owner_uid, show_on_profile
-           FROM channels
-           WHERE id = ?
+           FROM channel_control_projections
+           WHERE channel_id = ?
          )
          SELECT
            (SELECT owner_uid FROM target) AS projection_owner_uid,
@@ -161,12 +161,11 @@ function readSharedChannel(
                CASE
                  WHEN EXISTS(
                    SELECT 1
-                   FROM channels AS owner_channels
+                   FROM channel_control_projections AS owner_channels
                    WHERE owner_channels.owner_uid = (SELECT owner_uid FROM target)
                      AND owner_channels.show_on_profile = 1
-                     AND owner_channels.id NOT LIKE '%_live'
-                     AND owner_channels.id != ?
-                     ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
+                     AND owner_channels.channel_id != ?
+                     ${reportsChannelId ? "AND owner_channels.channel_id != ?" : ""}
                    LIMIT 1
                  ) THEN 2
                  ELSE 1

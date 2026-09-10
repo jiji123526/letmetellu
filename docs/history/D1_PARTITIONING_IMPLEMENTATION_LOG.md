@@ -288,11 +288,55 @@ Security and tradeoffs:
 - Existing snapshot tokens remain subject to their short 30-second or two-minute
   expiry for non-placement channel metadata changes.
 
+### Explicit control channel projection
+
+- Added `channel_control_projections` with only channel ID, owner ID, profile
+  visibility, creation time, projection version, and projection timestamp.
+- Passcode, moderation, deletion authority, and other access state are
+  deliberately excluded. The projection cannot authorize a channel request.
+- Existing normal channels are backfilled by migration. Live-channel rows are
+  excluded because normal and live variants share one parent placement and
+  account-wide views do not list live rows independently.
+- While production remains on one D1, insert, relevant update, and delete
+  triggers maintain the projection in the same SQLite transaction as
+  `channels`.
+- The split-database `init` path reads owner/profile enrichment from the
+  explicit projection instead of treating the full control `channels` table as
+  an implicit projection.
+- Added bounded audit SQL for missing, mismatched, and orphaned rows plus an
+  idempotent repair script.
+
+Validation:
+
+- isolated SQLite execution confirmed migration, insert/update/delete triggers,
+  projection version increments, mismatch detection, and repair;
+- all 71 Worker hardening test files passed;
+- `npx tsc --noEmit` passed in `worker/`.
+
+Tradeoffs and limits:
+
+- Projection storage and its owner/profile index add modest control-D1 storage.
+- Migration backfill writes one row per existing non-live channel and therefore
+  creates bounded one-time control-D1 write load. Apply the migration before any
+  canary routing and outside a known overload window.
+- Channel creation, owner transfer, profile visibility changes, and deletion
+  perform an additional trigger write. Unrelated channel updates do not fire
+  the update trigger.
+- `projection_version` currently orders control-DB trigger updates only. It is
+  not yet a globally authoritative source sequence.
+- The audit and repair scripts compare against control `channels` and are valid
+  only before physical shard ownership, or while that transitional row is
+  synchronously refreshed. They cannot detect or repair divergence from a Chat
+  shard.
+- The repair script deletes orphaned projection rows. Run the audit first and
+  do not use this repair script after physical shard ownership begins.
+- Before canary, shard-local durable events need an idempotent projection
+  consumer with monotonic source versioning and bounded reconciliation.
+
 ## Next implementation step
 
-Define projection freshness and repair behavior for the transitional control
-channel rows, then add shard-local durable source events before routing message
-or DM mutations. Before enabling a canary, add placement-aware capabilities,
-local placement/tombstone validation, and tests using distinct fake control and
-Chat databases. Virtual-bucket routing remains disabled until these safeguards
+Add shard-local durable source events and an idempotent control projection
+consumer with monotonic source versions. Then add local placement/tombstone
+validation and tests using distinct fake control and Chat databases. Message or
+DM mutations and virtual-bucket routing remain disabled until these safeguards
 and canary tooling are ready.
