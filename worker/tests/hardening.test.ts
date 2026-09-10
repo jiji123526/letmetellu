@@ -237,6 +237,19 @@ test("Twitter previews replace unstable mosaics with validated pbs media", () =>
   );
 });
 
+test("Twitter media lookup failures are observable and briefly cached", () => {
+  const source = readFileSync(new URL("../src/routes/preview.ts", import.meta.url), "utf8");
+
+  assert.match(source, /TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60/);
+  assert.match(source, /fxtwitter media preview unavailable/);
+  assert.match(source, /"upstream_status"/);
+  assert.match(source, /"content_type"/);
+  assert.match(source, /"invalid_json"/);
+  assert.match(source, /"no_safe_media"/);
+  assert.match(source, /"request_error"/);
+  assert.match(source, /twitterMediaLookupFailed\s*\?\s*TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS/);
+});
+
 test("upload access and quota checks stay ahead of request-body consumption", () => {
   const source = readFileSync(new URL("../src/routes/upload.ts", import.meta.url), "utf8");
   const handlerStart = source.indexOf("export async function handleUpload");

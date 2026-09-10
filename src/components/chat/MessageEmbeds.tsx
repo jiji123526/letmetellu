@@ -15,8 +15,9 @@ interface PreviewData {
   url: string;
 }
 
-const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v4";
+const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v5";
 const LEGACY_PREVIEW_CACHE_NAMES = [
+  "letmetellu-link-previews-v4",
   "letmetellu-link-previews-v3",
   "letmetellu-link-previews-v2",
 ];

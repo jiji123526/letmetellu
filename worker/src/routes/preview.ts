@@ -21,7 +21,12 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v5";
+const PREVIEW_CACHE_VERSION = "v6";
+const TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60;
+
+type FxTwitterMediaPreviewResult =
+  | { status: "selected"; image: string }
+  | { status: "failed"; image: "" };
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -108,7 +113,17 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
   return html;
 }
 
-async function fetchFxTwitterMediaPreview(statusId: string): Promise<string> {
+function logFxTwitterMediaFailure(
+  stage: string,
+  detail: Record<string, string | number> = {},
+): FxTwitterMediaPreviewResult {
+  console.warn("fxtwitter media preview unavailable", { stage, ...detail });
+  return { status: "failed", image: "" };
+}
+
+async function fetchFxTwitterMediaPreview(
+  statusId: string,
+): Promise<FxTwitterMediaPreviewResult> {
   try {
     const apiUrl = assertAllowedPreviewUrl(`https://api.fxtwitter.com/status/${statusId}`);
     const response = await fetchWithTimeout(apiUrl.toString(), {
@@ -118,13 +133,37 @@ async function fetchFxTwitterMediaPreview(statusId: string): Promise<string> {
       },
       redirect: "error",
     });
-    if (!response.ok) return "";
+    if (!response.ok) {
+      return logFxTwitterMediaFailure("upstream_status", {
+        upstreamStatus: response.status,
+      });
+    }
     const contentType = response.headers.get("Content-Type") || "";
-    if (!/^application\/json\b/i.test(contentType)) return "";
+    if (!/^application\/json\b/i.test(contentType)) {
+      return logFxTwitterMediaFailure("content_type", {
+        contentType: contentType.slice(0, 100),
+      });
+    }
     const body = await readResponseTextWithLimit(response);
-    return selectFxTwitterMediaPreviewUrl(JSON.parse(body) as unknown);
-  } catch {
-    return "";
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body) as unknown;
+    } catch {
+      return logFxTwitterMediaFailure("invalid_json");
+    }
+    const image = selectFxTwitterMediaPreviewUrl(payload);
+    if (!image) {
+      return logFxTwitterMediaFailure("no_safe_media");
+    }
+    return { status: "selected", image };
+  } catch (error) {
+    return logFxTwitterMediaFailure("request_error", {
+      errorType: error instanceof PreviewError
+        ? error.message
+        : error instanceof Error
+          ? error.name
+          : "unknown",
+    });
   }
 }
 
@@ -260,20 +299,31 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
 
     const metadata = parsePreviewMetadata(html, response.url || fetchUrl.toString());
 
+    let twitterMediaLookupFailed = false;
     if (previewUrl.toString().match(/https?:\/\/(twitter\.com|x\.com)\//)) {
       metadata.video = "";
       if (isFxTwitterMosaicUrl(metadata.image)) {
         const statusId = extractTwitterStatusId(previewUrl.toString());
-        metadata.image = statusId ? await fetchFxTwitterMediaPreview(statusId) : "";
+        if (statusId) {
+          const mediaPreview = await fetchFxTwitterMediaPreview(statusId);
+          metadata.image = mediaPreview.image;
+          twitterMediaLookupFailed = mediaPreview.status === "failed";
+        } else {
+          metadata.image = "";
+          twitterMediaLookupFailed = true;
+          logFxTwitterMediaFailure("missing_status_id");
+        }
       }
     }
 
     const hasUsefulMetadata = Boolean(metadata.title || metadata.image);
     const previewResponse = Response.json({ ...metadata, url: rawUrl }, {
       headers: {
-        "Cache-Control": `public, max-age=${hasUsefulMetadata
-          ? PREVIEW_SUCCESS_CACHE_TTL_SECONDS
-          : PREVIEW_EMPTY_CACHE_TTL_SECONDS}`,
+        "Cache-Control": `public, max-age=${twitterMediaLookupFailed
+          ? TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS
+          : hasUsefulMetadata
+            ? PREVIEW_SUCCESS_CACHE_TTL_SECONDS
+            : PREVIEW_EMPTY_CACHE_TTL_SECONDS}`,
       },
     });
     await cachePreview(cacheKey, previewResponse);
