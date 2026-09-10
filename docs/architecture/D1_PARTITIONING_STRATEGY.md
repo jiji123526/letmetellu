@@ -753,19 +753,24 @@ Implemented so far:
   same-database triggers during preparation and designed to transition to
   versioned shard events before canary;
 - added the shard-local domain-event ledger and monotonic channel projection
-  source events; the consumer and retention scheduling remain inactive;
+  source events; consumer and retention scheduling are behind a default-off
+  canary gate with no production shard bindings;
 - persisted channel projection versions independently from canonical channel
   rows so deleting and later recreating the same channel address cannot reset
   event ordering or bypass a delete watermark;
-- added an inactive, bounded projection consumer that leases shard events,
+- added a default-off, bounded projection consumer that leases shard events,
   validates a narrow payload contract, commits version-guarded control writes,
   and acknowledges the source only after the control batch succeeds;
-- added inactive, bounded retention for delivered events after 30 days and dead
-  events after 90 days; unresolved events and channel version watermarks are
-  never included;
+- added default-off, bounded retention for delivered events after 30 days and
+  dead events after 90 days; unresolved events and channel version watermarks
+  are never included;
 - added read-only, cursor-bounded reconciliation between one Chat source and
   control projection state without reading event payloads or authorization
   fields;
+- added explicit optional `CHAT_DB_CANARY_A` and `CHAT_DB_CANARY_B` binding
+  contracts plus a default-off dispatcher. Activation requires both the exact
+  `true` flag and an allowlisted shard-name list, and rejects missing, aliased,
+  or control-database bindings;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
@@ -774,8 +779,8 @@ Exit gate:
 
 ### Phase 2: durable source events
 
-Status: in progress; source ledger, channel projection events, and an inactive
-projection consumer exist, but no dispatcher is deployed.
+Status: in progress; source ledger, channel projection events, and a default-off
+projection dispatcher exist, but no canary D1 bindings are deployed.
 
 1. Add shard-local `domain_events`.
 2. Write message and event rows in the same D1 batch.
@@ -790,7 +795,8 @@ Exit gate:
 
 ### Phase 3: two-shard canary
 
-Status: not started.
+Status: preparation in progress; binding and dispatcher contracts exist, but
+physical canary databases and channel routing do not.
 
 1. Add two Chat D1 bindings with identical channel-local schema.
 2. Add a small static canary allowlist that routes locally without a control

@@ -36,6 +36,11 @@ import { runScheduledMaintenance } from "./lib/maintenance";
 import { runOperationalHealthAlerts } from "./lib/operational-alerts";
 import { drainNotificationOutbox } from "./lib/notification-delivery";
 import { isAllowedRequestOrigin } from "./lib/request-origin";
+import {
+  dispatchCanaryChannelProjectionEvents,
+  isCanaryProjectionDispatchEnabled,
+  retainCanaryDomainEvents,
+} from "./lib/channel-projection-dispatcher";
 
 export { ChatRoom };
 
@@ -425,6 +430,22 @@ export default {
           });
         }
       })());
+      if (isCanaryProjectionDispatchEnabled(env)) {
+        ctx.waitUntil((async () => {
+          try {
+            await dispatchCanaryChannelProjectionEvents(env);
+          } catch {
+            console.error("canary projection dispatch failed");
+            await recordOperationalEvent({
+              env,
+              severity: "error",
+              route: "scheduled canary projection dispatch",
+              eventType: "canary_projection_dispatch_failed",
+              detail: { error: "canary_projection_dispatch_failed" },
+            });
+          }
+        })());
+      }
     }
     if (controller.cron === "17 * * * *") {
       ctx.waitUntil((async () => {
@@ -443,6 +464,22 @@ export default {
           });
         }
       })());
+      if (isCanaryProjectionDispatchEnabled(env)) {
+        ctx.waitUntil((async () => {
+          try {
+            await retainCanaryDomainEvents(env);
+          } catch {
+            console.error("canary domain event retention failed");
+            await recordOperationalEvent({
+              env,
+              severity: "error",
+              route: "scheduled canary domain event retention",
+              eventType: "canary_domain_event_retention_failed",
+              detail: { error: "canary_domain_event_retention_failed" },
+            });
+          }
+        })());
+      }
     }
 
     const scheduledMinute = new Date(controller.scheduledTime).getUTCMinutes();

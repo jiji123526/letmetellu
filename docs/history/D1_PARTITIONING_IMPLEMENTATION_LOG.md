@@ -410,9 +410,9 @@ Tradeoff:
 - The source event is acknowledged only after the control batch commits.
   Control failures return the event to a bounded retry schedule and store only
   a fixed error code, not raw exceptions or payload content.
-- The consumer is not connected to cron or request handling yet. Deploying the
-  Worker without migrations `0065` and `0066` therefore does not query missing
-  tables or alter production behavior.
+- The consumer is connected only to the exact-match, default-off canary cron
+  gate and is never called from request handling. Without the flag and physical
+  canary bindings it does not query domain-event tables.
 
 Tradeoffs:
 
@@ -429,14 +429,15 @@ Tradeoffs:
 ### Domain-event terminal retention
 
 - Added partial indexes for delivered and dead event age scans.
-- Added an inactive cleanup helper that deletes at most 2,000 rows per status
-  per invocation, retaining delivered events for 30 days and dead events for
-  90 days.
+- Added a default-off cleanup helper that deletes at most 2,000 rows per status
+  per invocation, retaining delivered events for 30 days and dead events for 90
+  days.
 - Pending and processing events are outside both cleanup queries regardless of
   age. `channel_projection_versions` is also excluded because its delete
   watermarks must survive event retention and channel-address reuse.
-- Retention is not wired into current hourly maintenance yet, so deploying code
-  before migrations does not query absent domain-event tables.
+- Retention runs from the hourly cron only behind the same validated canary
+  gate, so the current production configuration does not query absent
+  domain-event tables.
 
 Tradeoff:
 
@@ -457,9 +458,35 @@ Tradeoff:
   until canary operations define explicit authorization, audit, and rollback
   controls.
 
+### Default-off canary projection dispatcher
+
+- Added optional `CHAT_DB_CANARY_A` and `CHAT_DB_CANARY_B` Worker binding
+  contracts without changing the production Wrangler configuration.
+- Added `D1_CANARY_PROJECTION_DISPATCH_ENABLED` and
+  `D1_CANARY_PROJECTION_DISPATCH_SHARDS`. Dispatch occurs only when the enable
+  value is exactly `true` and every configured shard name is allowlisted.
+- Startup resolution rejects missing bindings, duplicate shard names, two names
+  pointing to the same D1 object, and any canary binding that aliases the
+  control database.
+- The every-minute cron drains at most ten events per enabled shard. Hourly
+  retention runs only for the same validated source list.
+- Operational failures store fixed error codes rather than raw D1 errors or
+  event payloads. Existing notification and maintenance cron paths are
+  unchanged when dispatch is disabled.
+
+Deployment gate:
+
+- Production `wrangler.toml` intentionally has no canary bindings or enable
+  variables because physical database IDs have not been created or supplied.
+- Create both D1 databases, apply the shard schema through migration `0067`,
+  audit them, and add their real binding IDs before setting the flag.
+- Enable one source name first. Do not add channel routing in the same deploy;
+  verify backlog, retries, dead events, control watermarks, and D1 latency
+  before the separate routing cutover.
+
 ## Next implementation step
 
-Define explicit shard bindings and an opt-in dispatcher path for the two-shard
-canary, then add audited operator tooling around reconciliation. Message or DM
-mutations and virtual-bucket routing remain disabled until these safeguards and
-canary tooling are ready.
+Create and migrate the physical canary databases, then add audited operator
+tooling around reconciliation and a static channel allowlist for shadow reads.
+Message or DM mutations and virtual-bucket routing remain disabled until these
+safeguards and canary tooling are ready.

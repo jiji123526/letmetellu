@@ -1,5 +1,7 @@
 export interface Env {
   DB: D1Database;
+  CHAT_DB_CANARY_A?: D1Database;
+  CHAT_DB_CANARY_B?: D1Database;
   MEDIA: R2Bucket;
   CHAT_ROOM: DurableObjectNamespace;
   ALLOWED_ORIGIN: string;
@@ -12,6 +14,8 @@ export interface Env {
   APP_ORIGIN: string;
   REPORTS_CHANNEL_ID?: string;
   WRITE_MAINTENANCE_MODE?: string;
+  D1_CANARY_PROJECTION_DISPATCH_ENABLED?: string;
+  D1_CANARY_PROJECTION_DISPATCH_SHARDS?: string;
   UNIFIED_TIMELINE_CHANNEL_ALLOWLIST?: string;
   UNIFIED_TIMELINE_LIVE_CHANNEL_ALLOWLIST?: string;
   UNIFIED_TIMELINE_REPORTS_CHANNEL_ALLOWLIST?: string;
