@@ -9,6 +9,7 @@ SELECT
         projection.owner_uid != channel.owner_uid
         OR projection.show_on_profile != COALESCE(channel.show_on_profile, 0)
         OR COALESCE(projection.created_at, '') != COALESCE(channel.created_at, '')
+        OR projection.source_version != channel.projection_source_version
       )
     THEN 1 ELSE 0
   END) AS mismatched_rows
@@ -30,6 +31,8 @@ SELECT
   projection.show_on_profile AS projected_show_on_profile,
   COALESCE(channel.show_on_profile, 0) AS source_show_on_profile,
   projection.projection_version,
+  projection.source_version AS projected_source_version,
+  channel.projection_source_version AS source_version,
   projection.projected_at
 FROM channel_control_projections AS projection
 INNER JOIN channels AS channel
@@ -37,5 +40,6 @@ INNER JOIN channels AS channel
 WHERE projection.owner_uid != channel.owner_uid
    OR projection.show_on_profile != COALESCE(channel.show_on_profile, 0)
    OR COALESCE(projection.created_at, '') != COALESCE(channel.created_at, '')
+   OR projection.source_version != channel.projection_source_version
 ORDER BY projection.projected_at ASC
 LIMIT 100;

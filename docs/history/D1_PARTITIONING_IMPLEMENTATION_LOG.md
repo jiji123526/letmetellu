@@ -333,10 +333,54 @@ Tradeoffs and limits:
 - Before canary, shard-local durable events need an idempotent projection
   consumer with monotonic source versioning and bounded reconciliation.
 
+### Shard-local channel projection events
+
+- Added a generic shard-local `domain_events` ledger with pending, processing,
+  delivered, and dead states; retry timestamps; leases; attempt counts; bounded
+  JSON payloads; and idempotency by channel, event type, aggregate, and source
+  version.
+- Added monotonic `projection_source_version` to canonical channel rows and
+  `source_version` to control projections.
+- Replaced the preparation triggers so normal-channel creation,
+  owner/profile changes, and deletion update the local projection and append a
+  source event in the same SQLite transaction.
+- Live rows do not generate independent projection events.
+- Projection event payloads contain only owner ID, profile visibility, creation
+  time, and active/deleted state. They exclude passcodes, moderation data,
+  messages, media, and message text.
+- Added a bounded event-backlog audit that reports status, event type, invalid
+  payload counts, and at most 100 unresolved event headers without selecting
+  payload content.
+- Updated pre-canary projection audit and repair SQL to compare source versions.
+
+Validation:
+
+- isolated SQLite execution confirmed source versions `1`, `2`, and `3` for
+  create, update, and delete; matching event order; projection version updates;
+  and no live-row event;
+- schema/security tests passed;
+- all 72 Worker hardening test files passed;
+- `npx tsc --noEmit` passed in `worker/`.
+
+Tradeoffs and deployment gate:
+
+- Relevant channel mutations now perform an internal source-version update,
+  projection upsert/delete, and event insert. These are low-frequency control
+  operations but add D1 write amplification.
+- Two event indexes add further write and storage cost.
+- No consumer, acknowledgement, retry runner, or retention cleanup exists yet.
+  Applying migration `0065` now would create a growing pending backlog.
+- Do not apply `0065` to production until the idempotent consumer and retention
+  path are implemented and tested.
+- A future Chat shard using the same schema would also maintain an unused local
+  projection copy. Canary shard bootstrap must replace the preparation triggers
+  with event-only triggers.
+
 ## Next implementation step
 
-Add shard-local durable source events and an idempotent control projection
-consumer with monotonic source versions. Then add local placement/tombstone
-validation and tests using distinct fake control and Chat databases. Message or
-DM mutations and virtual-bucket routing remain disabled until these safeguards
-and canary tooling are ready.
+Add an idempotent control projection consumer that applies only newer source
+versions, records delete watermarks so stale upserts cannot resurrect channels,
+and acknowledges source events only after the control write commits. Then add
+lease recovery, retention, and distinct fake control/Chat database tests.
+Message or DM mutations and virtual-bucket routing remain disabled until these
+safeguards and canary tooling are ready.

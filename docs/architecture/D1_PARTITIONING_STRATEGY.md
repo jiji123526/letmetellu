@@ -370,6 +370,7 @@ CREATE TABLE domain_events (
   channel_id TEXT NOT NULL,
   event_type TEXT NOT NULL,
   aggregate_id TEXT NOT NULL,
+  source_version INTEGER NOT NULL,
   payload_json TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -377,7 +378,7 @@ CREATE TABLE domain_events (
   lease_until TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  UNIQUE (event_type, aggregate_id)
+  UNIQUE (channel_id, event_type, aggregate_id, source_version)
 );
 ```
 
@@ -751,6 +752,9 @@ Implemented so far:
 - added an explicit non-authoritative control channel projection, maintained by
   same-database triggers during preparation and designed to transition to
   versioned shard events before canary;
+- added the shard-local domain-event ledger and monotonic channel projection
+  source events; dispatch, acknowledgement, and retention are not implemented
+  yet;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
@@ -759,7 +763,8 @@ Exit gate:
 
 ### Phase 2: durable source events
 
-Status: not started.
+Status: in progress; source ledger and channel projection events exist, but no
+consumer is deployed.
 
 1. Add shard-local `domain_events`.
 2. Write message and event rows in the same D1 batch.
