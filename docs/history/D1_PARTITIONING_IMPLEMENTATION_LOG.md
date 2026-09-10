@@ -158,6 +158,37 @@ Tradeoffs:
 - `GET /api/init` remains unmigrated pending a separate audit of its shared
   in-flight cache keys and cross-shard isolation.
 
+### Private DM read boundary
+
+- Routed only the `GET /api/dm` branch through `resolveChannelDatabase()` and a
+  primary-first D1 read session.
+- Channel existence, passcode state, and private DM threads use the selected
+  channel database.
+- The protected reports-owner identity remains a control-database lookup.
+- `POST`, `PUT`, and `DELETE` remain on the existing database path. Moving
+  those mutations before shard-local durable events exist could commit channel
+  data while losing notification or cleanup side effects.
+- Production behavior remains single-database because the resolver still
+  returns `env.DB`.
+
+### Init route audit
+
+`GET /api/init` was audited but not migrated:
+
+- its channel query joins account-global `users`, reads the reports-channel
+  owner, and counts an owner's other channels;
+- those account-wide values require control-plane projections after sharding
+  and cannot be computed by querying one Chat shard;
+- its shared in-flight cache keys include channel and consistency constraint
+  but not effective shard ID, so they are not safe across placement changes;
+- report hydration currently receives the control environment even though its
+  canonical message data will be channel-local.
+
+The route must first split channel-local state from control projections, include
+effective shard and placement version in shared cache keys, and keep report
+hydration on the selected channel database. Adding only the resolver would risk
+incomplete profile data and stale cross-shard cache reuse.
+
 ## Next implementation step
 
 Migrate one channel-only read path at a time to resolve its database before

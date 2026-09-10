@@ -18,6 +18,10 @@ const dataSource = readFileSync(
   new URL("../src/routes/data.ts", import.meta.url),
   "utf8",
 );
+const dmSource = readFileSync(
+  new URL("../src/routes/dm.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -93,4 +97,23 @@ test("data collections separate channel and control database reads", () => {
     dataSource,
     /recordOperationalEvent\(\{\s*env,/,
   );
+});
+
+test("private DM GET separates channel and control database reads", () => {
+  const getStart = dmSource.indexOf('if (request.method === "GET")');
+  const putStart = dmSource.indexOf('if (request.method === "PUT")');
+  assert.ok(getStart >= 0 && putStart > getStart);
+  const getSource = dmSource.slice(getStart, putStart);
+
+  assert.match(getSource, /resolveChannelDatabase\(env, parentChannelId\)/);
+  assert.match(
+    getSource,
+    /createD1ReadSessionEnv\(\s*env,\s*"first-primary",\s*resolvedDatabase\.database,\s*\)/,
+  );
+  assert.match(
+    getSource,
+    /getChannelPasscodeInfo\(parentChannelId, readEnv\)/,
+  );
+  assert.match(getSource, /readDmThreads\(\s*readEnv,/);
+  assert.match(getSource, /getReportsChannelOwnerId\(env\)/);
 });

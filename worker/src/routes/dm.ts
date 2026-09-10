@@ -14,6 +14,8 @@ import { deleteMediaByUrl } from "../lib/media.ts";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
 import { queueChannelNotification } from "../lib/notification-events.ts";
+import { resolveChannelDatabase } from "../lib/database-access.ts";
+import { createD1ReadSessionEnv } from "../lib/d1-read-session.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
 const DM_RATE_LIMIT_WINDOW_MS = 10_000;
@@ -97,7 +99,13 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     if (!channelId) return Response.json({ error: "missing channel" }, { status: 400 });
 
     const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
-    const { exists, passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, env);
+    const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+    const readEnv = createD1ReadSessionEnv(
+      env,
+      "first-primary",
+      resolvedDatabase.database,
+    );
+    const { exists, passcode, owner_uid } = await getChannelPasscodeInfo(parentChannelId, readEnv);
     if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     const trustedUserId = getTrustedUserId(request, env);
     const isOwner = trustedUserId === owner_uid;
@@ -116,7 +124,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
     const dm = await readDmThreads(
-      env,
+      readEnv,
       channelId,
       isOwner ? { owner: true } : { owner: false, anonymousUid: requesterUid! },
     );
