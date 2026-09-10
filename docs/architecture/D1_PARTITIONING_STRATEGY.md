@@ -761,6 +761,9 @@ Implemented so far:
 - added an inactive, bounded projection consumer that leases shard events,
   validates a narrow payload contract, commits version-guarded control writes,
   and acknowledges the source only after the control batch succeeds;
+- added inactive, bounded retention for delivered events after 30 days and dead
+  events after 90 days; unresolved events and channel version watermarks are
+  never included;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:

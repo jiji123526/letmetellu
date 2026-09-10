@@ -426,10 +426,28 @@ Tradeoffs:
   does not match the contract. Auditing and bounded reconciliation remain
   required before activation.
 
+### Domain-event terminal retention
+
+- Added partial indexes for delivered and dead event age scans.
+- Added an inactive cleanup helper that deletes at most 2,000 rows per status
+  per invocation, retaining delivered events for 30 days and dead events for
+  90 days.
+- Pending and processing events are outside both cleanup queries regardless of
+  age. `channel_projection_versions` is also excluded because its delete
+  watermarks must survive event retention and channel-address reuse.
+- Retention is not wired into current hourly maintenance yet, so deploying code
+  before migrations does not query absent domain-event tables.
+
+Tradeoff:
+
+- Long-lived watermarks consume one small row for every channel address ever
+  used on that shard. Removing them would require a separate guarantee that no
+  stale event or old channel incarnation can reappear.
+
 ## Next implementation step
 
-Add bounded delivered/dead event retention and reconciliation that compares a
-physical Chat source with the control watermark without selecting secret
-payloads. Then define explicit shard bindings and an opt-in dispatcher path for
-the two-shard canary. Message or DM mutations and virtual-bucket routing remain
-disabled until these safeguards and canary tooling are ready.
+Add reconciliation that compares a physical Chat source with the control
+watermark without selecting secret payloads. Then define explicit shard
+bindings and an opt-in dispatcher path for the two-shard canary. Message or DM
+mutations and virtual-bucket routing remain disabled until these safeguards and
+canary tooling are ready.
