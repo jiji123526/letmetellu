@@ -214,21 +214,55 @@ Current behavior and tradeoffs:
   Override versions, signed hints, and shard-local tombstone validation remain
   required before physical channel movement.
 
+### Init split-database read path
+
+- Preserved the existing single-query `init` channel lookup whenever the
+  resolver selects the control database. The decision is based on the original
+  selected binding before D1 wraps it in a Session object.
+- Added a split path for ordinary channels on a different Chat shard. Canonical
+  channel, passcode, and moderation state comes from the selected shard while
+  owner display metadata and account-wide channel eligibility come from the
+  control database.
+- The shard and control reads run in parallel. Control enrichment is merged only
+  when its projected owner matches the canonical shard owner; mismatches degrade
+  to no owner name and zero related-channel eligibility.
+- Reports-owner identity remains control-plane data and is not used to decide
+  channel ownership.
+- Existing version-1 channel snapshots do not carry placement version. They are
+  ignored on non-control shards, forcing a current primary-first authorization
+  read until a placement-aware capability format exists.
+- Live-session expiry cleanup now receives the selected channel database rather
+  than implicitly writing to the control database.
+- Reports channels remain pinned to the control database. `init` returns
+  `503 reports_channel_shard_not_ready` if one is accidentally routed to a Chat
+  shard because report and petition hydration has not been separated.
+
+Tradeoffs and prerequisites:
+
+- The current control `channels` row acts as a transitional projection. Canary
+  migration must retain it and define how owner/profile projection changes are
+  refreshed.
+- Missing or owner-mismatched projections cannot grant access, but may
+  temporarily hide owner display metadata or related-channel UI.
+- Physical shard requests perform one Chat-shard read and one control read.
+  This is bounded parallel fanout, but canary p95/p99 must prove that it does not
+  offset the queueing improvement.
+- The primary production path retains its existing query count.
+
+Verification:
+
+- all 70 Worker hardening test files passed;
+- `npx tsc --noEmit` passed in `worker/`;
+- projection tests prove stale control ownership cannot replace canonical shard
+  ownership or expose its owner enrichment;
+- routing tests cover the same-database fast path, selected-shard session,
+  reports-channel guard, control admin lookup, and selected-shard live cleanup.
+
 ## Next implementation step
 
-Define the minimal control projection needed by `GET /api/init`: owner display
-name, bounded public owner-channel eligibility, and protected reports-owner
-identity. Then split the mixed query with these constraints:
-
-- retain the current single query while channel and control databases are the
-  same, so preparation does not regress the primary entry path;
-- when databases differ, read canonical channel/passcode/moderation state only
-  from the selected shard and enrichment only from the control projection;
-- never use stale projection ownership for authorization;
-- benchmark the two-database canary path before removing
-  `channel_init_shard_not_ready`.
-
-After read boundaries are complete, add shard-local durable source events before
-routing message or DM mutations. Virtual-bucket routing remains disabled until
-the read boundary, durable effects, tombstone validation, and canary tooling are
-all ready.
+Define projection freshness and repair behavior for the transitional control
+channel rows, then add shard-local durable source events before routing message
+or DM mutations. Before enabling a canary, add placement-aware capabilities,
+local placement/tombstone validation, and tests using distinct fake control and
+Chat databases. Virtual-bucket routing remains disabled until these safeguards
+and canary tooling are ready.

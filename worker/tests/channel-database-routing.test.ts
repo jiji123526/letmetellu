@@ -122,11 +122,11 @@ test("private DM GET separates channel and control database reads", () => {
   assert.match(getSource, /getReportsChannelOwnerId\(env\)/);
 });
 
-test("init fails closed until mixed control and channel reads are separated", () => {
+test("init separates channel and control database reads", () => {
   assert.match(initSource, /resolveChannelDatabase\(env, parentChannelId\)/);
   assert.match(
     initSource,
-    /if \(resolvedDatabase\.database !== env\.DB\) \{[\s\S]*channel_init_shard_not_ready[\s\S]*status: 503/,
+    /readSharedChannel\(\s*readEnv,\s*env,\s*parentChannelId,/,
   );
   assert.match(
     initSource,
@@ -136,5 +136,31 @@ test("init fails closed until mixed control and channel reads are separated", ()
     initSource,
     /createD1ReadSessionEnv\(\s*env,\s*readConstraint,\s*resolvedDatabase\.database,\s*\)/,
   );
+  assert.match(
+    initSource,
+    /const usesControlDatabase = resolvedDatabase\.database === env\.DB/,
+  );
+  assert.match(
+    initSource,
+    /LEFT JOIN channel_moderation ON channel_moderation\.channel_id = channels\.id[\s\S]*WHERE channels\.id = \?/,
+  );
+  assert.match(
+    initSource,
+    /WITH target AS \([\s\S]*AS projection_owner_uid/,
+  );
+  assert.match(initSource, /mergeInitChannelProjection\(channel, projection\)/);
+  assert.match(
+    initSource,
+    /const channelReadAccess = \([\s\S]*usesControlDatabase[\s\S]*authorizedChannelRead\?\.version === 1/,
+  );
+  assert.match(
+    initSource,
+    /if \(reportsChannel && !usesControlDatabase\) \{[\s\S]*reports_channel_shard_not_ready[\s\S]*status: 503/,
+  );
+  assert.match(
+    initSource,
+    /endLiveSession\(\s*channelEnv,/,
+  );
   assert.match(initSource, /isPlatformAdmin\(trustedUserId, env\)/);
+  assert.doesNotMatch(initSource, /channel_init_shard_not_ready/);
 });

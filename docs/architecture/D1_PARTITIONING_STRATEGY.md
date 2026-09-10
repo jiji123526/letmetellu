@@ -741,8 +741,10 @@ Implemented so far:
 - allowed D1 read sessions to start from a selected channel database;
 - routed unified timeline, data collection, and private DM reads through the
   selected channel database boundary;
-- added placement-versioned cache scope and made `init` fail closed for any
-  non-primary placement until its mixed control/channel query is separated;
+- added placement-versioned cache scope and a split `init` path that keeps
+  canonical authorization state on the selected shard, accepts control
+  enrichment only for a matching projected owner, and keeps reports channels
+  pinned to control;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:

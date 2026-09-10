@@ -34,7 +34,12 @@ import { createD1ReadSessionEnv, type D1ReadConstraint } from "../lib/d1-read-se
 import {
   getChannelDatabaseCacheScope,
   resolveChannelDatabase,
+  withDatabase,
 } from "../lib/database-access";
+import {
+  mergeInitChannelProjection,
+  type InitChannelControlProjection,
+} from "../lib/init-channel-projection";
 
 type SharedChannelRow = Record<string, unknown>;
 type SharedConfigRow = { id: string; text: string; updated_at?: string | null };
@@ -79,47 +84,110 @@ function shareInFlight<T>(
 }
 
 function readSharedChannel(
-  env: Env,
+  readEnv: Env,
+  controlEnv: Env,
   parentChannelId: string,
   reportsChannelId: string | null,
   constraint: D1ReadConstraint,
   databaseScope: string,
+  usesControlDatabase: boolean,
 ): Promise<SharedChannelRow | null> {
-  const key = `${databaseScope}:${constraint}:${reportsChannelId || ""}:${parentChannelId}`;
-  return shareInFlight(sharedChannelRequests, key, () => env.DB.prepare(
-    `SELECT
-       channels.*,
-       users.name AS owner_name,
-       channel_moderation.status AS moderation_status,
-       channel_moderation.petition_status AS moderation_petition_status,
-       ${reportsChannelId
-         ? "(SELECT owner_uid FROM channels WHERE id = ?)"
-         : "NULL"} AS reports_owner_id,
-       CASE
-         WHEN channels.show_on_profile = 1 THEN
+  if (usesControlDatabase) {
+    const key = `${databaseScope}:combined:${constraint}:${reportsChannelId || ""}:${parentChannelId}`;
+    return shareInFlight(sharedChannelRequests, key, () => readEnv.DB.prepare(
+      `SELECT
+         channels.*,
+         users.name AS owner_name,
+         channel_moderation.status AS moderation_status,
+         channel_moderation.petition_status AS moderation_petition_status,
+         ${reportsChannelId
+           ? "(SELECT owner_uid FROM channels WHERE id = ?)"
+           : "NULL"} AS reports_owner_id,
+         CASE
+           WHEN channels.show_on_profile = 1 THEN
+             CASE
+               WHEN EXISTS(
+                 SELECT 1
+                 FROM channels AS owner_channels
+                 WHERE owner_channels.owner_uid = channels.owner_uid
+                   AND owner_channels.show_on_profile = 1
+                   AND owner_channels.id NOT LIKE '%_live'
+                   AND owner_channels.id != channels.id
+                   ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
+                 LIMIT 1
+               ) THEN 2
+               ELSE 1
+             END
+           ELSE 0
+         END AS owner_channel_count
+       FROM channels
+       LEFT JOIN users ON users.id = channels.owner_uid
+       LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
+       WHERE channels.id = ?`,
+    ).bind(
+      ...(reportsChannelId ? [reportsChannelId, reportsChannelId] : []),
+      parentChannelId,
+    ).first<SharedChannelRow>());
+  }
+
+  const key = `${databaseScope}:split:${constraint}:${reportsChannelId || ""}:${parentChannelId}`;
+  return shareInFlight(sharedChannelRequests, key, async () => {
+    const [channel, projection] = await Promise.all([
+      readEnv.DB.prepare(
+        `SELECT
+           channels.*,
+           channel_moderation.status AS moderation_status,
+           channel_moderation.petition_status AS moderation_petition_status
+         FROM channels
+         LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
+         WHERE channels.id = ?`,
+      ).bind(parentChannelId).first<SharedChannelRow>(),
+      controlEnv.DB.prepare(
+        `WITH target AS (
+           SELECT owner_uid, show_on_profile
+           FROM channels
+           WHERE id = ?
+         )
+         SELECT
+           (SELECT owner_uid FROM target) AS projection_owner_uid,
+           (
+             SELECT users.name
+             FROM users
+             WHERE users.id = (SELECT owner_uid FROM target)
+           ) AS owner_name,
            CASE
-             WHEN EXISTS(
-               SELECT 1
-               FROM channels AS owner_channels
-               WHERE owner_channels.owner_uid = channels.owner_uid
-                 AND owner_channels.show_on_profile = 1
-                 AND owner_channels.id NOT LIKE '%_live'
-                 AND owner_channels.id != channels.id
-                 ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
-               LIMIT 1
-             ) THEN 2
-             ELSE 1
-           END
-         ELSE 0
-       END AS owner_channel_count
-     FROM channels
-     LEFT JOIN users ON users.id = channels.owner_uid
-     LEFT JOIN channel_moderation ON channel_moderation.channel_id = channels.id
-     WHERE channels.id = ?`,
-  ).bind(
-    ...(reportsChannelId ? [reportsChannelId, reportsChannelId] : []),
-    parentChannelId,
-  ).first<SharedChannelRow>());
+             WHEN COALESCE((SELECT show_on_profile FROM target), 0) = 1 THEN
+               CASE
+                 WHEN EXISTS(
+                   SELECT 1
+                   FROM channels AS owner_channels
+                   WHERE owner_channels.owner_uid = (SELECT owner_uid FROM target)
+                     AND owner_channels.show_on_profile = 1
+                     AND owner_channels.id NOT LIKE '%_live'
+                     AND owner_channels.id != ?
+                     ${reportsChannelId ? "AND owner_channels.id != ?" : ""}
+                   LIMIT 1
+                 ) THEN 2
+                 ELSE 1
+               END
+             ELSE 0
+           END AS owner_channel_count,
+           ${reportsChannelId
+             ? "(SELECT owner_uid FROM channels WHERE id = ?)"
+             : "NULL"} AS reports_owner_id`,
+      ).bind(
+        parentChannelId,
+        parentChannelId,
+        ...(reportsChannelId ? [reportsChannelId, reportsChannelId] : []),
+      ).first<InitChannelControlProjection>(),
+    ]);
+
+    if (!channel) {
+      return null;
+    }
+
+    return mergeInitChannelProjection(channel, projection);
+  });
 }
 
 function readSharedInitConfig(
@@ -235,22 +303,28 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const authorizedChannelRead = !reportsChannel
       ? await authorizeChannelReadToken(request, channelId, env)
       : null;
-    const channelReadAccess = authorizedChannelRead?.version === 1
+    const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+    const usesControlDatabase = resolvedDatabase.database === env.DB;
+    if (reportsChannel && !usesControlDatabase) {
+      return Response.json(
+        { error: "reports_channel_shard_not_ready" },
+        { status: 503 },
+      );
+    }
+    // Existing snapshot capabilities do not carry placement version. On a
+    // physical shard, force current channel authorization until a
+    // placement-aware capability format is deployed.
+    const channelReadAccess = (
+      usesControlDatabase
+      && authorizedChannelRead?.version === 1
+    )
       ? authorizedChannelRead
       : null;
     const readConstraint: D1ReadConstraint = channelReadAccess
       ? "first-unconstrained"
       : "first-primary";
-    const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
-    // The init query still mixes channel-local and control-plane projections.
-    // Refuse physical shard routing until those reads are split explicitly.
-    if (resolvedDatabase.database !== env.DB) {
-      return Response.json(
-        { error: "channel_init_shard_not_ready" },
-        { status: 503 },
-      );
-    }
     const databaseScope = getChannelDatabaseCacheScope(resolvedDatabase);
+    const channelEnv = withDatabase(env, resolvedDatabase.database);
     const readEnv = createD1ReadSessionEnv(
       env,
       readConstraint,
@@ -266,10 +340,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         }
       : await readSharedChannel(
           readEnv,
+          env,
           parentChannelId,
           reportsChannelId,
           readConstraint,
           databaseScope,
+          usesControlDatabase,
         );
     channelMs = roundedDuration(channelStartedAt);
 
@@ -504,7 +580,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     liveStatus = parseLiveSessionState(liveConfigRow?.text, liveConfigRow?.updated_at);
     if (isLiveSessionExpired(liveStatus)) {
       routeStage = "expire_live_state";
-      await endLiveSession(env, parentChannelId, "expired", liveStatus!.sessionId);
+      await endLiveSession(
+        channelEnv,
+        parentChannelId,
+        "expired",
+        liveStatus!.sessionId,
+      );
       liveStatus = null;
     }
     if (liveTimelineSessionAfterRead !== undefined) {
