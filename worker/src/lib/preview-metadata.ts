@@ -83,11 +83,29 @@ function getDocumentIcon(html: string, baseUrl: string): string {
   return candidates[0]?.url || "";
 }
 
+function getUrlIdentityTitle(baseUrl: string): string {
+  try {
+    const segments = new URL(baseUrl).pathname
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => decodeURIComponent(segment));
+    const first = segments[0] || "";
+    if (/^@[\p{L}\p{N}._-]{1,64}$/u.test(first)) return first;
+
+    const profilePrefixes = new Set(["c", "channel", "profile", "profiles", "user", "users"]);
+    const identity = profilePrefixes.has(first.toLowerCase()) ? segments[1] || "" : "";
+    return /^[\p{L}\p{N}._-]{1,64}$/u.test(identity) ? identity : "";
+  } catch {
+    return "";
+  }
+}
+
 export function parsePreviewMetadata(html: string, baseUrl: string): PreviewMetadata {
   const documentTitle = normalizeText(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
   const title = getMetaContent(html, "og:title")
     || getMetaContent(html, "twitter:title")
-    || documentTitle;
+    || documentTitle
+    || getUrlIdentityTitle(baseUrl);
   const description = getMetaContent(html, "og:description")
     || getMetaContent(html, "twitter:description")
     || getMetaContent(html, "description");

@@ -13,13 +13,32 @@ test("preview metadata falls back to the largest safe document icon and hostname
   `, "https://www.youtube.com/@example");
 
   assert.deepEqual(metadata, {
-    title: "",
+    title: "@example",
     description: "",
     image: "",
     icon: "https://www.youtube.com/favicon-144.png",
     video: "",
     siteName: "youtube.com",
   });
+});
+
+test("preview metadata derives only bounded profile-like path labels", () => {
+  assert.equal(
+    parsePreviewMetadata("", "https://youtube.com/@Stone_Pot").title,
+    "@Stone_Pot",
+  );
+  assert.equal(
+    parsePreviewMetadata("", "https://example.com/profile/creator-name").title,
+    "creator-name",
+  );
+  assert.equal(
+    parsePreviewMetadata("", "https://example.com/posts/private-looking-slug").title,
+    "",
+  );
+  assert.equal(
+    parsePreviewMetadata("", "https://example.com/@name%2Fadmin").title,
+    "",
+  );
 });
 
 test("preview metadata keeps icons separate from large preview media", () => {
