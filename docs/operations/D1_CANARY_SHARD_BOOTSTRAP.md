@@ -87,7 +87,8 @@ Repeat the same process with a distinct name such as
 
 1. add their IDs only to an isolated canary Worker configuration;
 2. keep dispatcher and channel routing disabled;
-3. implement read-only reconciliation operator tooling;
+3. configure and run the
+   [read-only reconciliation operator](./D1_CANARY_PROJECTION_RECONCILIATION.md);
 4. implement a static shadow-read allowlist;
 5. select low-risk channels only after the copy and rollback procedure is
    reviewed.

@@ -23,6 +23,7 @@ Markdown files to the repository root.
 - [Operations runbook](./operations/OPERATIONS_RUNBOOK.md): health signals, incident response, and recovery procedures
 - [D1 production migration](./operations/D1_PRODUCTION_MIGRATION.md): 2026-09-06 database cutover and rollback record
 - [D1 canary shard bootstrap](./operations/D1_CANARY_SHARD_BOOTSTRAP.md): guarded empty-shard preparation and audit procedure
+- [D1 canary projection reconciliation](./operations/D1_CANARY_PROJECTION_RECONCILIATION.md): secret-gated, read-only cross-database audit procedure
 
 ## History
 

@@ -19,6 +19,7 @@ import { handleChannelReports } from "./routes/channel-reports";
 import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
 import { handleNotifications } from "./routes/notifications";
+import { handleCanaryProjectionReconciliation } from "./routes/canary-projection-operations";
 import {
   getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
@@ -262,7 +263,9 @@ export default {
     let capturedException = false;
 
     try {
-      if (url.pathname.startsWith("/api/messages")) {
+      if (url.pathname === "/internal/d1-canary/reconcile") {
+        response = await handleCanaryProjectionReconciliation(request, env);
+      } else if (url.pathname.startsWith("/api/messages")) {
         response = await handleMessages(
           request,
           env,

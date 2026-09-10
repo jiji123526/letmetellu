@@ -5,7 +5,7 @@ import {
 } from "./channel-projection-consumer.ts";
 import { drainDomainEventRetention } from "./domain-event-retention.ts";
 
-type CanaryShardId = "canary-a" | "canary-b";
+export type CanaryShardId = "canary-a" | "canary-b";
 
 export interface CanaryProjectionSource {
   shardId: CanaryShardId;
@@ -32,6 +32,18 @@ export function isCanaryProjectionDispatchEnabled(env: Env): boolean {
   return env.D1_CANARY_PROJECTION_DISPATCH_ENABLED === "true";
 }
 
+export function resolveCanaryProjectionSource(
+  env: Env,
+  shardId: CanaryShardId,
+): CanaryProjectionSource {
+  const database = env[BINDINGS[shardId]];
+  if (!database) throw new Error("canary_projection_binding_missing");
+  if (database === env.DB) {
+    throw new Error("canary_projection_binding_is_control");
+  }
+  return { shardId, database };
+}
+
 export function resolveCanaryProjectionSources(env: Env): CanaryProjectionSource[] {
   if (!isCanaryProjectionDispatchEnabled(env)) return [];
 
@@ -50,10 +62,7 @@ export function resolveCanaryProjectionSources(env: Env): CanaryProjectionSource
     if (shardId !== "canary-a" && shardId !== "canary-b") {
       throw new Error("canary_projection_shard_unknown");
     }
-    const database = env[BINDINGS[shardId]];
-    if (!database) throw new Error("canary_projection_binding_missing");
-    if (database === env.DB) throw new Error("canary_projection_binding_is_control");
-    return { shardId, database };
+    return resolveCanaryProjectionSource(env, shardId);
   });
   if (new Set(sources.map((source) => source.database)).size !== sources.length) {
     throw new Error("canary_projection_bindings_alias");

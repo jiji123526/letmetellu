@@ -47,6 +47,7 @@ Status as of 2026-08-18:
 | `/api/recent-channels` | Browser-local only; Worker account route denied | Same | Own rows through trusted proxy | Own rows through trusted proxy | Identity/email canonicalization exists; action regression pending |
 | `/api/auth` | Public credential flow through trusted app origin/proxy contract | Same | Same | Same | Rate limits and token lifecycle implemented; privacy-bounded email/reset/legacy-upgrade monitoring implemented, rollout rehearsal pending |
 | `/api/preview` | Allowed with durable IP-derived quota and SSRF policy | Same | Same | Same | Server-side fetch policy remains authoritative; YouTube uses validated video IDs and deterministic thumbnails without client widgets or metadata fetches |
+| `/internal/d1-canary/reconcile` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Disabled without a dedicated 32+ character operator secret; isolated canary binding only, GET-only, maximum 100 rows, metadata-only response, no CORS/browser proxy and no repair capability |
 
 ## Required regression scenarios
 

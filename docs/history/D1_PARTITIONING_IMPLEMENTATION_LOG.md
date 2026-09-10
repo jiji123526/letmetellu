@@ -484,8 +484,6 @@ Deployment gate:
   verify backlog, retries, dead events, control watermarks, and D1 latency
   before the separate routing cutover.
 
-## Next implementation step
-
 ### Canary Chat-shard bootstrap and schema audit tooling
 
 - Added a one-time bootstrap overlay for empty databases after repository
@@ -509,10 +507,29 @@ Deployment gate:
 No physical canary database, Worker binding, channel data copy, dispatcher
 activation, or routing change was created by this step.
 
+### Secret-gated reconciliation operator
+
+- Added an internal GET-only route that executes one existing reconciliation
+  page against exactly one selected canary binding and the control database.
+- The route is hidden unless a dedicated 32-to-256-character operator secret
+  is configured. It does not trust browser identity, the ordinary internal
+  proxy secret, or platform-admin UI state.
+- Shard names, cursor syntax, and the one-to-100 row limit are validated before
+  any D1 query. Missing and control-aliased bindings fail closed.
+- Responses are `no-store` and contain only shard ID, checked count, bounded
+  issue headers, and the next cursor. Owner IDs, event payloads, passcodes,
+  messages, and media are not returned.
+- The operator has no mutation or repair path and remains independent of the
+  projection dispatch enable flag, allowing pre-dispatch auditing.
+- Added an operations runbook that keeps the secret out of source, browser
+  proxies, command arguments, and persistent production configuration.
+
+No canary secret, binding ID, remote database, dispatcher activation, channel
+copy, or routing change was added.
+
 ## Next implementation step
 
-After explicit Phase 0 and canary approval, create and audit one physical
-canary database at a time with the runbook. Then add read-only reconciliation
-operator tooling and a static shadow-read allowlist. Message or DM mutations
-and virtual-bucket routing remain disabled until these safeguards and canary
-tooling are ready.
+Add a default-off static shadow-read allowlist that compares selected
+low-risk channels without changing the user response. Record bounded mismatch
+metrics without channel content, and keep all mutation routing on the control
+database.
