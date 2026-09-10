@@ -92,10 +92,10 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   // Passcode gate for data endpoints
   const parentChannelId = channelId.endsWith("_live") ? channelId.replace(/_live$/, "") : channelId;
   const reportsChannel = isReportsChannel(parentChannelId, env);
-  const channelReadAccess = type && CHANNEL_READ_TOKEN_TYPES.has(type) && !reportsChannel
-    ? await authorizeChannelReadToken(request, channelId, env)
-    : null;
   const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+  const channelReadAccess = type && CHANNEL_READ_TOKEN_TYPES.has(type) && !reportsChannel
+    ? await authorizeChannelReadToken(request, channelId, env, resolvedDatabase)
+    : null;
   const readEnv = createD1ReadSessionEnv(
     env,
     channelReadAccess ? "first-unconstrained" : "first-primary",
@@ -157,6 +157,7 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         viewer: tokenViewer.owner ? "owner" : "visitor",
         subject: tokenViewer.owner ? trustedUserId : tokenViewer.anonymousUid,
         sensitive: tokenViewer.owner || Boolean(passcode),
+        placement: resolvedDatabase,
         env,
       })
     : null;

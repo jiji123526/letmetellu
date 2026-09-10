@@ -258,6 +258,36 @@ Verification:
 - routing tests cover the same-database fast path, selected-shard session,
   reports-channel guard, control admin lookup, and selected-shard live cleanup.
 
+### Placement-aware read capabilities
+
+- Snapshot capabilities now use version `3` and access-only capabilities use
+  version `4`.
+- Both formats include signed parent partition key, logical shard ID, and
+  placement version claims.
+- `init`, data collection, and unified timeline routes resolve the channel
+  database first and pass that result into the common capability verifier.
+- A capability is accepted only when its channel, viewer identity, shard, and
+  placement version all match. A mismatch falls back to the authoritative
+  primary-first channel check instead of replica-first access.
+- Legacy version `1` and `2` capabilities remain valid only for primary
+  placement version `1`, covering the short deployment overlap without allowing
+  them onto a future Chat shard.
+- Issuance rejects a placement whose parent partition does not match the
+  requested normal or live channel.
+
+Security and tradeoffs:
+
+- Placement claims are routing constraints, not authorization and not proof
+  that placement is current. The selected shard must still validate local
+  placement state or a movement tombstone before canary cutover.
+- The signed payload becomes slightly larger and exposes logical shard identity
+  to the browser. It does not expose a database credential or D1 database ID.
+- A placement change invalidates outstanding read capabilities immediately.
+  The next request performs an authoritative check and receives a refreshed
+  capability, adding one expected latency spike during movement.
+- Existing snapshot tokens remain subject to their short 30-second or two-minute
+  expiry for non-placement channel metadata changes.
+
 ## Next implementation step
 
 Define projection freshness and repair behavior for the transitional control

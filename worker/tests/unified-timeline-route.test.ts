@@ -329,6 +329,11 @@ test("a valid owner read capability skips the repeated channel metadata lookup",
       owner_channel_count: 1,
       has_passcode: false,
     },
+    placement: {
+      partitionKey: CHANNEL_ID,
+      shardId: "primary",
+      placementVersion: 1,
+    },
     env: fixture.env,
   });
   const response = await handleUnifiedTimeline(unifiedRequest({

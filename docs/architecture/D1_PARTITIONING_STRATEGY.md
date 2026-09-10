@@ -745,6 +745,9 @@ Implemented so far:
   canonical authorization state on the selected shard, accepts control
   enrichment only for a matching projected owner, and keeps reports channels
   pinned to control;
+- bound read capabilities to signed parent partition, logical shard, and
+  placement version claims while retaining legacy capabilities only on the
+  original primary placement;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:

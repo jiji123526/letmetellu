@@ -28,6 +28,7 @@ import { authorizeRoomToken, createRoomToken } from "./passcode";
 import {
   authorizeChannelReadToken,
   createChannelReadToken,
+  isChannelReadSnapshot,
   type ChannelReadSnapshot,
 } from "../lib/channel-read-token";
 import { createD1ReadSessionEnv, type D1ReadConstraint } from "../lib/d1-read-session";
@@ -300,9 +301,6 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const internalToken = request.headers.get("X-Internal-Token");
     const userId = request.headers.get("X-User-Id");
     const trustedUserId = internalToken === env.INTERNAL_SECRET && userId ? userId : "";
-    const authorizedChannelRead = !reportsChannel
-      ? await authorizeChannelReadToken(request, channelId, env)
-      : null;
     const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
     const usesControlDatabase = resolvedDatabase.database === env.DB;
     if (reportsChannel && !usesControlDatabase) {
@@ -311,15 +309,18 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         { status: 503 },
       );
     }
-    // Existing snapshot capabilities do not carry placement version. On a
-    // physical shard, force current channel authorization until a
-    // placement-aware capability format is deployed.
-    const channelReadAccess = (
-      usesControlDatabase
-      && authorizedChannelRead?.version === 1
-    )
-      ? authorizedChannelRead
+    const authorizedChannelRead = !reportsChannel
+      ? await authorizeChannelReadToken(
+          request,
+          channelId,
+          env,
+          resolvedDatabase,
+        )
       : null;
+    const channelReadAccess = authorizedChannelRead
+      && isChannelReadSnapshot(authorizedChannelRead)
+        ? authorizedChannelRead
+        : null;
     const readConstraint: D1ReadConstraint = channelReadAccess
       ? "first-unconstrained"
       : "first-primary";
@@ -637,6 +638,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           subject: isOwner ? trustedUserId : anonymousIdentity.uid,
           sensitive: isOwner || Boolean((channel as any).passcode),
           channel: toReadSnapshot(channel as Record<string, unknown>),
+          placement: resolvedDatabase,
           env,
         })
       : undefined;

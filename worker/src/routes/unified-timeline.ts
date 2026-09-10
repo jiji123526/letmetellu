@@ -71,10 +71,10 @@ export async function handleUnifiedTimeline(
   const parentChannelId = liveChannel
     ? channelId.replace(/_live$/, "")
     : channelId;
-  const channelReadAccess = !isReportsChannel(parentChannelId, env)
-    ? await authorizeChannelReadToken(request, channelId, env)
-    : null;
   const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+  const channelReadAccess = !isReportsChannel(parentChannelId, env)
+    ? await authorizeChannelReadToken(request, channelId, env, resolvedDatabase)
+    : null;
   const readEnv = createD1ReadSessionEnv(
     env,
     channelReadAccess ? "first-unconstrained" : "first-primary",
@@ -165,6 +165,7 @@ export async function handleUnifiedTimeline(
           viewer: viewer.owner ? "owner" : "visitor",
           subject: refreshedChannelReadSubject,
           sensitive: viewer.owner || Boolean(passcode),
+          placement: resolvedDatabase,
           env,
         })
       : null;

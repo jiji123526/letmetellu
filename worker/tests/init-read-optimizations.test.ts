@@ -137,7 +137,10 @@ test("channel entry proxies expose auth and Worker timing stages", () => {
 test("init reuses but never renews a valid channel read capability", () => {
   assert.match(initProxySource, /readChannelReadTokenCookie/);
   assert.match(initProxySource, /headers\["X-Channel-Read-Token"\] = channelReadToken/);
-  assert.match(initSource, /authorizeChannelReadToken\(request, channelId, env\)/);
+  assert.match(
+    initSource,
+    /authorizeChannelReadToken\(\s*request,\s*channelId,\s*env,\s*resolvedDatabase,\s*\)/,
+  );
   assert.match(initSource, /const channel = channelReadAccess[\s\S]*channelReadAccess\.channel[\s\S]*: await readSharedChannel/);
   assert.match(initSource, /const channelReadTokenCandidate = !channelReadAccess/);
   assert.match(initSource, /channelReadTokenCandidate\.length <= 3_500/);

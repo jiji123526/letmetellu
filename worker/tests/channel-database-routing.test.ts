@@ -70,6 +70,14 @@ test("unified timeline separates channel and control database reads", () => {
   );
   assert.match(
     unifiedTimelineSource,
+    /authorizeChannelReadToken\(request, channelId, env, resolvedDatabase\)/,
+  );
+  assert.match(
+    unifiedTimelineSource,
+    /placement: resolvedDatabase,/,
+  );
+  assert.match(
+    unifiedTimelineSource,
     /isPlatformAdmin\(trustedUserId, env\)/,
   );
   assert.match(
@@ -91,6 +99,11 @@ test("data collections separate channel and control database reads", () => {
     dataSource,
     /createD1ReadSessionEnv\(\s*env,\s*channelReadAccess \? "first-unconstrained" : "first-primary",\s*resolvedDatabase\.database,\s*\)/,
   );
+  assert.match(
+    dataSource,
+    /authorizeChannelReadToken\(request, channelId, env, resolvedDatabase\)/,
+  );
+  assert.match(dataSource, /placement: resolvedDatabase,/);
   assert.match(dataSource, /isPlatformAdmin\(trustedUserId, env\)/);
   assert.match(dataSource, /getUserLocale\(trustedUserId, env\)/);
   assert.doesNotMatch(
@@ -151,7 +164,15 @@ test("init separates channel and control database reads", () => {
   assert.match(initSource, /mergeInitChannelProjection\(channel, projection\)/);
   assert.match(
     initSource,
-    /const channelReadAccess = \([\s\S]*usesControlDatabase[\s\S]*authorizedChannelRead\?\.version === 1/,
+    /authorizeChannelReadToken\([\s\S]*resolvedDatabase,[\s\S]*\)/,
+  );
+  assert.match(
+    initSource,
+    /isChannelReadSnapshot\(authorizedChannelRead\)/,
+  );
+  assert.match(
+    initSource,
+    /placement: resolvedDatabase,/,
   );
   assert.match(
     initSource,
