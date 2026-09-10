@@ -23,6 +23,7 @@ const PREVIEW_FRESH_TTL_MS = 24 * 60 * 60 * 1000;
 const PREVIEW_MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CONCURRENT_PREVIEW_REQUESTS = 2;
 const MOUNTED_PREVIEW_PREFETCH_LIMIT = 6;
+const PREVIEW_IMAGE_LOAD_TIMEOUT_MS = 12_000;
 const previewCache = new Map<string, PreviewData | null>();
 const previewCacheMetadata = new Map<string, { cachedAt: number }>();
 const previewRequests = new Map<string, Promise<PreviewData | null>>();
@@ -75,24 +76,30 @@ function preloadPreviewImage(data: PreviewData): Promise<void> {
   const request = new Promise<void>((resolve) => {
     const image = new Image();
     let settled = false;
-    const finish = () => {
+    const timeout = globalThis.setTimeout(() => finish(false), PREVIEW_IMAGE_LOAD_TIMEOUT_MS);
+    const finish = (ready: boolean) => {
       if (settled) return;
       settled = true;
-      void (typeof image.decode === "function" ? image.decode().catch(() => {}) : Promise.resolve())
-        .finally(() => {
-          rememberReadyPreviewImage(data.image);
-          resolve();
-        });
-    };
-    image.onload = finish;
-    image.onerror = () => {
-      settled = true;
+      globalThis.clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
+      if (ready) {
+        rememberReadyPreviewImage(data.image);
+        if (typeof image.decode === "function") void image.decode().catch(() => {});
+      }
       resolve();
     };
+    image.onload = () => finish(true);
+    image.onerror = () => finish(false);
     image.src = data.image;
-    if (image.complete && image.naturalWidth > 0) finish();
+    if (image.complete && image.naturalWidth > 0) finish(true);
   });
   previewImageRequests.set(data.image, request);
+  void request.finally(() => {
+    if (previewImageRequests.get(data.image) === request) {
+      previewImageRequests.delete(data.image);
+    }
+  });
   return request;
 }
 
@@ -426,6 +433,20 @@ function PreviewImage({
 }) {
   const [loaded, setLoaded] = useState(readyPreviewImages.has(src));
   const [failed, setFailed] = useState(false);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (readyPreviewImages.has(src)) return;
+    loadTimeoutRef.current = setTimeout(() => {
+      loadTimeoutRef.current = null;
+      // Stop an indefinite skeleton while allowing a late image response.
+      setLoaded(true);
+    }, PREVIEW_IMAGE_LOAD_TIMEOUT_MS);
+    return () => {
+      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    };
+  }, [src]);
 
   return (
     <div
@@ -444,6 +465,8 @@ function PreviewImage({
       <img
         src={src}
         alt=""
+        decoding="async"
+        referrerPolicy="no-referrer"
         className={`media-load-fade${loaded ? " is-loaded" : ""}`}
         style={{
           position: "absolute",
@@ -454,14 +477,19 @@ function PreviewImage({
           objectFit: preserveFullImage ? "contain" : "cover",
         }}
         onLoad={(event) => {
+          if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
           const image = event.currentTarget;
-          void (typeof image.decode === "function" ? image.decode().catch(() => {}) : Promise.resolve())
-            .finally(() => {
-              rememberReadyPreviewImage(src);
-              setLoaded(true);
-            });
+          rememberReadyPreviewImage(src);
+          setFailed(false);
+          setLoaded(true);
+          if (typeof image.decode === "function") void image.decode().catch(() => {});
         }}
-        onError={() => setFailed(true)}
+        onError={() => {
+          if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+          setFailed(true);
+        }}
       />
     </div>
   );
@@ -608,6 +636,7 @@ function LinkPreviewCard({
         />
       ) : data.image ? (
         <PreviewImage
+          key={data.image}
           src={data.image}
           preserveFullImage={shouldPreserveFullImage}
           isMine={isMine}

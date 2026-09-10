@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Link-preview images no longer wait on decode before display — 2026-09-10
+
+- Link-preview images now become visible as soon as the browser fires `load`;
+  asynchronous `decode()` remains a best-effort optimization but no longer
+  controls skeleton removal.
+- Preview image state resets when a refreshed metadata response changes the
+  image URL. A 12-second guard stops an indefinitely animated skeleton while
+  still allowing a late image response to render.
+- Failed or timed-out preloads are removed from the in-memory request map so a
+  later visible request can retry. External preview images also use
+  `no-referrer` and asynchronous decoding.
+
+Tradeoff: stopping the skeleton after 12 seconds can expose an empty reserved
+media frame until a very slow response completes. This is preferable to an
+indefinite loading animation and does not add a Worker image proxy, bandwidth
+cost, or new SSRF surface.
+
 ### Global-notice reads use layered short-lived caches — 2026-09-08
 
 - Public global notices are not realtime-sensitive, so the root notice gate now reuses its last successful result for one hour in browser-local storage. Route transitions and refreshes inside that window still evaluate the cached notice and its versioned dismissal key, but no longer create another Vercel, Worker, or D1 request.
