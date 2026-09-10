@@ -486,7 +486,33 @@ Deployment gate:
 
 ## Next implementation step
 
-Create and migrate the physical canary databases, then add audited operator
-tooling around reconciliation and a static channel allowlist for shadow reads.
-Message or DM mutations and virtual-bucket routing remain disabled until these
-safeguards and canary tooling are ready.
+### Canary Chat-shard bootstrap and schema audit tooling
+
+- Added a one-time bootstrap overlay for empty databases after repository
+  migrations through `0067`.
+- The overlay fails before trigger replacement if canonical channels, local
+  projections, or domain events already exist, or if the expected projection
+  triggers and all four domain-event indexes are missing.
+- Successful bootstrap records an explicit `chat-canary` role and replaces the
+  preparation triggers with event-only triggers. Chat-shard channel mutations
+  advance persistent source watermarks and append minimal durable events
+  without writing the local control-projection copy.
+- Added a read-only audit for integrity, role metadata, required schema,
+  trigger behavior, local projection emptiness, watermark consistency, and a
+  bounded payload-free event backlog.
+- Added an operator runbook that keeps database creation, production bindings,
+  dispatcher activation, channel copy, and routing as separate gates.
+- In-memory SQLite coverage verifies empty-database rejection, schema-index
+  rejection, create/update/delete/recreate ordering, live-row exclusion, and
+  absence of direct local projection writes.
+
+No physical canary database, Worker binding, channel data copy, dispatcher
+activation, or routing change was created by this step.
+
+## Next implementation step
+
+After explicit Phase 0 and canary approval, create and audit one physical
+canary database at a time with the runbook. Then add read-only reconciliation
+operator tooling and a static shadow-read allowlist. Message or DM mutations
+and virtual-bucket routing remain disabled until these safeguards and canary
+tooling are ready.

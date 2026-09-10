@@ -22,6 +22,7 @@ Markdown files to the repository root.
 - [Launch checklist](./operations/LAUNCH_CHECKLIST.md): release gates and production smoke tests
 - [Operations runbook](./operations/OPERATIONS_RUNBOOK.md): health signals, incident response, and recovery procedures
 - [D1 production migration](./operations/D1_PRODUCTION_MIGRATION.md): 2026-09-06 database cutover and rollback record
+- [D1 canary shard bootstrap](./operations/D1_CANARY_SHARD_BOOTSTRAP.md): guarded empty-shard preparation and audit procedure
 
 ## History
 

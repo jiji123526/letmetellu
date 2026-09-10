@@ -796,7 +796,9 @@ Exit gate:
 ### Phase 3: two-shard canary
 
 Status: preparation in progress; binding and dispatcher contracts exist, but
-physical canary databases and channel routing do not.
+physical canary databases and channel routing do not. Empty-shard bootstrap and
+read-only schema audit tooling exist, including a fail-closed event-only trigger
+overlay; they have not been run against remote databases.
 
 1. Add two Chat D1 bindings with identical channel-local schema.
 2. Add a small static canary allowlist that routes locally without a control
