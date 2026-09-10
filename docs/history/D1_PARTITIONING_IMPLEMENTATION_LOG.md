@@ -112,6 +112,28 @@ goal: reducing service latency.
 - Canary success requires improved end-to-end p95/p99 latency; lower SQL or
   queue timing alone is insufficient.
 
+## 2026-09-10: unified timeline read boundary
+
+- Routed `GET /api/unified-timeline` through `resolveChannelDatabase()` before
+  opening its D1 read session.
+- Channel existence, passcode, viewer, timeline, live-session, and report
+  timeline data continue to use one session on the selected channel database.
+- Platform-administrator and user-locale lookups remain on the control database.
+  Shard placement is not an authorization decision and cannot grant access.
+- Production behavior is unchanged because the resolver still selects
+  `env.DB` and shard `primary` for every channel.
+- The resolver currently adds only a local asynchronous function call. Report
+  timelines may perform their locale lookup outside the channel read session;
+  this preserves the control-plane boundary at the cost of a small additional
+  primary-database read path.
+
+Verification:
+
+- all 69 Worker hardening test files passed;
+- `npx tsc --noEmit` passed in `worker/`;
+- routing tests assert that channel reads use the selected database while
+  platform-administrator and locale reads use the control environment.
+
 ## Next implementation step
 
 Migrate one channel-only read path at a time to resolve its database before

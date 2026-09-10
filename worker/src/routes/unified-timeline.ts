@@ -22,6 +22,7 @@ import { authorizeRoomToken } from "./passcode.ts";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
 import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token.ts";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session.ts";
+import { resolveChannelDatabase } from "../lib/database-access.ts";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -73,9 +74,11 @@ export async function handleUnifiedTimeline(
   const channelReadAccess = !isReportsChannel(parentChannelId, env)
     ? await authorizeChannelReadToken(request, channelId, env)
     : null;
+  const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
   const readEnv = createD1ReadSessionEnv(
     env,
     channelReadAccess ? "first-unconstrained" : "first-primary",
+    resolvedDatabase.database,
   );
   const channelAccess = channelReadAccess
     ? {
@@ -95,7 +98,7 @@ export async function handleUnifiedTimeline(
     : Boolean(trustedUserId && trustedUserId === ownerId);
   const isPlatformAdminViewer = !isOwner
     && Boolean(passcode)
-    && await isPlatformAdmin(trustedUserId, readEnv);
+    && await isPlatformAdmin(trustedUserId, env);
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
   }
@@ -218,7 +221,7 @@ export async function handleUnifiedTimeline(
       return Response.json({ error: "live_session_changed" }, { status: 409 });
     }
     const reportsOwnerLocale = reportsChannel && trustedUserId
-      ? await getUserLocale(trustedUserId, readEnv)
+      ? await getUserLocale(trustedUserId, env)
       : "ko";
     const contextPage = reportsChannel
       ? {
@@ -271,7 +274,7 @@ export async function handleUnifiedTimeline(
     return Response.json({ error: "live_session_changed" }, { status: 409 });
   }
   const reportsOwnerLocale = reportsChannel && trustedUserId
-    ? await getUserLocale(trustedUserId, readEnv)
+    ? await getUserLocale(trustedUserId, env)
     : "ko";
   const page = reportsChannel
     ? {

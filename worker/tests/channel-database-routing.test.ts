@@ -10,6 +10,10 @@ const socketAuthSource = readFileSync(
   new URL("../src/routes/socket-auth.ts", import.meta.url),
   "utf8",
 );
+const unifiedTimelineSource = readFileSync(
+  new URL("../src/routes/unified-timeline.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -41,4 +45,27 @@ test("socket authorization separates channel and control database reads", () => 
     /isPlatformAdmin\(trustedUserId, env\)/,
   );
   assert.doesNotMatch(socketAuthSource, /env\.DB\.prepare/);
+});
+
+test("unified timeline separates channel and control database reads", () => {
+  assert.match(
+    unifiedTimelineSource,
+    /resolveChannelDatabase\(env, parentChannelId\)/,
+  );
+  assert.match(
+    unifiedTimelineSource,
+    /createD1ReadSessionEnv\(\s*env,\s*channelReadAccess \? "first-unconstrained" : "first-primary",\s*resolvedDatabase\.database,\s*\)/,
+  );
+  assert.match(
+    unifiedTimelineSource,
+    /isPlatformAdmin\(trustedUserId, env\)/,
+  );
+  assert.match(
+    unifiedTimelineSource,
+    /getUserLocale\(trustedUserId, env\)/,
+  );
+  assert.doesNotMatch(
+    unifiedTimelineSource,
+    /(?:isPlatformAdmin|getUserLocale)\(trustedUserId, readEnv\)/,
+  );
 });
