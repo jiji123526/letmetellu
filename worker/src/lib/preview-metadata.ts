@@ -100,12 +100,16 @@ function getUrlIdentityTitle(baseUrl: string): string {
   }
 }
 
-export function parsePreviewMetadata(html: string, baseUrl: string): PreviewMetadata {
+export function parsePreviewMetadata(
+  html: string,
+  baseUrl: string,
+  identityUrl = baseUrl,
+): PreviewMetadata {
   const documentTitle = normalizeText(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
   const title = getMetaContent(html, "og:title")
     || getMetaContent(html, "twitter:title")
     || documentTitle
-    || getUrlIdentityTitle(baseUrl);
+    || getUrlIdentityTitle(identityUrl);
   const description = getMetaContent(html, "og:description")
     || getMetaContent(html, "twitter:description")
     || getMetaContent(html, "description");

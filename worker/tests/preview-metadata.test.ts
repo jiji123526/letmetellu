@@ -41,6 +41,16 @@ test("preview metadata derives only bounded profile-like path labels", () => {
   );
 });
 
+test("preview metadata preserves the shared identity across upstream redirects", () => {
+  const metadata = parsePreviewMetadata(
+    `<link rel="icon" href="/favicon.png">`,
+    "https://consent.youtube.com/",
+    "https://www.youtube.com/@Stone_Pot",
+  );
+  assert.equal(metadata.title, "@Stone_Pot");
+  assert.equal(metadata.icon, "https://consent.youtube.com/favicon.png");
+});
+
 test("preview metadata keeps icons separate from large preview media", () => {
   const metadata = parsePreviewMetadata(`
     <meta property="og:title" content="Example">

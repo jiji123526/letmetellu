@@ -21,7 +21,7 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v9";
+const PREVIEW_CACHE_VERSION = "v10";
 const TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60;
 
 function getPreviewRequestIp(request: Request): string {
@@ -244,7 +244,11 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
 
     const html = await readResponseTextWithLimit(response);
 
-    const metadata = parsePreviewMetadata(html, response.url || fetchUrl.toString());
+    const metadata = parsePreviewMetadata(
+      html,
+      response.url || fetchUrl.toString(),
+      previewUrl.toString(),
+    );
 
     let twitterMediaLookupFailed = false;
     if (previewUrl.toString().match(/https?:\/\/(twitter\.com|x\.com)\//)) {
