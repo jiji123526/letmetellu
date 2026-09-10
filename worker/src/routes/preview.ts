@@ -10,13 +10,18 @@ import {
   PREVIEW_EMPTY_CACHE_TTL_SECONDS,
   PREVIEW_SUCCESS_CACHE_TTL_SECONDS,
 } from "../lib/preview-cache-policy";
+import {
+  extractTwitterStatusId,
+  isFxTwitterMosaicUrl,
+  selectFxTwitterPhotoUrl,
+} from "../lib/twitter-preview";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
 const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v3";
+const PREVIEW_CACHE_VERSION = "v4";
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -101,6 +106,26 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
 
   html += decoder.decode();
   return html;
+}
+
+async function fetchFxTwitterPhoto(statusId: string): Promise<string> {
+  try {
+    const apiUrl = assertAllowedPreviewUrl(`https://api.fxtwitter.com/status/${statusId}`);
+    const response = await fetchWithTimeout(apiUrl.toString(), {
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (compatible; yap-preview/1.0)",
+      },
+      redirect: "error",
+    });
+    if (!response.ok) return "";
+    const contentType = response.headers.get("Content-Type") || "";
+    if (!/^application\/json\b/i.test(contentType)) return "";
+    const body = await readResponseTextWithLimit(response);
+    return selectFxTwitterPhotoUrl(JSON.parse(body) as unknown);
+  } catch {
+    return "";
+  }
 }
 
 async function cachePreview(cacheKey: Request, response: Response): Promise<void> {
@@ -237,6 +262,10 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
 
     if (previewUrl.toString().match(/https?:\/\/(twitter\.com|x\.com)\//)) {
       metadata.video = "";
+      if (isFxTwitterMosaicUrl(metadata.image)) {
+        const statusId = extractTwitterStatusId(previewUrl.toString());
+        metadata.image = statusId ? await fetchFxTwitterPhoto(statusId) : "";
+      }
     }
 
     const hasUsefulMetadata = Boolean(metadata.title || metadata.image);

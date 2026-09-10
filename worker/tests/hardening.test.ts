@@ -34,6 +34,11 @@ import { getPreviewFailureCacheTtl } from "../src/lib/preview-cache-policy.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 import { buildManagedMediaPath, extractMediaKey, normalizeManagedMediaUrl } from "../src/lib/media.ts";
 import { extractYouTubeVideoId } from "../src/lib/youtube-preview.ts";
+import {
+  extractTwitterStatusId,
+  isFxTwitterMosaicUrl,
+  selectFxTwitterPhotoUrl,
+} from "../src/lib/twitter-preview.ts";
 
 test("D1 overloads are transient and init retry jitter stays bounded", () => {
   assert.equal(
@@ -174,6 +179,45 @@ test("YouTube preview IDs support common share, live and reordered watch URLs", 
   assert.equal(extractYouTubeVideoId("https://www.youtube.com/watch?si=test&v=dQw4w9WgXcQ"), "dQw4w9WgXcQ");
   assert.equal(extractYouTubeVideoId("https://example.com/watch?v=dQw4w9WgXcQ"), null);
   assert.equal(extractYouTubeVideoId("https://youtube.com/watch?v=invalid"), null);
+});
+
+test("Twitter previews replace unstable mosaics with validated pbs photos", () => {
+  assert.equal(
+    extractTwitterStatusId("https://x.com/example/status/2097686264564895818"),
+    "2097686264564895818",
+  );
+  assert.equal(extractTwitterStatusId("https://example.com/status/123"), null);
+  assert.equal(
+    isFxTwitterMosaicUrl("https://mosaic.fxtwitter.com/jpeg/123/a/b"),
+    true,
+  );
+  assert.equal(
+    selectFxTwitterPhotoUrl({
+      tweet: {
+        media: {
+          photos: [
+            {
+              type: "photo",
+              url: "https://pbs.twimg.com/media/example.jpg?name=orig",
+            },
+          ],
+        },
+      },
+    }),
+    "https://pbs.twimg.com/media/example.jpg?name=orig",
+  );
+  assert.equal(
+    selectFxTwitterPhotoUrl({
+      tweet: {
+        media: {
+          photos: [
+            { type: "photo", url: "https://attacker.example/secret.jpg" },
+          ],
+        },
+      },
+    }),
+    "",
+  );
 });
 
 test("upload access and quota checks stay ahead of request-body consumption", () => {

@@ -15,11 +15,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Failed or timed-out preloads are removed from the in-memory request map so a
   later visible request can retry. External preview images also use
   `no-referrer` and asynchronous decoding.
+- FXTwitter multi-photo metadata no longer exposes the unreliable
+  `mosaic.fxtwitter.com` composite directly to browsers. The Worker retrieves
+  the matching JSON metadata and selects only the first validated
+  `pbs.twimg.com` photo URL; if no safe photo exists, it omits the broken image.
+- Worker preview cache version `v4` and browser Cache API version `v3`
+  invalidate previously stored mosaic URLs. The obsolete browser `v2` cache is
+  deleted asynchronously.
 
 Tradeoff: stopping the skeleton after 12 seconds can expose an empty reserved
 media frame until a very slow response completes. This is preferable to an
 indefinite loading animation and does not add a Worker image proxy, bandwidth
-cost, or new SSRF surface.
+cost, or new SSRF surface. Multi-photo Twitter previews show the first photo
+rather than a generated collage and require one additional bounded FXTwitter
+API request on a cold metadata fetch.
 
 ### Global-notice reads use layered short-lived caches — 2026-09-08
 
