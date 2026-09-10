@@ -444,10 +444,22 @@ Tradeoff:
   used on that shard. Removing them would require a separate guarantee that no
   stale event or old channel incarnation can reappear.
 
+### Read-only cross-database projection reconciliation
+
+- Added a cursor-based comparison of at most 100 source channel watermarks
+  against control watermarks and projections.
+- The check detects missing or stale control watermarks, missing or mismatched
+  active projections, and projections left behind after deletion.
+- It performs one bounded source query and one bounded control query. It does
+  not read domain-event payloads, passcodes, moderation records, messages, or
+  media, and diagnostics expose only channel IDs, reason codes, and versions.
+- Reconciliation is read-only. Automatic repair remains intentionally absent
+  until canary operations define explicit authorization, audit, and rollback
+  controls.
+
 ## Next implementation step
 
-Add reconciliation that compares a physical Chat source with the control
-watermark without selecting secret payloads. Then define explicit shard
-bindings and an opt-in dispatcher path for the two-shard canary. Message or DM
+Define explicit shard bindings and an opt-in dispatcher path for the two-shard
+canary, then add audited operator tooling around reconciliation. Message or DM
 mutations and virtual-bucket routing remain disabled until these safeguards and
 canary tooling are ready.

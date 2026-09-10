@@ -764,6 +764,9 @@ Implemented so far:
 - added inactive, bounded retention for delivered events after 30 days and dead
   events after 90 days; unresolved events and channel version watermarks are
   never included;
+- added read-only, cursor-bounded reconciliation between one Chat source and
+  control projection state without reading event payloads or authorization
+  fields;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
