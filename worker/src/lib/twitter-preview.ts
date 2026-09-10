@@ -38,21 +38,32 @@ function validatedTwitterImageUrl(value: unknown): string {
   }
 }
 
-export function selectFxTwitterPhotoUrl(payload: unknown): string {
+export function selectFxTwitterMediaPreviewUrl(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const tweet = (payload as { tweet?: unknown }).tweet;
   if (!tweet || typeof tweet !== "object") return "";
   const media = (tweet as { media?: unknown }).media;
   if (!media || typeof media !== "object") return "";
-  const photos = (media as { photos?: unknown }).photos;
-  if (!Array.isArray(photos)) return "";
 
-  for (const photo of photos.slice(0, 4)) {
-    if (!photo || typeof photo !== "object") continue;
-    const candidate = photo as { type?: unknown; url?: unknown };
-    if (candidate.type !== "photo") continue;
-    const url = validatedTwitterImageUrl(candidate.url);
-    if (url) return url;
+  const photos = (media as { photos?: unknown }).photos;
+  if (Array.isArray(photos)) {
+    for (const photo of photos.slice(0, 4)) {
+      if (!photo || typeof photo !== "object") continue;
+      const url = validatedTwitterImageUrl((photo as { url?: unknown }).url);
+      if (url) return url;
+    }
   }
+
+  const videos = (media as { videos?: unknown }).videos;
+  if (Array.isArray(videos)) {
+    for (const video of videos.slice(0, 4)) {
+      if (!video || typeof video !== "object") continue;
+      const url = validatedTwitterImageUrl(
+        (video as { thumbnail_url?: unknown }).thumbnail_url,
+      );
+      if (url) return url;
+    }
+  }
+
   return "";
 }

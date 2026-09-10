@@ -37,7 +37,7 @@ import { extractYouTubeVideoId } from "../src/lib/youtube-preview.ts";
 import {
   extractTwitterStatusId,
   isFxTwitterMosaicUrl,
-  selectFxTwitterPhotoUrl,
+  selectFxTwitterMediaPreviewUrl,
 } from "../src/lib/twitter-preview.ts";
 
 test("D1 overloads are transient and init retry jitter stays bounded", () => {
@@ -181,7 +181,7 @@ test("YouTube preview IDs support common share, live and reordered watch URLs", 
   assert.equal(extractYouTubeVideoId("https://youtube.com/watch?v=invalid"), null);
 });
 
-test("Twitter previews replace unstable mosaics with validated pbs photos", () => {
+test("Twitter previews replace unstable mosaics with validated pbs media", () => {
   assert.equal(
     extractTwitterStatusId("https://x.com/example/status/2097686264564895818"),
     "2097686264564895818",
@@ -192,12 +192,11 @@ test("Twitter previews replace unstable mosaics with validated pbs photos", () =
     true,
   );
   assert.equal(
-    selectFxTwitterPhotoUrl({
+    selectFxTwitterMediaPreviewUrl({
       tweet: {
         media: {
           photos: [
             {
-              type: "photo",
               url: "https://pbs.twimg.com/media/example.jpg?name=orig",
             },
           ],
@@ -207,11 +206,29 @@ test("Twitter previews replace unstable mosaics with validated pbs photos", () =
     "https://pbs.twimg.com/media/example.jpg?name=orig",
   );
   assert.equal(
-    selectFxTwitterPhotoUrl({
+    selectFxTwitterMediaPreviewUrl({
       tweet: {
         media: {
           photos: [
-            { type: "photo", url: "https://attacker.example/secret.jpg" },
+            { url: "https://attacker.example/secret.jpg" },
+          ],
+          videos: [
+            {
+              thumbnail_url:
+                "https://pbs.twimg.com/amplify_video_thumb/123/img/example.jpg",
+            },
+          ],
+        },
+      },
+    }),
+    "https://pbs.twimg.com/amplify_video_thumb/123/img/example.jpg",
+  );
+  assert.equal(
+    selectFxTwitterMediaPreviewUrl({
+      tweet: {
+        media: {
+          videos: [
+            { thumbnail_url: "https://attacker.example/secret.jpg" },
           ],
         },
       },

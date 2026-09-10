@@ -13,7 +13,7 @@ import {
 import {
   extractTwitterStatusId,
   isFxTwitterMosaicUrl,
-  selectFxTwitterPhotoUrl,
+  selectFxTwitterMediaPreviewUrl,
 } from "../lib/twitter-preview";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
@@ -21,7 +21,7 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v4";
+const PREVIEW_CACHE_VERSION = "v5";
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -108,7 +108,7 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
   return html;
 }
 
-async function fetchFxTwitterPhoto(statusId: string): Promise<string> {
+async function fetchFxTwitterMediaPreview(statusId: string): Promise<string> {
   try {
     const apiUrl = assertAllowedPreviewUrl(`https://api.fxtwitter.com/status/${statusId}`);
     const response = await fetchWithTimeout(apiUrl.toString(), {
@@ -122,7 +122,7 @@ async function fetchFxTwitterPhoto(statusId: string): Promise<string> {
     const contentType = response.headers.get("Content-Type") || "";
     if (!/^application\/json\b/i.test(contentType)) return "";
     const body = await readResponseTextWithLimit(response);
-    return selectFxTwitterPhotoUrl(JSON.parse(body) as unknown);
+    return selectFxTwitterMediaPreviewUrl(JSON.parse(body) as unknown);
   } catch {
     return "";
   }
@@ -264,7 +264,7 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
       metadata.video = "";
       if (isFxTwitterMosaicUrl(metadata.image)) {
         const statusId = extractTwitterStatusId(previewUrl.toString());
-        metadata.image = statusId ? await fetchFxTwitterPhoto(statusId) : "";
+        metadata.image = statusId ? await fetchFxTwitterMediaPreview(statusId) : "";
       }
     }
 
