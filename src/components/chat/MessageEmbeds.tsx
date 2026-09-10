@@ -631,7 +631,7 @@ function LinkPreviewCard({
         maxWidth: "100%",
         borderRadius: "12px",
         overflow: "hidden",
-        width: "min(320px, 100%)",
+        width: "100%",
         background: isMine ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.05)",
         textDecoration: "none",
         color: "inherit",

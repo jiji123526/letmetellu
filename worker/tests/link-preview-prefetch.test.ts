@@ -93,6 +93,15 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   );
   assert.match(globalStylesSource, /\.link-preview-skeleton/);
   assert.match(globalStylesSource, /\.preview-media-skeleton/);
+  assert.match(
+    globalStylesSource,
+    /\[data-bubble\]:has\(\.message-embeds\)\s*\{[\s\S]*width: min\(100%, calc\(320px \+ var\(--bubble-font-size\) \* 1\.176\)\)/,
+  );
+  assert.match(
+    globalStylesSource,
+    /\[data-bubble\]:has\(\.message-embeds\) \.link-preview-card,[\s\S]*width: 100% !important/,
+  );
+  assert.match(messageEmbedsSource, /className="link-preview-card"[\s\S]*width: "100%"/);
 });
 
 test("successful sends warm previews without delaying acknowledgement", () => {

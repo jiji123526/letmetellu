@@ -262,7 +262,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  width: min(320px, 100%);
+  width: 100%;
   min-height: 118px;
   padding: 14px;
   border-radius: 12px;
@@ -330,4 +330,16 @@ body {
 [data-bubble]:has(.message-embeds video):not(:has(.media-loading-dots)),
 [data-bubble]:has(.message-embeds .link-preview-card):not(:has(.media-loading-dots)) {
   padding: calc(var(--bubble-font-size) * 0.588) !important;
+}
+
+/* Link previews use the same available width regardless of message length. */
+[data-bubble]:has(.message-embeds) {
+  width: min(100%, calc(320px + var(--bubble-font-size) * 1.176));
+}
+
+[data-bubble]:has(.message-embeds) .message-embeds,
+[data-bubble]:has(.message-embeds) .message-embeds > div,
+[data-bubble]:has(.message-embeds) .link-preview-card,
+[data-bubble]:has(.message-embeds) .link-preview-skeleton {
+  width: 100% !important;
 }
