@@ -4,35 +4,13 @@ import {
   resolveCanaryProjectionSource,
 } from "../lib/channel-projection-dispatcher.ts";
 import { reconcileChannelProjections } from "../lib/channel-projection-reconciliation.ts";
+import {
+  canaryOperatorAuthorized,
+  unavailableCanaryOperatorResponse,
+} from "../lib/canary-operator-auth.ts";
 
-const MIN_OPERATOR_TOKEN_LENGTH = 32;
-const MAX_OPERATOR_TOKEN_LENGTH = 256;
 const MAX_RECONCILIATION_LIMIT = 100;
 const CHANNEL_CURSOR_PATTERN = /^[a-z0-9-]{3,30}$/;
-
-function unavailable(): Response {
-  return Response.json(
-    { error: "not_found" },
-    { status: 404, headers: { "Cache-Control": "no-store" } },
-  );
-}
-
-function operatorTokenAuthorized(request: Request, env: Env): boolean {
-  const configured = env.D1_CANARY_OPERATOR_TOKEN || "";
-  if (
-    configured.length < MIN_OPERATOR_TOKEN_LENGTH
-    || configured.length > MAX_OPERATOR_TOKEN_LENGTH
-  ) {
-    return false;
-  }
-  const presented = request.headers.get("X-Canary-Operator-Token") || "";
-  if (presented.length !== configured.length) return false;
-  let mismatch = 0;
-  for (let index = 0; index < configured.length; index += 1) {
-    mismatch |= presented.charCodeAt(index) ^ configured.charCodeAt(index);
-  }
-  return mismatch === 0;
-}
 
 function parseShardId(value: string | null): CanaryShardId | null {
   return value === "canary-a" || value === "canary-b" ? value : null;
@@ -49,7 +27,9 @@ export async function handleCanaryProjectionReconciliation(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  if (!operatorTokenAuthorized(request, env)) return unavailable();
+  if (!canaryOperatorAuthorized(request, env)) {
+    return unavailableCanaryOperatorResponse();
+  }
   if (request.method !== "GET") {
     return Response.json(
       { error: "method_not_allowed" },

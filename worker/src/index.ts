@@ -20,6 +20,7 @@ import { handlePlatformSupport, handleSupport } from "./routes/support";
 import { handleSurvey } from "./routes/survey";
 import { handleNotifications } from "./routes/notifications";
 import { handleCanaryProjectionReconciliation } from "./routes/canary-projection-operations";
+import { handleCanaryChannelCopyPreflight } from "./routes/canary-channel-copy-operations";
 import {
   getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
@@ -269,6 +270,8 @@ export default {
     try {
       if (url.pathname === "/internal/d1-canary/reconcile") {
         response = await handleCanaryProjectionReconciliation(request, env);
+      } else if (url.pathname === "/internal/d1-canary/copy-preflight") {
+        response = await handleCanaryChannelCopyPreflight(request, env);
       } else if (url.pathname.startsWith("/api/messages")) {
         response = await handleMessages(
           request,

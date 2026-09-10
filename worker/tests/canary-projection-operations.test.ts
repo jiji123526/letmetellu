@@ -9,6 +9,10 @@ const routeSource = readFileSync(
   new URL("../src/routes/canary-projection-operations.ts", import.meta.url),
   "utf8",
 );
+const operatorAuthSource = readFileSync(
+  new URL("../src/lib/canary-operator-auth.ts", import.meta.url),
+  "utf8",
+);
 const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
@@ -203,9 +207,9 @@ test("internal reconciliation route never exposes a browser proxy contract", () 
     indexSource,
     /url\.pathname === "\/internal\/d1-canary\/reconcile"[\s\S]*handleCanaryProjectionReconciliation/,
   );
-  assert.match(routeSource, /MIN_OPERATOR_TOKEN_LENGTH = 32/);
+  assert.match(operatorAuthSource, /MIN_OPERATOR_TOKEN_LENGTH = 32/);
   assert.match(routeSource, /MAX_RECONCILIATION_LIMIT = 100/);
-  assert.match(routeSource, /mismatch \|=/);
+  assert.match(operatorAuthSource, /mismatch \|=/);
   assert.doesNotMatch(routeSource, /X-Internal-Token|X-User-Id/);
   assert.doesNotMatch(routeSource, /payload_json|passcode|message_text|media_key/);
   assert.doesNotMatch(

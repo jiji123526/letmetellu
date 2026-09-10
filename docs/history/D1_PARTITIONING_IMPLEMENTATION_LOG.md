@@ -589,10 +589,41 @@ Security and tradeoffs:
 No remote migration, physical canary change, account copy, channel copy, or
 routing change was performed.
 
+### Read-only one-channel copy preflight
+
+- Added a fixed 16-table channel-local manifest covering parent and live rows,
+  messages, DMs, moderation, uploads, identity records, and derived indexes.
+- Added a dedicated-secret GET operator route that returns only row counts,
+  source projection version, and fixed blocker codes.
+- The reports channel, malformed IDs, missing bindings, and control-aliased
+  bindings fail closed. Browser identity, `INTERNAL_SECRET`, and platform-admin
+  state do not authorize the route.
+- Preflight rejects a missing source, invalid canary metadata, any destination
+  row, incomplete source cleanup, pending admin undo, or pending upload.
+- Source metadata and counts run in one read-only D1 batch; destination metadata
+  and counts run in one read-only batch concurrently. This avoids four separate
+  binding calls while preserving the no-write boundary.
+- Added route and manifest tests that prohibit mutation statements and verify
+  that no content, owner, passcode, payload, or media fields are selected.
+
+Tradeoffs:
+
+- Table counts and projection version are private operational metadata even
+  though they contain no content, so the route remains absent from browser
+  proxies and production configuration.
+- The result is point-in-time and does not freeze source writes. A clean result
+  is not evidence that a subsequent copy is stable.
+- Existing destination state is never resumed or overwritten by preflight.
+  Resumable copy and explicit partial-copy cleanup remain separate mutation
+  capabilities requiring a stronger authorization and audit design.
+
+No data was copied and no remote database, binding, secret, dispatcher,
+shadow-read setting, or routing state was changed.
+
 ## Next implementation step
 
-Add a guarded, resumable one-channel copy procedure for an explicitly selected
-low-risk canary. It must verify source stability, copy the full channel-local
-dataset without logging content, audit counts and integrity before shadow
-activation, and define cleanup on failure. Keep routing and all mutations on
-the control database.
+Add a separately secret-gated mutation path that creates a destination copy
+job and copies one explicit manifest stage in a bounded batch. It must use
+idempotent cursors, never return row content, refuse source blockers, and stop
+before routing or final cutover. Derived gallery/search/link state and partial
+copy cleanup need explicit contracts before activation.
