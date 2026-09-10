@@ -12,8 +12,8 @@ import {
 } from "../lib/preview-cache-policy";
 import {
   extractTwitterStatusId,
+  firstFxTwitterMosaicPhotoUrl,
   isFxTwitterMosaicUrl,
-  selectFxTwitterMediaPreviewUrl,
 } from "../lib/twitter-preview";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
@@ -21,12 +21,8 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v6";
+const PREVIEW_CACHE_VERSION = "v7";
 const TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60;
-
-type FxTwitterMediaPreviewResult =
-  | { status: "selected"; image: string }
-  | { status: "failed"; image: "" };
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -113,58 +109,8 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
   return html;
 }
 
-function logFxTwitterMediaFailure(
-  stage: string,
-  detail: Record<string, string | number> = {},
-): FxTwitterMediaPreviewResult {
-  console.warn("fxtwitter media preview unavailable", { stage, ...detail });
-  return { status: "failed", image: "" };
-}
-
-async function fetchFxTwitterMediaPreview(
-  statusId: string,
-): Promise<FxTwitterMediaPreviewResult> {
-  try {
-    const apiUrl = assertAllowedPreviewUrl(`https://api.fxtwitter.com/status/${statusId}`);
-    const response = await fetchWithTimeout(apiUrl.toString(), {
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; yap-preview/1.0)",
-      },
-      redirect: "error",
-    });
-    if (!response.ok) {
-      return logFxTwitterMediaFailure("upstream_status", {
-        upstreamStatus: response.status,
-      });
-    }
-    const contentType = response.headers.get("Content-Type") || "";
-    if (!/^application\/json\b/i.test(contentType)) {
-      return logFxTwitterMediaFailure("content_type", {
-        contentType: contentType.slice(0, 100),
-      });
-    }
-    const body = await readResponseTextWithLimit(response);
-    let payload: unknown;
-    try {
-      payload = JSON.parse(body) as unknown;
-    } catch {
-      return logFxTwitterMediaFailure("invalid_json");
-    }
-    const image = selectFxTwitterMediaPreviewUrl(payload);
-    if (!image) {
-      return logFxTwitterMediaFailure("no_safe_media");
-    }
-    return { status: "selected", image };
-  } catch (error) {
-    return logFxTwitterMediaFailure("request_error", {
-      errorType: error instanceof PreviewError
-        ? error.message
-        : error instanceof Error
-          ? error.name
-          : "unknown",
-    });
-  }
+function logFxTwitterMediaFailure(stage: string): void {
+  console.warn("fxtwitter media preview unavailable", { stage });
 }
 
 async function cachePreview(cacheKey: Request, response: Response): Promise<void> {
@@ -305,9 +251,11 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
       if (isFxTwitterMosaicUrl(metadata.image)) {
         const statusId = extractTwitterStatusId(previewUrl.toString());
         if (statusId) {
-          const mediaPreview = await fetchFxTwitterMediaPreview(statusId);
-          metadata.image = mediaPreview.image;
-          twitterMediaLookupFailed = mediaPreview.status === "failed";
+          metadata.image = firstFxTwitterMosaicPhotoUrl(metadata.image, statusId);
+          twitterMediaLookupFailed = !metadata.image;
+          if (twitterMediaLookupFailed) {
+            logFxTwitterMediaFailure("invalid_mosaic_url");
+          }
         } else {
           metadata.image = "";
           twitterMediaLookupFailed = true;

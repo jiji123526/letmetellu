@@ -70,7 +70,7 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /className="preview-media-skeleton"/);
   assert.match(messageEmbedsSource, /image\.decode\(\)/);
   assert.match(messageEmbedsSource, /PREVIEW_IMAGE_LOAD_TIMEOUT_MS = 12_000/);
-  assert.match(messageEmbedsSource, /PREVIEW_CACHE_NAME = "letmetellu-link-previews-v5"/);
+  assert.match(messageEmbedsSource, /PREVIEW_CACHE_NAME = "letmetellu-link-previews-v6"/);
   assert.match(messageEmbedsSource, /window\.caches\.delete\(cacheName\)/);
   assert.match(messageEmbedsSource, /previewImageRequests\.delete\(data\.image\)/);
   assert.match(messageEmbedsSource, /referrerPolicy="no-referrer"/);
