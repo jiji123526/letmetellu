@@ -144,6 +144,7 @@ test("preview metadata supports standard title fallback and relative images", ()
     title: "Legacy & Article",
     description: "Older page description",
     image: "https://www.example.com/images/card.jpg",
+    icon: "",
     video: "",
     siteName: "example.com",
   });

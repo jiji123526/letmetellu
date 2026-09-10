@@ -10,13 +10,15 @@ interface PreviewData {
   title: string;
   description: string;
   image: string;
+  icon: string;
   video: string;
   siteName: string;
   url: string;
 }
 
-const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v6";
+const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v7";
 const LEGACY_PREVIEW_CACHE_NAMES = [
+  "letmetellu-link-previews-v6",
   "letmetellu-link-previews-v5",
   "letmetellu-link-previews-v4",
   "letmetellu-link-previews-v3",
@@ -129,6 +131,7 @@ function isPreviewData(value: unknown): value is PreviewData {
   return typeof candidate.title === "string"
     && typeof candidate.description === "string"
     && typeof candidate.image === "string"
+    && (candidate.icon === undefined || typeof candidate.icon === "string")
     && typeof candidate.video === "string"
     && typeof candidate.siteName === "string"
     && typeof candidate.url === "string";
@@ -139,6 +142,7 @@ function compactPreviewData(data: PreviewData): PreviewData {
     title: data.title.slice(0, 500),
     description: data.description.slice(0, 1000),
     image: data.image.slice(0, 4096),
+    icon: (data.icon || "").slice(0, 4096),
     video: data.video.slice(0, 4096),
     siteName: data.siteName.slice(0, 200),
     url: data.url.slice(0, 4096),
@@ -243,7 +247,10 @@ function fetchPreviewNow(url: string, forceRefresh: boolean): Promise<PreviewDat
   return fetch(`/api/preview?url=${encodeURIComponent(url)}`)
     .then((response) => response.ok ? response.json() as Promise<PreviewData | null> : null)
     .then((result) => {
-      const normalized = result && (result.title || result.image) ? result : null;
+      const normalized = result
+        && (result.title || result.image || result.siteName || result.icon)
+        ? result
+        : null;
       if (normalized) {
         const now = Date.now();
         previewCache.set(url, normalized);
@@ -654,8 +661,20 @@ function LinkPreviewCard({
       {hasTextMetadata && (
         <div style={{ padding: "10px 12px" }}>
           {data.siteName && (
-            <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
-              {data.siteName}
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+              {data.icon && (
+                <img
+                  src={data.icon}
+                  alt=""
+                  width={16}
+                  height={16}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  style={{ width: "16px", height: "16px", objectFit: "contain", borderRadius: "3px", flex: "0 0 auto" }}
+                />
+              )}
+              <span>{data.siteName}</span>
             </div>
           )}
           {data.title && (

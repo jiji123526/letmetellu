@@ -21,7 +21,7 @@ const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v7";
+const PREVIEW_CACHE_VERSION = "v8";
 const TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60;
 
 function getPreviewRequestIp(request: Request): string {
@@ -217,6 +217,7 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
         title: "",
         description: "",
         image: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        icon: "",
         video: "",
         siteName: "YouTube",
         url: rawUrl,
