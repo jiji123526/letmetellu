@@ -69,6 +69,26 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /className="link-preview-skeleton"/);
   assert.match(messageEmbedsSource, /className="preview-media-skeleton"/);
   assert.match(messageEmbedsSource, /image\.decode\(\)/);
+  assert.match(messageEmbedsSource, /PREVIEW_IMAGE_LOAD_TIMEOUT_MS = 12_000/);
+  assert.match(messageEmbedsSource, /previewImageRequests\.delete\(data\.image\)/);
+  assert.match(messageEmbedsSource, /referrerPolicy="no-referrer"/);
+  assert.match(messageEmbedsSource, /<PreviewImage\s+key=\{data\.image\}/);
+  const previewImageSource = messageEmbedsSource.slice(
+    messageEmbedsSource.indexOf("function PreviewImage("),
+    messageEmbedsSource.indexOf("function PreviewVideo("),
+  );
+  const visibleImageLoadHandler = previewImageSource.slice(
+    previewImageSource.indexOf("onLoad={(event) =>"),
+    previewImageSource.indexOf("onError={() =>"),
+  );
+  assert.ok(
+    visibleImageLoadHandler.indexOf("setLoaded(true)")
+      < visibleImageLoadHandler.indexOf("image.decode()"),
+  );
+  assert.doesNotMatch(
+    visibleImageLoadHandler,
+    /image\.decode\(\)[\s\S]*finally\([\s\S]*setLoaded\(true\)/,
+  );
   assert.match(globalStylesSource, /\.link-preview-skeleton/);
   assert.match(globalStylesSource, /\.preview-media-skeleton/);
 });
