@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getChannelDatabaseCacheScope,
   getControlDatabase,
+  PRIMARY_DATABASE_PLACEMENT_VERSION,
   PRIMARY_DATABASE_SHARD_ID,
   resolveChannelDatabase,
   withDatabase,
@@ -25,6 +27,11 @@ test("channel resolution preserves the single-database deployment", async () => 
 
   assert.equal(resolved.partitionKey, "general");
   assert.equal(resolved.shardId, PRIMARY_DATABASE_SHARD_ID);
+  assert.equal(resolved.placementVersion, PRIMARY_DATABASE_PLACEMENT_VERSION);
+  assert.equal(
+    getChannelDatabaseCacheScope(resolved),
+    `${PRIMARY_DATABASE_SHARD_ID}:${PRIMARY_DATABASE_PLACEMENT_VERSION}`,
+  );
   assert.equal(resolved.database, env.DB);
 });
 
@@ -35,6 +42,7 @@ test("normal and live channel variants resolve to the same partition", async () 
 
   assert.equal(normal.partitionKey, live.partitionKey);
   assert.equal(normal.shardId, live.shardId);
+  assert.equal(normal.placementVersion, live.placementVersion);
   assert.equal(normal.database, live.database);
 });
 

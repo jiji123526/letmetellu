@@ -189,11 +189,46 @@ effective shard and placement version in shared cache keys, and keep report
 hydration on the selected channel database. Adding only the resolver would risk
 incomplete profile data and stale cross-shard cache reuse.
 
+### Init fail-closed routing boundary
+
+- Extended resolved channel placement with an explicit `placementVersion` and a
+  standard `shardId:placementVersion` cache scope.
+- `GET /api/init` now resolves placement before opening its D1 read session.
+- Shared channel and config in-flight cache keys include the resolved database
+  scope, consistency constraint, and channel identity.
+- Platform-administrator verification uses the control environment rather than
+  the channel-scoped read environment.
+- Until the mixed channel/control query is split, `init` returns
+  `503 channel_init_shard_not_ready` if resolution selects a database other
+  than the control database. It never falls back to reading that channel from
+  the wrong database.
+
+Current behavior and tradeoffs:
+
+- Production remains on `primary` placement version `1`, so query count,
+  response shape, and physical database selection are unchanged.
+- The resolver adds only local asynchronous work in the current implementation.
+- A future canary channel cannot use `init` until control projections and
+  channel-local reads are separated. This is intentional fail-closed behavior.
+- Placement version `1` is a contract placeholder, not movement protection.
+  Override versions, signed hints, and shard-local tombstone validation remain
+  required before physical channel movement.
+
 ## Next implementation step
 
-Migrate one channel-only read path at a time to resolve its database before
-opening a D1 read session. Mixed routes must separate control-plane reads from
-channel-local reads before they are switched. Durable source events remain
-required before notification storage can be physically separated. The resolver
-will remain single-database during this phase; virtual-bucket routing is enabled
-only in the canary after all channel-local paths use the resolver.
+Define the minimal control projection needed by `GET /api/init`: owner display
+name, bounded public owner-channel eligibility, and protected reports-owner
+identity. Then split the mixed query with these constraints:
+
+- retain the current single query while channel and control databases are the
+  same, so preparation does not regress the primary entry path;
+- when databases differ, read canonical channel/passcode/moderation state only
+  from the selected shard and enrichment only from the control projection;
+- never use stale projection ownership for authorization;
+- benchmark the two-database canary path before removing
+  `channel_init_shard_not_ready`.
+
+After read boundaries are complete, add shard-local durable source events before
+routing message or DM mutations. Virtual-bucket routing remains disabled until
+the read boundary, durable effects, tombstone validation, and canary tooling are
+all ready.

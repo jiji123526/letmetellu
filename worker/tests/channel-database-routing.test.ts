@@ -22,6 +22,10 @@ const dmSource = readFileSync(
   new URL("../src/routes/dm.ts", import.meta.url),
   "utf8",
 );
+const initSource = readFileSync(
+  new URL("../src/routes/init.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -116,4 +120,21 @@ test("private DM GET separates channel and control database reads", () => {
   );
   assert.match(getSource, /readDmThreads\(\s*readEnv,/);
   assert.match(getSource, /getReportsChannelOwnerId\(env\)/);
+});
+
+test("init fails closed until mixed control and channel reads are separated", () => {
+  assert.match(initSource, /resolveChannelDatabase\(env, parentChannelId\)/);
+  assert.match(
+    initSource,
+    /if \(resolvedDatabase\.database !== env\.DB\) \{[\s\S]*channel_init_shard_not_ready[\s\S]*status: 503/,
+  );
+  assert.match(
+    initSource,
+    /getChannelDatabaseCacheScope\(resolvedDatabase\)/,
+  );
+  assert.match(
+    initSource,
+    /createD1ReadSessionEnv\(\s*env,\s*readConstraint,\s*resolvedDatabase\.database,\s*\)/,
+  );
+  assert.match(initSource, /isPlatformAdmin\(trustedUserId, env\)/);
 });

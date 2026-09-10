@@ -31,6 +31,10 @@ import {
   type ChannelReadSnapshot,
 } from "../lib/channel-read-token";
 import { createD1ReadSessionEnv, type D1ReadConstraint } from "../lib/d1-read-session";
+import {
+  getChannelDatabaseCacheScope,
+  resolveChannelDatabase,
+} from "../lib/database-access";
 
 type SharedChannelRow = Record<string, unknown>;
 type SharedConfigRow = { id: string; text: string; updated_at?: string | null };
@@ -79,8 +83,9 @@ function readSharedChannel(
   parentChannelId: string,
   reportsChannelId: string | null,
   constraint: D1ReadConstraint,
+  databaseScope: string,
 ): Promise<SharedChannelRow | null> {
-  const key = `${constraint}:${reportsChannelId || ""}:${parentChannelId}`;
+  const key = `${databaseScope}:${constraint}:${reportsChannelId || ""}:${parentChannelId}`;
   return shareInFlight(sharedChannelRequests, key, () => env.DB.prepare(
     `SELECT
        channels.*,
@@ -123,8 +128,9 @@ function readSharedInitConfig(
   parentChannelId: string,
   isLiveChannel: boolean,
   constraint: D1ReadConstraint,
+  databaseScope: string,
 ): Promise<SharedInitConfig> {
-  const key = `${constraint}:${channelId}:${isLiveChannel ? "live" : "normal"}`;
+  const key = `${databaseScope}:${constraint}:${channelId}:${isLiveChannel ? "live" : "normal"}`;
   return shareInFlight(sharedConfigRequests, key, async () => {
     const statements = [
       env.DB.prepare(`
@@ -235,7 +241,21 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
     const readConstraint: D1ReadConstraint = channelReadAccess
       ? "first-unconstrained"
       : "first-primary";
-    const readEnv = createD1ReadSessionEnv(env, readConstraint);
+    const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
+    // The init query still mixes channel-local and control-plane projections.
+    // Refuse physical shard routing until those reads are split explicitly.
+    if (resolvedDatabase.database !== env.DB) {
+      return Response.json(
+        { error: "channel_init_shard_not_ready" },
+        { status: 503 },
+      );
+    }
+    const databaseScope = getChannelDatabaseCacheScope(resolvedDatabase);
+    const readEnv = createD1ReadSessionEnv(
+      env,
+      readConstraint,
+      resolvedDatabase.database,
+    );
     // Fetch channel config (always from parent)
     const channelStartedAt = performance.now();
     const channel = channelReadAccess
@@ -244,7 +264,13 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           passcode: channelReadAccess.channel.has_passcode ? "capability-authorized" : null,
           reports_owner_id: null,
         }
-      : await readSharedChannel(readEnv, parentChannelId, reportsChannelId, readConstraint);
+      : await readSharedChannel(
+          readEnv,
+          parentChannelId,
+          reportsChannelId,
+          readConstraint,
+          databaseScope,
+        );
     channelMs = roundedDuration(channelStartedAt);
 
     if (!channel) {
@@ -262,7 +288,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       : trustedUserId === (channel as any).owner_uid;
     const isPlatformAdminViewer = !isOwner
       && Boolean((channel as any).passcode)
-      && await isPlatformAdmin(trustedUserId, readEnv);
+      && await isPlatformAdmin(trustedUserId, env);
     const adminDataStatus = userId === (channel as any).owner_uid
       ? (isOwner ? "authorized" : "unauthorized")
       : undefined;
@@ -430,7 +456,14 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
           return page;
         },
       }),
-      readSharedInitConfig(readEnv, channelId, parentChannelId, isLiveChannel, readConstraint),
+      readSharedInitConfig(
+        readEnv,
+        channelId,
+        parentChannelId,
+        isLiveChannel,
+        readConstraint,
+        databaseScope,
+      ),
       statements.length > 0 ? readEnv.DB.batch(statements) : Promise.resolve([]),
     ]);
     bootstrapMs = roundedDuration(bootstrapStartedAt);

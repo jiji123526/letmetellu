@@ -739,6 +739,10 @@ Implemented so far:
 - routed channel-state and socket-authorization channel reads through the
   resolver;
 - allowed D1 read sessions to start from a selected channel database;
+- routed unified timeline, data collection, and private DM reads through the
+  selected channel database boundary;
+- added placement-versioned cache scope and made `init` fail closed for any
+  non-primary placement until its mixed control/channel query is separated;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
