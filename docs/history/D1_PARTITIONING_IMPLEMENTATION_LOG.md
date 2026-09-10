@@ -396,11 +396,40 @@ Tradeoff:
   write. This cost is required to support channel-address reuse safely; keeping
   the version only on the deletable canonical row is not correct.
 
+### Idempotent control projection consumer
+
+- Added a bounded consumer that accepts separate source and control D1
+  databases, leases at most ten ready or expired events, and recovers abandoned
+  leases.
+- Event payloads are treated as untrusted input. The consumer validates the
+  event ID, channel and aggregate identity, event type, positive safe-integer
+  version, owner ID, profile flag, timestamp, and payload size before writing.
+- Control writes atomically advance `channel_projection_versions` and apply the
+  corresponding projection mutation only when the event still owns that exact
+  active or deleted watermark.
+- The source event is acknowledged only after the control batch commits.
+  Control failures return the event to a bounded retry schedule and store only
+  a fixed error code, not raw exceptions or payload content.
+- The consumer is not connected to cron or request handling yet. Deploying the
+  Worker without migrations `0065` and `0066` therefore does not query missing
+  tables or alter production behavior.
+
+Tradeoffs:
+
+- Cross-D1 writes cannot be one transaction. The consumer intentionally uses
+  at-least-once delivery; a control commit followed by a failed source
+  acknowledgement causes a harmless version-guarded replay.
+- Events are processed serially within each small batch. This limits concurrent
+  pressure on the single-threaded control D1 at the cost of lower dispatcher
+  throughput.
+- Strict validation can dead-letter a legacy or manually inserted event that
+  does not match the contract. Auditing and bounded reconciliation remain
+  required before activation.
+
 ## Next implementation step
 
-Add an idempotent control projection consumer that applies only newer source
-versions, records delete watermarks so stale upserts cannot resurrect channels,
-and acknowledges source events only after the control write commits. Then add
-lease recovery, retention, and distinct fake control/Chat database tests.
-Message or DM mutations and virtual-bucket routing remain disabled until these
-safeguards and canary tooling are ready.
+Add bounded delivered/dead event retention and reconciliation that compares a
+physical Chat source with the control watermark without selecting secret
+payloads. Then define explicit shard bindings and an opt-in dispatcher path for
+the two-shard canary. Message or DM mutations and virtual-bucket routing remain
+disabled until these safeguards and canary tooling are ready.

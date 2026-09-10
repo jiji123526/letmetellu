@@ -753,11 +753,14 @@ Implemented so far:
   same-database triggers during preparation and designed to transition to
   versioned shard events before canary;
 - added the shard-local domain-event ledger and monotonic channel projection
-  source events; dispatch, acknowledgement, and retention are not implemented
+  source events; the consumer remains inactive and retention is not implemented
   yet;
 - persisted channel projection versions independently from canonical channel
   rows so deleting and later recreating the same channel address cannot reset
   event ordering or bypass a delete watermark;
+- added an inactive, bounded projection consumer that leases shard events,
+  validates a narrow payload contract, commits version-guarded control writes,
+  and acknowledges the source only after the control batch succeeds;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
@@ -766,8 +769,8 @@ Exit gate:
 
 ### Phase 2: durable source events
 
-Status: in progress; source ledger and channel projection events exist, but no
-consumer is deployed.
+Status: in progress; source ledger, channel projection events, and an inactive
+projection consumer exist, but no dispatcher is deployed.
 
 1. Add shard-local `domain_events`.
 2. Write message and event rows in the same D1 batch.
