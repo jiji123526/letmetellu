@@ -42,6 +42,10 @@ import {
   isCanaryProjectionDispatchEnabled,
   retainCanaryDomainEvents,
 } from "./lib/channel-projection-dispatcher";
+import {
+  observeCanaryChannelShadow,
+  resolveCanaryChannelShadowPlacement,
+} from "./lib/canary-channel-shadow";
 
 export { ChatRoom };
 
@@ -278,6 +282,15 @@ export default {
         response = await handleData(request, env);
       } else if (url.pathname.startsWith("/api/init")) {
         response = await handleInitWithRetry(request, env);
+        if (request.method === "GET" && response.ok) {
+          const shadowPlacement = resolveCanaryChannelShadowPlacement(
+            env,
+            url.searchParams.get("channel"),
+          );
+          if (shadowPlacement) {
+            ctx.waitUntil(observeCanaryChannelShadow(env, shadowPlacement));
+          }
+        }
       } else if (url.pathname.startsWith("/api/channel-state")) {
         response = await handleChannelState(request, env);
       } else if (url.pathname.startsWith("/api/admin")) {

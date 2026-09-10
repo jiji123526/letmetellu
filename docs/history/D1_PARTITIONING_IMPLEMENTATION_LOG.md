@@ -527,9 +527,39 @@ activation, or routing change was created by this step.
 No canary secret, binding ID, remote database, dispatcher activation, channel
 copy, or routing change was added.
 
+### Default-off canary channel shadow reads
+
+- Added a static mapping for at most 20 parent channel IDs to the two named
+  canary bindings. Unknown shards, malformed IDs, duplicates, conflicting
+  placements, and the reports channel fail closed without shadow work.
+- Successful normal and live `/api/init` requests schedule one control-row and
+  one canary-row read after the user response has been determined.
+- The comparison covers only row existence, owner identity, passcode/frozen
+  access state, instance ID, profile visibility, and source version. It does
+  not select messages, DMs, notices, profile/background media, or content.
+- Matches produce no control-D1 write. Mismatches and failures contain fixed
+  reason codes only, are suppressed for five minutes per isolate, and use a
+  capped in-memory suppression map.
+- Shadow results cannot change response data, authorization, placement, or
+  mutation routing. The production Wrangler configuration remains disabled.
+
+Tradeoffs:
+
+- Each selected init consumes two additional metadata reads even though
+  `waitUntil` removes them from the response dependency chain.
+- Isolate-local suppression reduces event-write pressure but is approximate
+  across isolates and deployments.
+- This gate validates only the narrow canonical channel contract. It does not
+  establish message-history or mutation correctness and is not a routing
+  cutover signal by itself.
+
+No physical canary database, binding ID, channel copy, shadow allowlist,
+dispatcher activation, or routing change was added.
+
 ## Next implementation step
 
-Add a default-off static shadow-read allowlist that compares selected
-low-risk channels without changing the user response. Record bounded mismatch
-metrics without channel content, and keep all mutation routing on the control
-database.
+Add a guarded, resumable one-channel copy procedure for an explicitly selected
+low-risk canary. It must verify source stability, copy the full channel-local
+dataset without logging content, audit counts and integrity before shadow
+activation, and define cleanup on failure. Keep routing and all mutations on
+the control database.

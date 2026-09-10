@@ -919,11 +919,17 @@ Do not proceed when:
 
 ## Recommended next action
 
-Implement Phase 0 only. The present production evidence does not yet prove that
-database contention is the cause of the observed first-read tail latency. In
-parallel, design Phase 1 so future partitioning does not require another broad
-route rewrite. Do not create production shards or split notification tables
-until Phase 0 evidence and Phase 2 durable handoff are complete.
+Phase 0 measurement and the Phase 1 code boundary are implemented. Canary
+schema bootstrap, durable projection handoff, read-only reconciliation, and a
+default-off metadata shadow-read gate are also implemented without creating or
+routing production shards.
+
+The next operational action is still gated: create and bootstrap an empty
+canary, copy one low-risk channel through a separately reviewed process, and
+run reconciliation before enabling its static shadow-read placement. Do not
+change `resolveChannelDatabase`, split notification tables, or route production
+traffic until the shadow contract is clean and the remaining mutation and
+rollback gates are implemented.
 
 ## Sources
 
