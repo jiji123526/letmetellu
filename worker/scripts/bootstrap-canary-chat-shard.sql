@@ -66,7 +66,7 @@ SELECT
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 1),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 2),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -78,9 +78,24 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  1,
+  2,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
+
+CREATE TABLE canary_channel_copy_jobs (
+  channel_id TEXT PRIMARY KEY,
+  source_projection_version INTEGER NOT NULL
+    CHECK (source_projection_version > 0),
+  stage TEXT NOT NULL DEFAULT 'prepared'
+    CHECK (stage IN ('prepared', 'channels_copied')),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'failed', 'complete')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX canary_channel_copy_jobs_status_updated_idx
+  ON canary_channel_copy_jobs(status, updated_at, channel_id);
 
 DROP TRIGGER channel_control_projection_insert;
 DROP TRIGGER channel_control_projection_update;

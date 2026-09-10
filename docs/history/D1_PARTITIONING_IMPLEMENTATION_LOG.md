@@ -620,10 +620,51 @@ Tradeoffs:
 No data was copied and no remote database, binding, secret, dispatcher,
 shadow-read setting, or routing state was changed.
 
+### Version-pinned copy job and canonical channel stage
+
+- Raised the empty-canary bootstrap overlay to version 2 and added a
+  destination-local copy-job ledger containing only channel ID, source
+  projection version, fixed stage/status, and timestamps.
+- Added a separate `D1_CANARY_COPY_TOKEN` contract. The read-only operator
+  secret, browser identity, ordinary internal secret, owner role, and platform
+  admin role cannot authorize copy writes.
+- Added exact, 1 KB-bounded POST commands for idempotent job creation and the
+  canonical parent/live channel stage. Reports and malformed identifiers fail
+  before D1 access.
+- Copy mutation is disabled whenever canary projection dispatch is enabled.
+  Production Wrangler configuration still has no copy secret or canary
+  bindings.
+- `start` executes the existing clean-destination/source-activity preflight and
+  pins the source projection version. A conflicting existing job fails closed.
+- `copy-channels` explicitly selects every canonical channel column. It checks
+  the pinned version, inserts at most the parent and live rows, and advances the
+  job in one destination batch.
+- A post-write source-version check marks the job failed when it observes a
+  concurrent canonical change. Responses contain only stage/status/blocker
+  metadata and never return copied settings.
+
+Security and tradeoffs:
+
+- Canonical rows include passcode hashes, notices, and channel asset paths.
+  Canary bindings and operator access therefore require production-equivalent
+  protection even though responses and logs are content-free.
+- Parent insertion emits a pending projection event. Dispatcher and copy are
+  mutually exclusive in this Worker, but operators must also avoid another
+  deployment dispatching from the same canary during copy.
+- Cross-D1 atomicity is impossible. A source mutation can occur after the
+  post-copy check, so this is only an initial backfill stage.
+- Failed jobs deliberately retain destination rows. Automatic cleanup is
+  absent because deleting a copied parent emits another durable projection
+  event and needs a separately audited cleanup workflow.
+
+No remote database was mutated, no copy secret or binding was configured, and
+no traffic routing, shadow allowlist, or dispatcher state changed.
+
 ## Next implementation step
 
-Add a separately secret-gated mutation path that creates a destination copy
-job and copies one explicit manifest stage in a bounded batch. It must use
-idempotent cursors, never return row content, refuse source blockers, and stop
-before routing or final cutover. Derived gallery/search/link state and partial
-copy cleanup need explicit contracts before activation.
+Extend the copy-job ledger with a bounded cursor and add low-volume policy and
+configuration stages before message history. Define explicit column contracts
+and dependency order for moderators, blocks, banned words, moderation,
+petitions, config, and upload tickets. Keep message/DM content and derived
+gallery/search/link state out until their cursor and rebuild contracts are
+separately tested.

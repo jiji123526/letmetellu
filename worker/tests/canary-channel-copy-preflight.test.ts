@@ -58,7 +58,7 @@ class PreflightDatabase {
   };
   metadata: Record<string, unknown> | null = {
     shard_role: "chat-canary",
-    bootstrap_version: 1,
+    bootstrap_version: 2,
   };
 
   prepare(sql: string) {

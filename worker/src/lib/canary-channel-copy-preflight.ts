@@ -179,7 +179,7 @@ export async function preflightCanaryChannelCopy(input: {
   if (
     !metadata
     || metadata.shard_role !== "chat-canary"
-    || Number(metadata.bootstrap_version) !== 1
+    || Number(metadata.bootstrap_version) !== 2
   ) {
     blockers.push("destination_not_bootstrapped");
   }

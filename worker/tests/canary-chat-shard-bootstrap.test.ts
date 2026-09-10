@@ -138,7 +138,7 @@ test("canary triggers emit events without writing a local control projection", (
   `).get();
   assert.deepEqual({ ...metadata }, {
     shard_role: "chat-canary",
-    bootstrap_version: 1,
+    bootstrap_version: 2,
   });
 
   database.prepare(`
@@ -228,6 +228,8 @@ test("canary bootstrap and audit avoid channel secrets and event payload output"
   assert.match(auditSource, /PRAGMA quick_check/);
   assert.match(auditSource, /PRAGMA foreign_key_check/);
   assert.match(auditSource, /pragma_foreign_key_list\('dm_replies'\)/);
+  assert.match(auditSource, /FROM canary_channel_copy_jobs/);
+  assert.match(auditSource, /LIMIT 100/);
   assert.match(auditSource, /writes_local_projection/);
   assert.match(auditSource, /LIMIT 100/);
   assert.doesNotMatch(auditSource, /SELECT\s+payload_json/);

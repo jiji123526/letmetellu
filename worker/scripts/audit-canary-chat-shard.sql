@@ -24,6 +24,8 @@ SELECT
 FROM sqlite_schema
 WHERE name IN (
   'channels',
+  'canary_channel_copy_jobs',
+  'canary_channel_copy_jobs_status_updated_idx',
   'channel_control_projections',
   'channel_projection_versions',
   'domain_events',
@@ -33,6 +35,17 @@ WHERE name IN (
   'domain_events_dead_updated_idx'
 )
 ORDER BY type, name;
+
+SELECT
+  channel_id,
+  source_projection_version,
+  stage,
+  status,
+  created_at,
+  updated_at
+FROM canary_channel_copy_jobs
+ORDER BY updated_at ASC, channel_id ASC
+LIMIT 100;
 
 SELECT
   name,

@@ -49,6 +49,7 @@ Status as of 2026-08-18:
 | `/api/preview` | Allowed with durable IP-derived quota and SSRF policy | Same | Same | Same | Server-side fetch policy remains authoritative; YouTube uses validated video IDs and deterministic thumbnails without client widgets or metadata fetches |
 | `/internal/d1-canary/reconcile` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Disabled without a dedicated 32+ character operator secret; isolated canary binding only, GET-only, maximum 100 rows, metadata-only response, no CORS/browser proxy and no repair capability |
 | `/internal/d1-canary/copy-preflight` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Same dedicated operator-secret boundary; GET-only, reports channel excluded, metadata counts only, two read-only D1 batches, no copy or repair capability |
+| `/internal/d1-canary/copy` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Separate 32+ character copy secret, POST-only exact JSON commands, reports channel excluded, dispatcher must be disabled, destination job ledger and source-version gate; currently copies canonical parent/live rows only |
 
 ## Required regression scenarios
 
