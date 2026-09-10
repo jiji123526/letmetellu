@@ -922,7 +922,9 @@ Do not proceed when:
 Phase 0 measurement and the Phase 1 code boundary are implemented. Canary
 schema bootstrap, durable projection handoff, read-only reconciliation, and a
 default-off metadata shadow-read gate are also implemented without creating or
-routing production shards.
+routing production shards. The first cross-plane schema dependency was removed:
+DM replies retain shard-local channel and DM foreign keys without requiring
+account rows to be copied into each Chat shard.
 
 The next operational action is still gated: create and bootstrap an empty
 canary, copy one low-risk channel through a separately reviewed process, and

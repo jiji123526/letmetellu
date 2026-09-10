@@ -4,6 +4,14 @@ PRAGMA quick_check;
 PRAGMA foreign_key_check;
 
 SELECT
+  "table" AS referenced_table,
+  "from" AS source_column,
+  "to" AS referenced_column,
+  on_delete
+FROM pragma_foreign_key_list('dm_replies')
+ORDER BY referenced_table, source_column;
+
+SELECT
   shard_role,
   bootstrap_version,
   bootstrapped_at

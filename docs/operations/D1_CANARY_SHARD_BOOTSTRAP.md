@@ -21,7 +21,11 @@ The bootstrap SQL fails before changing triggers unless:
 
 - `channels`, `channel_control_projections`, and `domain_events` are empty;
 - all three repository projection triggers exist; and
-- all four domain-event ready, lease, delivered, and dead indexes exist.
+- all four domain-event ready, lease, delivered, and dead indexes exist;
+- migration `0068` removed the `dm_replies.owner_uid -> users.id`
+  cross-plane foreign key; and
+- the shard-local `dm_replies -> dm` and `dm_replies -> channels` foreign keys
+  remain present.
 
 The script then records the `chat-canary` role and replaces the preparation
 triggers with event-only triggers. Canonical channel writes advance the
@@ -42,7 +46,7 @@ npx wrangler d1 create "$CANARY_DB"
 Record the returned database ID in the private deployment change, but do not
 add it to production bindings yet.
 
-Apply every repository migration through `0067`:
+Apply every repository migration through `0068`:
 
 ```bash
 npx wrangler d1 migrations apply "$CANARY_DB" --remote
@@ -66,6 +70,7 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
 
 - `PRAGMA quick_check` returns `ok`.
 - `PRAGMA foreign_key_check` returns no rows.
+- `dm_replies` lists foreign keys only to `channels` and `dm`, not `users`.
 - `chat_shard_metadata` reports role `chat-canary` and bootstrap version `1`.
 - All eight listed tables and indexes are present.
 - Each of the three projection triggers reports:

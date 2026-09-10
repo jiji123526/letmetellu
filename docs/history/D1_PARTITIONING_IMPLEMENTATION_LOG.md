@@ -478,7 +478,7 @@ Deployment gate:
 
 - Production `wrangler.toml` intentionally has no canary bindings or enable
   variables because physical database IDs have not been created or supplied.
-- Create both D1 databases, apply the shard schema through migration `0067`,
+- Create both D1 databases, apply the shard schema through migration `0068`,
   audit them, and add their real binding IDs before setting the flag.
 - Enable one source name first. Do not add channel routing in the same deploy;
   verify backlog, retries, dead events, control watermarks, and D1 latency
@@ -487,7 +487,7 @@ Deployment gate:
 ### Canary Chat-shard bootstrap and schema audit tooling
 
 - Added a one-time bootstrap overlay for empty databases after repository
-  migrations through `0067`.
+  migrations through `0068`.
 - The overlay fails before trigger replacement if canonical channels, local
   projections, or domain events already exist, or if the expected projection
   triggers and all four domain-event indexes are missing.
@@ -555,6 +555,39 @@ Tradeoffs:
 
 No physical canary database, binding ID, channel copy, shadow allowlist,
 dispatcher activation, or routing change was added.
+
+### DM reply Chat-shard schema boundary
+
+- Identified that `dm_replies.owner_uid` referenced the control-plane
+  `users(id)` table. A full channel copy would therefore fail on an empty Chat
+  shard or require replication of account rows containing unrelated private
+  account state.
+- Added migration `0068` to rebuild `dm_replies` without that cross-plane
+  foreign key while preserving every existing column, row, the owner/client
+  idempotency constraint, the DM reply lookup index, and the DM activity
+  trigger.
+- Retained the shard-local `dm_id -> dm(id)` cascade and
+  `channel_id -> channels(id)` foreign keys.
+- Strengthened canary bootstrap so a database prepared only through `0067`, a
+  schema that still references `users`, or a schema missing either shard-local
+  foreign key fails before trigger replacement.
+- Extended the read-only canary audit to list the DM reply foreign-key boundary
+  without selecting private reply data.
+
+Security and tradeoffs:
+
+- Account rows, email addresses, password hashes, and authentication state must
+  not be copied into Chat shards merely to satisfy a foreign key.
+- `owner_uid` remains an opaque authorization subject identifier. Request
+  authorization continues to use trusted identity and channel ownership, not
+  referential integrity.
+- SQLite no longer rejects an unknown `owner_uid` at insert time. Account
+  deletion and shard audits must therefore detect or clean orphan identifiers
+  explicitly. The removed foreign key did not have `ON DELETE CASCADE`, so
+  deletion was already an application workflow rather than a DB cascade.
+
+No remote migration, physical canary change, account copy, channel copy, or
+routing change was performed.
 
 ## Next implementation step
 

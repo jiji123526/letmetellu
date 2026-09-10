@@ -1,5 +1,5 @@
 -- One-time overlay for an empty canary Chat shard after repository migrations
--- through 0067 have been applied. Never run this against the control database.
+-- through 0068 have been applied. Never run this against the control database.
 --
 -- The guard intentionally fails before trigger changes if application rows
 -- already exist or the expected projection schema is incomplete.
@@ -11,7 +11,9 @@ CREATE TABLE _canary_chat_shard_bootstrap_guard (
   local_projection_rows INTEGER NOT NULL CHECK (local_projection_rows = 0),
   domain_event_rows INTEGER NOT NULL CHECK (domain_event_rows = 0),
   projection_trigger_count INTEGER NOT NULL CHECK (projection_trigger_count = 3),
-  domain_event_index_count INTEGER NOT NULL CHECK (domain_event_index_count = 4)
+  domain_event_index_count INTEGER NOT NULL CHECK (domain_event_index_count = 4),
+  dm_reply_control_fk_count INTEGER NOT NULL CHECK (dm_reply_control_fk_count = 0),
+  dm_reply_shard_fk_count INTEGER NOT NULL CHECK (dm_reply_shard_fk_count = 2)
 );
 
 INSERT INTO _canary_chat_shard_bootstrap_guard (
@@ -20,7 +22,9 @@ INSERT INTO _canary_chat_shard_bootstrap_guard (
   local_projection_rows,
   domain_event_rows,
   projection_trigger_count,
-  domain_event_index_count
+  domain_event_index_count,
+  dm_reply_control_fk_count,
+  dm_reply_shard_fk_count
 )
 SELECT
   1,
@@ -47,6 +51,16 @@ SELECT
         'domain_events_delivered_updated_idx',
         'domain_events_dead_updated_idx'
       )
+  ),
+  (
+    SELECT COUNT(*)
+    FROM pragma_foreign_key_list('dm_replies')
+    WHERE "table" = 'users'
+  ),
+  (
+    SELECT COUNT(*)
+    FROM pragma_foreign_key_list('dm_replies')
+    WHERE "table" IN ('dm', 'channels')
   );
 
 CREATE TABLE chat_shard_metadata (

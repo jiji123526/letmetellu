@@ -54,6 +54,17 @@ function createPreparedDatabase(): DatabaseSync {
       updated_at TEXT NOT NULL,
       UNIQUE(channel_id, event_type, aggregate_id, source_version)
     );
+    CREATE TABLE dm (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL REFERENCES channels(id),
+      activity_at TEXT
+    );
+    CREATE TABLE dm_replies (
+      id TEXT PRIMARY KEY,
+      dm_id TEXT NOT NULL REFERENCES dm(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL REFERENCES channels(id),
+      owner_uid TEXT NOT NULL
+    );
     CREATE INDEX domain_events_attempt_ready_idx
       ON domain_events(status, next_attempt_at, created_at, id);
     CREATE INDEX domain_events_lease_ready_idx
@@ -96,6 +107,22 @@ test("canary bootstrap requires an empty fully migrated database", () => {
   incompleteDatabase.exec("DROP INDEX domain_events_dead_updated_idx");
   assert.throws(
     () => incompleteDatabase.exec(bootstrapSource),
+    /CHECK constraint failed/,
+  );
+
+  const crossPlaneDatabase = createPreparedDatabase();
+  crossPlaneDatabase.exec(`
+    DROP TABLE dm_replies;
+    CREATE TABLE users (id TEXT PRIMARY KEY);
+    CREATE TABLE dm_replies (
+      id TEXT PRIMARY KEY,
+      dm_id TEXT NOT NULL REFERENCES dm(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL REFERENCES channels(id),
+      owner_uid TEXT NOT NULL REFERENCES users(id)
+    );
+  `);
+  assert.throws(
+    () => crossPlaneDatabase.exec(bootstrapSource),
     /CHECK constraint failed/,
   );
 });
@@ -200,6 +227,7 @@ test("canary bootstrap and audit avoid channel secrets and event payload output"
 
   assert.match(auditSource, /PRAGMA quick_check/);
   assert.match(auditSource, /PRAGMA foreign_key_check/);
+  assert.match(auditSource, /pragma_foreign_key_list\('dm_replies'\)/);
   assert.match(auditSource, /writes_local_projection/);
   assert.match(auditSource, /LIMIT 100/);
   assert.doesNotMatch(auditSource, /SELECT\s+payload_json/);
