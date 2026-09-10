@@ -30,6 +30,7 @@ import {
 } from "../lib/unified-timeline-metrics";
 import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session";
+import { resolveChannelDatabase } from "../lib/database-access";
 
 const CHANNEL_READ_TOKEN_TYPES = new Set([
   "messages",
@@ -94,9 +95,11 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
   const channelReadAccess = type && CHANNEL_READ_TOKEN_TYPES.has(type) && !reportsChannel
     ? await authorizeChannelReadToken(request, channelId, env)
     : null;
+  const resolvedDatabase = await resolveChannelDatabase(env, parentChannelId);
   const readEnv = createD1ReadSessionEnv(
     env,
     channelReadAccess ? "first-unconstrained" : "first-primary",
+    resolvedDatabase.database,
   );
   const channelAccess = channelReadAccess
     ? {
@@ -115,9 +118,9 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     : trustedUserId === owner_uid;
   const isPlatformAdminViewer = !isOwner
     && Boolean(passcode)
-    && await isPlatformAdmin(trustedUserId, readEnv);
+    && await isPlatformAdmin(trustedUserId, env);
   const reportsOwnerLocale = reportsChannel && isOwner && trustedUserId
-    ? await getUserLocale(trustedUserId, readEnv)
+    ? await getUserLocale(trustedUserId, env)
     : "ko";
   if (reportsChannel && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });

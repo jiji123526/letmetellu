@@ -81,7 +81,10 @@ test("init shares only public in-flight reads and keeps viewer state separate", 
 test("channel reads use one D1 session with a security-aware first constraint", () => {
   assert.match(initSource, /channelReadAccess[\s\S]*\? "first-unconstrained"[\s\S]*: "first-primary"/);
   assert.match(initSource, /createD1ReadSessionEnv\(env, readConstraint\)/);
-  assert.match(dataSource, /createD1ReadSessionEnv\([\s\S]*channelReadAccess \? "first-unconstrained" : "first-primary"/);
+  assert.match(
+    dataSource,
+    /createD1ReadSessionEnv\(\s*env,\s*channelReadAccess \? "first-unconstrained" : "first-primary",\s*resolvedDatabase\.database,\s*\)/,
+  );
   assert.match(
     unifiedTimelineSource,
     /createD1ReadSessionEnv\(\s*env,\s*channelReadAccess \? "first-unconstrained" : "first-primary",\s*resolvedDatabase\.database,\s*\)/,

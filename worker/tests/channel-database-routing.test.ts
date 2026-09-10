@@ -14,6 +14,10 @@ const unifiedTimelineSource = readFileSync(
   new URL("../src/routes/unified-timeline.ts", import.meta.url),
   "utf8",
 );
+const dataSource = readFileSync(
+  new URL("../src/routes/data.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -67,5 +71,26 @@ test("unified timeline separates channel and control database reads", () => {
   assert.doesNotMatch(
     unifiedTimelineSource,
     /(?:isPlatformAdmin|getUserLocale)\(trustedUserId, readEnv\)/,
+  );
+});
+
+test("data collections separate channel and control database reads", () => {
+  assert.match(
+    dataSource,
+    /resolveChannelDatabase\(env, parentChannelId\)/,
+  );
+  assert.match(
+    dataSource,
+    /createD1ReadSessionEnv\(\s*env,\s*channelReadAccess \? "first-unconstrained" : "first-primary",\s*resolvedDatabase\.database,\s*\)/,
+  );
+  assert.match(dataSource, /isPlatformAdmin\(trustedUserId, env\)/);
+  assert.match(dataSource, /getUserLocale\(trustedUserId, env\)/);
+  assert.doesNotMatch(
+    dataSource,
+    /(?:isPlatformAdmin|getUserLocale)\(trustedUserId, readEnv\)/,
+  );
+  assert.match(
+    dataSource,
+    /recordOperationalEvent\(\{\s*env,/,
   );
 });

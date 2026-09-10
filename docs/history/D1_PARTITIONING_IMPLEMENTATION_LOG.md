@@ -134,6 +134,30 @@ Verification:
 - routing tests assert that channel reads use the selected database while
   platform-administrator and locale reads use the control environment.
 
+### Data collection read boundary
+
+- Routed `GET /api/data` through `resolveChannelDatabase()` before opening its
+  D1 read session.
+- Messages, context, reply parents, blocked users, gallery, DMs, links, search,
+  banned words, and unified-timeline shadow reads use the selected channel
+  database.
+- Platform-administrator and user-locale lookups remain on the control
+  database. Operational shadow mismatch and failure events also remain on the
+  control database so incident history is not fragmented across shards.
+- Authorization still validates channel existence, ownership, passcode, and
+  private collection access after routing. Selecting a shard grants no access.
+- Production behavior remains single-database because the resolver still
+  returns `env.DB`.
+
+Tradeoffs:
+
+- Normal collection reads add only the current local resolver call.
+- Report locale and platform-administrator checks may use a separate
+  control-database operation. This favors a single authoritative identity and
+  authorization source over avoiding an uncommon extra read.
+- `GET /api/init` remains unmigrated pending a separate audit of its shared
+  in-flight cache keys and cross-shard isolation.
+
 ## Next implementation step
 
 Migrate one channel-only read path at a time to resolve its database before
