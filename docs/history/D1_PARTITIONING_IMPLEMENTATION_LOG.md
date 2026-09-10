@@ -376,6 +376,26 @@ Tradeoffs and deployment gate:
   projection copy. Canary shard bootstrap must replace the preparation triggers
   with event-only triggers.
 
+### Persistent channel projection versions
+
+- Added `channel_projection_versions`, keyed independently from canonical
+  channel rows, after confirming that deleted channel addresses are allowed to
+  be recreated with a new `instance_id`.
+- Create, projection update, and delete events now advance that persistent
+  version. Recreating a deleted address therefore receives a version newer than
+  its delete event instead of resetting to version 1.
+- The same minimal table can serve as the applied-event watermark in the
+  control database. Its `active` or `deleted` state lets a future consumer
+  reject stale upserts that arrive after deletion.
+- Live rows remain excluded because their lifecycle belongs to the parent
+  channel and they must not create an independent control projection.
+
+Tradeoff:
+
+- Every projected channel mutation performs one additional indexed watermark
+  write. This cost is required to support channel-address reuse safely; keeping
+  the version only on the deletable canonical row is not correct.
+
 ## Next implementation step
 
 Add an idempotent control projection consumer that applies only newer source

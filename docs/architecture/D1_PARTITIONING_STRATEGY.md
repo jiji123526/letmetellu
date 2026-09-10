@@ -755,6 +755,9 @@ Implemented so far:
 - added the shard-local domain-event ledger and monotonic channel projection
   source events; dispatch, acknowledgement, and retention are not implemented
   yet;
+- persisted channel projection versions independently from canonical channel
+  rows so deleting and later recreating the same channel address cannot reset
+  event ordering or bypass a delete watermark;
 - kept control-plane lookups outside channel-scoped database environments.
 
 Exit gate:
