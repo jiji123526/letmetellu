@@ -753,8 +753,7 @@ Implemented so far:
   same-database triggers during preparation and designed to transition to
   versioned shard events before canary;
 - added the shard-local domain-event ledger and monotonic channel projection
-  source events; the consumer remains inactive and retention is not implemented
-  yet;
+  source events; the consumer and retention scheduling remain inactive;
 - persisted channel projection versions independently from canonical channel
   rows so deleting and later recreating the same channel address cannot reset
   event ordering or bypass a delete watermark;

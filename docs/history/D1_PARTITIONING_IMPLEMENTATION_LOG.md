@@ -370,8 +370,8 @@ Tradeoffs and deployment gate:
 - Two event indexes add further write and storage cost.
 - No consumer, acknowledgement, retry runner, or retention cleanup exists yet.
   Applying migration `0065` now would create a growing pending backlog.
-- Do not apply `0065` to production until the idempotent consumer and retention
-  path are implemented and tested.
+- Do not apply `0065` to production until the tested consumer and retention
+  path are connected to an explicit shard dispatcher and operational rollout.
 - A future Chat shard using the same schema would also maintain an unused local
   projection copy. Canary shard bootstrap must replace the preparation triggers
   with event-only triggers.
