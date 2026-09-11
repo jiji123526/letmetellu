@@ -1258,6 +1258,73 @@ Worker는 passcode를 성공적으로 검증한 뒤 `room-access` 토큰을 발�
 
 이게 이 프로젝트 권한 모델의 핵심이다.
 
+### Q. 토큰은 어느 단계에서 쓰이고, 어디서 생성되고, 어디서 검증되나
+
+이 프로젝트는 "토큰 하나로 모든 것을 해결"하는 구조가 아니다. 단계별로 다른
+토큰을 쓴다. 아래 표로 보면 전체 흐름이 한 번에 잡힌다.
+
+| 토큰/신호 | 언제 쓰나 | 어디서 생성되나 | 어디에 저장/전달되나 | 어디서 검증되나 |
+| --- | --- | --- | --- | --- |
+| `Auth.js session` | 로그인된 사용자가 Next.js 페이지/API를 칠 때 | Auth.js 로그인 흐름 | 브라우저와 Next.js 사이 세션 쿠키 | Next.js `auth()` 호출 ([src/app/api/init/route.ts](../../src/app/api/init/route.ts), [src/app/api/data/route.ts](../../src/app/api/data/route.ts)) |
+| `X-Internal-Token` | Next.js가 Worker에 "내부 서버 요청"임을 주장할 때 | 별도 발급이 아니라 `INTERNAL_SECRET` 환경변수 사용 | Next.js가 Worker 요청 헤더에 첨부 | Worker의 [worker/src/lib/trusted-identity.ts](../../worker/src/lib/trusted-identity.ts) |
+| `X-User-Id` | 로그인 사용자 ID를 Worker에 전달할 때 | Next.js가 서버 세션 확인 후 헤더에 설정 | Next.js -> Worker 헤더 | Worker의 [worker/src/lib/trusted-identity.ts](../../worker/src/lib/trusted-identity.ts), 각 route의 owner 판정 |
+| `X-Anonymous-Token` | 익명 방문자를 같은 주체로 식별해야 할 때 | Worker의 [worker/src/lib/anonymous-identity.ts](../../worker/src/lib/anonymous-identity.ts), 보통 [worker/src/routes/init.ts](../../worker/src/routes/init.ts) | HttpOnly cookie, 이후 Next.js가 Worker로 전달 | `verifyAnonymousIdentityToken()` in [worker/src/lib/anonymous-identity.ts](../../worker/src/lib/anonymous-identity.ts) |
+| `X-Device-Token` | 디바이스 단위 식별, 차단/남용 제어 보조가 필요할 때 | Worker의 [worker/src/lib/anonymous-identity.ts](../../worker/src/lib/anonymous-identity.ts), 보통 [worker/src/routes/init.ts](../../worker/src/routes/init.ts) | HttpOnly cookie, 이후 Next.js가 Worker로 전달 | `verifyDeviceIdentityToken()` in [worker/src/lib/anonymous-identity.ts](../../worker/src/lib/anonymous-identity.ts) |
+| `X-Room-Token` | passcode 채널에 이미 입장 권한을 통과했음을 증명할 때 | Worker의 [worker/src/routes/passcode.ts](../../worker/src/routes/passcode.ts)에서 `createRoomToken()` | [src/app/api/verify-passcode/route.ts](../../src/app/api/verify-passcode/route.ts)에서 받아 HttpOnly cookie 저장 후 이후 요청 헤더로 전달 | `authorizeRoomToken()` in [worker/src/routes/passcode.ts](../../worker/src/routes/passcode.ts), `init/data/unified-timeline/messages/upload/socket-auth/chat-room` |
+| `X-Channel-Read-Token` | 최근 통과한 read 권한을 짧게 재사용할 때 | Worker의 [worker/src/lib/channel-read-token.ts](../../worker/src/lib/channel-read-token.ts), 주로 [worker/src/routes/init.ts](../../worker/src/routes/init.ts), [worker/src/routes/data.ts](../../worker/src/routes/data.ts), [worker/src/routes/unified-timeline.ts](../../worker/src/routes/unified-timeline.ts) | 응답 헤더 -> Next.js가 채널별 HttpOnly cookie 저장 -> 다음 read 요청에 다시 전달 | `authorizeChannelReadToken()` in [worker/src/lib/channel-read-token.ts](../../worker/src/lib/channel-read-token.ts) |
+| `WebSocket token` | 브라우저가 `/ws/:channel` 실시간 연결을 인증할 때 | Next.js의 [src/app/api/ws-token/route.ts](../../src/app/api/ws-token/route.ts), 사전 권한판정은 Worker [worker/src/routes/socket-auth.ts](../../worker/src/routes/socket-auth.ts) | 브라우저가 WS auth message에 포함해 DO로 전송 | DO의 [worker/src/realtime/chat-room.ts](../../worker/src/realtime/chat-room.ts), 검증 함수는 [worker/src/lib/admin-ws-token.ts](../../worker/src/lib/admin-ws-token.ts) |
+| `media_token` | 보호된 이미지/배경 같은 미디어 URL 접근 때 | Next.js의 [src/lib/media-access-token.ts](../../src/lib/media-access-token.ts) | 서명된 미디어 URL query string | Worker의 [worker/src/routes/upload.ts](../../worker/src/routes/upload.ts)에서 `verifyMediaAccessToken()` |
+
+실제 요청 흐름으로 다시 묶어 보면:
+
+1. 로그인 사용자는 `Auth.js session`으로 먼저 Next.js에서 식별된다.
+2. Next.js는 Worker에 갈 때 `X-Internal-Token + X-User-Id`로 내부 신뢰를 전달한다.
+3. 익명 사용자는 `X-Anonymous-Token + X-Device-Token`으로 지속 식별된다.
+4. 잠긴 채널에 들어가면 `X-Room-Token`이 생기고, 이후 read/write/upload/ws 준비 단계에 재사용된다.
+5. read 경로는 `X-Channel-Read-Token`으로 짧게 최적화된다.
+6. 실시간 연결 순간에는 별도로 `WebSocket token`을 다시 쓴다.
+7. 보호 미디어는 마지막으로 `media_token`까지 붙어야 안전하게 읽을 수 있다.
+
+### Q. 토큰은 HTTP가 만드는 것인가
+
+아니다. `HTTP`는 토큰을 만드는 주체가 아니라, 토큰을 `전달하는 통로`다.
+
+정확히 나누면:
+
+- 토큰을 만드는 주체
+  Next.js 서버 코드, Worker 서버 코드, 혹은 Auth.js 같은 서버 측 인증 로직
+- 토큰을 실어 나르는 경로
+  HTTP 헤더, HTTP 응답 본문, 쿠키, WebSocket 메시지
+
+이 프로젝트를 기준으로 보면:
+
+- `Auth.js session`
+  Auth.js/Next.js가 만든다.
+- `X-Internal-Token`
+  새로 발급하는 토큰이라기보다 `INTERNAL_SECRET` 값을 Next.js가 헤더에 넣는다.
+- `X-User-Id`
+  Next.js가 `auth()`로 세션을 확인한 뒤 헤더에 적는다.
+- `X-Anonymous-Token`, `X-Device-Token`
+  Worker가 만든다.
+- `X-Room-Token`
+  Worker가 passcode 검증 성공 후 만든다.
+- `X-Channel-Read-Token`
+  Worker가 read capability로 만든다.
+- `WebSocket token`
+  Next.js가 만들되, 그 전에 Worker가 socket auth 판정을 한다.
+- `media_token`
+  Next.js가 미디어 URL에 붙이기 직전에 만든다.
+
+즉 "토큰을 누가 만들었는가"와 "토큰이 어떤 프로토콜로 전달되는가"는 다른 질문이다.
+
+- 생성
+  애플리케이션 서버 코드가 한다.
+- 전달
+  HTTP나 WebSocket이 한다.
+
+그래서 `HTTP가 토큰을 만든다`고 보면 안 되고,
+`서버가 토큰을 만들고 HTTP가 그것을 옮긴다`고 이해하는 편이 정확하다.
+
 ### Q. 이 프로젝트에서 쓰는 API를 전체적으로 분류하면 어떻게 되나
 
 이 프로젝트에서 `API`라고 부르는 것은 한 종류가 아니다. 크게 보면 다섯 층이
