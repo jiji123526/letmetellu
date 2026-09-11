@@ -16,6 +16,7 @@ Markdown files to the repository root.
 - [D1 partitioning strategy](./architecture/D1_PARTITIONING_STRATEGY.md): channel sharding trade-offs, rollout plan, and platform case studies
 - [Security authorization matrix](./architecture/SECURITY_AUTHORIZATION_MATRIX.md): identity evidence and privileged boundaries
 - [Notification delivery optimization](./architecture/NOTIFICATION_DELIVERY_OPTIMIZATION.md): notification query costs and scaling priorities
+- [Next.js + Worker edge architecture guide (Korean)](./architecture/NEXTJS_WORKER_EDGE_ARCHITECTURE_KO.md): deep explanation of the browser, Next.js, Worker, D1, Durable Object, R2, and Cache API structure
 
 ## Operations
 
