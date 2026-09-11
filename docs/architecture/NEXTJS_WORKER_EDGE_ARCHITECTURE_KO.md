@@ -1022,6 +1022,463 @@ DO는 그 반대로 생각해야 한다.
 
 으로 이해하면 된다.
 
+### Q. `X-Internal-Token`, `X-User-Id`, `X-Room-Token`, `X-Anonymous-Token`, `X-Channel-Read-Token`은 각각 무엇인가
+
+이 헤더들은 전부 "로그인 토큰"이 아니다. 서로 다른 종류의 신뢰를 나눠 담고 있다.
+
+- `X-Internal-Token`
+  Next.js 서버가 Worker에 보내는 내부 신뢰 증명이다.
+- `X-User-Id`
+  Next.js가 서버 세션을 확인한 뒤 "이 요청의 로그인 사용자는 이 사람"이라고
+  주장하는 값이다.
+- `X-Room-Token`
+  passcode가 걸린 채널에 들어갈 권한을 이미 통과했다는 증명이다.
+- `X-Anonymous-Token`
+  익명 방문자를 안정적으로 식별하기 위한 서명된 identity다.
+- `X-Channel-Read-Token`
+  최근에 통과한 채널 읽기 권한을 짧은 시간 동안 재사용하게 해 주는 capability다.
+
+즉 이 구조는:
+
+- 서버가 주장하는 로그인 사용자 신원
+- 채널 접근 권한
+- 익명 방문자 identity
+- 짧은 read capability
+
+를 서로 다른 토큰으로 분리한다.
+
+### Q. 왜 `X-User-Id`만으로는 절대 충분하지 않나
+
+`X-User-Id`는 문자열일 뿐이다. 브라우저는 임의의 헤더를 붙일 수 있으므로,
+그 값 하나만 보고 owner/admin으로 취급하면 안 된다.
+
+그래서 Worker는:
+
+- `X-Internal-Token === env.INTERNAL_SECRET`
+
+인지 먼저 확인하고, 그게 맞을 때만 `X-User-Id`를 신뢰한다.
+
+관련 코드는
+[worker/src/lib/trusted-identity.ts](../../worker/src/lib/trusted-identity.ts)다.
+
+즉:
+
+- `X-User-Id` = 주장
+- `X-Internal-Token` = 그 주장을 믿어도 되는 근거
+
+라고 보면 된다.
+
+### Q. `X-Internal-Token`과 `X-User-Id`는 실제로 어디서 붙나
+
+Next.js 프록시가 Auth.js 세션을 확인한 뒤, 로그인된 사용자가 있으면 둘을 같이
+붙인다.
+
+관련 코드는:
+
+- [src/app/api/data/route.ts](../../src/app/api/data/route.ts)
+- [src/app/api/unified-timeline/route.ts](../../src/app/api/unified-timeline/route.ts)
+
+즉 브라우저가 직접 Worker에 로그인 사용자 ID를 증명하는 것이 아니라,
+`Next.js 서버가 세션을 확인한 뒤 대신 Worker에 전달`하는 구조다.
+
+### Q. `X-Room-Token`은 정확히 무엇을 증명하나
+
+`X-Room-Token`은 "이 사용자가 이 잠긴 채널의 passcode gate를 통과했다"는 증명이다.
+로그인 증명도 아니고 owner 증명도 아니다.
+
+Worker는 passcode를 성공적으로 검증한 뒤 `room-access` 토큰을 발급한다. 이 토큰은:
+
+- `channel_id`
+- `passcode_binding`
+- `iat`
+- `exp`
+
+를 담는다.
+
+여기서 중요한 것은 `passcode_binding`이다. 이 값은 단순한 채널 ID가 아니라
+`현재 저장된 passcode hash`와 채널 ID를 다시 HMAC으로 묶은 값이다.
+
+관련 코드는
+[worker/src/routes/passcode.ts](../../worker/src/routes/passcode.ts)에 있다.
+
+### Q. `X-Room-Token`은 어떻게 검증되나
+
+검증은 두 단계다.
+
+1. `verifyRoomToken()`
+   HMAC 서명, 형식, 만료 시간을 검증한다.
+2. `authorizeRoomToken()`
+   `channel_id`가 현재 채널과 맞는지 보고, `passcode_binding`이 현재 채널의
+   최신 passcode hash와 아직도 맞는지 다시 확인한다.
+
+관련 코드는:
+
+- [worker/src/routes/passcode.ts](../../worker/src/routes/passcode.ts)
+
+이 설계 덕분에 채널 passcode가 바뀌면 예전 room token은 자동으로 무효가 된다.
+즉 "예전에 한 번 통과했다"가 아니라 "지금도 유효한 passcode 상태에 묶여 있다"가
+핵심이다.
+
+### Q. `X-Anonymous-Token`은 왜 필요한가
+
+익명 사용자도 완전 무상태로 다루면 서비스가 깨진다. 예를 들어:
+
+- 본인이 보낸 DM 루트를 다시 찾아야 하고
+- 차단 여부를 확인해야 하고
+- 같은 익명 방문자에게 짧은 read capability를 다시 묶어야 하고
+- 업로드/행동 제한을 어느 정도 같은 주체에 연결해야 한다
+
+그래서 Worker는 익명 사용자에게 `anonymous-identity` 토큰을 발급한다.
+
+이 토큰은 대략:
+
+- `type: "anonymous-identity"`
+- `uid`
+- `iat`
+- `exp`
+
+를 담고, HMAC으로 서명된다.
+
+관련 코드는
+[worker/src/lib/anonymous-identity.ts](../../worker/src/lib/anonymous-identity.ts)다.
+
+중요한 점은 이 토큰이 `채널 접근 자체를 허용하는 것은 아니라는 것`이다. 이것은
+"이 익명 방문자가 누구인지 안정적으로 식별하는 수단"이다.
+
+### Q. `X-Channel-Read-Token`은 왜 따로 필요한가
+
+이 토큰은 로그인 토큰도 아니고 room token도 아니다. 역할은:
+
+"최근에 통과한 채널 read access를 아주 짧은 시간 동안 재사용해서, 같은 종류의
+읽기 요청마다 매번 처음부터 권한 판정을 반복하지 않게 해 주는 것"
+
+이다.
+
+이 토큰은:
+
+- `type: "channel-read"`
+- `version`
+- `channel_id`
+- `viewer`
+- `subject`
+- `iat`
+- `exp`
+
+를 담는다.
+
+버전 1은 채널 snapshot까지 포함하고, 버전 2는 access-only capability다.
+
+관련 코드는
+[worker/src/lib/channel-read-token.ts](../../worker/src/lib/channel-read-token.ts)다.
+
+### Q. `X-Channel-Read-Token`은 어떻게 검증되나
+
+이 토큰은 서명만 맞는다고 끝나지 않는다. Worker는:
+
+1. HMAC 서명 검증
+2. 타입/버전/만료 검증
+3. `channel_id` 일치 검증
+4. 현재 요청 주체와 `subject` 재결합 검증
+
+을 한다.
+
+마지막 단계가 가장 중요하다.
+
+- `viewer === "owner"`이면
+  `getTrustedUserId(request, env) === payload.subject` 여야 한다.
+- `viewer === "visitor"`이면
+  현재의 `X-Anonymous-Token`을 검증한 결과 `uid === payload.subject` 여야 한다.
+
+즉 channel-read token 문자열만 갖고 있어서는 안 되고, 현재의 로그인 사용자나
+현재의 익명 identity와 다시 맞아야 한다.
+
+관련 코드는
+[worker/src/lib/channel-read-token.ts](../../worker/src/lib/channel-read-token.ts)다.
+
+### Q. Worker는 실제 요청에서 이 토큰들을 어떤 순서로 보나
+
+예를 들어 `/api/data`와 `/api/unified-timeline`은 대략 이런 순서로 움직인다.
+
+1. 허용된 read 타입이면 `X-Channel-Read-Token`을 먼저 검증 시도한다.
+2. 실패하거나 없으면 채널의 실제 passcode/owner 상태를 D1에서 읽는다.
+3. `X-Internal-Token + X-User-Id`가 맞으면 trusted user로 취급한다.
+4. owner가 아니고 passcode가 있으면 `X-Room-Token`을 검증한다.
+5. visitor 경로에서는 `X-Anonymous-Token`으로 익명 사용자를 식별한다.
+6. 성공한 read-only 경로는 새 `X-Channel-Read-Token`을 다시 발급할 수 있다.
+
+관련 코드는:
+
+- [worker/src/routes/data.ts](../../worker/src/routes/data.ts)
+- [worker/src/routes/unified-timeline.ts](../../worker/src/routes/unified-timeline.ts)
+
+즉 구조는:
+
+- 빠른 capability 경로
+- authoritative fallback 경로
+
+의 이중 구조다.
+
+### Q. `/api/init`은 이 토큰들을 어떻게 발급하나
+
+`/api/init`은 채널 진입 bootstrap 시점에 여러 토큰을 정리한다.
+
+- 익명 토큰이 없으면 새 `anonymous-identity` 발급
+- device 토큰이 없으면 새 `device-identity` 발급
+- owner가 passcode 채널에 들어오면 owner용 room token 발급 가능
+- 적절한 경우 channel-read capability 발급
+
+관련 코드는
+[worker/src/routes/init.ts](../../worker/src/routes/init.ts)에 있다.
+
+그리고 Next.js는 여기서 내려온 `X-Channel-Read-Token`을 채널별 HttpOnly cookie로
+저장해 다음 read 경로에서 다시 보낼 수 있게 한다.
+
+관련 코드는
+[src/lib/channel-read-token-cookie.ts](../../src/lib/channel-read-token-cookie.ts)다.
+
+### Q. 이 구조의 가장 중요한 보안 원칙은 무엇인가
+
+이 시스템은 `어떤 토큰도 단독으로 과신하지 않는다`는 원칙 위에 서 있다.
+
+예를 들면:
+
+- `X-User-Id`만으로 owner 취급하지 않는다.
+- `X-Channel-Read-Token`만으로 현재 주체를 확정하지 않는다.
+- `X-Room-Token`도 현재 passcode hash와 다시 묶는다.
+- `X-Anonymous-Token`은 identity일 뿐, access 자체를 주지는 않는다.
+
+즉 이 구조는 단순 "서명 검증"이 아니라:
+
+- 누가 주장했는가
+- 현재 채널과 맞는가
+- 현재 passcode 상태와 맞는가
+- 현재 요청 주체와 다시 이어지는가
+
+를 매번 대조한다.
+
+이게 이 프로젝트 권한 모델의 핵심이다.
+
+### Q. 이 프로젝트에서 쓰는 API를 전체적으로 분류하면 어떻게 되나
+
+이 프로젝트에서 `API`라고 부르는 것은 한 종류가 아니다. 크게 보면 다섯 층이
+겹쳐서 동작한다.
+
+1. 브라우저 Web API
+2. Next.js 서버 API
+3. 애플리케이션 HTTP API
+4. Cloudflare 플랫폼 API
+5. 인증/서명용 보안 API
+
+중요한 점은 브라우저가 직접 모든 백엔드 자원을 두드리는 구조가 아니라는 것이다.
+브라우저는 보통 `Next.js /api/*`를 먼저 치고, Next.js가 필요한 헤더와 세션 정보를
+붙여 Worker로 다시 보낸다. 실제 권한 판단과 데이터 정답은 Worker 쪽에 있다.
+
+### Q. 브라우저 쪽에서는 어떤 Web API를 쓰나
+
+가장 기본은 `fetch`와 `WebSocket`이다.
+
+- `fetch`
+  초기화, 히스토리 조회, 메시지 전송, 업로드, 지원 요청 같은 거의 모든 HTTP 호출
+  에 사용된다.
+- `WebSocket`
+  채팅 메시지, presence, live 상태처럼 서버가 먼저 밀어줘야 하는 실시간 이벤트에
+  사용된다.
+- `Request`, `Response`, `Headers`, `URL`
+  Next.js Route Handler와 Worker가 모두 웹 표준 인터페이스를 쓰기 때문에, 서버
+  코드도 브라우저와 비슷한 모델로 움직인다.
+- `Cache API`
+  브라우저 쪽에서는 preview/background 같은 일부 데이터를 임시 복원하는 데
+  쓰이고, Worker 쪽에서는 edge 캐시 용도로 따로 쓰인다. 이름은 같지만 계층은
+  다르다.
+- `crypto.subtle`
+  이 프로젝트에서는 특히 토큰 서명/검증에 쓰인다. 브라우저 전용이 아니라
+  Next.js/Worker 런타임에서도 같은 계열 API를 쓴다.
+
+즉 이 프로젝트는 오래된 Node 전용 API보다 `웹 표준 API` 위에 많이 서 있다.
+
+### Q. Next.js 서버 API는 무엇을 하나
+
+Next.js는 단순 페이지 렌더러가 아니라 `브라우저와 Worker 사이의 첫 번째 서버
+경계`다.
+
+코드상으로는 [src/app/api](../../src/app/api) 아래 Route Handler들이 그 역할을
+한다.
+
+예를 들면:
+
+- [src/app/api/init/route.ts](../../src/app/api/init/route.ts)
+  채널 진입 bootstrap 요청을 Worker로 프록시하고, 익명 토큰/room token/channel
+  read token 쿠키를 정리한다.
+- [src/app/api/data/route.ts](../../src/app/api/data/route.ts)
+  채널 데이터 read 요청을 Worker로 보내고, 응답 안의 보호 미디어 URL을 다시
+  서명한다.
+- [src/app/api/unified-timeline/route.ts](../../src/app/api/unified-timeline/route.ts)
+  공개 메시지, DM root, owner reply를 한 타임라인으로 합친 읽기 경로를 프록시한다.
+- [src/app/api/messages/route.ts](../../src/app/api/messages/route.ts)
+  메시지 전송/수정/삭제/리액션 요청을 Worker로 전달한다.
+- [src/app/api/upload/route.ts](../../src/app/api/upload/route.ts)
+  업로드 바이트 스트림을 Worker로 전달하면서 필요한 권한 헤더를 붙인다.
+- [src/app/api/ws-token/route.ts](../../src/app/api/ws-token/route.ts)
+  WebSocket 연결 전에 사용할 짧은 수명의 WS 토큰을 발급한다.
+
+여기서 Next.js가 하는 핵심 일은:
+
+- Auth.js 세션 확인
+- HttpOnly cookie 읽기/쓰기
+- 내부 요청 헤더 부착
+- Worker 응답을 브라우저 친화적으로 가공
+
+이다.
+
+### Q. 브라우저가 실제로 치는 애플리케이션 HTTP API는 무엇들인가
+
+브라우저 관점에서는 주로 `Next.js /api/*`가 공개 API다. 이 프로젝트에서 자주
+보이는 것들을 목적별로 묶으면 아래와 같다.
+
+- 진입/읽기
+  `/api/init`, `/api/data`, `/api/unified-timeline`, `/api/channel-state`,
+  `/api/recent-channels`
+- 쓰기/실시간 준비
+  `/api/messages`, `/api/dm`, `/api/upload`, `/api/ws-token`,
+  `/api/verify-passcode`, `/api/room-token`
+- 사용자/운영
+  `/api/user`, `/api/admin`, `/api/support`, `/api/platform-admin/support`,
+  `/api/channel-reports`, `/api/global-notice`, `/api/survey`,
+  `/api/notifications/*`, `/api/version`
+- 인증
+  `/api/auth/[...nextauth]`, `/api/email-auth`
+
+이 중에서 정말 구조를 이해하는 데 중요한 최소 집합은:
+
+1. `/api/init`
+2. `/api/data` 또는 `/api/unified-timeline`
+3. `/api/messages`
+4. `/api/upload`
+5. `/api/ws-token`
+
+이다. 이 다섯 개를 이해하면 채널 진입부터 읽기, 쓰기, 실시간 연결까지 거의 다
+보인다.
+
+### Q. Worker 쪽 API는 왜 따로 있나
+
+Worker에는 이 프로젝트의 `authoritative API`가 있다. 실제 권한 검사, D1 조회,
+R2 업로드, DO 연결, preview 생성 같은 핵심 로직은 여기서 수행된다.
+
+라우팅은 [worker/src/index.ts](../../worker/src/index.ts)에 모여 있다.
+
+대표적으로:
+
+- `/api/init`
+- `/api/data`
+- `/api/unified-timeline`
+- `/api/messages`
+- `/api/dm`
+- `/api/upload`
+- `/api/socket-auth`
+- `/api/verify-passcode`
+- `/api/support`
+- `/api/media/:key`
+- `/ws/:channel`
+
+가 있다.
+
+여기서 중요한 차이는:
+
+- `Next.js /api/*` = 브라우저-facing 경계
+- `Worker /api/*` = 권한과 데이터의 실제 정답
+
+이라는 점이다.
+
+이름이 비슷해도 역할은 다르다. 예를 들어
+[src/app/api/data/route.ts](../../src/app/api/data/route.ts)는 프록시이고,
+[worker/src/routes/data.ts](../../worker/src/routes/data.ts)는 실제 읽기 정책을
+집행한다.
+
+### Q. Cloudflare 플랫폼 API는 구체적으로 무엇을 쓰나
+
+이 프로젝트의 Worker 내부에서는 Cloudflare 전용 API가 많이 쓰인다.
+
+- Worker `fetch` handler
+  모든 HTTP 요청의 진입점이다.
+- Durable Objects
+  채널별 실시간 연결과 broadcast를 맡는다.
+- D1 API
+  `env.DB.prepare(...).bind(...).first()/run()/all()` 같은 형태로 관계형 데이터를
+  읽고 쓴다.
+- R2 API
+  업로드 파일 원본을 저장하고 꺼낸다.
+- Cache API
+  preview나 공개 배경 메타데이터처럼 짧게 재사용할 데이터를 edge에서 캐시한다.
+- Scheduled handler
+  알림 outbox 배달, 유지보수, 운영 경고 평가 같은 주기 작업에 쓰인다.
+
+즉 Worker는 단순 HTTP 서버가 아니라 `Cloudflare 플랫폼 기능들을 묶는 오케스트라`
+에 가깝다.
+
+### Q. Durable Object API는 이 프로젝트에서 어떻게 쓰이나
+
+이 프로젝트는 DO를 거의 `채널별 실시간 actor`처럼 쓴다.
+
+예를 들면 [worker/src/index.ts](../../worker/src/index.ts)에서 WebSocket 요청이
+`/ws/:channel`로 들어오면:
+
+1. `env.CHAT_ROOM.idFromName(channelId)`로 DO ID를 만든다.
+2. `env.CHAT_ROOM.get(doId)`로 스텁을 얻는다.
+3. `stub.fetch(request)`로 해당 채널 인스턴스에 연결을 넘긴다.
+
+또 메시지 저장 후에는
+[worker/src/routes/messages.ts](../../worker/src/routes/messages.ts)에서 같은 DO에
+`/broadcast` 요청을 보내 실시간 fan-out을 한다.
+
+즉 DO API는:
+
+- WebSocket 연결 수용
+- 채널별 직렬화
+- broadcast 조정
+- live presence 관리
+
+에 쓰인다.
+
+### Q. 보안 쪽 API는 무엇이 핵심인가
+
+이 프로젝트는 보안도 API처럼 봐야 이해가 쉽다. 대표적인 것은 두 갈래다.
+
+- Auth.js 세션 API
+  Next.js가 `auth()`로 로그인 사용자를 확인한다.
+- Web Crypto API
+  `crypto.subtle`로 HMAC 서명과 검증을 한다.
+
+예를 들면:
+
+- [src/app/api/ws-token/route.ts](../../src/app/api/ws-token/route.ts)
+  에서는 WS 토큰을 HMAC으로 서명한다.
+- [worker/src/routes/upload.ts](../../worker/src/routes/upload.ts)
+  에서는 미디어 접근 토큰을 검증한다.
+
+이 덕분에 이 프로젝트는 단순 쿠키 문자열 비교가 아니라, `서명된 capability`와
+`내부 서버 신뢰`를 조합해서 권한을 판단한다.
+
+### Q. 결국 이 프로젝트 API의 실제 요청 흐름은 어떻게 보나
+
+대표 흐름 몇 개만 잡아두면 전체가 정리된다.
+
+1. 채널 진입
+   브라우저 -> `/api/init` -> Worker `/api/init` -> D1 조회 -> 토큰/쿠키 정리
+2. 히스토리 읽기
+   브라우저 -> `/api/data` 또는 `/api/unified-timeline` -> Worker read 정책 집행
+   -> D1 조회 -> 필요 시 channel read token 갱신
+3. 메시지 전송
+   브라우저 -> `/api/messages` -> Worker 검증/저장 -> D1 write -> DO broadcast
+4. 이미지 업로드
+   브라우저 -> `/api/upload` -> Worker 권한/쿼터 검사 -> R2 저장 -> upload ticket 기록
+5. 실시간 연결
+   브라우저 -> `/api/ws-token` -> Worker `/api/socket-auth` -> WS 토큰 발급 ->
+   `/ws/:channel` WebSocket 연결 -> ChatRoom DO 수용
+
+이 다섯 흐름을 보면, 이 프로젝트의 API는 사실상 `페이지용 API`, `권한용 API`,
+`데이터용 API`, `실시간 API`, `스토리지 API`가 겹친 복합 구조라는 것을 알 수
+있다.
+
 ## 추천 자료
 
 아래 자료들은 "이 구조를 구성하는 개념"을 배우기에 실제로 많이 추천되는
