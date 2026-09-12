@@ -66,7 +66,7 @@ SELECT
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 2),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 3),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -78,7 +78,7 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  2,
+  3,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
 
@@ -87,9 +87,23 @@ CREATE TABLE canary_channel_copy_jobs (
   source_projection_version INTEGER NOT NULL
     CHECK (source_projection_version > 0),
   stage TEXT NOT NULL DEFAULT 'prepared'
-    CHECK (stage IN ('prepared', 'channels_copied')),
+    CHECK (stage IN (
+      'prepared',
+      'channels_copied',
+      'moderators_copied',
+      'blocked_copied',
+      'banned_words_copied',
+      'channel_moderation_copied',
+      'channel_petitions_copied',
+      'config_copied',
+      'upload_tickets_copied'
+    )),
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active', 'failed', 'complete')),
+  cursor_channel_id TEXT,
+  cursor_row_id TEXT,
+  stage_rows_copied INTEGER NOT NULL DEFAULT 0
+    CHECK (stage_rows_copied >= 0),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

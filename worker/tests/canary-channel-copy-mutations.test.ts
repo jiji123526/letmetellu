@@ -85,7 +85,7 @@ class CopyDatabase {
   async first(statement: CopyStatement) {
     this.queries.push({ sql: statement.sql, values: statement.values });
     if (statement.sql.includes("chat_shard_metadata")) {
-      return { shard_role: "chat-canary", bootstrap_version: 2 };
+      return { shard_role: "chat-canary", bootstrap_version: 3 };
     }
     if (statement.sql.includes("canary_channel_copy_jobs")) return this.job;
     if (statement.sql.includes("FROM channels AS channel")) {

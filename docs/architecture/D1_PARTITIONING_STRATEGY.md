@@ -798,10 +798,11 @@ Exit gate:
 Status: preparation in progress; binding and dispatcher contracts exist, but
 physical canary databases and channel routing do not. Empty-shard bootstrap and
 read-only schema audit tooling exist, including a fail-closed event-only trigger
-overlay; they have not been run against remote databases. A dedicated-secret,
-GET-only operator endpoint can execute one bounded, metadata-only reconciliation
-page against one explicitly selected canary binding and is disabled in the
-production configuration.
+overlay; they have not been run against remote databases. Dedicated-secret
+operators now provide metadata-only preflight/reconciliation, a version-pinned
+canonical copy, and resumable 100-row stages for low-volume policy/config data.
+They remain disabled in production configuration; message/DM copy, cleanup,
+write freeze, and routing are not implemented.
 
 1. Add two Chat D1 bindings with identical channel-local schema.
 2. Add a small static canary allowlist that routes locally without a control

@@ -8,6 +8,7 @@ import { isCanaryProjectionDispatchEnabled } from "../lib/channel-projection-dis
 import { isReportsChannel } from "../lib/special-channels.ts";
 import {
   copyCanaryCanonicalChannels,
+  copyCanaryPolicyConfigBatch,
   startCanaryChannelCopy,
 } from "../lib/canary-channel-copy.ts";
 
@@ -15,7 +16,7 @@ const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 const MAX_COMMAND_BYTES = 1024;
 
 interface CopyCommand {
-  action: "start" | "copy-channels";
+  action: "start" | "copy-channels" | "copy-policy-config";
   shard: CanaryShardId;
   channel: string;
 }
@@ -32,7 +33,11 @@ function parseCommand(text: string): CopyCommand | null {
   const input = value as Record<string, unknown>;
   if (
     Object.keys(input).sort().join(",") !== "action,channel,shard"
-    || (input.action !== "start" && input.action !== "copy-channels")
+    || (
+      input.action !== "start"
+      && input.action !== "copy-channels"
+      && input.action !== "copy-policy-config"
+    )
     || (input.shard !== "canary-a" && input.shard !== "canary-b")
     || typeof input.channel !== "string"
     || !CHANNEL_ID_PATTERN.test(input.channel)
@@ -83,17 +88,16 @@ export async function handleCanaryChannelCopyMutation(
   }
 
   try {
+    const operationInput = {
+      env,
+      shardId: command.shard,
+      channelId: command.channel,
+    };
     const result = command.action === "start"
-      ? await startCanaryChannelCopy({
-        env,
-        shardId: command.shard,
-        channelId: command.channel,
-      })
-      : await copyCanaryCanonicalChannels({
-        env,
-        shardId: command.shard,
-        channelId: command.channel,
-      });
+      ? await startCanaryChannelCopy(operationInput)
+      : command.action === "copy-channels"
+        ? await copyCanaryCanonicalChannels(operationInput)
+        : await copyCanaryPolicyConfigBatch(operationInput);
     return Response.json(result, {
       status: result.blockers.length === 0 ? 200 : 409,
       headers: { "Cache-Control": "no-store" },

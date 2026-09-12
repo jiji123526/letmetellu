@@ -58,21 +58,8 @@ function channelAndLiveBindings(channelId: string): string[] {
   return [channelId, `${channelId}_live`];
 }
 
-function configBindings(channelId: string): string[] {
-  return [
-    `notice_${channelId}`,
-    `notice_${channelId}_live`,
-    `welcome_${channelId}`,
-    `live_${channelId}`,
-    `liveEmojis_${channelId}`,
-    `petition_${channelId}`,
-    `dm_${channelId}`,
-  ];
-}
-
 function countStatement(database: D1Database, channelId: string) {
   const channelIds = channelAndLiveBindings(channelId);
-  const configs = configBindings(channelId);
   const statements: Array<{ table: CopyTable; sql: string; values: string[] }> = [
     { table: "channels", sql: "id IN (?, ?)", values: channelIds },
     { table: "moderators", sql: "channel_id IN (?, ?)", values: channelIds },
@@ -80,11 +67,7 @@ function countStatement(database: D1Database, channelId: string) {
     { table: "blocked", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "dm", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "gallery", sql: "channel_id IN (?, ?)", values: channelIds },
-    {
-      table: "config",
-      sql: `id IN (${configs.map(() => "?").join(", ")})`,
-      values: configs,
-    },
+    { table: "config", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "banned_words", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "upload_tickets", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "channel_reports", sql: "channel_id IN (?, ?)", values: channelIds },
@@ -179,7 +162,7 @@ export async function preflightCanaryChannelCopy(input: {
   if (
     !metadata
     || metadata.shard_role !== "chat-canary"
-    || Number(metadata.bootstrap_version) !== 2
+    || Number(metadata.bootstrap_version) !== 3
   ) {
     blockers.push("destination_not_bootstrapped");
   }

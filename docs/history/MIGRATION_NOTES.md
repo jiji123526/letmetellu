@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### D1 canary copy now resumes through bounded policy/config stages — 2026-09-11
+
+- The isolated canary copy operator now advances from canonical channel rows
+  through moderators, blocks, banned words, channel moderation, petitions,
+  config, and upload tickets in an explicit dependency order.
+- Every call reads at most 101 source rows and writes at most 100. The
+  destination job ledger persists a deterministic channel/row cursor, making a
+  large stage resumable without placing an unbounded transaction on D1.
+- Bootstrap metadata is now version 3. Audit output exposes only whether a
+  cursor exists and the numeric stage progress; copied policy text, identities,
+  fingerprints, upload keys, and other private values are never returned.
+- Config preflight now counts the same channel-scoped rows the copy command
+  would move. Actual SQLite regression tests cover a multi-batch stage, all
+  seven stage transitions, and fail-closed source-version drift.
+
+Trade-off: this is still an initial backfill, not a consistent live migration.
+Canonical projection versions do not capture every policy/config mutation, so
+a final write freeze, delta reconciliation, explicit cleanup, and the separate
+message/DM copy contracts are required before any channel can be routed to a
+canary. The command is operator-only and adds no query or payload to normal
+production traffic. No remote database, deployment setting, or production data
+was changed in this step.
+
 ### Link-preview images no longer wait on decode before display — 2026-09-10
 
 - Link-preview images now become visible as soon as the browser fires `load`;

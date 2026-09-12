@@ -660,11 +660,53 @@ Security and tradeoffs:
 No remote database was mutated, no copy secret or binding was configured, and
 no traffic routing, shadow allowlist, or dispatcher state changed.
 
+### Bounded policy and configuration copy stages
+
+- Raised the empty-canary bootstrap overlay to version 3 and extended the
+  destination copy ledger with a channel/row cursor and per-stage copied-row
+  count.
+- Added the dedicated-secret `copy-policy-config` command. Each invocation
+  reads at most 101 rows, writes at most 100 rows, and atomically advances the
+  cursor or the stage with the destination inserts.
+- Fixed the dependency order and explicit columns for moderators, blocks,
+  banned words, channel moderation, petitions, config, and upload tickets.
+  Dynamic table/column identifiers come only from this internal allowlist;
+  request data cannot select SQL identifiers.
+- Aligned config preflight counting with the actual parent/live `channel_id`
+  copy scope instead of relying on a hand-maintained list of config IDs.
+- Preserved source projection-version checks before and after every batch,
+  fail-closed destination inserts, dispatcher/copy mutual exclusion, and
+  metadata-only responses and audit output.
+- Added actual SQLite coverage for a 105-row stage split across two resumable
+  batches, all seven stages, sensitive-value non-disclosure, and source-version
+  mismatch failure.
+
+Tradeoffs:
+
+- The canonical projection version does not advance for changes inside these
+  policy/config tables. This stage deliberately provides bounded initial
+  backfill only; final write freeze, delta reconciliation, and mutation routing
+  must close that consistency gap before cutover.
+- The generic copy loop reduces duplicated operator code, while its table,
+  key, column, and stage contracts remain a fixed source-code allowlist. Adding
+  or renaming a schema column now requires a bootstrap-version and contract
+  review.
+- The 100-row batch limits D1 transaction and retry impact but requires
+  repeated operator calls for unusually large block/moderator lists. This work
+  is off the user request path and adds no production runtime query.
+- Failed partial copies remain in the destination and are not routable. A
+  separately authorized cleanup workflow is still required before any remote
+  canary migration.
+
+No remote database was mutated, no canary binding or secret was configured,
+and no traffic, shadow read, or projection dispatcher setting changed.
+
 ## Next implementation step
 
-Extend the copy-job ledger with a bounded cursor and add low-volume policy and
-configuration stages before message history. Define explicit column contracts
-and dependency order for moderators, blocks, banned words, moderation,
-petitions, config, and upload tickets. Keep message/DM content and derived
-gallery/search/link state out until their cursor and rebuild contracts are
-separately tested.
+Define and test the high-volume message-history stage separately. Specify a
+stable message cursor, root/reply dependency handling, actor-identity and
+pending-deletion ordering, source mutation/delta reconciliation, and maximum
+batch cost before copying content. Derived gallery, FTS, and link state should
+be rebuilt or verified from canonical messages rather than blindly trusted;
+DMs and reports remain later explicit contracts. Do not run a remote copy until
+partial-copy cleanup and the final write-freeze/cutover protocol exist.

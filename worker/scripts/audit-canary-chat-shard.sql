@@ -41,6 +41,8 @@ SELECT
   source_projection_version,
   stage,
   status,
+  CASE WHEN cursor_channel_id IS NULL THEN 0 ELSE 1 END AS has_cursor,
+  stage_rows_copied,
   created_at,
   updated_at
 FROM canary_channel_copy_jobs

@@ -138,7 +138,7 @@ test("canary triggers emit events without writing a local control projection", (
   `).get();
   assert.deepEqual({ ...metadata }, {
     shard_role: "chat-canary",
-    bootstrap_version: 2,
+    bootstrap_version: 3,
   });
 
   database.prepare(`
