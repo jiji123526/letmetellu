@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parseMediaDimensions } from "../src/lib/media-dimensions.ts";
+import {
+  getRememberedMessageMediaGeometry,
+  rememberMessageMediaGeometry,
+} from "../../src/lib/message-media-geometry.ts";
 
 const messageContentSource = readFileSync(
   new URL("../../src/components/chat/ChatMessageContent.tsx", import.meta.url),
@@ -17,6 +21,10 @@ const messageListSource = readFileSync(
 );
 const messagePaneSource = readFileSync(
   new URL("../../src/components/chat/ChatViewMessagePane.tsx", import.meta.url),
+  "utf8",
+);
+const galleryPanelSource = readFileSync(
+  new URL("../../src/components/chat/GalleryPanel.tsx", import.meta.url),
   "utf8",
 );
 const mutationSource = readFileSync(
@@ -49,7 +57,7 @@ test("media dimensions accept only complete bounded integer pairs", () => {
 });
 
 test("direct message images reserve geometry and activate near the chat viewport", () => {
-  assert.match(messageContentSource, /aspectRatio: `\$\{Number\(width\)\} \/ \$\{Number\(height\)\}`/);
+  assert.match(messageContentSource, /aspectRatio: `\$\{Number\(effectiveWidth\)\} \/ \$\{Number\(effectiveHeight\)\}`/);
   assert.match(messageContentSource, /target\.closest<HTMLElement>\("\.messages-scroll"\)/);
   assert.match(messageContentSource, /messageImageObserverGroups = new WeakMap/);
   assert.match(messageContentSource, /function observeMessageImage\(/);
@@ -67,10 +75,23 @@ test("direct message images reserve geometry and activate near the chat viewport
   assert.match(messageContentSource, /image\.decode\(\)/);
   assert.match(messageContentSource, /media-load-fade/);
   assert.match(messageContentSource, /media-load-failure/);
+  assert.match(messageContentSource, /data-history-layout-stable=\{hasStableDimensions/);
   assert.match(globalStylesSource, /@keyframes media-skeleton-pulse/);
   assert.match(globalStylesSource, /prefers-reduced-motion: reduce/);
   assert.match(messageListSource, /width=\{msg\.image_w\}/);
   assert.match(messageListSource, /height=\{msg\.image_h\}/);
+});
+
+test("gallery-loaded geometry survives rotating protected-media tokens", () => {
+  const first = "https://media.example/api/media/channel/photo.jpg?media_token=first";
+  const second = "https://media.example/api/media/channel/photo.jpg?media_token=second";
+  rememberMessageMediaGeometry(first, 1200, 800);
+  assert.deepEqual(getRememberedMessageMediaGeometry(second), {
+    width: 1200,
+    height: 800,
+  });
+  assert.match(galleryPanelSource, /rememberMessageMediaGeometry\(item\.image, image\.naturalWidth, image\.naturalHeight\)/);
+  assert.match(messageContentSource, /getRememberedMessageMediaGeometry\(src\)/);
 });
 
 test("gallery staging keeps its bounded image context eager", () => {

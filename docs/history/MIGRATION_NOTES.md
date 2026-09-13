@@ -4,6 +4,18 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Gallery jumps stop waiting for geometry-stable media bytes — 2026-09-13
+
+- Production inspection separated the gallery list, unified context lookup and D1 execution from the client-side jump. Sample gallery/context responses completed in roughly `83–245 ms`, with reported D1 SQL time around `4.7–25.3 ms`; the remaining delay came from hidden staging waiting for image/video bytes and decode before committing the scroll.
+- Current message, DM and reply uploads already persist validated `image_w`/`image_h`. Message rendering now marks those reserved aspect-ratio frames as layout-stable, so gallery navigation waits for geometry-changing content rather than for the underlying media download to finish.
+- Gallery thumbnails record their loaded natural dimensions in a bounded session-memory map keyed by the protected media resource with `media_token` removed. Historical migrated images whose database dimensions are null can therefore reserve the same aspect ratio when a newly signed context URL is returned instead of downloading the same media again before navigation.
+- Link-preview metadata still resolves before the atomic jump because it determines whether a card exists and how much text it contains. Once resolved, the preview image and video frames use fixed aspect ratios and no longer block the jump on their own network or decode completion.
+- The existing hidden staging tree, context-window authorization, one-time atomic swap and exact media-centering calculation remain in place. Unknown-dimension media that has not previously loaded continues using the conservative readiness wait.
+
+Trade-off: geometry remembered from the gallery is session-local and bounded to 500 media resources; a cold legacy image with no stored dimensions still waits on its first jump. Geometry-stable images may display their reserved skeleton briefly after the chat has moved to the correct location, trading delayed pixels for much faster navigation without reintroducing scroll bounce. Link-preview metadata can still be a blocking dependency when uncached because removing that wait would allow a previously zero-height URL preview to shift the target.
+
+Deployment note: frontend-only. No Worker deployment or D1 migration is required. Verify a cold jump to a modern image moves after the context response without waiting for the image request, a gallery-loaded legacy image reserves its natural ratio across a rotated `media_token`, and a completely cold legacy image still performs one stable atomic jump.
+
 ### Link-preview images no longer wait on decode before display — 2026-09-10
 
 - Link-preview images now become visible as soon as the browser fires `load`;
