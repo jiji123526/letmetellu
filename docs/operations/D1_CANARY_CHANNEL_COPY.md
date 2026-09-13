@@ -2,7 +2,7 @@
 
 ## Current scope
 
-The mutation operator currently supports three commands:
+The mutation operator currently supports four commands:
 
 1. `start`: run the full read-only preflight and create one version-pinned copy
    job on the destination canary.
@@ -10,11 +10,15 @@ The mutation operator currently supports three commands:
    `channels` rows in one destination D1 batch and advance the job stage.
 3. `copy-policy-config`: copy one bounded batch from the current low-volume
    policy/config stage and persist its resume cursor on the destination.
+4. `copy-messages`: pin one source-history boundary, copy at most 50 canonical
+   messages, and persist the source cursor in the same destination batch.
 
 The policy/config command covers moderators, blocks, banned words, channel
 moderation, petitions, config, and upload tickets in that fixed dependency
-order. It does not yet copy messages, DMs, reports, actor identities, pending
-deletion state, gallery, links, search state, or any other manifest table. It
+order. The message command copies canonical message rows only. It does not yet
+copy DMs, reports, actor identities, pending deletion state, links, or any
+other remaining manifest table. Gallery and FTS rows are produced by the
+destination message triggers but still require explicit reconciliation. It
 does not freeze writes, route traffic, enable shadow reads, dispatch projection
 events, or clean up a failed partial copy.
 
@@ -80,6 +84,17 @@ curl --fail-with-body \
   --data "{\"action\":\"copy-policy-config\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\"}"
 ```
 
+After `upload_tickets_copied`, repeat the message command until it returns
+`stage: messages_copied` and `hasMore: false`:
+
+```bash
+curl --fail-with-body \
+  "$CANARY_WORKER_URL/internal/d1-canary/copy" \
+  -H "Content-Type: application/json" \
+  -H "X-Canary-Copy-Token: $D1_CANARY_COPY_TOKEN" \
+  --data "{\"action\":\"copy-messages\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\"}"
+```
+
 Each successful response reports only the stage, status, batch count,
 cumulative count for the current stage, and whether that stage has another
 batch. It never returns copied row values.
@@ -90,13 +105,14 @@ controls appropriate to the operator host.
 
 ## State and idempotency
 
-Bootstrap version 3 adds the bounded cursor fields to
+Bootstrap version 4 adds the message snapshot and timestamp cursor fields to
 `canary_channel_copy_jobs`. A job stores only:
 
 - channel ID;
 - source projection version captured by preflight;
 - fixed stage and status;
-- current channel/row cursor and an integer progress count;
+- current channel/timestamp/row cursor and an integer progress count;
+- the immutable upper `(created_at, id)` boundary for the initial message pass;
 - creation and update timestamps.
 
 Repeated `start` before data copy returns the same matching job. Repeated
@@ -123,7 +139,16 @@ contracts are:
    status, attached_record_id, attached_record_type, created_at, expires_at)`.
 
 Advancing into the next stage clears the cursor and its progress counter. A
-repeated command after `upload_tickets_copied` is an idempotent no-op.
+repeated policy command after `upload_tickets_copied` is an idempotent no-op.
+
+The first `copy-messages` call pins the newest existing `(created_at, id)` from
+the parent and optional live channel. Messages created after that boundary are
+not allowed to extend the initial pass indefinitely. Root messages are copied
+first in `(created_at, id)` order; only after every root is committed does the
+job copy replies in the same order. This preserves the current root-only reply
+foreign-key dependency. Each call reads at most 51 rows and writes at most 50
+message rows plus one cursor update. The message inserts and cursor advancement
+share one destination batch, making an ambiguous retry safe.
 
 The canonical stage requires the current source row version to equal the job
 version before writing. Parent/live inserts and job-stage advancement share one
@@ -145,13 +170,23 @@ detects a change, the job is marked failed and routing remains unchanged.
   policy/config, message, or DM mutations. The bounded policy copy is therefore
   an initial backfill, not a consistent cutover snapshot. Final reconciliation
   and a short write freeze/delta copy remain mandatory.
+- The pinned message boundary excludes ordinary later inserts, but it does not
+  capture edits, reactions, reports, soft deletion, or a same-timestamp late
+  insert that sorts below the boundary. A later delta/reconciliation contract
+  and final write freeze remain mandatory before routing.
+- Active server-backed admin deletion undo fails and permanently marks the copy
+  job failed. It is safer to restart from a clean destination than to copy a
+  transient mixture of previous and pending deletion states.
+- Destination message triggers build FTS and gallery rows as canonical messages
+  arrive. `message_links`, actor identities, derived-row counts, and FTS/gallery
+  integrity are not yet a completed cutover gate.
 - A pre-existing destination row or a concurrent operator call fails closed
   instead of overwriting private policy state. There is still no automated
   partial-copy cleanup.
-- One command performs a bounded source read, a destination batch, and source
-  version checks. This is acceptable for an offline operator path and never
-  runs on normal user traffic, but it is not intended as a bulk message-copy
-  mechanism.
+- One command performs bounded source reads, a destination batch, and source
+  safety checks. This is acceptable for an offline operator path and never runs
+  on normal user traffic. Fifty-row message batches deliberately favor bounded
+  D1 write and trigger cost over maximum copy throughput.
 - A successful canonical stage is not permission to configure shadow reads or
   routing. Continue only after the remaining manifest stages and verification
   gates exist.

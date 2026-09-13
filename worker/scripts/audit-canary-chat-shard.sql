@@ -41,7 +41,13 @@ SELECT
   source_projection_version,
   stage,
   status,
-  CASE WHEN cursor_channel_id IS NULL THEN 0 ELSE 1 END AS has_cursor,
+  CASE
+    WHEN cursor_channel_id IS NULL
+      AND cursor_created_at IS NULL
+      AND cursor_row_id IS NULL
+    THEN 0 ELSE 1
+  END AS has_cursor,
+  CASE WHEN message_snapshot_id IS NULL THEN 0 ELSE 1 END AS has_message_snapshot,
   stage_rows_copied,
   created_at,
   updated_at

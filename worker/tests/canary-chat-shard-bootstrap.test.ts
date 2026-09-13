@@ -138,8 +138,23 @@ test("canary triggers emit events without writing a local control projection", (
   `).get();
   assert.deepEqual({ ...metadata }, {
     shard_role: "chat-canary",
-    bootstrap_version: 3,
+    bootstrap_version: 4,
   });
+  const copyJobColumns = database.prepare(`
+    SELECT name
+    FROM pragma_table_info('canary_channel_copy_jobs')
+    WHERE name IN (
+      'cursor_created_at',
+      'message_snapshot_created_at',
+      'message_snapshot_id'
+    )
+    ORDER BY name
+  `).all().map((row) => row.name);
+  assert.deepEqual(copyJobColumns, [
+    "cursor_created_at",
+    "message_snapshot_created_at",
+    "message_snapshot_id",
+  ]);
 
   database.prepare(`
     INSERT INTO channels (

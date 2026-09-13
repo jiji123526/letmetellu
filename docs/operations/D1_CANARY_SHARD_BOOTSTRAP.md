@@ -71,8 +71,9 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
 - `PRAGMA quick_check` returns `ok`.
 - `PRAGMA foreign_key_check` returns no rows.
 - `dm_replies` lists foreign keys only to `channels` and `dm`, not `users`.
-- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `3`.
-- `canary_channel_copy_jobs`, its bounded cursor/progress columns, and its
+- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `4`.
+- `canary_channel_copy_jobs`, its bounded cursor, message-snapshot/progress
+  columns, and its
   status/update index are present and empty.
 - All listed tables and indexes are present.
 - Each of the three projection triggers reports:

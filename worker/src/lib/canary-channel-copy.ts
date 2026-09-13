@@ -14,10 +14,13 @@ export type CopyStage =
   | "channel_moderation_copied"
   | "channel_petitions_copied"
   | "config_copied"
-  | "upload_tickets_copied";
+  | "upload_tickets_copied"
+  | "message_roots_copied"
+  | "messages_copied";
 type CopyStatus = "active" | "failed" | "complete";
 
 export const CANARY_POLICY_COPY_BATCH_SIZE = 100;
+export const CANARY_MESSAGE_COPY_BATCH_SIZE = 50;
 
 interface CopyJobRow {
   channel_id: string;
@@ -25,7 +28,10 @@ interface CopyJobRow {
   stage: CopyStage;
   status: CopyStatus;
   cursor_channel_id: string | null;
+  cursor_created_at: string | null;
   cursor_row_id: string | null;
+  message_snapshot_created_at: string | null;
+  message_snapshot_id: string | null;
   stage_rows_copied: number;
 }
 
@@ -66,6 +72,36 @@ interface PolicyCopyRow extends Record<string, unknown> {
   __cursor_channel_id: string;
   __cursor_row_id: string;
 }
+
+interface MessageCopyRow extends Record<string, unknown> {
+  __cursor_created_at: string;
+}
+
+const MESSAGE_COPY_COLUMNS = [
+  "id",
+  "client_message_id",
+  "uid",
+  "auth_uid",
+  "nick",
+  "text",
+  "is_admin",
+  "reply_to",
+  "root_id",
+  "report",
+  "reported_msg_id",
+  "gallery_id",
+  "dm",
+  "deleted",
+  "edited",
+  "reported",
+  "reactions",
+  "image",
+  "image_w",
+  "image_h",
+  "fingerprint",
+  "channel_id",
+  "created_at",
+] as const;
 
 interface PolicyCopyStep {
   fromStage: CopyStage;
@@ -643,6 +679,349 @@ export async function copyCanaryPolicyConfigBatch(input: {
       status: "failed",
       idempotent: false,
       blockers: ["source_version_changed"],
+      batchRowsCopied: batchRows.length,
+      stageRowsCopied: completedStageRows,
+      hasMore,
+    };
+  }
+
+  return {
+    shardId: input.shardId,
+    channelId: input.channelId,
+    stage: nextStage,
+    status: "active",
+    idempotent: false,
+    blockers: [],
+    batchRowsCopied: batchRows.length,
+    stageRowsCopied: completedStageRows,
+    hasMore,
+  };
+}
+
+interface MessageCopySourceState {
+  projection_source_version: number;
+  active_undo_rows: number;
+}
+
+interface MessageSnapshotRow {
+  created_at: string;
+  id: string;
+}
+
+async function messageCopySourceBlocker(input: {
+  source: D1Database;
+  channelId: string;
+  expectedVersion: number;
+}): Promise<string | null> {
+  const sourceState = await input.source.prepare(`
+    SELECT
+      channel.projection_source_version,
+      EXISTS (
+        SELECT 1
+        FROM pending_admin_deletions
+        WHERE channel_id IN (?, ?)
+        LIMIT 1
+      ) AS active_undo_rows
+    FROM channels AS channel
+    WHERE channel.id = ?
+  `).bind(
+    input.channelId,
+    `${input.channelId}_live`,
+    input.channelId,
+  ).first<MessageCopySourceState>();
+  if (
+    !sourceState
+    || Number(sourceState.projection_source_version)
+      !== Number(input.expectedVersion)
+  ) {
+    return "source_version_changed";
+  }
+  return Number(sourceState.active_undo_rows) > 0
+    ? "source_undo_active"
+    : null;
+}
+
+async function readMessageSnapshot(
+  source: D1Database,
+  channelId: string,
+): Promise<MessageSnapshotRow | null> {
+  return source.prepare(`
+    SELECT COALESCE(created_at, '') AS created_at, id
+    FROM messages
+    WHERE channel_id IN (?, ?)
+    ORDER BY COALESCE(created_at, '') DESC, id DESC
+    LIMIT 1
+  `).bind(channelId, `${channelId}_live`).first<MessageSnapshotRow>();
+}
+
+function readMessageRows(input: {
+  source: D1Database;
+  channelId: string;
+  roots: boolean;
+  snapshotCreatedAt: string;
+  snapshotId: string;
+  cursorCreatedAt: string | null;
+  cursorId: string | null;
+}) {
+  const cursorCreatedAt = input.cursorCreatedAt || "";
+  const cursorId = input.cursorId || "";
+  return input.source.prepare(`
+    SELECT
+      ${MESSAGE_COPY_COLUMNS.join(", ")},
+      COALESCE(created_at, '') AS __cursor_created_at
+    FROM messages
+    WHERE channel_id IN (?, ?)
+      AND reply_to IS ${input.roots ? "NULL" : "NOT NULL"}
+      AND (
+        COALESCE(created_at, '') < ?
+        OR (COALESCE(created_at, '') = ? AND id <= ?)
+      )
+      AND (
+        ? = ''
+        OR COALESCE(created_at, '') > ?
+        OR (COALESCE(created_at, '') = ? AND id > ?)
+      )
+    ORDER BY COALESCE(created_at, '') ASC, id ASC
+    LIMIT ?
+  `).bind(
+    input.channelId,
+    `${input.channelId}_live`,
+    input.snapshotCreatedAt,
+    input.snapshotCreatedAt,
+    input.snapshotId,
+    cursorCreatedAt,
+    cursorCreatedAt,
+    cursorCreatedAt,
+    cursorId,
+    CANARY_MESSAGE_COPY_BATCH_SIZE + 1,
+  ).all<MessageCopyRow>();
+}
+
+function insertMessageRow(
+  destination: D1Database,
+  row: MessageCopyRow,
+): D1PreparedStatement {
+  return destination.prepare(`
+    INSERT INTO messages (${MESSAGE_COPY_COLUMNS.join(", ")})
+    VALUES (${MESSAGE_COPY_COLUMNS.map(() => "?").join(", ")})
+  `).bind(...MESSAGE_COPY_COLUMNS.map((column) => row[column] ?? null));
+}
+
+async function readCopyJob(
+  destination: D1Database,
+  channelId: string,
+): Promise<CopyJobRow | null> {
+  return destination.prepare(`
+    SELECT
+      channel_id,
+      source_projection_version,
+      stage,
+      status,
+      cursor_channel_id,
+      cursor_created_at,
+      cursor_row_id,
+      message_snapshot_created_at,
+      message_snapshot_id,
+      stage_rows_copied
+    FROM canary_channel_copy_jobs
+    WHERE channel_id = ?
+  `).bind(channelId).first<CopyJobRow>();
+}
+
+export async function copyCanaryMessageHistoryBatch(input: {
+  env: Env;
+  shardId: CanaryShardId;
+  channelId: string;
+}): Promise<CanaryChannelCopyResult> {
+  const destination = resolveCanaryProjectionSource(
+    input.env,
+    input.shardId,
+  ).database;
+  let job = await readCopyJob(destination, input.channelId);
+  if (!job) {
+    return {
+      shardId: input.shardId,
+      channelId: input.channelId,
+      stage: "prepared",
+      status: "failed",
+      idempotent: false,
+      blockers: ["copy_job_missing"],
+    };
+  }
+  if (job.status !== "active") {
+    return result(input.shardId, input.channelId, job, true, [
+      "copy_job_not_active",
+    ]);
+  }
+  if (
+    job.stage !== "upload_tickets_copied"
+    && job.stage !== "message_roots_copied"
+    && job.stage !== "messages_copied"
+  ) {
+    return result(input.shardId, input.channelId, job, true, [
+      "policy_stage_required",
+    ]);
+  }
+  if (job.stage === "messages_copied") {
+    return {
+      ...result(input.shardId, input.channelId, job, true),
+      batchRowsCopied: 0,
+      stageRowsCopied: Number(job.stage_rows_copied || 0),
+      hasMore: false,
+    };
+  }
+
+  const sourceBlocker = await messageCopySourceBlocker({
+    source: input.env.DB,
+    channelId: input.channelId,
+    expectedVersion: job.source_projection_version,
+  });
+  if (sourceBlocker) {
+    await markCopyJobFailed(destination, input.channelId);
+    return {
+      shardId: input.shardId,
+      channelId: input.channelId,
+      stage: job.stage,
+      status: "failed",
+      idempotent: false,
+      blockers: [sourceBlocker],
+    };
+  }
+
+  if (!job.message_snapshot_id) {
+    const snapshot = await readMessageSnapshot(input.env.DB, input.channelId);
+    if (!snapshot) {
+      const now = new Date().toISOString();
+      await destination.prepare(`
+        UPDATE canary_channel_copy_jobs
+        SET stage = 'messages_copied',
+            cursor_created_at = NULL,
+            cursor_row_id = NULL,
+            stage_rows_copied = 0,
+            updated_at = ?
+        WHERE channel_id = ?
+          AND stage = 'upload_tickets_copied'
+          AND status = 'active'
+          AND message_snapshot_id IS NULL
+      `).bind(now, input.channelId).run();
+      const currentJob = await readCopyJob(destination, input.channelId);
+      if (!currentJob) throw new Error("canary_copy_job_missing_after_snapshot");
+      return {
+        ...result(input.shardId, input.channelId, currentJob, false),
+        batchRowsCopied: 0,
+        stageRowsCopied: 0,
+        hasMore: false,
+      };
+    }
+    await destination.prepare(`
+      UPDATE canary_channel_copy_jobs
+      SET message_snapshot_created_at = ?,
+          message_snapshot_id = ?,
+          updated_at = ?
+      WHERE channel_id = ?
+        AND stage = 'upload_tickets_copied'
+        AND status = 'active'
+        AND message_snapshot_id IS NULL
+    `).bind(
+      snapshot.created_at,
+      snapshot.id,
+      new Date().toISOString(),
+      input.channelId,
+    ).run();
+    job = await readCopyJob(destination, input.channelId);
+    if (!job) throw new Error("canary_copy_job_missing_after_snapshot");
+  }
+
+  if (!job.message_snapshot_id || job.message_snapshot_created_at === null) {
+    throw new Error("canary_copy_snapshot_missing");
+  }
+  const roots = job.stage === "upload_tickets_copied";
+  const sourceResult = await readMessageRows({
+    source: input.env.DB,
+    channelId: input.channelId,
+    roots,
+    snapshotCreatedAt: job.message_snapshot_created_at,
+    snapshotId: job.message_snapshot_id,
+    cursorCreatedAt: job.cursor_created_at,
+    cursorId: job.cursor_row_id,
+  });
+  const batchRows = sourceResult.results.slice(0, CANARY_MESSAGE_COPY_BATCH_SIZE);
+  const hasMore = sourceResult.results.length > CANARY_MESSAGE_COPY_BATCH_SIZE;
+  const lastRow = batchRows.at(-1);
+  const completedStageRows = Number(job.stage_rows_copied || 0)
+    + batchRows.length;
+  const nextStage: CopyStage = hasMore
+    ? job.stage
+    : roots
+      ? "message_roots_copied"
+      : "messages_copied";
+  const nextCursorCreatedAt = hasMore
+    ? lastRow?.__cursor_created_at || null
+    : null;
+  const nextCursorId = hasMore ? String(lastRow?.id || "") || null : null;
+  const nextStageRows = hasMore ? completedStageRows : 0;
+  const statements = [
+    ...batchRows.map((row) => insertMessageRow(destination, row)),
+    destination.prepare(`
+      UPDATE canary_channel_copy_jobs
+      SET stage = ?,
+          cursor_channel_id = NULL,
+          cursor_created_at = ?,
+          cursor_row_id = ?,
+          stage_rows_copied = ?,
+          updated_at = ?
+      WHERE channel_id = ?
+        AND source_projection_version = ?
+        AND stage = ?
+        AND status = 'active'
+        AND COALESCE(cursor_created_at, '') = ?
+        AND COALESCE(cursor_row_id, '') = ?
+        AND message_snapshot_created_at = ?
+        AND message_snapshot_id = ?
+    `).bind(
+      nextStage,
+      nextCursorCreatedAt,
+      nextCursorId,
+      nextStageRows,
+      new Date().toISOString(),
+      input.channelId,
+      job.source_projection_version,
+      job.stage,
+      job.cursor_created_at || "",
+      job.cursor_row_id || "",
+      job.message_snapshot_created_at,
+      job.message_snapshot_id,
+    ),
+  ];
+  const batchResult = await destination.batch(statements);
+  const updateChanges = Number(batchResult.at(-1)?.meta?.changes || 0);
+  if (updateChanges !== 1) {
+    const currentJob = await readCopyJob(destination, input.channelId);
+    if (!currentJob) throw new Error("canary_copy_job_missing_after_batch");
+    return {
+      ...result(input.shardId, input.channelId, currentJob, true, [
+        "copy_job_advanced",
+      ]),
+      batchRowsCopied: 0,
+      stageRowsCopied: Number(currentJob.stage_rows_copied || 0),
+      hasMore: currentJob.stage === job.stage,
+    };
+  }
+
+  const afterBlocker = await messageCopySourceBlocker({
+    source: input.env.DB,
+    channelId: input.channelId,
+    expectedVersion: job.source_projection_version,
+  });
+  if (afterBlocker) {
+    await markCopyJobFailed(destination, input.channelId);
+    return {
+      shardId: input.shardId,
+      channelId: input.channelId,
+      stage: nextStage,
+      status: "failed",
+      idempotent: false,
+      blockers: [afterBlocker],
       batchRowsCopied: batchRows.length,
       stageRowsCopied: completedStageRows,
       hasMore,

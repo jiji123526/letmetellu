@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### D1 canary message history copy is bounded and parent-first — 2026-09-13
+
+- The isolated canary copy operator now pins a finite `(created_at, id)` source
+  boundary and copies canonical messages in batches of at most 50 rows.
+- Root messages finish before replies begin, preserving reply foreign keys, and
+  each destination insert batch advances its resume cursor atomically.
+- A later source message is excluded from the pinned initial pass; active admin
+  deletion undo and channel-version drift fail closed. Tests exercise
+  multi-batch resume, parent-first ordering, snapshot exclusion, idempotent
+  completion, and deletion-state rejection without exposing content.
+- Bootstrap metadata is now version 4. The audit reports only whether a message
+  snapshot/cursor exists and does not select message bodies or identity data.
+
+Trade-off: this is a finite initial backfill, not a consistent cutover. Message
+edits, reactions, report/deletion changes, actor identities, links, and derived
+gallery/FTS integrity still require reconciliation, followed by partial-copy
+cleanup and a final write-freeze/delta protocol. Fifty-row batches reduce D1 and
+trigger pressure but require more operator calls. No remote database, Worker
+configuration, deployment, or production route changed in this step.
+
 ### Gallery jumps stop waiting for geometry-stable media bytes — 2026-09-13
 
 - Production inspection separated the gallery list, unified context lookup and D1 execution from the client-side jump. Sample gallery/context responses completed in roughly `83–245 ms`, with reported D1 SQL time around `4.7–25.3 ms`; the remaining delay came from hidden staging waiting for image/video bytes and decode before committing the scroll.

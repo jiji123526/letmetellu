@@ -701,12 +701,49 @@ Tradeoffs:
 No remote database was mutated, no canary binding or secret was configured,
 and no traffic, shadow read, or projection dispatcher setting changed.
 
+### Snapshot-bounded message history copy
+
+- Raised the empty-canary bootstrap overlay to version 4 and added a persisted
+  message timestamp cursor plus an initial-history upper boundary to each copy
+  job.
+- Added the dedicated-secret `copy-messages` command after the policy/config
+  stages. The first call pins the newest source `(created_at, id)` across the
+  parent and live channel so new traffic cannot make the initial pass unbounded.
+- Each invocation reads at most 51 rows and inserts at most 50 canonical
+  messages. Message inserts and cursor advancement share one destination D1
+  batch, so a successful but ambiguously acknowledged request resumes after the
+  committed batch rather than duplicating it.
+- All roots are copied before any replies. This preserves the current flattened
+  root/reply foreign-key dependency without disabling destination integrity.
+- Source channel-version drift and any active server-backed admin deletion undo
+  fail closed. Operator responses and shard audit output expose only stage,
+  progress, cursor/snapshot presence, and fixed blocker codes; message text,
+  identities, reactions, fingerprints, and media paths remain private.
+- Actual SQLite tests cover a 55-root multi-batch copy, reply ordering, snapshot
+  exclusion of a later message, idempotent completion, and active-undo failure.
+
+Tradeoffs:
+
+- The snapshot boundary makes the initial insertion set finite, but existing
+  message edits, reactions, reports, deletion changes, and same-timestamp late
+  inserts are not represented by the channel projection version. This remains
+  an initial backfill and cannot authorize routing.
+- Destination message triggers construct FTS and gallery state while rows are
+  inserted. Those derived tables still need explicit count/integrity
+  reconciliation, while link state should be rebuilt from canonical text.
+- Actor identities, pending-deletion reconciliation, DMs, reports, delta copy,
+  partial-copy cleanup, and the final write-freeze/cutover protocol remain
+  separate gates.
+- Fifty-row batches limit D1 transaction, FTS, and gallery-trigger pressure at
+  the cost of more operator calls. No normal production request executes this
+  code, and no remote database or routing configuration changed in this step.
+
 ## Next implementation step
 
-Define and test the high-volume message-history stage separately. Specify a
-stable message cursor, root/reply dependency handling, actor-identity and
-pending-deletion ordering, source mutation/delta reconciliation, and maximum
-batch cost before copying content. Derived gallery, FTS, and link state should
-be rebuilt or verified from canonical messages rather than blindly trusted;
-DMs and reports remain later explicit contracts. Do not run a remote copy until
-partial-copy cleanup and the final write-freeze/cutover protocol exist.
+Add the message-dependent actor-identity stage and read-only derived-state
+reconciliation. Actor records must follow their canonical messages; gallery and
+FTS output should be checked against those messages, and link state should be
+rebuilt from canonical text rather than blindly copied. Then define message
+mutation/delta reconciliation and partial-copy cleanup before any remote copy.
+DMs and reports remain later explicit contracts, and the final write-freeze and
+cutover protocol is still required before routing.
