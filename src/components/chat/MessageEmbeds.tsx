@@ -451,6 +451,7 @@ function PreviewImage({
   return (
     <div
       className="preview-media-frame"
+      data-history-layout-stable
       style={{
         aspectRatio: preserveFullImage ? "1 / 1" : "2 / 1",
         maxHeight: preserveFullImage ? "320px" : "160px",
@@ -500,7 +501,11 @@ function PreviewVideo({ src, poster }: { src: string; poster?: string }) {
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className="preview-media-frame" style={{ aspectRatio: "2 / 1", maxHeight: "200px" }}>
+    <div
+      className="preview-media-frame"
+      data-history-layout-stable
+      style={{ aspectRatio: "2 / 1", maxHeight: "200px" }}
+    >
       {!loaded && !failed && (
         <div className="preview-media-skeleton" data-history-layout-pending aria-hidden="true" />
       )}

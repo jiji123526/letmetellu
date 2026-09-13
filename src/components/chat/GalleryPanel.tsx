@@ -4,6 +4,7 @@ import { CloseIcon } from "@/components/ui/CloseIcon";
 import { useRef, useCallback } from "react";
 import { useLocale } from "@/hooks/useLocale";
 import { chatDateLabel } from "@/lib/chat-date";
+import { rememberMessageMediaGeometry } from "@/lib/message-media-geometry";
 
 interface GalleryItem {
   id: string;
@@ -93,8 +94,13 @@ export function GalleryPanel({ items, onViewImage, onLoadMore, hasMore, onClose 
                     )}
                     <img
                       src={item.image}
+                      alt=""
                       className="w-full cursor-pointer"
                       style={{ aspectRatio: "1", objectFit: "cover", borderRadius: "6px", transition: "opacity .15s" }}
+                      onLoad={(event) => {
+                        const image = event.currentTarget;
+                        rememberMessageMediaGeometry(item.image, image.naturalWidth, image.naturalHeight);
+                      }}
                       onClick={() => onViewImage?.(item.image, { id: item.id, created_at: item.created_at })}
                     />
                   </div>

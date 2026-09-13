@@ -708,6 +708,10 @@ test("gallery navigation skips context replacement when its target is already mo
     historyNavigationSource,
     /await waitForRelevantPendingLayout\(container, target, controller\.signal\)/,
   );
+  assert.match(
+    historyNavigationSource,
+    /!node\.closest\("\[data-history-layout-stable\]"\)/,
+  );
   assert.ok(
     historyNavigationSource.indexOf("await waitForRelevantPendingLayout(")
       < historyNavigationSource.indexOf(
