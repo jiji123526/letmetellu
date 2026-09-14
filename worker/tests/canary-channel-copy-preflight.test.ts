@@ -30,6 +30,11 @@ class PreflightStatement {
 
   async first<T>() {
     this.database.queries.push({ sql: this.sql, values: this.values });
+    if (this.sql.includes("pragma_table_info('channels')")) {
+      return {
+        projection_version_columns: this.database.projectionVersionColumns,
+      } as T;
+    }
     if (this.sql.includes("chat_shard_metadata")) {
       return this.database.metadata as T | null;
     }
@@ -60,6 +65,7 @@ class PreflightDatabase {
     shard_role: "chat-canary",
     bootstrap_version: 11,
   };
+  projectionVersionColumns = 1;
 
   prepare(sql: string) {
     return new PreflightStatement(this, sql);
@@ -169,6 +175,26 @@ test("copy preflight fails closed on destination rows and source activity", asyn
     "source_undo_active",
     "source_upload_pending",
   ]);
+});
+
+test("copy preflight reports an unmigrated source schema as a fixed blocker", async () => {
+  const control = new PreflightDatabase();
+  control.projectionVersionColumns = 0;
+
+  const response = await handleCanaryChannelCopyPreflight(
+    request("?shard=canary-a&channel=room-one"),
+    env({ control }),
+  );
+  assert.equal(response.status, 409);
+  const body = await response.json() as {
+    blockers: string[];
+    projectionSourceVersion: number;
+  };
+  assert.equal(body.projectionSourceVersion, 0);
+  assert.deepEqual(body.blockers, ["source_projection_schema_missing"]);
+  assert.ok(control.queries.some(({ sql }) => (
+    sql.includes("0") && sql.includes("AS projection_source_version")
+  )));
 });
 
 test("copy preflight fails closed on missing or aliased canary binding", async () => {

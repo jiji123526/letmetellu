@@ -63,6 +63,8 @@ handling in the bounded copy implementation rather than blind duplication.
 `409` returns one or more fixed blocker codes:
 
 - `source_channel_missing`;
+- `source_projection_schema_missing` when the source has not received the
+  versioned projection foundation required to pin a copy;
 - `destination_not_bootstrapped`;
 - `destination_not_empty`;
 - `source_cleanup_active`;

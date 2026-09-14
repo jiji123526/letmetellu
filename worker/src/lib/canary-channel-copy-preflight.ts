@@ -47,6 +47,10 @@ interface DestinationMetadataRow {
   bootstrap_version: number;
 }
 
+interface SourceSchemaRow {
+  projection_version_columns: number;
+}
+
 export interface CanaryChannelCopyPreflightResult {
   shardId: CanaryShardId;
   channelId: string;
@@ -110,9 +114,18 @@ export async function preflightCanaryChannelCopy(input: {
     input.env,
     input.shardId,
   ).database;
+  const sourceSchema = await input.env.DB.prepare(`
+    SELECT COUNT(*) AS projection_version_columns
+    FROM pragma_table_info('channels')
+    WHERE name = 'projection_source_version'
+  `).first<SourceSchemaRow>();
+  const hasProjectionVersion = Number(
+    sourceSchema?.projection_version_columns || 0,
+  ) === 1;
   const sourceStateStatement = input.env.DB.prepare(`
         SELECT
-          channel.projection_source_version,
+          ${hasProjectionVersion ? "channel.projection_source_version" : "0"}
+            AS projection_source_version,
           (
             SELECT COUNT(*)
             FROM cleanup_jobs
@@ -162,6 +175,7 @@ export async function preflightCanaryChannelCopy(input: {
   ) as CountRow[];
 
   const blockers: string[] = [];
+  if (!hasProjectionVersion) blockers.push("source_projection_schema_missing");
   if (!sourceState) blockers.push("source_channel_missing");
   if (
     !metadata
@@ -187,7 +201,9 @@ export async function preflightCanaryChannelCopy(input: {
   return {
     shardId: input.shardId,
     channelId: input.channelId,
-    projectionSourceVersion: Number(sourceState?.projection_source_version || 0),
+    projectionSourceVersion: hasProjectionVersion
+      ? Number(sourceState?.projection_source_version || 0)
+      : 0,
     sourceCounts: normalizeCounts(sourceCountRows),
     destinationCounts,
     blockers,
