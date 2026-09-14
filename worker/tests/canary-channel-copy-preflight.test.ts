@@ -151,6 +151,11 @@ test("copy preflight reports metadata counts without selecting row content", asy
       && !/\b(text|payload_json|passcode|owner_uid|image)\b/i.test(sql)
     )),
   );
+  const countQueries = control.queries.filter(({ sql }) => sql.includes("AS table_name"));
+  assert.equal(countQueries.length, 3);
+  assert.ok(countQueries.every(({ sql }) => (
+    (sql.match(/SELECT '/g) || []).length <= 8
+  )));
 });
 
 test("copy preflight fails closed on destination rows and source activity", async () => {

@@ -5,6 +5,7 @@ import {
 } from "./channel-projection-dispatcher.ts";
 
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
+const COUNT_STATEMENT_TABLE_LIMIT = 8;
 
 export const CANARY_CHANNEL_COPY_TABLES = [
   "channels",
@@ -64,7 +65,7 @@ function channelAndLiveBindings(channelId: string): string[] {
   return [channelId, `${channelId}_live`];
 }
 
-function countStatement(database: D1Database, channelId: string) {
+function countStatements(database: D1Database, channelId: string) {
   const channelIds = channelAndLiveBindings(channelId);
   const statements: Array<{ table: CopyTable; sql: string; values: string[] }> = [
     { table: "channels", sql: "id IN (?, ?)", values: channelIds },
@@ -86,12 +87,17 @@ function countStatement(database: D1Database, channelId: string) {
     { table: "dm_notification_owners", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "pending_admin_deletions", sql: "channel_id IN (?, ?)", values: channelIds },
   ];
-  const sql = statements.map(({ table, sql: where }) => (
-    `SELECT '${table}' AS table_name, COUNT(*) AS row_count FROM ${table} WHERE ${where}`
-  )).join(" UNION ALL ");
-  return database.prepare(sql).bind(
-    ...statements.flatMap(({ values }) => values),
-  );
+  const prepared: D1PreparedStatement[] = [];
+  for (let offset = 0; offset < statements.length; offset += COUNT_STATEMENT_TABLE_LIMIT) {
+    const chunk = statements.slice(offset, offset + COUNT_STATEMENT_TABLE_LIMIT);
+    const sql = chunk.map(({ table, sql: where }) => (
+      `SELECT '${table}' AS table_name, COUNT(*) AS row_count FROM ${table} WHERE ${where}`
+    )).join(" UNION ALL ");
+    prepared.push(database.prepare(sql).bind(
+      ...chunk.flatMap(({ values }) => values),
+    ));
+  }
+  return prepared;
 }
 
 function normalizeCounts(rows: CountRow[]): RowCounts {
@@ -156,11 +162,11 @@ export async function preflightCanaryChannelCopy(input: {
   const [sourceResults, destinationResults] = await Promise.all([
     input.env.DB.batch([
       sourceStateStatement,
-      countStatement(input.env.DB, input.channelId),
+      ...countStatements(input.env.DB, input.channelId),
     ]),
     destination.batch([
       destinationMetadataStatement,
-      countStatement(destination, input.channelId),
+      ...countStatements(destination, input.channelId),
     ]),
   ]);
   const sourceState = sourceResults[0].results?.[0] as
@@ -169,10 +175,12 @@ export async function preflightCanaryChannelCopy(input: {
   const metadata = destinationResults[0].results?.[0] as
     | DestinationMetadataRow
     | undefined;
-  const sourceCountRows = (sourceResults[1].results || []) as CountRow[];
-  const destinationCountRows = (
-    destinationResults[1].results || []
-  ) as CountRow[];
+  const sourceCountRows = sourceResults.slice(1).flatMap(
+    (result) => (result.results || []) as CountRow[],
+  );
+  const destinationCountRows = destinationResults.slice(1).flatMap(
+    (result) => (result.results || []) as CountRow[],
+  );
 
   const blockers: string[] = [];
   if (!hasProjectionVersion) blockers.push("source_projection_schema_missing");
