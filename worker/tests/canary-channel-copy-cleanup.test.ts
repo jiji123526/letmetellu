@@ -93,6 +93,12 @@ function createDestination(): DatabaseSync {
       message_id TEXT NOT NULL,
       PRIMARY KEY (channel_id, message_id)
     );
+    CREATE TABLE canary_dm_reconciliation_seen (
+      channel_id TEXT NOT NULL,
+      record_type TEXT NOT NULL,
+      record_id TEXT NOT NULL,
+      PRIMARY KEY (channel_id, record_type, record_id)
+    );
     CREATE TABLE channel_control_projections (channel_id TEXT PRIMARY KEY);
     CREATE TABLE channel_projection_versions (
       channel_id TEXT PRIMARY KEY,
@@ -267,6 +273,7 @@ test("cleanup requires explicit abandon and removes one canary copy atomically",
     "channel_projection_versions",
     "canary_channel_copy_jobs",
     "canary_message_reconciliation_seen",
+    "canary_dm_reconciliation_seen",
   ]) {
     assert.equal(
       destination.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count,
@@ -303,7 +310,7 @@ test("cleanup fails closed for shadowed, processed, or unsupported state", async
   const unsafe = createDestination();
   unsafe.prepare("UPDATE canary_channel_copy_jobs SET status = 'abandoned'").run();
   unsafe.prepare("UPDATE domain_events SET status = 'delivered'").run();
-  unsafe.prepare("INSERT INTO dm VALUES ('dm-one', 'room-one')").run();
+  unsafe.prepare("INSERT INTO channel_reports VALUES ('report-one', 'room-one')").run();
   const unsafeResponse = await handleCanaryChannelCopyCleanup(
     request("cleanup"),
     env(unsafe),
@@ -347,6 +354,10 @@ test("cleanup has a distinct hidden secret and rejects active dispatch", async (
     new URL("../wrangler.toml", import.meta.url),
     "utf8",
   );
+  const cleanupSource = readFileSync(
+    new URL("../src/lib/canary-channel-copy-cleanup.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(indexSource, /\/internal\/d1-canary\/copy-cleanup/);
   assert.doesNotMatch(
     indexSource,
@@ -354,4 +365,5 @@ test("cleanup has a distinct hidden secret and rejects active dispatch", async (
   );
   assert.doesNotMatch(routeSource, /X-Internal-Token|X-User-Id/);
   assert.doesNotMatch(productionWrangler, /D1_CANARY_CLEANUP_TOKEN/);
+  assert.doesNotMatch(cleanupSource, /push_subscriptions\s+WHERE\s+channel_id/);
 });

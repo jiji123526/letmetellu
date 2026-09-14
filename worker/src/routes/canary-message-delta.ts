@@ -9,6 +9,10 @@ import {
   completeCanaryMessageDelta,
 } from "../lib/canary-message-delta.ts";
 import { copyCanaryMessageDependentsBatch } from "../lib/canary-message-dependents.ts";
+import {
+  completeCanaryDmDelta,
+  reconcileCanaryDmDeltaBatch,
+} from "../lib/canary-dm-delta.ts";
 import type { CanaryShardId } from "../lib/channel-projection-dispatcher.ts";
 import { isCanaryProjectionDispatchEnabled } from "../lib/channel-projection-dispatcher.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
@@ -17,7 +21,13 @@ const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 const MAX_COMMAND_BYTES = 1024;
 
 interface DeltaCommand {
-  action: "start" | "reconcile" | "rebuild-dependents" | "complete";
+  action:
+    | "start"
+    | "reconcile"
+    | "rebuild-dependents"
+    | "complete"
+    | "reconcile-dm"
+    | "complete-dm";
   shard: CanaryShardId;
   channel: string;
 }
@@ -39,6 +49,8 @@ function parseCommand(text: string): DeltaCommand | null {
       && input.action !== "reconcile"
       && input.action !== "rebuild-dependents"
       && input.action !== "complete"
+      && input.action !== "reconcile-dm"
+      && input.action !== "complete-dm"
     )
     || (input.shard !== "canary-a" && input.shard !== "canary-b")
     || typeof input.channel !== "string"
@@ -93,7 +105,11 @@ export async function handleCanaryMessageDelta(request: Request, env: Env) {
         ? await reconcileCanaryMessageDeltaBatch(input)
         : command.action === "rebuild-dependents"
           ? await copyCanaryMessageDependentsBatch(input)
-          : await completeCanaryMessageDelta(input);
+          : command.action === "complete"
+            ? await completeCanaryMessageDelta(input)
+            : command.action === "reconcile-dm"
+              ? await reconcileCanaryDmDeltaBatch(input)
+              : await completeCanaryDmDelta(input);
     return Response.json(result, {
       status: result.blockers.length === 0 ? 200 : 409,
       headers: { "Cache-Control": "no-store" },

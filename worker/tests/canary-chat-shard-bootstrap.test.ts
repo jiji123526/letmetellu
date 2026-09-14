@@ -22,6 +22,7 @@ function createPreparedDatabase(): DatabaseSync {
       created_at TEXT,
       projection_source_version INTEGER NOT NULL DEFAULT 1
     );
+    CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE channel_control_projections (
       channel_id TEXT PRIMARY KEY,
       owner_uid TEXT NOT NULL,
@@ -64,6 +65,12 @@ function createPreparedDatabase(): DatabaseSync {
       dm_id TEXT NOT NULL REFERENCES dm(id) ON DELETE CASCADE,
       channel_id TEXT NOT NULL REFERENCES channels(id),
       owner_uid TEXT NOT NULL
+    );
+    CREATE TABLE dm_notification_owners (
+      dm_id TEXT PRIMARY KEY REFERENCES dm(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL
     );
     CREATE INDEX domain_events_attempt_ready_idx
       ON domain_events(status, next_attempt_at, created_at, id);
@@ -113,7 +120,6 @@ test("canary bootstrap requires an empty fully migrated database", () => {
   const crossPlaneDatabase = createPreparedDatabase();
   crossPlaneDatabase.exec(`
     DROP TABLE dm_replies;
-    CREATE TABLE users (id TEXT PRIMARY KEY);
     CREATE TABLE dm_replies (
       id TEXT PRIMARY KEY,
       dm_id TEXT NOT NULL REFERENCES dm(id) ON DELETE CASCADE,
@@ -138,8 +144,14 @@ test("canary triggers emit events without writing a local control projection", (
   `).get();
   assert.deepEqual({ ...metadata }, {
     shard_role: "chat-canary",
-    bootstrap_version: 7,
+    bootstrap_version: 8,
   });
+  const notificationOwnerForeignKeys = database.prepare(`
+    SELECT "table" AS referenced_table
+    FROM pragma_foreign_key_list('dm_notification_owners')
+    ORDER BY referenced_table
+  `).all().map((row) => row.referenced_table);
+  assert.deepEqual(notificationOwnerForeignKeys, ["channels", "dm"]);
   const copyJobColumns = database.prepare(`
     SELECT name
     FROM pragma_table_info('canary_channel_copy_jobs')

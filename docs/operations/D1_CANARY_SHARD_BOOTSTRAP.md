@@ -25,7 +25,9 @@ The bootstrap SQL fails before changing triggers unless:
 - migration `0068` removed the `dm_replies.owner_uid -> users.id`
   cross-plane foreign key; and
 - the shard-local `dm_replies -> dm` and `dm_replies -> channels` foreign keys
-  remain present.
+  remain present; and
+- `dm_notification_owners` still has its migrated control-plane user foreign
+  key and its two local DM/channel foreign keys before the overlay rebuilds it.
 
 The script then records the `chat-canary` role and replaces the preparation
 triggers with event-only triggers. Canonical channel writes advance the
@@ -71,11 +73,13 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
 - `PRAGMA quick_check` returns `ok`.
 - `PRAGMA foreign_key_check` returns no rows.
 - `dm_replies` lists foreign keys only to `channels` and `dm`, not `users`.
-- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `7`.
+- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `8`.
+- `dm_notification_owners` retains foreign keys to local `dm` and `channels`
+  but no longer references the control-plane `users` table.
 - `canary_channel_copy_jobs`, its bounded cursor, message-snapshot/progress
   columns, its status/update index, and the cleanup audit table/index are
-  present and empty. The message reconciliation seen table is also present and
-  empty.
+  present and empty. The message and DM reconciliation seen tables are also
+  present and empty.
 - All listed tables and indexes are present.
 - Each of the three projection triggers reports:
   - `emits_domain_events = 1`;

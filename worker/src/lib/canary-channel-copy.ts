@@ -24,7 +24,15 @@ export type CopyStage =
   | "delta_pruning"
   | "delta_messages_copied"
   | "delta_message_actors_copied"
-  | "delta_links_rebuilt";
+  | "delta_links_rebuilt"
+  | "delta_dm_roots_upserting"
+  | "delta_dm_replies_upserting"
+  | "delta_dm_replies_pruning"
+  | "delta_dm_roots_pruning"
+  | "delta_dm_actors_copying"
+  | "delta_dm_notification_owners_copying"
+  | "delta_dm_dependents_copied"
+  | "delta_dm_verified";
 type CopyStatus = "active" | "failed" | "abandoned" | "complete";
 
 export const CANARY_POLICY_COPY_BATCH_SIZE = 100;
@@ -109,6 +117,36 @@ export const CANARY_MESSAGE_COPY_COLUMNS = [
   "fingerprint",
   "channel_id",
   "created_at",
+] as const;
+
+export const CANARY_DM_COPY_COLUMNS = [
+  "id",
+  "client_message_id",
+  "uid",
+  "auth_uid",
+  "nick",
+  "text",
+  "image",
+  "image_w",
+  "image_h",
+  "channel_id",
+  "created_at",
+  "pending_delete_at",
+  "activity_at",
+] as const;
+
+export const CANARY_DM_REPLY_COPY_COLUMNS = [
+  "id",
+  "client_reply_id",
+  "dm_id",
+  "channel_id",
+  "owner_uid",
+  "text",
+  "created_at",
+  "pending_delete_at",
+  "image",
+  "image_w",
+  "image_h",
 ] as const;
 
 interface PolicyCopyStep {

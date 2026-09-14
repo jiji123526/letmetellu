@@ -141,6 +141,12 @@ function createDatabase(includeJob = false): DatabaseSync {
         message_id TEXT NOT NULL,
         PRIMARY KEY (channel_id, message_id)
       );
+      CREATE TABLE canary_dm_reconciliation_seen (
+        channel_id TEXT NOT NULL,
+        record_type TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        PRIMARY KEY (channel_id, record_type, record_id)
+      );
     `);
   }
   database.prepare(`

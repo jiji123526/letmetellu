@@ -340,7 +340,7 @@ export async function completeCanaryMessageDelta(input: {
   const destination = resolveCanaryProjectionSource(input.env, input.shardId).database;
   const job = await readJob(destination, input.channelId);
   if (!job) throw new Error("canary_delta_job_missing");
-  if (job.status === "complete" && job.stage === "delta_links_rebuilt") {
+  if (job.stage.startsWith("delta_dm_") || job.status === "complete") {
     return response({ ...input, ...job, idempotent: true });
   }
   if (job.status !== "active" || job.stage !== "delta_links_rebuilt") {
@@ -369,26 +369,34 @@ export async function completeCanaryMessageDelta(input: {
     await markFailed(destination, input.channelId);
     return response({ ...input, ...job, status: "failed", idempotent: false, blockers: [blocker] });
   }
-  const update = await destination.prepare(`
+  const results = await destination.batch([
+    destination.prepare(`
+      DELETE FROM canary_dm_reconciliation_seen WHERE channel_id = ?
+    `).bind(input.channelId),
+    destination.prepare(`
     UPDATE canary_channel_copy_jobs
-    SET status = 'complete', updated_at = ?
+    SET stage = 'delta_dm_roots_upserting',
+      cursor_created_at = NULL, cursor_row_id = NULL,
+      stage_rows_copied = 0, updated_at = ?
     WHERE channel_id = ? AND source_projection_version = ?
       AND stage = 'delta_links_rebuilt' AND status = 'active'
-  `).bind(
-    new Date().toISOString(),
-    input.channelId,
-    job.source_projection_version,
-  ).run();
-  if (Number(update.meta.changes || 0) !== 1) {
+    `).bind(
+      new Date().toISOString(),
+      input.channelId,
+      job.source_projection_version,
+    ),
+  ]);
+  if (Number(results.at(-1)?.meta?.changes || 0) !== 1) {
     const current = await readJob(destination, input.channelId);
     if (!current) throw new Error("canary_delta_job_missing_after_complete");
     return response({ ...input, ...current, idempotent: true, blockers: ["copy_job_advanced"] });
   }
   return response({
     ...input,
-    stage: "delta_links_rebuilt",
-    status: "complete",
+    stage: "delta_dm_roots_upserting",
+    status: "active",
     idempotent: false,
+    hasMore: true,
   });
 }
 

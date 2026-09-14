@@ -4,6 +4,35 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Frozen D1 canary DM reconciliation is now bounded and verifiable — 2026-09-13
+
+- Message finalization now advances into a frozen DM pipeline instead of
+  prematurely marking the whole copy complete. DM roots are upserted before
+  owner replies, with at most 40 rows per call and an atomic destination seen
+  marker for hard-delete detection.
+- The pipeline prunes missing replies before roots, then rebuilds DM actor
+  identities and DM notification ownership. It preserves idempotency keys,
+  private identity fields, pending-delete state, media dimensions, and
+  `activity_at` without returning any row content to the operator.
+- Final verification compares root, reply, actor, and notification-owner
+  counts; rejects orphaned state; validates activity ordering; and rechecks the
+  source version and active deletion Undo before recording
+  `delta_dm_verified`. The overall job remains active for later manifest work.
+- Fresh canary bootstrap metadata is version 8. The Chat-shard overlay removes
+  the impossible `dm_notification_owners.user_id -> users.id` cross-database
+  foreign key while retaining local DM/channel foreign keys. Failed-copy
+  cleanup now understands the DM manifest and both reconciliation seen sets.
+  The cleanup safety query also stopped treating account-global push
+  subscriptions as channel-scoped state; the table has no `channel_id`.
+
+Trade-off: DM copy occurs only during write maintenance, so the pause grows
+linearly with private history and requires multiple operator round trips. This
+avoids adding an always-on DM mutation journal and removes the online-snapshot
+race for the first canary. Reports, remaining notification/control state,
+final manifest review, routing, smoke tests, and rollback gates still remain.
+No deployment, maintenance toggle, remote D1 mutation, or production routing
+change occurred in this step.
+
 ### Frozen D1 canary message reconciliation closes initial-copy drift — 2026-09-13
 
 - Added a finalize-secret operator that is callable only while global HTTP
@@ -17,8 +46,8 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 - Message actors and link rows are cleared and rebuilt after reconciliation;
   gallery and FTS are refreshed by canonical message triggers. A final command
   reruns aggregate derived-state verification and source safety checks before
-  changing the job status to `complete`.
-- Fresh canary bootstrap metadata is now version 7. SQLite tests cover
+  advancing into the frozen DM pipeline.
+- Fresh canary bootstrap metadata at that step was version 7. SQLite tests cover
   multi-batch upsert, parent-before-reply ordering, mutation refresh, new-row
   insertion, hard-delete pruning, dependent rebuilding, completion, dedicated
   authorization, and mandatory maintenance mode.

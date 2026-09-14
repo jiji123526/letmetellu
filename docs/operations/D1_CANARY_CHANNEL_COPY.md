@@ -18,9 +18,10 @@ The copy mutation operator currently supports five commands:
 The policy/config command covers moderators, blocks, banned words, channel
 moderation, petitions, config, and upload tickets in that fixed dependency
 order. The message commands now copy canonical rows, then message actor
-identities, and rebuild link rows from copied message text. They do not yet
-copy DMs, reports, pending deletion state, or any other remaining manifest
-table. Gallery and FTS rows are produced by destination message triggers and
+identities, and rebuild link rows from copied message text. This online
+operator does not copy DMs; the later frozen finalization operator does.
+Reports and other remaining manifest tables are not yet copied. Gallery and
+FTS rows are produced by destination message triggers and
 checked by a separate read-only verification route. The operator
 does not freeze writes, route traffic, enable shadow reads, dispatch projection
 events. A separate cleanup operator can abandon and remove a failed partial
@@ -129,7 +130,8 @@ controls appropriate to the operator host.
 
 ## State and idempotency
 
-Bootstrap version 7 adds the dependent/delta stages, reconciliation seen set,
+Bootstrap version 8 adds the dependent/message-delta/DM-delta stages, both
+reconciliation seen sets, the shard-local DM notification ownership boundary,
 and cleanup audit to the existing message snapshot
 and timestamp cursor fields in
 `canary_channel_copy_jobs`. A job stores only:

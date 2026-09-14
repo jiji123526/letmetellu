@@ -58,7 +58,7 @@ class PreflightDatabase {
   };
   metadata: Record<string, unknown> | null = {
     shard_role: "chat-canary",
-    bootstrap_version: 7,
+    bootstrap_version: 8,
   };
 
   prepare(sql: string) {
@@ -138,7 +138,7 @@ test("copy preflight reports metadata counts without selecting row content", asy
   assert.deepEqual(body.blockers, []);
   assert.equal((body.sourceCounts as Record<string, number>).messages, 12);
   assert.equal((body.sourceCounts as Record<string, number>).dm_replies, 2);
-  assert.doesNotMatch(JSON.stringify(body), /owner|passcode|message text|media/);
+  assert.doesNotMatch(JSON.stringify(body), /owner_uid|user_id|passcode|message text|media path/);
   assert.ok(
     control.queries.every(({ sql }) => (
       !/SELECT\s+\*/i.test(sql)

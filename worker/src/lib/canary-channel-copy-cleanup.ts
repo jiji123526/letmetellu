@@ -126,15 +126,11 @@ async function readSafetyState(
       (SELECT COUNT(*) FROM domain_events
         WHERE channel_id = ? AND status != 'pending') AS non_pending_event_rows,
       (
-        (SELECT COUNT(*) FROM dm WHERE channel_id IN (?, ?))
-        + (SELECT COUNT(*) FROM dm_replies WHERE channel_id IN (?, ?))
-        + (SELECT COUNT(*) FROM channel_reports WHERE channel_id IN (?, ?))
+        (SELECT COUNT(*) FROM channel_reports WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM pending_admin_deletions WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM notification_preferences WHERE channel_id IN (?, ?))
-        + (SELECT COUNT(*) FROM push_subscriptions WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM notification_outbox WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM message_notification_owners WHERE channel_id IN (?, ?))
-        + (SELECT COUNT(*) FROM dm_notification_owners WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM user_recent_channels WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM cleanup_jobs
             WHERE resource_type = 'channel' AND resource_id IN (?, ?))
@@ -142,10 +138,6 @@ async function readSafetyState(
   `).bind(
     channelId,
     channelId,
-    channelId, liveChannelId,
-    channelId, liveChannelId,
-    channelId, liveChannelId,
-    channelId, liveChannelId,
     channelId, liveChannelId,
     channelId, liveChannelId,
     channelId, liveChannelId,
@@ -251,7 +243,15 @@ export async function cleanupCanaryChannelCopy(input: {
   const statements = [
     destination.prepare("DELETE FROM canary_message_reconciliation_seen WHERE channel_id = ?")
       .bind(input.channelId),
+    destination.prepare("DELETE FROM canary_dm_reconciliation_seen WHERE channel_id = ?")
+      .bind(input.channelId),
     destination.prepare("DELETE FROM message_actor_identities WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
+    destination.prepare("DELETE FROM dm_notification_owners WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
+    destination.prepare("DELETE FROM dm_replies WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
+    destination.prepare("DELETE FROM dm WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),
     destination.prepare("DELETE FROM message_links WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),

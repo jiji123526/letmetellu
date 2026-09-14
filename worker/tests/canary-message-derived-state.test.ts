@@ -146,6 +146,12 @@ function createDatabase(destination = false): DatabaseSync {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE canary_dm_reconciliation_seen (
+        channel_id TEXT NOT NULL,
+        record_type TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        PRIMARY KEY (channel_id, record_type, record_id)
+      );
     `);
   }
   database.prepare(`
@@ -317,7 +323,7 @@ test("derived verification reports fixed mismatch codes without row content", as
   assert.deepEqual(body.blockers, ["gallery_derived_mismatch"]);
 });
 
-test("frozen delta rebuilds dependents before marking the copy complete", async () => {
+test("frozen message delta advances to the bounded DM reconciliation", async () => {
   const source = createDatabase();
   const destination = createDatabase(true);
   prepareCopiedHistory(source, destination);
@@ -339,15 +345,15 @@ test("frozen delta rebuilds dependents before marking the copy complete", async 
   const completed = await handleCanaryMessageDelta(deltaRequest("complete"), inputEnv);
   assert.equal(completed.status, 200);
   const body = await completed.json() as Record<string, unknown>;
-  assert.equal(body.status, "complete");
-  assert.equal(body.stage, "delta_links_rebuilt");
+  assert.equal(body.status, "active");
+  assert.equal(body.stage, "delta_dm_roots_upserting");
   assert.doesNotMatch(
     JSON.stringify(body),
     /private-uid|private-device|ordinary message|example\.com|private\/image/,
   );
   assert.equal(
     destination.prepare("SELECT status FROM canary_channel_copy_jobs").get()?.status,
-    "complete",
+    "active",
   );
 });
 

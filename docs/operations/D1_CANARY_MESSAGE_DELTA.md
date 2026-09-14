@@ -1,9 +1,9 @@
 # D1 canary frozen message reconciliation
 
 This operator closes message changes that occurred after the initial channel
-copy. It is the only message reconciliation stage allowed to mark a copy job
-`complete`. It does not copy DMs, reports, or other later manifest families and
-does not authorize routing by itself.
+copy and then performs the frozen DM reconciliation. DM verification leaves the
+job active for the remaining report/control manifest; it does not mark the
+whole copy complete or authorize routing.
 
 ## Mandatory safety state
 
@@ -37,8 +37,10 @@ frontend proxies, and production `wrangler.toml`.
    destination canonical text in existing bounded batches. Message triggers
    refresh gallery and FTS during the upsert pass.
 6. `complete` reruns aggregate actor/gallery/link/FTS verification, checks the
-   source version and active deletion-undo state again, and only then marks the
-   copy job complete.
+   source version and active deletion-undo state again, and advances into
+   `delta_dm_roots_upserting` without marking the job complete.
+7. Follow the [frozen DM reconciliation](./D1_CANARY_DM_DELTA.md). Its final
+   verification records `delta_dm_verified` while keeping the job active.
 
 The destination-only `canary_message_reconciliation_seen` table prevents a
 large in-memory ID set and makes missing-source deletion deterministic. It is
@@ -69,7 +71,7 @@ curl --fail-with-body \
 ```
 
 Repeat `rebuild-dependents` until the stage is `delta_links_rebuilt`, then run
-`complete` once:
+`complete` once to enter the DM stages:
 
 ```bash
 curl --fail-with-body \
@@ -85,8 +87,8 @@ curl --fail-with-body \
   --data "{\"action\":\"complete\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\"}"
 ```
 
-Do not disable maintenance merely because `complete` succeeded. DM/report
-copy, full manifest verification, routing configuration, smoke tests, and the
+Do not disable maintenance merely because this `complete` succeeded. Frozen
+DM copy, report copy, full manifest verification, routing configuration, smoke tests, and the
 rollback decision must be completed in the approved cutover procedure first.
 
 ## Tradeoffs
@@ -102,6 +104,6 @@ rollback decision must be completed in the approved cutover procedure first.
 - Root-first ordering preserves reply foreign keys. The seen table adds one
   destination write per source message, but prevents an unbounded Worker memory
   set and detects hard-deleted source rows safely.
-- A complete message stage is not a complete channel cutover. DMs, reports,
+- A complete message stage is not a complete channel cutover. Reports,
   notifications, uploads created before maintenance, and policy deltas retain
   their own explicit gates.

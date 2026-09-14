@@ -844,11 +844,52 @@ Tradeoffs:
 - Message completion is not routing permission. DM, report, notification,
   policy-delta, final manifest, smoke-test, and rollback gates remain.
 
+### Frozen DM and DM-reply reconciliation
+
+- Changed message `complete` from a terminal job transition into the entry
+  point for a frozen DM pipeline. DM verification records a dedicated stage
+  but deliberately leaves the overall job active for later manifest work.
+- Added deterministic 40-row stages that upsert DM roots before owner replies,
+  record source IDs atomically in a destination-only seen set, prune missing
+  replies before roots, and then rebuild DM actor identities and DM
+  notification ownership.
+- Canonical copies retain client idempotency IDs, anonymous/authenticated
+  identity, text/media fields, pending-delete state, and activity ordering.
+  Operator responses remain content-free.
+- Added final aggregate checks for source/destination root, reply, actor, and
+  notification-owner counts, plus destination orphan and `activity_at`
+  consistency checks. Source projection drift or any active deletion Undo
+  continues to fail closed.
+- Raised the fresh-canary overlay to version 8. It rebuilds
+  `dm_notification_owners` without its impossible control-plane `users` foreign
+  key while retaining local `dm` and `channels` integrity. Cleanup now removes
+  the supported DM family and both reconciliation seen sets. Its safety query
+  no longer references a nonexistent `push_subscriptions.channel_id` because
+  browser subscriptions are account-global control state.
+- Actual SQLite coverage exercises 45 roots, 42 replies, multi-batch resume,
+  stale-row refresh, hard-delete pruning, actor/notification rebuilding,
+  activity mismatch rejection, completion, and content-free responses.
+
+Tradeoffs:
+
+- Frozen-only DM copy makes the future maintenance interval proportional to DM
+  history. It avoids a permanent per-mutation journal and the consistency gap
+  of an online initial DM snapshot; canary timing must determine whether a
+  later online pre-copy is worth the extra machinery.
+- The notification owner stores an opaque control-plane user ID without a
+  local user foreign key. Account existence and subscription/outbox delivery
+  remain control-plane responsibilities.
+- Completion still is not routing permission. Reports, message-notification
+  ownership, remaining control/notification manifest decisions, smoke tests,
+  and rollback gates remain.
+
+No Worker was deployed, no maintenance setting changed, no remote D1 row was
+mutated, and no production routing changed.
+
 ## Next implementation step
 
-Define and implement the bounded DM and DM-reply copy contract, including
-owner-only visibility, actor identity, activity ordering, pending-delete state,
-notification ownership, parent-before-reply ordering, and frozen-delta
-verification. Reports and the remaining notification/policy manifest follow;
-no physical binding, remote copy, or routing change should occur before those
-contracts pass isolated canary tests.
+Define and implement the report and remaining notification/control manifest.
+The next review must decide which rows are channel-shard canonical, which stay
+control-only, and which require durable cross-database events. No physical
+binding, remote copy, or routing change should occur before those contracts,
+the final manifest audit, smoke tests, and rollback gates pass.
