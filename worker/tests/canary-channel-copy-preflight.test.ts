@@ -152,9 +152,9 @@ test("copy preflight reports metadata counts without selecting row content", asy
     )),
   );
   const countQueries = control.queries.filter(({ sql }) => sql.includes("AS table_name"));
-  assert.equal(countQueries.length, 3);
+  assert.equal(countQueries.length, 5);
   assert.ok(countQueries.every(({ sql }) => (
-    (sql.match(/SELECT '/g) || []).length <= 8
+    (sql.match(/SELECT '/g) || []).length <= 4
   )));
 });
 

@@ -5,7 +5,7 @@ import {
 } from "./channel-projection-dispatcher.ts";
 
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
-const COUNT_STATEMENT_TABLE_LIMIT = 8;
+const COUNT_STATEMENT_TABLE_LIMIT = 4;
 
 export const CANARY_CHANNEL_COPY_TABLES = [
   "channels",
