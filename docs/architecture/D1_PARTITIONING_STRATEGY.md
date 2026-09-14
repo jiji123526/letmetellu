@@ -816,12 +816,13 @@ Exit gate:
 
 ### Phase 3: two-shard canary
 
-Status: preparation in progress; binding and dispatcher contracts exist, but
-channel routing does not. Empty-shard bootstrap, read-only audit, version-pinned
+Status: preparation in progress; one empty WNAM Chat canary has passed the
+version-11 bootstrap and read-only audit but remains unrouted and absent from
+production bindings. Empty-shard bootstrap, read-only audit, version-pinned
 copy, bounded policy/message/DM/notification/report reconciliation, cleanup,
 and a one-channel report-dispatch exercise are implemented as default-off,
-dedicated-secret operators. They remain absent from production configuration.
-Remote dispatcher exercise, source tombstone, cutover, and rollback evidence
+dedicated-secret operators. Isolated operator deployment, remote preflight and
+copy, dispatcher exercise, source tombstone, cutover, and rollback evidence
 remain gated work.
 
 1. Add two Chat D1 bindings with identical channel-local schema.

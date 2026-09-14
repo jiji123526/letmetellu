@@ -2,8 +2,26 @@
 
 This log records incremental work toward the proposed
 [D1 partitioning strategy](../architecture/D1_PARTITIONING_STRATEGY.md).
-Production still uses one D1 database. No shard databases, virtual-bucket map,
-placement overrides, data migration, or cutover have been created.
+Production still routes every request to one D1 database. One empty, unrouted
+Chat canary now exists for the first channel-copy exercise; no virtual-bucket
+map, placement override, channel data migration, or cutover has been created.
+
+## 2026-09-14: first remote Chat canary prepared
+
+- Created `letsplay-chat-10997-canary-20260914` as a new WNAM D1 database for
+  the future `/ch/10997` exercise. It is not bound to the production Worker and
+  receives no application traffic.
+- Applied repository migrations `0001` through `0070`, then applied the
+  version-11 event-only Chat-shard bootstrap overlay.
+- The read-only audit returned `quick_check=ok`, zero foreign-key errors,
+  `shard_role=chat-canary`, six event-emitting triggers, zero local-projection
+  triggers, and zero channel, event, projection, and report-watermark rows.
+- Used a temporary bootstrap-only Wrangler configuration. No canary binding,
+  secret, route, cron, or maintenance flag was added to production config.
+
+The next gate is a narrow isolated-operator deployment and read-only copy
+preflight for `/ch/10997`. Initial copying, channel maintenance, dispatcher
+execution, and routing remain unstarted and require their own change review.
 
 ## 2026-09-14: isolated channel-report dispatcher exercise
 

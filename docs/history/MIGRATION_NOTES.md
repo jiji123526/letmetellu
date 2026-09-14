@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### The first empty remote Chat canary is prepared but unrouted — 2026-09-14
+
+- Created `letsplay-chat-10997-canary-20260914` in WNAM as an isolated target
+  for a future `/ch/10997` copy exercise. The database is not bound to the
+  production Worker and receives no user traffic.
+- Applied migrations `0001`–`0070` and the guarded version-11 Chat-shard
+  bootstrap overlay using a temporary configuration outside the repository.
+- A read-only aggregate audit returned `quick_check=ok`, zero foreign-key
+  errors, the expected `chat-canary` role/version, all six event-only triggers,
+  no local-projection-writing trigger, and zero canonical/event/projection rows.
+
+Trade-off: a real remote resource now needs inventory and eventual cleanup even
+though no application behavior changed. Creating and bootstrapping it does not
+prove channel-copy correctness or authorize routing. No production binding,
+deployment, source read/write, maintenance activation, channel copy,
+dispatcher run, or cutover occurred in this step.
+
 ### Channel-report dispatch can now be exercised one channel at a time — 2026-09-14
 
 - Added a hidden one-shot operator that accepts only one exact canary shard and
