@@ -43,7 +43,7 @@ The preflight counts the parent and `_live` scope for:
 - channel config and banned words;
 - upload tickets;
 - channel reports, moderation, and petitions;
-- actor-identity records;
+- actor-identity and message/DM notification-owner records;
 - pending admin-delete undo records.
 
 Notification preferences, subscriptions, outbox rows, account rows, control

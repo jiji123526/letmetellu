@@ -20,6 +20,7 @@ export const CANARY_CHANNEL_COPY_TABLES = [
   "channel_moderation",
   "channel_petitions",
   "message_actor_identities",
+  "message_notification_owners",
   "message_links",
   "dm_replies",
   "dm_notification_owners",
@@ -75,6 +76,7 @@ function countStatement(database: D1Database, channelId: string) {
     { table: "channel_moderation", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "channel_petitions", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "message_actor_identities", sql: "channel_id IN (?, ?)", values: channelIds },
+    { table: "message_notification_owners", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "message_links", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "dm_replies", sql: "channel_id IN (?, ?)", values: channelIds },
     { table: "dm_notification_owners", sql: "channel_id IN (?, ?)", values: channelIds },
@@ -164,7 +166,7 @@ export async function preflightCanaryChannelCopy(input: {
   if (
     !metadata
     || metadata.shard_role !== "chat-canary"
-    || Number(metadata.bootstrap_version) !== 8
+    || Number(metadata.bootstrap_version) !== 9
   ) {
     blockers.push("destination_not_bootstrapped");
   }

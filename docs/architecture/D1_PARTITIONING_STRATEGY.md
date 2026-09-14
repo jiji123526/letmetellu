@@ -174,6 +174,11 @@ includes:
 
 Foreign keys and transactions remain useful inside this boundary.
 
+Authenticated message/DM notification ownership follows the message into the
+Chat shard as an opaque account ID. Browser subscriptions, preferences,
+delivery outbox rows, recent-channel state, and global cleanup jobs remain in
+control. Cross-database notification fanout must use durable shard events.
+
 ### Notification database
 
 A separate notification database is optional and should be introduced only when

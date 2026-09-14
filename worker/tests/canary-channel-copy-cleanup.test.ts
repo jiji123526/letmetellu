@@ -99,6 +99,11 @@ function createDestination(): DatabaseSync {
       record_id TEXT NOT NULL,
       PRIMARY KEY (channel_id, record_type, record_id)
     );
+    CREATE TABLE canary_notification_reconciliation_seen (
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      PRIMARY KEY (channel_id, message_id)
+    );
     CREATE TABLE channel_control_projections (channel_id TEXT PRIMARY KEY);
     CREATE TABLE channel_projection_versions (
       channel_id TEXT PRIMARY KEY,

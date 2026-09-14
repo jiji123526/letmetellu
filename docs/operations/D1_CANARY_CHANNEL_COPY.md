@@ -130,10 +130,10 @@ controls appropriate to the operator host.
 
 ## State and idempotency
 
-Bootstrap version 8 adds the dependent/message-delta/DM-delta stages, both
-reconciliation seen sets, the shard-local DM notification ownership boundary,
-and cleanup audit to the existing message snapshot
-and timestamp cursor fields in
+Bootstrap version 9 adds the dependent/message-delta/DM-delta and notification
+ownership stages, all reconciliation seen sets, the shard-local DM and message
+notification ownership boundaries, and cleanup audit to the existing message
+snapshot and timestamp cursor fields in
 `canary_channel_copy_jobs`. A job stores only:
 
 - channel ID;

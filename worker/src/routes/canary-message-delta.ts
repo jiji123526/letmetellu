@@ -13,6 +13,10 @@ import {
   completeCanaryDmDelta,
   reconcileCanaryDmDeltaBatch,
 } from "../lib/canary-dm-delta.ts";
+import {
+  completeCanaryNotificationManifest,
+  reconcileCanaryMessageNotificationOwnersBatch,
+} from "../lib/canary-notification-manifest.ts";
 import type { CanaryShardId } from "../lib/channel-projection-dispatcher.ts";
 import { isCanaryProjectionDispatchEnabled } from "../lib/channel-projection-dispatcher.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
@@ -27,7 +31,9 @@ interface DeltaCommand {
     | "rebuild-dependents"
     | "complete"
     | "reconcile-dm"
-    | "complete-dm";
+    | "complete-dm"
+    | "reconcile-notification-owners"
+    | "complete-notification-manifest";
   shard: CanaryShardId;
   channel: string;
 }
@@ -51,6 +57,8 @@ function parseCommand(text: string): DeltaCommand | null {
       && input.action !== "complete"
       && input.action !== "reconcile-dm"
       && input.action !== "complete-dm"
+      && input.action !== "reconcile-notification-owners"
+      && input.action !== "complete-notification-manifest"
     )
     || (input.shard !== "canary-a" && input.shard !== "canary-b")
     || typeof input.channel !== "string"
@@ -109,7 +117,11 @@ export async function handleCanaryMessageDelta(request: Request, env: Env) {
             ? await completeCanaryMessageDelta(input)
             : command.action === "reconcile-dm"
               ? await reconcileCanaryDmDeltaBatch(input)
-              : await completeCanaryDmDelta(input);
+              : command.action === "complete-dm"
+                ? await completeCanaryDmDelta(input)
+                : command.action === "reconcile-notification-owners"
+                  ? await reconcileCanaryMessageNotificationOwnersBatch(input)
+                  : await completeCanaryNotificationManifest(input);
     return Response.json(result, {
       status: result.blockers.length === 0 ? 200 : 409,
       headers: { "Cache-Control": "no-store" },

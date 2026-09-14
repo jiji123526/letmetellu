@@ -5,6 +5,27 @@ This log records incremental work toward the proposed
 Production still uses one D1 database. No shard databases, virtual-bucket map,
 placement overrides, data migration, or cutover have been created.
 
+## 2026-09-14: notification ownership manifest
+
+- Classified message/DM owner routing as Chat-shard state and preferences,
+  subscriptions, outbox delivery, recent channels, and cleanup orchestration as
+  control-only state.
+- Added bounded frozen reconciliation and hard-delete pruning for
+  `message_notification_owners`, followed by count, orphan, and control-state
+  contamination checks.
+- Advanced fresh canary bootstrap to version 9 and removed only the impossible
+  user foreign key from message notification ownership while preserving local
+  message/channel constraints.
+- Kept the job active after `delta_notification_manifest_verified`; report
+  event/projection design and the remaining final gates are not implemented.
+
+Verification:
+
+- targeted SQLite operator, bootstrap, preflight, and cleanup tests passed;
+- Worker TypeScript compilation passed.
+
+No production configuration, deployment, remote database, or routing changed.
+
 ## 2026-09-09: implementation branch started
 
 Branch: `feature/d1-channel-db-abstraction`

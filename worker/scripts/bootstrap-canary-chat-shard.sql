@@ -17,7 +17,11 @@ CREATE TABLE _canary_chat_shard_bootstrap_guard (
   dm_notification_owner_control_fk_count INTEGER NOT NULL
     CHECK (dm_notification_owner_control_fk_count = 1),
   dm_notification_owner_shard_fk_count INTEGER NOT NULL
-    CHECK (dm_notification_owner_shard_fk_count = 2)
+    CHECK (dm_notification_owner_shard_fk_count = 2),
+  message_notification_owner_control_fk_count INTEGER NOT NULL
+    CHECK (message_notification_owner_control_fk_count = 1),
+  message_notification_owner_shard_fk_count INTEGER NOT NULL
+    CHECK (message_notification_owner_shard_fk_count = 2)
 );
 
 INSERT INTO _canary_chat_shard_bootstrap_guard (
@@ -30,7 +34,9 @@ INSERT INTO _canary_chat_shard_bootstrap_guard (
   dm_reply_control_fk_count,
   dm_reply_shard_fk_count,
   dm_notification_owner_control_fk_count,
-  dm_notification_owner_shard_fk_count
+  dm_notification_owner_shard_fk_count,
+  message_notification_owner_control_fk_count,
+  message_notification_owner_shard_fk_count
 )
 SELECT
   1,
@@ -77,12 +83,22 @@ SELECT
     SELECT COUNT(*)
     FROM pragma_foreign_key_list('dm_notification_owners')
     WHERE "table" IN ('dm', 'channels')
+  ),
+  (
+    SELECT COUNT(*)
+    FROM pragma_foreign_key_list('message_notification_owners')
+    WHERE "table" = 'users'
+  ),
+  (
+    SELECT COUNT(*)
+    FROM pragma_foreign_key_list('message_notification_owners')
+    WHERE "table" IN ('messages', 'channels')
   );
 
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 8),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 9),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -94,7 +110,7 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  8,
+  9,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
 
@@ -130,7 +146,11 @@ CREATE TABLE canary_channel_copy_jobs (
       'delta_dm_actors_copying',
       'delta_dm_notification_owners_copying',
       'delta_dm_dependents_copied',
-      'delta_dm_verified'
+      'delta_dm_verified',
+      'delta_message_notification_owners_copying',
+      'delta_message_notification_owners_pruning',
+      'delta_message_notification_owners_copied',
+      'delta_notification_manifest_verified'
     )),
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active', 'failed', 'abandoned', 'complete')),
@@ -161,6 +181,12 @@ CREATE TABLE canary_dm_reconciliation_seen (
   PRIMARY KEY (channel_id, record_type, record_id)
 );
 
+CREATE TABLE canary_notification_reconciliation_seen (
+  channel_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  PRIMARY KEY (channel_id, message_id)
+);
+
 -- A Chat shard owns DM notification routing metadata, but account rows remain
 -- in the control database. Preserve local DM/channel integrity without a
 -- cross-database users foreign key.
@@ -183,6 +209,28 @@ ALTER TABLE dm_notification_owners_shard_boundary
 
 CREATE INDEX dm_notification_owners_user_idx
   ON dm_notification_owners(user_id, created_at DESC);
+
+-- Reply notification routing is channel-local, while the referenced account
+-- remains authoritative in control D1. Retain message/channel integrity only.
+CREATE TABLE message_notification_owners_shard_boundary (
+  message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+INSERT INTO message_notification_owners_shard_boundary (
+  message_id, channel_id, user_id, created_at
+)
+SELECT message_id, channel_id, user_id, created_at
+FROM message_notification_owners;
+
+DROP TABLE message_notification_owners;
+ALTER TABLE message_notification_owners_shard_boundary
+  RENAME TO message_notification_owners;
+
+CREATE INDEX message_notification_owners_user_idx
+  ON message_notification_owners(user_id, created_at DESC);
 
 CREATE TABLE canary_channel_cleanup_audit (
   id TEXT PRIMARY KEY,

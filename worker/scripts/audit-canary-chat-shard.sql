@@ -20,6 +20,14 @@ FROM pragma_foreign_key_list('dm_notification_owners')
 ORDER BY referenced_table, source_column;
 
 SELECT
+  "table" AS referenced_table,
+  "from" AS source_column,
+  "to" AS referenced_column,
+  on_delete
+FROM pragma_foreign_key_list('message_notification_owners')
+ORDER BY referenced_table, source_column;
+
+SELECT
   shard_role,
   bootstrap_version,
   bootstrapped_at
@@ -38,6 +46,7 @@ WHERE name IN (
   'canary_channel_cleanup_audit_channel_idx',
   'canary_message_reconciliation_seen',
   'canary_dm_reconciliation_seen',
+  'canary_notification_reconciliation_seen',
   'channel_control_projections',
   'channel_projection_versions',
   'domain_events',
@@ -81,6 +90,11 @@ SELECT channel_id, record_type, COUNT(*) AS rows
 FROM canary_dm_reconciliation_seen
 GROUP BY channel_id, record_type
 ORDER BY channel_id, record_type;
+
+SELECT channel_id, COUNT(*) AS rows
+FROM canary_notification_reconciliation_seen
+GROUP BY channel_id
+ORDER BY channel_id;
 
 SELECT
   name,

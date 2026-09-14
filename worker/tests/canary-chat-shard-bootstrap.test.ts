@@ -72,6 +72,16 @@ function createPreparedDatabase(): DatabaseSync {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE messages (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL REFERENCES channels(id)
+    );
+    CREATE TABLE message_notification_owners (
+      message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL
+    );
     CREATE INDEX domain_events_attempt_ready_idx
       ON domain_events(status, next_attempt_at, created_at, id);
     CREATE INDEX domain_events_lease_ready_idx
@@ -144,7 +154,7 @@ test("canary triggers emit events without writing a local control projection", (
   `).get();
   assert.deepEqual({ ...metadata }, {
     shard_role: "chat-canary",
-    bootstrap_version: 8,
+    bootstrap_version: 9,
   });
   const notificationOwnerForeignKeys = database.prepare(`
     SELECT "table" AS referenced_table
@@ -152,6 +162,12 @@ test("canary triggers emit events without writing a local control projection", (
     ORDER BY referenced_table
   `).all().map((row) => row.referenced_table);
   assert.deepEqual(notificationOwnerForeignKeys, ["channels", "dm"]);
+  const messageNotificationOwnerForeignKeys = database.prepare(`
+    SELECT "table" AS referenced_table
+    FROM pragma_foreign_key_list('message_notification_owners')
+    ORDER BY referenced_table
+  `).all().map((row) => row.referenced_table);
+  assert.deepEqual(messageNotificationOwnerForeignKeys, ["channels", "messages"]);
   const copyJobColumns = database.prepare(`
     SELECT name
     FROM pragma_table_info('canary_channel_copy_jobs')
@@ -255,6 +271,7 @@ test("canary bootstrap and audit avoid channel secrets and event payload output"
   assert.match(auditSource, /PRAGMA quick_check/);
   assert.match(auditSource, /PRAGMA foreign_key_check/);
   assert.match(auditSource, /pragma_foreign_key_list\('dm_replies'\)/);
+  assert.match(auditSource, /pragma_foreign_key_list\('message_notification_owners'\)/);
   assert.match(auditSource, /FROM canary_channel_copy_jobs/);
   assert.match(auditSource, /LIMIT 100/);
   assert.match(auditSource, /writes_local_projection/);

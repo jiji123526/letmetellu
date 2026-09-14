@@ -130,7 +130,6 @@ async function readSafetyState(
         + (SELECT COUNT(*) FROM pending_admin_deletions WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM notification_preferences WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM notification_outbox WHERE channel_id IN (?, ?))
-        + (SELECT COUNT(*) FROM message_notification_owners WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM user_recent_channels WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM cleanup_jobs
             WHERE resource_type = 'channel' AND resource_id IN (?, ?))
@@ -138,7 +137,6 @@ async function readSafetyState(
   `).bind(
     channelId,
     channelId,
-    channelId, liveChannelId,
     channelId, liveChannelId,
     channelId, liveChannelId,
     channelId, liveChannelId,
@@ -245,7 +243,11 @@ export async function cleanupCanaryChannelCopy(input: {
       .bind(input.channelId),
     destination.prepare("DELETE FROM canary_dm_reconciliation_seen WHERE channel_id = ?")
       .bind(input.channelId),
+    destination.prepare("DELETE FROM canary_notification_reconciliation_seen WHERE channel_id = ?")
+      .bind(input.channelId),
     destination.prepare("DELETE FROM message_actor_identities WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
+    destination.prepare("DELETE FROM message_notification_owners WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),
     destination.prepare("DELETE FROM dm_notification_owners WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),

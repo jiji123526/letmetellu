@@ -66,10 +66,10 @@ curl --fail-with-body \
 ```
 
 `stage: delta_dm_verified` with `status: active` means the implemented
-canonical, policy, message, and DM families agree at this frozen point. The job
-deliberately remains active because report state, remaining
-notification/control ownership, final manifest audit, smoke testing, and
-rollback gates remain.
+canonical, policy, message, and DM families agree at this frozen point. Next,
+run the [notification ownership manifest](D1_CANARY_NOTIFICATION_MANIFEST.md).
+The job deliberately remains active because report state, final manifest
+audit, smoke testing, and rollback gates remain.
 
 ## Tradeoffs
 

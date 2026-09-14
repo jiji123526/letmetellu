@@ -4,6 +4,32 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### D1 canary notification ownership now has an explicit manifest — 2026-09-14
+
+- Added a frozen, bounded reconciliation for `message_notification_owners`.
+  Each operator call upserts or prunes at most 40 rows, uses an atomic seen set
+  to detect source hard deletions, and never returns account or message IDs.
+- Defined the data boundary in executable code and an operations runbook:
+  message/DM notification ownership is channel-local; preferences,
+  subscriptions, delivery outbox, recent channels, and global cleanup jobs are
+  control-only.
+- Final manifest verification compares message-owner counts, rejects orphaned
+  owner rows, and fails if channel-associated control-only rows appear in the
+  Chat shard. Success advances to `delta_notification_manifest_verified` but
+  deliberately leaves the copy job active.
+- Fresh canary bootstrap metadata is version 9. Its shard overlay removes the
+  impossible `message_notification_owners.user_id -> users.id` foreign key
+  while retaining local message/channel foreign keys. Audit and failed-copy
+  cleanup now understand the new manifest and reconciliation seen set.
+
+Trade-off: a Chat shard can retain an opaque account ID after that account is
+removed from control, so the eventual notification consumer must validate the
+account before delivery. Keeping subscriptions and delivery leases out of the
+shard avoids copying sensitive browser credentials and prevents two delivery
+authorities. Channel reports remain unresolved until a durable moderation
+event/control projection exists. No deployment, remote D1 mutation,
+maintenance toggle, or production routing change occurred in this step.
+
 ### Frozen D1 canary DM reconciliation is now bounded and verifiable — 2026-09-13
 
 - Message finalization now advances into a frozen DM pipeline instead of

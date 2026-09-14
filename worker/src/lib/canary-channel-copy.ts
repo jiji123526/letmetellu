@@ -32,7 +32,11 @@ export type CopyStage =
   | "delta_dm_actors_copying"
   | "delta_dm_notification_owners_copying"
   | "delta_dm_dependents_copied"
-  | "delta_dm_verified";
+  | "delta_dm_verified"
+  | "delta_message_notification_owners_copying"
+  | "delta_message_notification_owners_pruning"
+  | "delta_message_notification_owners_copied"
+  | "delta_notification_manifest_verified";
 type CopyStatus = "active" | "failed" | "abandoned" | "complete";
 
 export const CANARY_POLICY_COPY_BATCH_SIZE = 100;
