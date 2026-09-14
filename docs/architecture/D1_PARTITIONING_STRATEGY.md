@@ -157,6 +157,10 @@ The control plane owns account-global and routing records:
 The control database is authoritative for lifecycle and exceptional placement.
 It is not part of the normal channel request path.
 
+Channel-report bodies remain canonical in the Chat shard, while a
+self-contained report projection supplies the platform-wide moderation inbox.
+See [the report projection design](D1_CHANNEL_REPORT_PROJECTION.md).
+
 ### Chat shard
 
 Each channel has exactly one active home Chat D1. Its strongly consistent data

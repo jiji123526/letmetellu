@@ -32,6 +32,8 @@ function createPreparedDatabase(): DatabaseSync {
       projected_at TEXT NOT NULL,
       source_version INTEGER NOT NULL DEFAULT 1
     );
+    CREATE TABLE channel_report_control_projections (report_id TEXT PRIMARY KEY);
+    CREATE TABLE channel_report_projection_watermarks (report_id TEXT PRIMARY KEY);
     CREATE TABLE channel_projection_versions (
       channel_id TEXT PRIMARY KEY,
       source_version INTEGER NOT NULL,
@@ -196,6 +198,10 @@ test("canary triggers emit events without writing a local control projection", (
 
   assert.equal(
     database.prepare("SELECT COUNT(*) AS rows FROM channel_control_projections").get()?.rows,
+    0,
+  );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS rows FROM channel_report_control_projections").get()?.rows,
     0,
   );
   const watermark = database.prepare(`

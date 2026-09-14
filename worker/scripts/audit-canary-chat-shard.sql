@@ -48,6 +48,8 @@ WHERE name IN (
   'canary_dm_reconciliation_seen',
   'canary_notification_reconciliation_seen',
   'channel_control_projections',
+  'channel_report_control_projections',
+  'channel_report_projection_watermarks',
   'channel_projection_versions',
   'domain_events',
   'domain_events_attempt_ready_idx',
@@ -113,6 +115,12 @@ ORDER BY name;
 SELECT
   COUNT(*) AS local_projection_rows
 FROM channel_control_projections;
+
+SELECT
+  (SELECT COUNT(*) FROM channel_report_control_projections)
+    AS local_report_projection_rows,
+  (SELECT COUNT(*) FROM channel_report_projection_watermarks)
+    AS local_report_watermark_rows;
 
 SELECT
   COUNT(*) AS active_channels_missing_watermark

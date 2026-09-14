@@ -19,7 +19,8 @@ dispatcher.
 
 The bootstrap SQL fails before changing triggers unless:
 
-- `channels`, `channel_control_projections`, and `domain_events` are empty;
+- `channels`, channel and report control projections, report projection
+  watermarks, and `domain_events` are empty;
 - all three repository projection triggers exist; and
 - all four domain-event ready, lease, delivered, and dead indexes exist;
 - migration `0068` removed the `dm_replies.owner_uid -> users.id`
@@ -52,7 +53,7 @@ npx wrangler d1 create "$CANARY_DB"
 Record the returned database ID in the private deployment change, but do not
 add it to production bindings yet.
 
-Apply every repository migration through `0068`:
+Apply every repository migration through `0069`:
 
 ```bash
 npx wrangler d1 migrations apply "$CANARY_DB" --remote
@@ -92,6 +93,8 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
   - `advances_watermark = 1`;
   - `writes_local_projection = 0`.
 - `local_projection_rows = 0`.
+- `local_report_projection_rows = 0` and
+  `local_report_watermark_rows = 0`.
 - `active_channels_missing_watermark = 0`.
 - No domain-event backlog is present before channel copy testing.
 

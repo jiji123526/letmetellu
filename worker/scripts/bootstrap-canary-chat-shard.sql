@@ -1,5 +1,5 @@
 -- One-time overlay for an empty canary Chat shard after repository migrations
--- through 0068 have been applied. Never run this against the control database.
+-- through 0069 have been applied. Never run this against the control database.
 --
 -- The guard intentionally fails before trigger changes if application rows
 -- already exist or the expected projection schema is incomplete.
@@ -9,6 +9,10 @@ CREATE TABLE _canary_chat_shard_bootstrap_guard (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   channel_rows INTEGER NOT NULL CHECK (channel_rows = 0),
   local_projection_rows INTEGER NOT NULL CHECK (local_projection_rows = 0),
+  local_report_projection_rows INTEGER NOT NULL
+    CHECK (local_report_projection_rows = 0),
+  local_report_watermark_rows INTEGER NOT NULL
+    CHECK (local_report_watermark_rows = 0),
   domain_event_rows INTEGER NOT NULL CHECK (domain_event_rows = 0),
   projection_trigger_count INTEGER NOT NULL CHECK (projection_trigger_count = 3),
   domain_event_index_count INTEGER NOT NULL CHECK (domain_event_index_count = 4),
@@ -28,6 +32,8 @@ INSERT INTO _canary_chat_shard_bootstrap_guard (
   id,
   channel_rows,
   local_projection_rows,
+  local_report_projection_rows,
+  local_report_watermark_rows,
   domain_event_rows,
   projection_trigger_count,
   domain_event_index_count,
@@ -42,6 +48,8 @@ SELECT
   1,
   (SELECT COUNT(*) FROM channels),
   (SELECT COUNT(*) FROM channel_control_projections),
+  (SELECT COUNT(*) FROM channel_report_control_projections),
+  (SELECT COUNT(*) FROM channel_report_projection_watermarks),
   (SELECT COUNT(*) FROM domain_events),
   (
     SELECT COUNT(*)

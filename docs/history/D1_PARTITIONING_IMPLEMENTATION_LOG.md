@@ -5,6 +5,27 @@ This log records incremental work toward the proposed
 Production still uses one D1 database. No shard databases, virtual-bucket map,
 placement overrides, data migration, or cutover have been created.
 
+## 2026-09-14: channel-report projection foundation
+
+- Added canonical report source versions plus a self-contained, indexed
+  control projection and deletion-preserving watermark table.
+- Backfilled existing monolith reports without introducing account or channel
+  foreign keys into the future control projection.
+- Added strict report event parsing and monotonic, idempotent control writes;
+  stale delivery cannot resurrect a projection after a newer delete.
+- Updated fresh-canary bootstrap guards and read-only audit coverage for the
+  new empty projection tables.
+
+Verification:
+
+- migration, payload validation, stale-event ordering, and bootstrap SQLite
+  tests passed;
+- Worker TypeScript compilation passed.
+
+The producer, shared event-consumer dispatch, frozen report copy, admin read
+switch, and mutation routing remain separate gated steps. No production state
+changed.
+
 ## 2026-09-14: notification ownership manifest
 
 - Classified message/DM owner routing as Chat-shard state and preferences,

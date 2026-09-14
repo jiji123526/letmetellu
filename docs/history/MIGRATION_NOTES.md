@@ -4,6 +4,28 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-report sharding now has a control-projection foundation — 2026-09-14
+
+- Added migration `0069` with a non-authoritative report projection and a
+  deletion-preserving version watermark. Existing monolith reports are
+  backfilled at source version 1, and canonical reports gain a monotonic source
+  version for later durable events.
+- The projection is self-contained for the platform-admin inbox: it includes
+  report state, reporter identifiers, and snapshot channel name/owner fields,
+  but has no cross-database foreign keys.
+- Added a strict, bounded report-event parser and an idempotent control writer.
+  Higher delete watermarks prevent delayed stale upserts from resurrecting a
+  report. SQLite tests cover migration backfill, payload rejection, and
+  out-of-order delivery.
+- Fresh canary bootstrap now requires the new projection and watermark tables
+  to be empty, and its read-only audit exposes only their aggregate row counts.
+
+Trade-off: control D1 will hold a second operational copy of sensitive report
+data and report visibility will eventually be asynchronous. This foundation is
+not wired into producers, consumers, or reads yet, so current behavior is
+unchanged. No deployment, remote migration, production routing, or data
+movement occurred in this step.
+
 ### D1 canary notification ownership now has an explicit manifest — 2026-09-14
 
 - Added a frozen, bounded reconciliation for `message_notification_owners`.
