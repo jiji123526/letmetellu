@@ -19,7 +19,7 @@ export type CopyStage =
   | "messages_copied"
   | "message_actors_copied"
   | "message_links_rebuilt";
-type CopyStatus = "active" | "failed" | "complete";
+type CopyStatus = "active" | "failed" | "abandoned" | "complete";
 
 export const CANARY_POLICY_COPY_BATCH_SIZE = 100;
 export const CANARY_MESSAGE_COPY_BATCH_SIZE = 50;

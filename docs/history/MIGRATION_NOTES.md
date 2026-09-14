@@ -4,6 +4,31 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Failed D1 canary copies now have an audited cleanup path — 2026-09-13
+
+- Added a dedicated cleanup-secret route with two explicit operations:
+  `abandon` changes an active job into a cleanup-eligible state, and `cleanup`
+  removes only a failed or abandoned destination copy whose pinned source
+  projection version matches the request.
+- Cleanup fails closed while projection event dispatch is enabled, while the
+  channel is shadow-compared, when the shadow configuration is invalid, when a
+  local control projection exists, when a projection event has already been
+  processed, or when a later unsupported data family is present.
+- Supported copied rows, parent/live channels, the delete event emitted by the
+  channel trigger, the shard-local watermark, and the copy job are deleted in
+  one destination D1 batch. A content-free cleanup audit row makes retries
+  idempotent.
+- The empty canary bootstrap is now version 6 and includes the cleanup audit
+  table/index. SQLite tests cover explicit abandon, atomic cleanup, retry,
+  shadow/processed/unsupported-state rejection, version matching, separate
+  authorization, and the dispatch gate.
+
+Trade-off: cleanup deliberately refuses to guess how to delete any future DM,
+report, notification, or other unsupported state. Such rows require a later
+manifest-aware extension or manual review. The cleanup route and its secret
+remain absent from production configuration; no Worker deployment, remote D1
+mutation, routing change, or user request path changed in this step.
+
 ### D1 canary rebuilds message dependents and verifies derived state — 2026-09-13
 
 - The isolated canary copy job now advances through bounded message-actor and

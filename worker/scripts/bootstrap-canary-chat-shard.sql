@@ -66,7 +66,7 @@ SELECT
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 5),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 6),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -78,7 +78,7 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  5,
+  6,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
 
@@ -103,7 +103,7 @@ CREATE TABLE canary_channel_copy_jobs (
       'message_links_rebuilt'
     )),
   status TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active', 'failed', 'complete')),
+    CHECK (status IN ('active', 'failed', 'abandoned', 'complete')),
   cursor_channel_id TEXT,
   cursor_created_at TEXT,
   cursor_row_id TEXT,
@@ -117,6 +117,19 @@ CREATE TABLE canary_channel_copy_jobs (
 
 CREATE INDEX canary_channel_copy_jobs_status_updated_idx
   ON canary_channel_copy_jobs(status, updated_at, channel_id);
+
+CREATE TABLE canary_channel_cleanup_audit (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  source_projection_version INTEGER NOT NULL,
+  previous_stage TEXT NOT NULL,
+  previous_status TEXT NOT NULL
+    CHECK (previous_status IN ('failed', 'abandoned')),
+  cleaned_at TEXT NOT NULL
+);
+
+CREATE INDEX canary_channel_cleanup_audit_channel_idx
+  ON canary_channel_cleanup_audit(channel_id, cleaned_at DESC, id DESC);
 
 DROP TRIGGER channel_control_projection_insert;
 DROP TRIGGER channel_control_projection_update;

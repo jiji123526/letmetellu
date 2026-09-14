@@ -778,12 +778,44 @@ Tradeoffs:
   deltas, partial-copy cleanup, DMs, reports, and final write-freeze/cutover
   remain required, and no remote database or production setting changed.
 
+### Audited failed-copy cleanup
+
+- Added a third, cleanup-only secret and hidden POST route. Copy and read-only
+  operator credentials cannot authorize destructive cleanup.
+- An active job must first be explicitly marked `abandoned` with its exact
+  pinned source projection version. Cleanup accepts only `failed` or
+  `abandoned` jobs and is idempotent after an ambiguous successful response.
+- Cleanup rejects active projection dispatch, shadow-listed channels, invalid
+  shadow configuration, shard-local control projections, any non-pending
+  projection event, and any DM/report/notification/deletion state outside the
+  currently implemented copy manifest.
+- Known policy, canonical message, actor, gallery, and link rows are removed
+  before parent/live channel rows. The trigger-generated delete event, local
+  projection watermark, and copy job are removed in the same destination D1
+  batch; a content-free audit row is retained.
+- Raised the fresh-canary overlay to version 6 and extended its read-only audit
+  to include cleanup metadata. Actual SQLite tests cover the successful atomic
+  path and every major fail-closed boundary.
+
+Tradeoffs:
+
+- Refusing unknown data is less convenient than broad cascading deletion, but
+  prevents a future copy stage from silently losing state that this cleanup
+  contract does not yet understand.
+- Pending projection events are safe to remove only because dispatch must be
+  disabled. Any processing, delivered, or dead event requires manual review of
+  possible control-plane effects instead of automated cleanup.
+- The retained audit includes channel ID, version, old stage/status, and time,
+  but no copied contents, identities, URLs, media paths, or policy values.
+- The implementation exists only on the feature branch. No secret, binding,
+  Worker deployment, remote database mutation, shadow setting, or routing
+  change was made.
+
 ## Next implementation step
 
-Define partial-copy cleanup before any remote copy. Cleanup must be separately
-authorized, idempotent, aware of canary projection events, and restricted to a
-failed or explicitly abandoned copy job. After that, define the frozen message
-mutation/delta reconciliation protocol so edits, reactions, reports, deletion
-changes, and boundary races are closed before routing. DMs and reports remain
-later explicit contracts, and the final write-freeze/cutover protocol is still
-required.
+Define the frozen message mutation/delta reconciliation protocol so edits,
+reactions, reports, soft-deletion changes, actor changes, and boundary races
+are closed before routing. This must pin a mutation boundary, compare stable
+aggregate evidence, and remain restartable without overwriting newer state.
+DMs and reports remain later explicit copy contracts, and the final
+write-freeze/cutover protocol is still required.

@@ -26,6 +26,8 @@ WHERE name IN (
   'channels',
   'canary_channel_copy_jobs',
   'canary_channel_copy_jobs_status_updated_idx',
+  'canary_channel_cleanup_audit',
+  'canary_channel_cleanup_audit_channel_idx',
   'channel_control_projections',
   'channel_projection_versions',
   'domain_events',
@@ -53,6 +55,16 @@ SELECT
   updated_at
 FROM canary_channel_copy_jobs
 ORDER BY updated_at ASC, channel_id ASC
+LIMIT 100;
+
+SELECT
+  channel_id,
+  source_projection_version,
+  previous_stage,
+  previous_status,
+  cleaned_at
+FROM canary_channel_cleanup_audit
+ORDER BY cleaned_at DESC, id DESC
 LIMIT 100;
 
 SELECT

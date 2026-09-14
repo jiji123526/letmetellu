@@ -40,6 +40,14 @@ export function canaryCopyAuthorized(request: Request, env: Env): boolean {
   );
 }
 
+export function canaryCleanupAuthorized(request: Request, env: Env): boolean {
+  return dedicatedCanarySecretAuthorized(
+    request,
+    env.D1_CANARY_CLEANUP_TOKEN,
+    "X-Canary-Cleanup-Token",
+  );
+}
+
 export function unavailableCanaryOperatorResponse(): Response {
   return Response.json(
     { error: "not_found" },

@@ -2,7 +2,7 @@
 
 ## Current scope
 
-The mutation operator currently supports five commands:
+The copy mutation operator currently supports five commands:
 
 1. `start`: run the full read-only preflight and create one version-pinned copy
    job on the destination canary.
@@ -23,7 +23,8 @@ copy DMs, reports, pending deletion state, or any other remaining manifest
 table. Gallery and FTS rows are produced by destination message triggers and
 checked by a separate read-only verification route. The operator
 does not freeze writes, route traffic, enable shadow reads, dispatch projection
-events, or clean up a failed partial copy.
+events. A separate cleanup operator can abandon and remove a failed partial
+copy under a stricter authorization boundary.
 
 Do not use this operator on a remote database until all later manifest stages
 and explicit partial-copy cleanup are implemented and reviewed.
@@ -128,7 +129,7 @@ controls appropriate to the operator host.
 
 ## State and idempotency
 
-Bootstrap version 5 adds the dependent stages to the existing message snapshot
+Bootstrap version 6 adds the dependent stages and cleanup audit to the existing message snapshot
 and timestamp cursor fields in
 `canary_channel_copy_jobs`. A job stores only:
 
@@ -200,9 +201,8 @@ detects a change, the job is marked failed and routing remains unchanged.
 - Inserting the parent row creates a pending canary projection event through
   the shard trigger. Keep dispatcher activation disabled until copy and
   reconciliation procedures explicitly permit it.
-- A failed job may retain destination channel rows. There is intentionally no
-  automatic cleanup yet because deleting the parent emits a delete projection
-  event and requires an audited cleanup contract.
+- A failed job retains destination rows until an operator uses the separately
+  authorized abandon/cleanup protocol below. Cleanup is never automatic.
 - `projection_source_version` covers canonical channel projection changes, not
   policy/config, message, or DM mutations. The bounded policy copy is therefore
   an initial backfill, not a consistent cutover snapshot. Final reconciliation
@@ -219,8 +219,7 @@ detects a change, the job is marked failed and routing remains unchanged.
   read-only verification is still only a point-in-time prerequisite—not a
   completed cutover gate.
 - A pre-existing destination row or a concurrent operator call fails closed
-  instead of overwriting private policy state. There is still no automated
-  partial-copy cleanup.
+  instead of overwriting private policy state.
 - One command performs bounded source reads, a destination batch, and source
   safety checks. This is acceptable for an offline operator path and never runs
   on normal user traffic. Fifty-row message batches deliberately favor bounded
@@ -228,3 +227,48 @@ detects a change, the job is marked failed and routing remains unchanged.
 - A successful canonical stage is not permission to configure shadow reads or
   routing. Continue only after the remaining manifest stages and verification
   gates exist.
+
+## Failed partial-copy cleanup
+
+Cleanup uses a third secret, `D1_CANARY_CLEANUP_TOKEN`, sent only in the
+`X-Canary-Cleanup-Token` header to the hidden POST-only
+`/internal/d1-canary/copy-cleanup` route. The copy and read-only operator
+tokens do not authorize it. The secret is intentionally absent from production
+configuration and browser CORS allowances.
+
+An active copy must first be explicitly abandoned using the exact source
+projection version returned by preflight:
+
+```bash
+export D1_CANARY_CLEANUP_TOKEN
+SOURCE_PROJECTION_VERSION=123
+
+curl --fail-with-body \
+  "$CANARY_WORKER_URL/internal/d1-canary/copy-cleanup" \
+  -H "Content-Type: application/json" \
+  -H "X-Canary-Cleanup-Token: $D1_CANARY_CLEANUP_TOKEN" \
+  --data "{\"action\":\"abandon\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\",\"sourceProjectionVersion\":$SOURCE_PROJECTION_VERSION}"
+```
+
+Only a failed or explicitly abandoned job can then be cleaned:
+
+```bash
+curl --fail-with-body \
+  "$CANARY_WORKER_URL/internal/d1-canary/copy-cleanup" \
+  -H "Content-Type: application/json" \
+  -H "X-Canary-Cleanup-Token: $D1_CANARY_CLEANUP_TOKEN" \
+  --data "{\"action\":\"cleanup\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\",\"sourceProjectionVersion\":$SOURCE_PROJECTION_VERSION}"
+```
+
+Cleanup rejects active projection dispatch, a channel present in the shadow
+allowlist, an invalid shadow configuration, any locally written control
+projection, any already processed projection event, and any channel data from
+later unsupported copy stages. The supported partial-copy rows, the channel
+rows, the delete event emitted by the channel trigger, its local watermark,
+and the copy job are removed in one destination D1 batch. A non-sensitive
+audit row is retained, making an ambiguous retry idempotent without retaining
+private copied content.
+
+This operation deletes only the isolated destination copy. It never mutates
+the source/control database. Do not deploy the route, create its secret, or run
+either command without a separate production-change review.
