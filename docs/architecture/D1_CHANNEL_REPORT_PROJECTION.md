@@ -50,10 +50,24 @@ watermark and event ledger without retaining the control projection. The
 dispatcher remains default-off and no shard routing is enabled, so existing
 report routes still use canonical `channel_reports` in the current database.
 
+## Isolated dispatcher gate
+
+The code now includes a hidden one-shot operator that claims at most ten events
+for one explicit canary shard, one channel, and only the `channel_report`
+aggregate. It requires write maintenance and refuses to run while the normal
+scheduled dispatcher is enabled. SQLite integration coverage exercises report
+insert, moderation update, deletion, retry, dead-letter, version ordering, and
+cross-channel/aggregate isolation.
+
+The operator is not configured or deployed in production. Its remote exercise
+is a separate irreversible gate because the first processed event makes the
+ordinary destination cleanup fail closed. See the
+[report-dispatch exercise runbook](../operations/D1_CANARY_REPORT_DISPATCH_EXERCISE.md).
+
 ## Next implementation steps
 
-1. Exercise report insert, moderation update, and deletion through the
-   default-off canary dispatcher, including retry and dead-letter behavior.
+1. With separate approval, run the isolated dispatcher exercise against a
+   frozen canary and capture metadata-only evidence.
 2. Only after shadow evidence is clean, switch global admin reads to the
    projection and route admin mutations back to the canonical shard.
 
@@ -79,8 +93,9 @@ and required durable events.
   may appear in the global inbox slightly later, while duplicate-report checks
   and canonical moderation remain shard-local and strongly consistent.
 - The event path is wired but remains inactive without an explicitly enabled,
-  allowlisted canary dispatcher. Applying only part of the sequence must not be
-  treated as permission to route reports.
+  allowlisted scheduled dispatcher. The one-shot route is separately secreted,
+  maintenance-only, and channel-scoped. Applying only part of the sequence must
+  not be treated as permission to route reports.
 
 No migration, deployment, or production data movement is authorized by this
 document.

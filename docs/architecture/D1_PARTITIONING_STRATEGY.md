@@ -780,6 +780,9 @@ Implemented so far:
 - added maintenance-only, 40-row channel-report reconciliation with exact
   conflict rejection, stale-row pruning, and canonical/projection/watermark/
   event verification before a canary can advance;
+- added a maintenance-only, separately secreted one-shot dispatcher that can
+  claim at most ten report events for one explicit canary shard and channel;
+  it refuses scheduled-dispatch overlap and exposes counts only;
 - added read-only, cursor-bounded reconciliation between one Chat source and
   control projection state without reading event payloads or authorization
   fields;
@@ -795,8 +798,10 @@ Exit gate:
 
 ### Phase 2: durable source events
 
-Status: in progress; source ledger, channel projection events, and a default-off
-projection dispatcher exist, but no canary D1 bindings are deployed.
+Status: in progress; source ledger, channel and report projection events,
+bounded retry/dead-letter consumers, retention, and default-off scheduled plus
+one-shot dispatch contracts exist, but no canary dispatcher is configured or
+deployed.
 
 1. Add shard-local `domain_events`.
 2. Write message and event rows in the same D1 batch.
@@ -812,13 +817,12 @@ Exit gate:
 ### Phase 3: two-shard canary
 
 Status: preparation in progress; binding and dispatcher contracts exist, but
-physical canary databases and channel routing do not. Empty-shard bootstrap and
-read-only schema audit tooling exist, including a fail-closed event-only trigger
-overlay; they have not been run against remote databases. Dedicated-secret
-operators now provide metadata-only preflight/reconciliation, a version-pinned
-canonical copy, and resumable 100-row stages for low-volume policy/config data.
-They remain disabled in production configuration; message/DM copy, cleanup,
-write freeze, and routing are not implemented.
+channel routing does not. Empty-shard bootstrap, read-only audit, version-pinned
+copy, bounded policy/message/DM/notification/report reconciliation, cleanup,
+and a one-channel report-dispatch exercise are implemented as default-off,
+dedicated-secret operators. They remain absent from production configuration.
+Remote dispatcher exercise, source tombstone, cutover, and rollback evidence
+remain gated work.
 
 1. Add two Chat D1 bindings with identical channel-local schema.
 2. Add a small static canary allowlist that routes locally without a control

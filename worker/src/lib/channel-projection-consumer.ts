@@ -228,26 +228,37 @@ async function claimProjectionEvents(
   sourceDatabase: D1Database,
   nowMs: number,
   limit: number,
+  channelId?: string,
+  aggregateType?: "channel" | "channel_report",
 ): Promise<ProjectionEventRow[]> {
   const now = new Date(nowMs).toISOString();
   const leaseUntil = new Date(nowMs + PROJECTION_LEASE_MS).toISOString();
+  const scopeSql = `${channelId ? " AND channel_id = ?" : ""}${
+    aggregateType ? " AND aggregate_type = ?" : ""
+  }`;
+  const scopeValues = [
+    ...(channelId ? [channelId] : []),
+    ...(aggregateType ? [aggregateType] : []),
+  ];
   const [readyResult, expiredLeaseResult] = await sourceDatabase.batch<ProjectionEventCandidate>([
     sourceDatabase.prepare(`
       SELECT id, created_at
       FROM domain_events
       WHERE status = 'pending'
         AND next_attempt_at <= ?
+        ${scopeSql}
       ORDER BY next_attempt_at ASC, created_at ASC, id ASC
       LIMIT ?
-    `).bind(now, limit),
+    `).bind(now, ...scopeValues, limit),
     sourceDatabase.prepare(`
       SELECT id, created_at
       FROM domain_events
       WHERE status = 'processing'
         AND lease_until < ?
+        ${scopeSql}
       ORDER BY lease_until ASC, created_at ASC, id ASC
       LIMIT ?
-    `).bind(now, limit),
+    `).bind(now, ...scopeValues, limit),
   ]);
   const candidates = [...(readyResult.results || []), ...(expiredLeaseResult.results || [])]
     .sort((left, right) => (
@@ -356,10 +367,21 @@ export async function drainChannelProjectionEvents(input: {
   controlDatabase: D1Database;
   nowMs?: number;
   limit?: number;
+  channelId?: string;
+  aggregateType?: "channel" | "channel_report";
 }): Promise<ChannelProjectionDrainResult> {
   const nowMs = input.nowMs ?? Date.now();
   const limit = Math.max(1, Math.min(input.limit ?? PROJECTION_BATCH_SIZE, PROJECTION_BATCH_SIZE));
-  const rows = await claimProjectionEvents(input.sourceDatabase, nowMs, limit);
+  if (input.channelId && !CHANNEL_ID_PATTERN.test(input.channelId)) {
+    throw new Error("invalid_projection_channel_scope");
+  }
+  const rows = await claimProjectionEvents(
+    input.sourceDatabase,
+    nowMs,
+    limit,
+    input.channelId,
+    input.aggregateType,
+  );
   const result: ChannelProjectionDrainResult = {
     claimed: rows.length,
     delivered: 0,

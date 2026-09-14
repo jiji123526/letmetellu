@@ -5,6 +5,30 @@ This log records incremental work toward the proposed
 Production still uses one D1 database. No shard databases, virtual-bucket map,
 placement overrides, data migration, or cutover have been created.
 
+## 2026-09-14: isolated channel-report dispatcher exercise
+
+- Added a separately secreted, maintenance-only one-shot operator that drains
+  at most ten `channel_report` events for one explicit canary shard and channel.
+- The operator refuses to run beside the scheduled dispatcher, excludes the
+  reports special channel, returns counts only, and has no browser proxy/CORS
+  or production configuration.
+- Scoped candidate claims leave other channels and aggregate types untouched.
+  Existing leases, bounded retry, fixed-code dead-letter, and monotonic control
+  watermarks are reused rather than introducing a second delivery mechanism.
+- Added an operations runbook that marks the first processed event as an
+  irreversible gate for ordinary automated cleanup.
+
+Verification:
+
+- SQLite trigger integration covers report create, moderation update, delete,
+  retry, dead-letter, version order, and channel/aggregate isolation;
+- the complete Worker hardening suite and TypeScript compilation pass before
+  this branch is handed off.
+
+The next gate is an explicitly approved remote exercise against one frozen
+canary, followed by metadata-only comparison. No production configuration,
+deployment, remote database, maintenance mode, or routing changed.
+
 ## 2026-09-14: frozen channel-report reconciliation
 
 - Added maintenance-only, deterministic report copy and stale-row pruning in

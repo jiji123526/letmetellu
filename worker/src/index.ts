@@ -25,6 +25,7 @@ import { handleCanaryChannelCopyMutation } from "./routes/canary-channel-copy-mu
 import { handleCanaryChannelCopyVerification } from "./routes/canary-channel-copy-verification";
 import { handleCanaryChannelCopyCleanup } from "./routes/canary-channel-copy-cleanup";
 import { handleCanaryMessageDelta } from "./routes/canary-message-delta";
+import { handleCanaryProjectionDispatchOnce } from "./routes/canary-projection-dispatch-once";
 import {
   getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
@@ -289,6 +290,8 @@ export default {
         response = await handleCanaryChannelCopyCleanup(request, env);
       } else if (url.pathname === "/internal/d1-canary/message-delta") {
         response = await handleCanaryMessageDelta(request, env);
+      } else if (url.pathname === "/internal/d1-canary/dispatch-once") {
+        response = await handleCanaryProjectionDispatchOnce(request, env);
       } else if (url.pathname.startsWith("/api/messages")) {
         response = await handleMessages(
           request,

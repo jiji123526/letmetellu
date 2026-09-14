@@ -4,6 +4,31 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-report dispatch can now be exercised one channel at a time — 2026-09-14
+
+- Added a hidden one-shot operator that accepts only one exact canary shard and
+  channel, then claims at most ten ready `channel_report` events. Other channels
+  and aggregate types remain untouched.
+- The route has a new dedicated 32+ character secret, requires global write
+  maintenance, refuses to overlap the scheduled dispatcher, excludes the
+  reports special channel, returns counts only, and has no browser CORS/proxy
+  or production configuration.
+- Reused the existing lease, retry, dead-letter, and version-watermark delivery
+  path. SQLite integration now covers real trigger-driven report create,
+  moderation update, delete, simulated control failure and retry, malformed
+  event dead-lettering, and scope isolation.
+- Added a dedicated runbook. The first processed event is documented as a
+  no-return gate for ordinary automated copy cleanup because cleanup correctly
+  rejects non-pending event history.
+
+Trade-off: the scope predicates do not yet have a channel-leading event index.
+The existing status/time indexes keep writes cheaper, and the operator is
+limited to one frozen channel and ten events; a new index should be added only
+if remote query metadata proves excessive rows read. The operator remains
+intentionally manual and can require several calls, but that prevents an
+accidental broad drain. No deployment, remote migration, maintenance
+activation, routing, or production data movement occurred in this step.
+
 ### Frozen channel-report reconciliation is bounded and fail-closed — 2026-09-14
 
 - Added a maintenance-only continuation after notification manifest

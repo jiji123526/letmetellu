@@ -108,3 +108,8 @@ movable.
 
 No command in this runbook may be executed against production without a
 separate production-change review.
+
+After successful verification, the next gate is the
+[isolated report-dispatch exercise](D1_CANARY_REPORT_DISPATCH_EXERCISE.md).
+Its first processed event prevents ordinary automated copy cleanup, so it
+requires a separate change review rather than following automatically.

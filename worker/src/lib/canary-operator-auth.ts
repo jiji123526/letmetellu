@@ -56,6 +56,14 @@ export function canaryFinalizeAuthorized(request: Request, env: Env): boolean {
   );
 }
 
+export function canaryDispatchAuthorized(request: Request, env: Env): boolean {
+  return dedicatedCanarySecretAuthorized(
+    request,
+    env.D1_CANARY_DISPATCH_TOKEN,
+    "X-Canary-Dispatch-Token",
+  );
+}
+
 export function unavailableCanaryOperatorResponse(): Response {
   return Response.json(
     { error: "not_found" },
