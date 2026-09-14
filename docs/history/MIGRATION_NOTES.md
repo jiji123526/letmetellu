@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `/ch/10997` passed isolated copy preflight except for the unapplied source foundation — 2026-09-14
+
+- Added and deployed a dedicated preflight-only Worker. It exposes one
+  secret-protected GET path and contains no application route, CORS, cron,
+  Durable Object, R2, copy, dispatch, or maintenance capability.
+- Production D1 rejected the original 18-table count union and still rejected
+  eight terms. Manifest counts are now split into five statements with at most
+  four compound terms each, matching the observed remote limit.
+- The resulting metadata-only preflight found 2,830 messages, 27 DM roots, 52
+  gallery rows, no active cleanup/Undo/pending-upload blocker, and a completely
+  empty Chat-canary destination.
+- The only returned blocker was `source_projection_schema_missing` because
+  production has not applied migrations `0064`–`0070`. The preflight now
+  reports that state as a fixed `409` blocker instead of an opaque `503`.
+
+Trade-off: compatibility with the lower compound-query limit adds several
+small indexed count statements to a manual operator call. That is preferable
+to a fragile oversized statement and does not affect user-facing routes. The
+isolated Worker now exists as an operational resource and retains read-only DB
+bindings, but its secret is stored only in Cloudflare. No production schema,
+source data, application deployment, channel maintenance, copy, dispatcher, or
+routing change occurred.
+
 ### The first empty remote Chat canary is prepared but unrouted — 2026-09-14
 
 - Created `letsplay-chat-10997-canary-20260914` in WNAM as an isolated target

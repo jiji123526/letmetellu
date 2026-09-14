@@ -80,6 +80,10 @@ message text, DM text, owner ID, passcode, event payload, or media URL. Counts
 are still private operational metadata and must not be exposed through a
 browser route.
 
+The manifest count is split into statements containing at most four compound
+terms because the production D1 query boundary rejected larger unions during
+the first remote exercise.
+
 ## Cost and limitations
 
 - Source checks and counts use one read-only D1 batch; destination metadata and

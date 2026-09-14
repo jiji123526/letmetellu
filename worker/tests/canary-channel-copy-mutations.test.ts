@@ -84,6 +84,9 @@ class CopyDatabase {
 
   async first(statement: CopyStatement) {
     this.queries.push({ sql: statement.sql, values: statement.values });
+    if (statement.sql.includes("pragma_table_info('channels')")) {
+      return { projection_version_columns: 1 };
+    }
     if (statement.sql.includes("chat_shard_metadata")) {
       return { shard_role: "chat-canary", bootstrap_version: 11 };
     }

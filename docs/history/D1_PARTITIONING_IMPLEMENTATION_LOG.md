@@ -6,6 +6,29 @@ Production still routes every request to one D1 database. One empty, unrouted
 Chat canary now exists for the first channel-copy exercise; no virtual-bucket
 map, placement override, channel data migration, or cutover has been created.
 
+## 2026-09-14: isolated `/ch/10997` copy preflight
+
+- Added and deployed `letsplay-d1-canary-preflight-10997`, a narrow Worker
+  exposing only the dedicated-secret GET preflight route. It has no application
+  routes, CORS, cron, Durable Object, R2, write-maintenance flag, copy command,
+  or dispatcher command.
+- Its bindings permit metadata/count reads from the current control/source D1
+  and the new empty Chat canary. No production Worker binding changed.
+- Real D1 rejected eight-table compound count statements. The manifest was
+  therefore split into at most four `UNION ALL` terms per query; regression
+  coverage pins the bound. This costs five small count statements per database
+  but avoids the platform query-shape limit.
+- The successful `/ch/10997` preflight found one source channel, 2,830
+  messages, 27 DM roots, 52 gallery rows, and an empty destination. There was
+  no active cleanup, deletion Undo, or pending upload blocker.
+- The only blocker is `source_projection_schema_missing`: production has not
+  applied migrations `0064`–`0070`, so a source projection version cannot yet
+  pin a frozen copy.
+
+The next gate is a reviewed production migration-foundation deployment. No
+source mutation, channel maintenance, copy, dispatcher run, or routing change
+occurred.
+
 ## 2026-09-14: first remote Chat canary prepared
 
 - Created `letsplay-chat-10997-canary-20260914` as a new WNAM D1 database for
