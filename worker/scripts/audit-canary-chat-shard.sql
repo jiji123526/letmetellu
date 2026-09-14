@@ -28,6 +28,7 @@ WHERE name IN (
   'canary_channel_copy_jobs_status_updated_idx',
   'canary_channel_cleanup_audit',
   'canary_channel_cleanup_audit_channel_idx',
+  'canary_message_reconciliation_seen',
   'channel_control_projections',
   'channel_projection_versions',
   'domain_events',

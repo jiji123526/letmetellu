@@ -4,6 +4,33 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Frozen D1 canary message reconciliation closes initial-copy drift — 2026-09-13
+
+- Added a finalize-secret operator that is callable only while global HTTP
+  writes and scheduled work are paused. The initial call pins the current
+  source message boundary after maintenance becomes active.
+- The operator rereads roots and replies in deterministic batches of at most
+  40, upserts every canonical field, and atomically records destination seen
+  markers. It then deletes destination messages absent from the frozen source,
+  covering new messages, edits, reactions, report flags, soft deletions, media
+  changes, and hard deletions without an unbounded in-memory ID set.
+- Message actors and link rows are cleared and rebuilt after reconciliation;
+  gallery and FTS are refreshed by canonical message triggers. A final command
+  reruns aggregate derived-state verification and source safety checks before
+  changing the job status to `complete`.
+- Fresh canary bootstrap metadata is now version 7. SQLite tests cover
+  multi-batch upsert, parent-before-reply ordering, mutation refresh, new-row
+  insertion, hard-delete pruning, dependent rebuilding, completion, dedicated
+  authorization, and mandatory maintenance mode.
+
+Trade-off: the frozen pass is linear in channel message count and deliberately
+rewrites unchanged messages, causing FTS/gallery write amplification. This
+avoids introducing a permanent mutation journal before the canary proves the
+partition design, but requires a brief global write pause and multiple bounded
+operator calls. DM, report, notification, policy-delta, routing, and rollback
+gates still remain. No deployment, maintenance toggle, remote D1 mutation, or
+production routing change occurred in this step.
+
 ### Failed D1 canary copies now have an audited cleanup path — 2026-09-13
 
 - Added a dedicated cleanup-secret route with two explicit operations:
@@ -18,7 +45,7 @@ This file records both the original CSS-to-TSX porting constraints and the datab
   channel trigger, the shard-local watermark, and the copy job are deleted in
   one destination D1 batch. A content-free cleanup audit row makes retries
   idempotent.
-- The empty canary bootstrap is now version 6 and includes the cleanup audit
+- The empty canary bootstrap at this step became version 6 and included the cleanup audit
   table/index. SQLite tests cover explicit abandon, atomic cleanup, retry,
   shadow/processed/unsupported-state rejection, version matching, separate
   authorization, and the dispatch gate.

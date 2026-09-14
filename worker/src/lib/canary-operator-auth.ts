@@ -48,6 +48,14 @@ export function canaryCleanupAuthorized(request: Request, env: Env): boolean {
   );
 }
 
+export function canaryFinalizeAuthorized(request: Request, env: Env): boolean {
+  return dedicatedCanarySecretAuthorized(
+    request,
+    env.D1_CANARY_FINALIZE_TOKEN,
+    "X-Canary-Finalize-Token",
+  );
+}
+
 export function unavailableCanaryOperatorResponse(): Response {
   return Response.json(
     { error: "not_found" },

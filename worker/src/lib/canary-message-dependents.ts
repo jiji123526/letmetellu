@@ -254,7 +254,7 @@ export async function copyCanaryMessageDependentsBatch(input: {
       blockers: ["copy_job_not_active"],
     };
   }
-  if (job.stage === "message_links_rebuilt") {
+  if (job.stage === "message_links_rebuilt" || job.stage === "delta_links_rebuilt") {
     return {
       shardId: input.shardId,
       channelId: input.channelId,
@@ -267,7 +267,12 @@ export async function copyCanaryMessageDependentsBatch(input: {
       hasMore: false,
     };
   }
-  if (job.stage !== "messages_copied" && job.stage !== "message_actors_copied") {
+  if (
+    job.stage !== "messages_copied"
+    && job.stage !== "message_actors_copied"
+    && job.stage !== "delta_messages_copied"
+    && job.stage !== "delta_message_actors_copied"
+  ) {
     return {
       shardId: input.shardId,
       channelId: input.channelId,
@@ -305,7 +310,9 @@ export async function copyCanaryMessageDependentsBatch(input: {
     };
   }
 
-  const actors = job.stage === "messages_copied";
+  const delta = job.stage.startsWith("delta_");
+  const actors = job.stage === "messages_copied"
+    || job.stage === "delta_messages_copied";
   const sourceResult = actors
     ? await readActorRows({
         source: input.env.DB,
@@ -331,8 +338,8 @@ export async function copyCanaryMessageDependentsBatch(input: {
   const nextStage: CopyStage = hasMore
     ? job.stage
     : actors
-      ? "message_actors_copied"
-      : "message_links_rebuilt";
+      ? delta ? "delta_message_actors_copied" : "message_actors_copied"
+      : delta ? "delta_links_rebuilt" : "message_links_rebuilt";
   const statements = [
     ...batchRows.map((row) => (
       actors ? actorInsert(destination, row) : linkInsert(destination, row)

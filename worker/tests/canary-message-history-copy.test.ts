@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { handleCanaryChannelCopyMutation } from "../src/routes/canary-channel-copy-mutations.ts";
+import { handleCanaryMessageDelta } from "../src/routes/canary-message-delta.ts";
 import type { Env } from "../src/types.ts";
 
 const COPY_TOKEN = "copy-token-that-is-at-least-thirty-two-characters";
+const FINALIZE_TOKEN = "finalize-token-that-is-at-least-thirty-two-characters";
 
 class SqliteStatement {
   private readonly database: DatabaseSync;
@@ -107,6 +110,15 @@ function createDatabase(includeJob = false): DatabaseSync {
       id TEXT PRIMARY KEY,
       channel_id TEXT NOT NULL
     );
+    CREATE TABLE message_actor_identities (
+      record_id TEXT,
+      record_type TEXT,
+      channel_id TEXT
+    );
+    CREATE TABLE message_links (
+      message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      channel_id TEXT
+    );
   `);
   if (includeJob) {
     database.exec(`
@@ -124,6 +136,11 @@ function createDatabase(includeJob = false): DatabaseSync {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE canary_message_reconciliation_seen (
+        channel_id TEXT NOT NULL,
+        message_id TEXT NOT NULL,
+        PRIMARY KEY (channel_id, message_id)
+      );
     `);
   }
   database.prepare(`
@@ -133,6 +150,25 @@ function createDatabase(includeJob = false): DatabaseSync {
     INSERT INTO channels (id, projection_source_version) VALUES (?, ?)
   `).run("room-one_live", 7);
   return database;
+}
+
+function deltaEnv(source: DatabaseSync, destination: DatabaseSync): Env {
+  return {
+    ...copyEnv(source, destination),
+    D1_CANARY_FINALIZE_TOKEN: FINALIZE_TOKEN,
+    WRITE_MAINTENANCE_MODE: "true",
+  } as Env;
+}
+
+function deltaRequest(action: "start" | "reconcile") {
+  return new Request("https://worker.example/internal/d1-canary/message-delta", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Canary-Finalize-Token": FINALIZE_TOKEN,
+    },
+    body: JSON.stringify({ action, shard: "canary-a", channel: "room-one" }),
+  });
 }
 
 function insertJob(destination: DatabaseSync) {
@@ -272,6 +308,122 @@ test("message history copy is snapshot-bounded, resumable, and parent-first", as
   assert.equal(retryBody.idempotent, true);
   assert.equal(retryBody.batchRowsCopied, 0);
   assert.equal(destination.prepare("SELECT COUNT(*) AS count FROM messages").get()?.count, 57);
+});
+
+test("frozen delta refreshes mutations, adds new rows, and prunes hard deletes", async () => {
+  const source = createDatabase();
+  const destination = createDatabase(true);
+  for (let index = 0; index < 45; index += 1) {
+    const values = {
+      id: `root-${String(index).padStart(3, "0")}`,
+      createdAt: `2026-09-13T02:${String(index).padStart(2, "0")}:00.000Z`,
+    };
+    insertMessage({ database: source, ...values });
+    insertMessage({ database: destination, ...values });
+  }
+  insertMessage({
+    database: destination,
+    id: "hard-deleted",
+    createdAt: "2026-09-13T01:00:00.000Z",
+  });
+  source.prepare(`
+    UPDATE messages
+    SET text = 'updated-private-text', reactions = '{"heart":2}', edited = 1
+    WHERE id = 'root-000'
+  `).run();
+  insertMessage({
+    database: source,
+    id: "new-root",
+    createdAt: "2026-09-13T03:00:00.000Z",
+  });
+  insertMessage({
+    database: source,
+    id: "new-reply",
+    replyTo: "new-root",
+    createdAt: "2026-09-13T03:01:00.000Z",
+  });
+  destination.prepare(`
+    INSERT INTO canary_channel_copy_jobs (
+      channel_id, source_projection_version, stage, status, created_at, updated_at
+    ) VALUES ('room-one', 7, 'message_links_rebuilt', 'active', ?, ?)
+  `).run("2026-09-13T00:00:00.000Z", "2026-09-13T00:00:00.000Z");
+
+  const inputEnv = deltaEnv(source, destination);
+  const started = await handleCanaryMessageDelta(deltaRequest("start"), inputEnv);
+  assert.equal(started.status, 200);
+  assert.equal((await started.json() as { stage: string }).stage, "delta_roots_upserting");
+
+  let stage = "delta_roots_upserting";
+  for (let call = 0; call < 10 && stage !== "delta_messages_copied"; call += 1) {
+    const response = await handleCanaryMessageDelta(deltaRequest("reconcile"), inputEnv);
+    assert.equal(response.status, 200);
+    stage = (await response.json() as { stage: string }).stage;
+  }
+  assert.equal(stage, "delta_messages_copied");
+  const updated = destination.prepare(`
+    SELECT text, reactions, edited FROM messages WHERE id = 'root-000'
+  `).get();
+  assert.deepEqual({ ...updated }, {
+    text: "updated-private-text",
+    reactions: '{"heart":2}',
+    edited: 1,
+  });
+  assert.equal(
+    destination.prepare("SELECT COUNT(*) AS count FROM messages WHERE id = 'new-reply'")
+      .get()?.count,
+    1,
+  );
+  assert.equal(
+    destination.prepare("SELECT COUNT(*) AS count FROM messages WHERE id = 'hard-deleted'")
+      .get()?.count,
+    0,
+  );
+  assert.equal(
+    destination.prepare("SELECT COUNT(*) AS count FROM canary_message_reconciliation_seen")
+      .get()?.count,
+    0,
+  );
+});
+
+test("delta route requires maintenance and its distinct secret", async () => {
+  const source = createDatabase();
+  const destination = createDatabase(true);
+  const noMaintenance = deltaEnv(source, destination);
+  noMaintenance.WRITE_MAINTENANCE_MODE = "false";
+  assert.equal(
+    (await handleCanaryMessageDelta(deltaRequest("start"), noMaintenance)).status,
+    409,
+  );
+  const wrongSecret = new Request(deltaRequest("start").url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Canary-Finalize-Token": COPY_TOKEN,
+    },
+    body: JSON.stringify({ action: "start", shard: "canary-a", channel: "room-one" }),
+  });
+  assert.equal(
+    (await handleCanaryMessageDelta(wrongSecret, deltaEnv(source, destination))).status,
+    404,
+  );
+
+  const routeSource = readFileSync(
+    new URL("../src/routes/canary-message-delta.ts", import.meta.url),
+    "utf8",
+  );
+  const indexSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  const productionWrangler = readFileSync(
+    new URL("../wrangler.toml", import.meta.url),
+    "utf8",
+  );
+  assert.match(indexSource, /isCanaryFinalizeRoute/);
+  assert.match(indexSource, /\/internal\/d1-canary\/message-delta/);
+  assert.doesNotMatch(
+    indexSource,
+    /Access-Control-Allow-Headers[^\n]*X-Canary-Finalize-Token/,
+  );
+  assert.doesNotMatch(routeSource, /X-Internal-Token|X-User-Id/);
+  assert.doesNotMatch(productionWrangler, /D1_CANARY_FINALIZE_TOKEN/);
 });
 
 test("message history copy fails closed while an undo deletion is active", async () => {

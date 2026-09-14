@@ -66,7 +66,7 @@ SELECT
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 6),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 7),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -78,7 +78,7 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  6,
+  7,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
 
@@ -100,7 +100,13 @@ CREATE TABLE canary_channel_copy_jobs (
       'message_roots_copied',
       'messages_copied',
       'message_actors_copied',
-      'message_links_rebuilt'
+      'message_links_rebuilt',
+      'delta_roots_upserting',
+      'delta_messages_upserting',
+      'delta_pruning',
+      'delta_messages_copied',
+      'delta_message_actors_copied',
+      'delta_links_rebuilt'
     )),
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active', 'failed', 'abandoned', 'complete')),
@@ -117,6 +123,12 @@ CREATE TABLE canary_channel_copy_jobs (
 
 CREATE INDEX canary_channel_copy_jobs_status_updated_idx
   ON canary_channel_copy_jobs(status, updated_at, channel_id);
+
+CREATE TABLE canary_message_reconciliation_seen (
+  channel_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  PRIMARY KEY (channel_id, message_id)
+);
 
 CREATE TABLE canary_channel_cleanup_audit (
   id TEXT PRIMARY KEY,

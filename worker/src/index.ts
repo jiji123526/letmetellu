@@ -24,6 +24,7 @@ import { handleCanaryChannelCopyPreflight } from "./routes/canary-channel-copy-o
 import { handleCanaryChannelCopyMutation } from "./routes/canary-channel-copy-mutations";
 import { handleCanaryChannelCopyVerification } from "./routes/canary-channel-copy-verification";
 import { handleCanaryChannelCopyCleanup } from "./routes/canary-channel-copy-cleanup";
+import { handleCanaryMessageDelta } from "./routes/canary-message-delta";
 import {
   getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
@@ -173,7 +174,12 @@ export default {
 
     // Keep read-only access available during a database cutover while
     // preventing any new state from being written to the source database.
-    if (env.WRITE_MAINTENANCE_MODE === "true" && request.method !== "GET") {
+    const isCanaryFinalizeRoute = url.pathname === "/internal/d1-canary/message-delta";
+    if (
+      env.WRITE_MAINTENANCE_MODE === "true"
+      && request.method !== "GET"
+      && !isCanaryFinalizeRoute
+    ) {
       return buildResponse(request, Response.json({
         error: "maintenance_write_disabled",
         message: "데이터 이전 중입니다. 잠시 후 다시 시도해 주세요.",
@@ -281,6 +287,8 @@ export default {
         response = await handleCanaryChannelCopyVerification(request, env);
       } else if (url.pathname === "/internal/d1-canary/copy-cleanup") {
         response = await handleCanaryChannelCopyCleanup(request, env);
+      } else if (url.pathname === "/internal/d1-canary/message-delta") {
+        response = await handleCanaryMessageDelta(request, env);
       } else if (url.pathname.startsWith("/api/messages")) {
         response = await handleMessages(
           request,

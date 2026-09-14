@@ -4,10 +4,12 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { handleCanaryChannelCopyMutation } from "../src/routes/canary-channel-copy-mutations.ts";
 import { handleCanaryChannelCopyVerification } from "../src/routes/canary-channel-copy-verification.ts";
+import { handleCanaryMessageDelta } from "../src/routes/canary-message-delta.ts";
 import type { Env } from "../src/types.ts";
 
 const COPY_TOKEN = "copy-token-that-is-at-least-thirty-two-characters";
 const OPERATOR_TOKEN = "operator-token-at-least-thirty-two-characters";
+const FINALIZE_TOKEN = "finalize-token-that-is-at-least-thirty-two-characters";
 
 class SqliteStatement {
   readonly sql: string;
@@ -178,7 +180,20 @@ function env(source: DatabaseSync, destination: DatabaseSync): Env {
     CHAT_DB_CANARY_A: new SqliteD1(destination) as unknown as D1Database,
     D1_CANARY_COPY_TOKEN: COPY_TOKEN,
     D1_CANARY_OPERATOR_TOKEN: OPERATOR_TOKEN,
+    D1_CANARY_FINALIZE_TOKEN: FINALIZE_TOKEN,
+    WRITE_MAINTENANCE_MODE: "true",
   } as unknown as Env;
+}
+
+function deltaRequest(action: "rebuild-dependents" | "complete") {
+  return new Request("https://worker.example/internal/d1-canary/message-delta", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Canary-Finalize-Token": FINALIZE_TOKEN,
+    },
+    body: JSON.stringify({ action, shard: "canary-a", channel: "room-one" }),
+  });
 }
 
 function mutationRequest() {
@@ -300,6 +315,40 @@ test("derived verification reports fixed mismatch codes without row content", as
   const body = await response.json() as { blockers: string[]; ready: boolean };
   assert.equal(body.ready, false);
   assert.deepEqual(body.blockers, ["gallery_derived_mismatch"]);
+});
+
+test("frozen delta rebuilds dependents before marking the copy complete", async () => {
+  const source = createDatabase();
+  const destination = createDatabase(true);
+  prepareCopiedHistory(source, destination);
+  destination.prepare(`
+    UPDATE canary_channel_copy_jobs SET stage = 'delta_messages_copied'
+  `).run();
+  const inputEnv = env(source, destination);
+  let stage = "delta_messages_copied";
+  for (let call = 0; call < 5 && stage !== "delta_links_rebuilt"; call += 1) {
+    const response = await handleCanaryMessageDelta(
+      deltaRequest("rebuild-dependents"),
+      inputEnv,
+    );
+    assert.equal(response.status, 200);
+    stage = (await response.json() as { stage: string }).stage;
+  }
+  assert.equal(stage, "delta_links_rebuilt");
+
+  const completed = await handleCanaryMessageDelta(deltaRequest("complete"), inputEnv);
+  assert.equal(completed.status, 200);
+  const body = await completed.json() as Record<string, unknown>;
+  assert.equal(body.status, "complete");
+  assert.equal(body.stage, "delta_links_rebuilt");
+  assert.doesNotMatch(
+    JSON.stringify(body),
+    /private-uid|private-device|ordinary message|example\.com|private\/image/,
+  );
+  assert.equal(
+    destination.prepare("SELECT status FROM canary_channel_copy_jobs").get()?.status,
+    "complete",
+  );
 });
 
 test("derived verification is hidden, GET-only, and rejects malformed scope", async () => {

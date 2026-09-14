@@ -18,7 +18,13 @@ export type CopyStage =
   | "message_roots_copied"
   | "messages_copied"
   | "message_actors_copied"
-  | "message_links_rebuilt";
+  | "message_links_rebuilt"
+  | "delta_roots_upserting"
+  | "delta_messages_upserting"
+  | "delta_pruning"
+  | "delta_messages_copied"
+  | "delta_message_actors_copied"
+  | "delta_links_rebuilt";
 type CopyStatus = "active" | "failed" | "abandoned" | "complete";
 
 export const CANARY_POLICY_COPY_BATCH_SIZE = 100;
@@ -79,7 +85,7 @@ interface MessageCopyRow extends Record<string, unknown> {
   __cursor_created_at: string;
 }
 
-const MESSAGE_COPY_COLUMNS = [
+export const CANARY_MESSAGE_COPY_COLUMNS = [
   "id",
   "client_message_id",
   "uid",
@@ -769,7 +775,7 @@ function readMessageRows(input: {
   const cursorId = input.cursorId || "";
   return input.source.prepare(`
     SELECT
-      ${MESSAGE_COPY_COLUMNS.join(", ")},
+      ${CANARY_MESSAGE_COPY_COLUMNS.join(", ")},
       COALESCE(created_at, '') AS __cursor_created_at
     FROM messages
     WHERE channel_id IN (?, ?)
@@ -804,9 +810,9 @@ function insertMessageRow(
   row: MessageCopyRow,
 ): D1PreparedStatement {
   return destination.prepare(`
-    INSERT INTO messages (${MESSAGE_COPY_COLUMNS.join(", ")})
-    VALUES (${MESSAGE_COPY_COLUMNS.map(() => "?").join(", ")})
-  `).bind(...MESSAGE_COPY_COLUMNS.map((column) => row[column] ?? null));
+    INSERT INTO messages (${CANARY_MESSAGE_COPY_COLUMNS.join(", ")})
+    VALUES (${CANARY_MESSAGE_COPY_COLUMNS.map(() => "?").join(", ")})
+  `).bind(...CANARY_MESSAGE_COPY_COLUMNS.map((column) => row[column] ?? null));
 }
 
 async function readCopyJob(

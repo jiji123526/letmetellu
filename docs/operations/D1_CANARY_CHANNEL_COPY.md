@@ -129,7 +129,8 @@ controls appropriate to the operator host.
 
 ## State and idempotency
 
-Bootstrap version 6 adds the dependent stages and cleanup audit to the existing message snapshot
+Bootstrap version 7 adds the dependent/delta stages, reconciliation seen set,
+and cleanup audit to the existing message snapshot
 and timestamp cursor fields in
 `canary_channel_copy_jobs`. A job stores only:
 
@@ -272,3 +273,7 @@ private copied content.
 This operation deletes only the isolated destination copy. It never mutates
 the source/control database. Do not deploy the route, create its secret, or run
 either command without a separate production-change review.
+
+After the initial copy and derived verification are clean, continue with the
+[frozen message reconciliation runbook](D1_CANARY_MESSAGE_DELTA.md). Do not
+route the channel based on the initial copy alone.

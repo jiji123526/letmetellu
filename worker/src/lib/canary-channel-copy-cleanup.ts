@@ -249,6 +249,8 @@ export async function cleanupCanaryChannelCopy(input: {
   const liveChannelId = `${input.channelId}_live`;
   const now = new Date().toISOString();
   const statements = [
+    destination.prepare("DELETE FROM canary_message_reconciliation_seen WHERE channel_id = ?")
+      .bind(input.channelId),
     destination.prepare("DELETE FROM message_actor_identities WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),
     destination.prepare("DELETE FROM message_links WHERE channel_id IN (?, ?)")

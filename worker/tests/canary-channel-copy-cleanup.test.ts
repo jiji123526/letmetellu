@@ -88,6 +88,11 @@ function createDestination(): DatabaseSync {
       previous_status TEXT NOT NULL,
       cleaned_at TEXT NOT NULL
     );
+    CREATE TABLE canary_message_reconciliation_seen (
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      PRIMARY KEY (channel_id, message_id)
+    );
     CREATE TABLE channel_control_projections (channel_id TEXT PRIMARY KEY);
     CREATE TABLE channel_projection_versions (
       channel_id TEXT PRIMARY KEY,
@@ -189,6 +194,7 @@ function createDestination(): DatabaseSync {
     INSERT INTO blocked VALUES ('blocked-one', 'room-one');
     INSERT INTO canary_channel_copy_jobs
       VALUES ('room-one', 7, 'messages_copied', 'active', '2026-09-13T00:00:00Z');
+    INSERT INTO canary_message_reconciliation_seen VALUES ('room-one', 'message-one');
   `);
   return database;
 }
@@ -260,6 +266,7 @@ test("cleanup requires explicit abandon and removes one canary copy atomically",
     "domain_events",
     "channel_projection_versions",
     "canary_channel_copy_jobs",
+    "canary_message_reconciliation_seen",
   ]) {
     assert.equal(
       destination.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count,

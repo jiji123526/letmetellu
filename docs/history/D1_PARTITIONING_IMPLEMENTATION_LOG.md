@@ -811,11 +811,44 @@ Tradeoffs:
   Worker deployment, remote database mutation, shadow setting, or routing
   change was made.
 
+### Frozen message delta reconciliation
+
+- Added a fourth, finalize-only secret and exact internal route. It is rejected
+  unless global write maintenance is active and canary projection dispatch is
+  disabled; the maintenance middleware exception matches only this route.
+- The start command pins the newest source message after writes stop. Bounded
+  passes upsert roots before replies and store each source message ID in a
+  destination-only seen table in the same transaction as its canonical row.
+- A following bounded prune removes destination messages absent from the seen
+  set, closing hard-delete drift. The pass then clears message actors and links
+  so both can be rebuilt from the now-current canonical snapshot.
+- Gallery and FTS update through existing message triggers. Final completion
+  reruns aggregate actor/gallery/link/FTS checks plus source-version and active
+  deletion-undo checks before setting the copy job to `complete`.
+- Fresh canary bootstrap is version 7. Actual SQLite coverage exercises more
+  than one upsert batch, updated content/reactions, new roots and replies,
+  missing-source deletion, seen-set cleanup, dependent rebuilding, successful
+  completion, maintenance enforcement, and secret isolation.
+
+Tradeoffs:
+
+- The algorithm is O(channel messages) and upserts unchanged rows, adding
+  gallery/FTS trigger work. A permanent mutation journal would reduce cutover
+  work but adds overhead and consistency/retention complexity to every normal
+  write; the bounded frozen scan is safer for the first canary.
+- Forty-row batches keep each upsert plus seen-marker batch below conservative
+  D1 statement pressure, but increase operator round trips.
+- Global write maintenance is stronger than a channel-only pause and affects
+  users during the eventual cutover. It is not enabled by this code change and
+  requires explicit approval before deployment/use.
+- Message completion is not routing permission. DM, report, notification,
+  policy-delta, final manifest, smoke-test, and rollback gates remain.
+
 ## Next implementation step
 
-Define the frozen message mutation/delta reconciliation protocol so edits,
-reactions, reports, soft-deletion changes, actor changes, and boundary races
-are closed before routing. This must pin a mutation boundary, compare stable
-aggregate evidence, and remain restartable without overwriting newer state.
-DMs and reports remain later explicit copy contracts, and the final
-write-freeze/cutover protocol is still required.
+Define and implement the bounded DM and DM-reply copy contract, including
+owner-only visibility, actor identity, activity ordering, pending-delete state,
+notification ownership, parent-before-reply ordering, and frozen-delta
+verification. Reports and the remaining notification/policy manifest follow;
+no physical binding, remote copy, or routing change should occur before those
+contracts pass isolated canary tests.

@@ -90,7 +90,7 @@ export async function verifyCanaryMessageDerivedState(input: {
   };
   if (
     job.status !== "active"
-    || job.stage !== "message_links_rebuilt"
+    || (job.stage !== "message_links_rebuilt" && job.stage !== "delta_links_rebuilt")
     || !job.message_snapshot_id
     || job.message_snapshot_created_at === null
   ) {
