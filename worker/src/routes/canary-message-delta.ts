@@ -17,6 +17,10 @@ import {
   completeCanaryNotificationManifest,
   reconcileCanaryMessageNotificationOwnersBatch,
 } from "../lib/canary-notification-manifest.ts";
+import {
+  completeCanaryChannelReportReconciliation,
+  reconcileCanaryChannelReportsBatch,
+} from "../lib/canary-channel-report-reconciliation.ts";
 import type { CanaryShardId } from "../lib/channel-projection-dispatcher.ts";
 import { isCanaryProjectionDispatchEnabled } from "../lib/channel-projection-dispatcher.ts";
 import { isReportsChannel } from "../lib/special-channels.ts";
@@ -33,7 +37,9 @@ interface DeltaCommand {
     | "reconcile-dm"
     | "complete-dm"
     | "reconcile-notification-owners"
-    | "complete-notification-manifest";
+    | "complete-notification-manifest"
+    | "reconcile-channel-reports"
+    | "complete-channel-reports";
   shard: CanaryShardId;
   channel: string;
 }
@@ -59,6 +65,8 @@ function parseCommand(text: string): DeltaCommand | null {
       && input.action !== "complete-dm"
       && input.action !== "reconcile-notification-owners"
       && input.action !== "complete-notification-manifest"
+      && input.action !== "reconcile-channel-reports"
+      && input.action !== "complete-channel-reports"
     )
     || (input.shard !== "canary-a" && input.shard !== "canary-b")
     || typeof input.channel !== "string"
@@ -121,7 +129,11 @@ export async function handleCanaryMessageDelta(request: Request, env: Env) {
                 ? await completeCanaryDmDelta(input)
                 : command.action === "reconcile-notification-owners"
                   ? await reconcileCanaryMessageNotificationOwnersBatch(input)
-                  : await completeCanaryNotificationManifest(input);
+                  : command.action === "complete-notification-manifest"
+                    ? await completeCanaryNotificationManifest(input)
+                    : command.action === "reconcile-channel-reports"
+                      ? await reconcileCanaryChannelReportsBatch(input)
+                      : await completeCanaryChannelReportReconciliation(input);
     return Response.json(result, {
       status: result.blockers.length === 0 ? 200 : 409,
       headers: { "Cache-Control": "no-store" },

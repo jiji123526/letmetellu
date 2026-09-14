@@ -47,6 +47,7 @@ WHERE name IN (
   'canary_message_reconciliation_seen',
   'canary_dm_reconciliation_seen',
   'canary_notification_reconciliation_seen',
+  'canary_channel_report_reconciliation_seen',
   'channel_control_projections',
   'channel_report_control_projections',
   'channel_report_projection_watermarks',
@@ -95,6 +96,11 @@ ORDER BY channel_id, record_type;
 
 SELECT channel_id, COUNT(*) AS rows
 FROM canary_notification_reconciliation_seen
+GROUP BY channel_id
+ORDER BY channel_id;
+
+SELECT channel_id, COUNT(*) AS rows
+FROM canary_channel_report_reconciliation_seen
 GROUP BY channel_id
 ORDER BY channel_id;
 

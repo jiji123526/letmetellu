@@ -777,6 +777,9 @@ Implemented so far:
   insert/update/delete events; the shared bounded consumer validates and
   applies them, while fresh Chat-shard bootstrap keeps only event and watermark
   state and never a local admin-inbox projection;
+- added maintenance-only, 40-row channel-report reconciliation with exact
+  conflict rejection, stale-row pruning, and canonical/projection/watermark/
+  event verification before a canary can advance;
 - added read-only, cursor-bounded reconciliation between one Chat source and
   control projection state without reading event payloads or authorization
   fields;

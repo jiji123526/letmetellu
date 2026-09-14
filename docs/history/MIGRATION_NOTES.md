@@ -4,6 +4,33 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Frozen channel-report reconciliation is bounded and fail-closed — 2026-09-14
+
+- Added a maintenance-only continuation after notification manifest
+  verification. Canonical channel reports are scanned in deterministic batches
+  of at most 40 and inserted into the prepared Chat canary with their source
+  versions.
+- Retries compare every existing destination report field before continuing.
+  An exact copy is idempotent; conflicting moderation evidence marks the job
+  failed instead of being overwritten. A destination seen set supports bounded
+  stale-report pruning.
+- Completion compares source/destination report counts and version totals,
+  verifies the source control projection and both active watermark sets,
+  requires a matching destination durable event for every report, and confirms
+  that the Chat shard has no local admin report projection.
+- Fresh canary bootstrap metadata is version `11`. Cleanup and read-only audit
+  now include the temporary report seen set, canonical reports, and report
+  watermarks. Added a dedicated operations runbook and SQLite regression tests.
+
+Trade-off: the maintenance window gains one operator round trip per 40 reports
+plus a bounded prune pass. Sensitive report rows pass through the internal
+Worker for comparison but never appear in responses or audit output. Count and
+version totals are not a cryptographic digest; the current guarantee combines
+fresh-empty preflight, full bounded traversal, exact retry conflict checks,
+stale pruning, and projection/watermark/event validation. No deployment,
+remote migration, maintenance activation, routing, or production data movement
+occurred in this step.
+
 ### Channel-report mutations now emit durable projection events — 2026-09-14
 
 - Added migration `0070`. Channel-report insert, moderation update, and delete

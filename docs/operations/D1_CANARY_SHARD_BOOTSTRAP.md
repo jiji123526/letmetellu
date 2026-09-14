@@ -80,7 +80,7 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
 - `PRAGMA quick_check` returns `ok`.
 - `PRAGMA foreign_key_check` returns no rows.
 - `dm_replies` lists foreign keys only to `channels` and `dm`, not `users`.
-- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `10`.
+- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `11`.
 - `dm_notification_owners` retains foreign keys to local `dm` and `channels`
   but no longer references the control-plane `users` table.
 - `message_notification_owners` retains foreign keys to local `messages` and
@@ -88,7 +88,8 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
 - `canary_channel_copy_jobs`, its bounded cursor, message-snapshot/progress
   columns, its status/update index, and the cleanup audit table/index are
   present and empty. The message and DM reconciliation seen tables are also
-  present and empty, together with the notification reconciliation seen table.
+  present and empty, together with the notification and channel-report
+  reconciliation seen tables.
 - All listed tables and indexes are present.
 - Each of the six channel and channel-report projection triggers reports:
   - `emits_domain_events = 1`;

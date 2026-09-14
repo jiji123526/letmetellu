@@ -104,7 +104,20 @@ function createDestination(): DatabaseSync {
       message_id TEXT NOT NULL,
       PRIMARY KEY (channel_id, message_id)
     );
+    CREATE TABLE canary_channel_report_reconciliation_seen (
+      channel_id TEXT NOT NULL,
+      report_id TEXT NOT NULL,
+      PRIMARY KEY (channel_id, report_id)
+    );
     CREATE TABLE channel_control_projections (channel_id TEXT PRIMARY KEY);
+    CREATE TABLE channel_report_control_projections (
+      report_id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL
+    );
+    CREATE TABLE channel_report_projection_watermarks (
+      report_id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL
+    );
     CREATE TABLE channel_projection_versions (
       channel_id TEXT PRIMARY KEY,
       source_version INTEGER NOT NULL,
@@ -279,6 +292,10 @@ test("cleanup requires explicit abandon and removes one canary copy atomically",
     "canary_channel_copy_jobs",
     "canary_message_reconciliation_seen",
     "canary_dm_reconciliation_seen",
+    "canary_notification_reconciliation_seen",
+    "canary_channel_report_reconciliation_seen",
+    "channel_reports",
+    "channel_report_projection_watermarks",
   ]) {
     assert.equal(
       destination.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()?.count,
@@ -315,7 +332,7 @@ test("cleanup fails closed for shadowed, processed, or unsupported state", async
   const unsafe = createDestination();
   unsafe.prepare("UPDATE canary_channel_copy_jobs SET status = 'abandoned'").run();
   unsafe.prepare("UPDATE domain_events SET status = 'delivered'").run();
-  unsafe.prepare("INSERT INTO channel_reports VALUES ('report-one', 'room-one')").run();
+  unsafe.prepare("INSERT INTO pending_admin_deletions VALUES ('undo-one', 'room-one')").run();
   const unsafeResponse = await handleCanaryChannelCopyCleanup(
     request("cleanup"),
     env(unsafe),

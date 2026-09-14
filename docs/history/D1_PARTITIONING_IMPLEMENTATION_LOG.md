@@ -5,6 +5,29 @@ This log records incremental work toward the proposed
 Production still uses one D1 database. No shard databases, virtual-bucket map,
 placement overrides, data migration, or cutover have been created.
 
+## 2026-09-14: frozen channel-report reconciliation
+
+- Added maintenance-only, deterministic report copy and stale-row pruning in
+  batches of at most 40 after notification manifest verification.
+- Exact destination retries remain idempotent; any differing report field
+  fails closed instead of overwriting moderation evidence.
+- Completion verifies canonical report count/version parity, the source control
+  projection, source and destination watermarks, destination durable events,
+  and the absence of a local Chat-shard report projection.
+- Advanced fresh canary bootstrap to version 11 and extended cleanup/audit for
+  report reconciliation state.
+
+Verification:
+
+- bounded copy, projection verification, conflict rejection, bootstrap,
+  preflight, and cleanup tests passed;
+- Worker TypeScript compilation passed.
+
+The next gate is an isolated dispatcher exercise covering report create,
+moderation update, deletion, retry, and dead-letter behavior. No production
+configuration, deployment, remote database, maintenance mode, or routing
+changed.
+
 ## 2026-09-14: durable channel-report projection events
 
 - Added same-transaction report source-version, watermark, monolith projection,

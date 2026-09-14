@@ -14,6 +14,7 @@ interface CleanupJobRow {
 
 interface CleanupSafetyRow {
   local_projection_rows: number;
+  local_report_projection_rows: number;
   non_pending_event_rows: number;
   unsupported_rows: number;
 }
@@ -123,11 +124,12 @@ async function readSafetyState(
     SELECT
       (SELECT COUNT(*) FROM channel_control_projections
         WHERE channel_id = ?) AS local_projection_rows,
+      (SELECT COUNT(*) FROM channel_report_control_projections
+        WHERE channel_id IN (?, ?)) AS local_report_projection_rows,
       (SELECT COUNT(*) FROM domain_events
-        WHERE channel_id = ? AND status != 'pending') AS non_pending_event_rows,
+        WHERE channel_id IN (?, ?) AND status != 'pending') AS non_pending_event_rows,
       (
-        (SELECT COUNT(*) FROM channel_reports WHERE channel_id IN (?, ?))
-        + (SELECT COUNT(*) FROM pending_admin_deletions WHERE channel_id IN (?, ?))
+        (SELECT COUNT(*) FROM pending_admin_deletions WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM notification_preferences WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM notification_outbox WHERE channel_id IN (?, ?))
         + (SELECT COUNT(*) FROM user_recent_channels WHERE channel_id IN (?, ?))
@@ -136,7 +138,7 @@ async function readSafetyState(
       ) AS unsupported_rows
   `).bind(
     channelId,
-    channelId,
+    channelId, liveChannelId,
     channelId, liveChannelId,
     channelId, liveChannelId,
     channelId, liveChannelId,
@@ -221,6 +223,9 @@ export async function cleanupCanaryChannelCopy(input: {
   if (Number(safety.local_projection_rows) !== 0) {
     blockers.push("local_control_projection_present");
   }
+  if (Number(safety.local_report_projection_rows) !== 0) {
+    blockers.push("local_report_control_projection_present");
+  }
   if (Number(safety.non_pending_event_rows) !== 0) {
     blockers.push("projection_event_already_processed");
   }
@@ -244,6 +249,8 @@ export async function cleanupCanaryChannelCopy(input: {
     destination.prepare("DELETE FROM canary_dm_reconciliation_seen WHERE channel_id = ?")
       .bind(input.channelId),
     destination.prepare("DELETE FROM canary_notification_reconciliation_seen WHERE channel_id = ?")
+      .bind(input.channelId),
+    destination.prepare("DELETE FROM canary_channel_report_reconciliation_seen WHERE channel_id = ?")
       .bind(input.channelId),
     destination.prepare("DELETE FROM message_actor_identities WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),
@@ -275,12 +282,16 @@ export async function cleanupCanaryChannelCopy(input: {
       .bind(input.channelId, liveChannelId),
     destination.prepare("DELETE FROM moderators WHERE channel_id IN (?, ?)")
       .bind(input.channelId, liveChannelId),
+    destination.prepare("DELETE FROM channel_reports WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
+    destination.prepare("DELETE FROM channel_report_projection_watermarks WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
     destination.prepare("DELETE FROM channels WHERE id = ?")
       .bind(liveChannelId),
     destination.prepare("DELETE FROM channels WHERE id = ?")
       .bind(input.channelId),
-    destination.prepare("DELETE FROM domain_events WHERE channel_id = ?")
-      .bind(input.channelId),
+    destination.prepare("DELETE FROM domain_events WHERE channel_id IN (?, ?)")
+      .bind(input.channelId, liveChannelId),
     destination.prepare("DELETE FROM channel_projection_versions WHERE channel_id = ?")
       .bind(input.channelId),
     destination.prepare(`

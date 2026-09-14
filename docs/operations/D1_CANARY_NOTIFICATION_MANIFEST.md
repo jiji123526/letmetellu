@@ -41,7 +41,7 @@ All requirements from the frozen message and DM runbooks remain mandatory:
 - the dedicated finalize secret is present;
 - the source projection version is unchanged;
 - no pending admin-deletion Undo row exists;
-- the destination is a bootstrap-version-9 empty Chat canary.
+- the destination is a bootstrap-version-11 empty Chat canary.
 
 The route returns only counts, progress, and fixed blocker codes. It never
 returns message IDs, user IDs, endpoints, notification payloads, or report
@@ -90,8 +90,10 @@ Completion checks:
 - the source version and Undo safety state still match.
 
 Success records `stage: delta_notification_manifest_verified` while leaving
-`status: active`. Reports, upload-ticket final state, policy delta, final
-integrity audit, smoke testing, routing, and rollback gates still remain.
+`status: active`. Continue with
+[channel-report reconciliation](./D1_CANARY_CHANNEL_REPORT_RECONCILIATION.md).
+Upload-ticket final state, policy delta, final integrity audit, smoke testing,
+routing, and rollback gates still remain.
 
 ## Tradeoffs
 

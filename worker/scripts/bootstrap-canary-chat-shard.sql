@@ -119,7 +119,7 @@ SELECT
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 10),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 11),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -131,7 +131,7 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  10,
+  11,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
 
@@ -171,7 +171,11 @@ CREATE TABLE canary_channel_copy_jobs (
       'delta_message_notification_owners_copying',
       'delta_message_notification_owners_pruning',
       'delta_message_notification_owners_copied',
-      'delta_notification_manifest_verified'
+      'delta_notification_manifest_verified',
+      'delta_channel_reports_copying',
+      'delta_channel_reports_pruning',
+      'delta_channel_reports_copied',
+      'delta_channel_reports_verified'
     )),
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active', 'failed', 'abandoned', 'complete')),
@@ -206,6 +210,12 @@ CREATE TABLE canary_notification_reconciliation_seen (
   channel_id TEXT NOT NULL,
   message_id TEXT NOT NULL,
   PRIMARY KEY (channel_id, message_id)
+);
+
+CREATE TABLE canary_channel_report_reconciliation_seen (
+  channel_id TEXT NOT NULL,
+  report_id TEXT NOT NULL,
+  PRIMARY KEY (channel_id, report_id)
 );
 
 -- A Chat shard owns DM notification routing metadata, but account rows remain

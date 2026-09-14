@@ -53,6 +53,7 @@ Status as of 2026-08-18:
 | `/internal/d1-canary/copy-cleanup` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Dedicated cleanup-secret boundary; POST-only exact abandon/cleanup commands, version-pinned, dispatch/shadow fail-closed, destination-only atomic cleanup with non-sensitive audit, no browser proxy or CORS access |
 | `/internal/d1-canary/message-delta` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Dedicated finalize-secret boundary; POST-only exact commands, available only during global write maintenance with projection dispatch disabled, bounded parent-first message and private-DM reconciliation, fixed metadata-only results, no browser proxy or CORS access |
 | `/internal/d1-canary/copy` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Separate 32+ character copy secret, POST-only exact JSON commands, reports channel excluded, dispatcher must be disabled, destination job ledger and source-version gate; bounded canonical, policy, message, actor, and link-rebuild stages |
+| `/internal/d1-canary/message-delta` | Hidden | Hidden | Hidden | Hidden from browser/admin sessions | Separate 32+ character finalize secret, write-maintenance required, dispatcher disabled, exact POST command; bounded message, DM, notification-owner, and channel-report reconciliation with fixed non-sensitive blockers |
 
 ## Required regression scenarios
 

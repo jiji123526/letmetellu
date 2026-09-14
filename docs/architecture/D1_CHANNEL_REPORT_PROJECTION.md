@@ -44,7 +44,7 @@ control projection, and append a versioned `channel_report` domain event in the
 same SQLite transaction. The bounded shared projection consumer now dispatches
 those report events through the strict parser and idempotent writer.
 
-Fresh Chat-shard bootstrap version `10` replaces the monolith-compatible
+Fresh Chat-shard bootstrap version `11` replaces the monolith-compatible
 report triggers with event-only variants. A shard therefore advances its local
 watermark and event ledger without retaining the control projection. The
 dispatcher remains default-off and no shard routing is enabled, so existing
@@ -52,12 +52,16 @@ report routes still use canonical `channel_reports` in the current database.
 
 ## Next implementation steps
 
-1. Reconcile and copy frozen canonical report rows into a canary Chat shard.
-2. Compare canonical report versions and control projection watermarks.
-3. Exercise report insert, moderation update, and deletion through the
+1. Exercise report insert, moderation update, and deletion through the
    default-off canary dispatcher, including retry and dead-letter behavior.
-4. Only after shadow evidence is clean, switch global admin reads to the
+2. Only after shadow evidence is clean, switch global admin reads to the
    projection and route admin mutations back to the canonical shard.
+
+Frozen canonical report copy and comparison are implemented behind the same
+maintenance-only operator boundary as message and DM reconciliation. Batches
+are capped at 40, exact destination conflicts fail closed, and completion
+compares canonical counts/versions, control projection state, shard watermarks,
+and required durable events.
 
 ## Tradeoffs and risks
 
