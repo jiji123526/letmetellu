@@ -15,6 +15,8 @@ CREATE TABLE _canary_chat_shard_bootstrap_guard (
     CHECK (local_report_watermark_rows = 0),
   domain_event_rows INTEGER NOT NULL CHECK (domain_event_rows = 0),
   projection_trigger_count INTEGER NOT NULL CHECK (projection_trigger_count = 3),
+  report_projection_trigger_count INTEGER NOT NULL
+    CHECK (report_projection_trigger_count = 3),
   domain_event_index_count INTEGER NOT NULL CHECK (domain_event_index_count = 4),
   dm_reply_control_fk_count INTEGER NOT NULL CHECK (dm_reply_control_fk_count = 0),
   dm_reply_shard_fk_count INTEGER NOT NULL CHECK (dm_reply_shard_fk_count = 2),
@@ -36,6 +38,7 @@ INSERT INTO _canary_chat_shard_bootstrap_guard (
   local_report_watermark_rows,
   domain_event_rows,
   projection_trigger_count,
+  report_projection_trigger_count,
   domain_event_index_count,
   dm_reply_control_fk_count,
   dm_reply_shard_fk_count,
@@ -59,6 +62,16 @@ SELECT
         'channel_control_projection_insert',
         'channel_control_projection_update',
         'channel_control_projection_delete'
+      )
+  ),
+  (
+    SELECT COUNT(*)
+    FROM sqlite_schema
+    WHERE type = 'trigger'
+      AND name IN (
+        'channel_report_projection_insert',
+        'channel_report_projection_update',
+        'channel_report_projection_delete'
       )
   ),
   (
@@ -106,7 +119,7 @@ SELECT
 CREATE TABLE chat_shard_metadata (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   shard_role TEXT NOT NULL CHECK (shard_role = 'chat-canary'),
-  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 9),
+  bootstrap_version INTEGER NOT NULL CHECK (bootstrap_version = 10),
   bootstrapped_at TEXT NOT NULL
 );
 
@@ -118,7 +131,7 @@ INSERT INTO chat_shard_metadata (
 ) VALUES (
   1,
   'chat-canary',
-  9,
+  10,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 );
 
@@ -256,6 +269,9 @@ CREATE INDEX canary_channel_cleanup_audit_channel_idx
 DROP TRIGGER channel_control_projection_insert;
 DROP TRIGGER channel_control_projection_update;
 DROP TRIGGER channel_control_projection_delete;
+DROP TRIGGER channel_report_projection_insert;
+DROP TRIGGER channel_report_projection_update;
+DROP TRIGGER channel_report_projection_delete;
 
 -- Chat shards own canonical channel rows and emit durable projection events.
 -- They never write the control-plane projection table directly.
@@ -406,6 +422,138 @@ BEGIN
     json_object('state', 'deleted'),
     'pending',
     0,
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  );
+END;
+
+-- Reports remain canonical in the Chat shard. These triggers advance a local
+-- ordering watermark and emit the complete control-projection event, but never
+-- write the shard's empty channel_report_control_projections table.
+CREATE TRIGGER channel_report_projection_insert
+AFTER INSERT ON channel_reports
+BEGIN
+  INSERT INTO channel_report_projection_watermarks (
+    report_id, channel_id, source_version, state, updated_at
+  ) VALUES (
+    NEW.id, NEW.channel_id, NEW.projection_source_version, 'active',
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  )
+  ON CONFLICT(report_id) DO UPDATE SET
+    channel_id = excluded.channel_id,
+    source_version = excluded.source_version,
+    state = excluded.state,
+    updated_at = excluded.updated_at
+  WHERE excluded.source_version > channel_report_projection_watermarks.source_version;
+
+  INSERT INTO domain_events (
+    id, channel_id, aggregate_type, aggregate_id, event_type, source_version,
+    payload_json, status, attempt_count, next_attempt_at, created_at, updated_at
+  )
+  SELECT
+    lower(hex(randomblob(16))), NEW.channel_id, 'channel_report', NEW.id,
+    'channel_report_projection_upsert', NEW.projection_source_version,
+    json_object(
+      'channel_name', channel.name,
+      'channel_owner_uid', channel.owner_uid,
+      'reporter_uid', NEW.reporter_uid,
+      'reporter_auth_uid', NEW.reporter_auth_uid,
+      'reporter_device_id', NEW.reporter_device_id,
+      'reason', NEW.reason,
+      'details', NEW.details,
+      'created_at', NEW.created_at,
+      'status', NEW.status,
+      'resolution_note', NEW.resolution_note,
+      'resolved_at', NEW.resolved_at,
+      'inbox_message_id', NEW.inbox_message_id,
+      'state', 'active'
+    ),
+    'pending', 0,
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  FROM channels AS channel
+  WHERE channel.id = NEW.channel_id;
+END;
+
+CREATE TRIGGER channel_report_projection_update
+AFTER UPDATE OF
+  reporter_uid, reporter_auth_uid, reporter_device_id, reason, details,
+  created_at, status, resolution_note, resolved_at, inbox_message_id
+ON channel_reports
+BEGIN
+  UPDATE channel_reports
+  SET projection_source_version = OLD.projection_source_version + 1
+  WHERE id = NEW.id;
+
+  INSERT INTO channel_report_projection_watermarks (
+    report_id, channel_id, source_version, state, updated_at
+  ) VALUES (
+    NEW.id, NEW.channel_id, OLD.projection_source_version + 1, 'active',
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  )
+  ON CONFLICT(report_id) DO UPDATE SET
+    channel_id = excluded.channel_id,
+    source_version = excluded.source_version,
+    state = excluded.state,
+    updated_at = excluded.updated_at
+  WHERE excluded.source_version > channel_report_projection_watermarks.source_version;
+
+  INSERT INTO domain_events (
+    id, channel_id, aggregate_type, aggregate_id, event_type, source_version,
+    payload_json, status, attempt_count, next_attempt_at, created_at, updated_at
+  )
+  SELECT
+    lower(hex(randomblob(16))), NEW.channel_id, 'channel_report', NEW.id,
+    'channel_report_projection_upsert', OLD.projection_source_version + 1,
+    json_object(
+      'channel_name', channel.name,
+      'channel_owner_uid', channel.owner_uid,
+      'reporter_uid', NEW.reporter_uid,
+      'reporter_auth_uid', NEW.reporter_auth_uid,
+      'reporter_device_id', NEW.reporter_device_id,
+      'reason', NEW.reason,
+      'details', NEW.details,
+      'created_at', NEW.created_at,
+      'status', NEW.status,
+      'resolution_note', NEW.resolution_note,
+      'resolved_at', NEW.resolved_at,
+      'inbox_message_id', NEW.inbox_message_id,
+      'state', 'active'
+    ),
+    'pending', 0,
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  FROM channels AS channel
+  WHERE channel.id = NEW.channel_id;
+END;
+
+CREATE TRIGGER channel_report_projection_delete
+AFTER DELETE ON channel_reports
+BEGIN
+  INSERT INTO channel_report_projection_watermarks (
+    report_id, channel_id, source_version, state, updated_at
+  ) VALUES (
+    OLD.id, OLD.channel_id, OLD.projection_source_version + 1, 'deleted',
+    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  )
+  ON CONFLICT(report_id) DO UPDATE SET
+    channel_id = excluded.channel_id,
+    source_version = excluded.source_version,
+    state = excluded.state,
+    updated_at = excluded.updated_at
+  WHERE excluded.source_version > channel_report_projection_watermarks.source_version;
+
+  INSERT INTO domain_events (
+    id, channel_id, aggregate_type, aggregate_id, event_type, source_version,
+    payload_json, status, attempt_count, next_attempt_at, created_at, updated_at
+  ) VALUES (
+    lower(hex(randomblob(16))), OLD.channel_id, 'channel_report', OLD.id,
+    'channel_report_projection_delete', OLD.projection_source_version + 1,
+    json_object('state', 'deleted'),
+    'pending', 0,
     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
     strftime('%Y-%m-%dT%H:%M:%fZ', 'now')

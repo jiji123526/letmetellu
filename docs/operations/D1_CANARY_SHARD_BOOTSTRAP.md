@@ -21,7 +21,8 @@ The bootstrap SQL fails before changing triggers unless:
 
 - `channels`, channel and report control projections, report projection
   watermarks, and `domain_events` are empty;
-- all three repository projection triggers exist; and
+- all three channel and all three channel-report projection triggers exist;
+  and
 - all four domain-event ready, lease, delivered, and dead indexes exist;
 - migration `0068` removed the `dm_replies.owner_uid -> users.id`
   cross-plane foreign key; and
@@ -35,9 +36,10 @@ The bootstrap SQL fails before changing triggers unless:
   rebuilds it.
 
 The script then records the `chat-canary` role and replaces the preparation
-triggers with event-only triggers. Canonical channel writes advance the
-shard-local watermark and append a durable event, but never write the local
-copy of `channel_control_projections`.
+triggers with event-only triggers. Canonical channel and channel-report writes
+advance their shard-local watermarks and append durable events, but never write
+the local copies of `channel_control_projections` or
+`channel_report_control_projections`.
 
 ## Prepare one database
 
@@ -53,7 +55,7 @@ npx wrangler d1 create "$CANARY_DB"
 Record the returned database ID in the private deployment change, but do not
 add it to production bindings yet.
 
-Apply every repository migration through `0069`:
+Apply every repository migration through `0070`:
 
 ```bash
 npx wrangler d1 migrations apply "$CANARY_DB" --remote
@@ -78,7 +80,7 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
 - `PRAGMA quick_check` returns `ok`.
 - `PRAGMA foreign_key_check` returns no rows.
 - `dm_replies` lists foreign keys only to `channels` and `dm`, not `users`.
-- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `9`.
+- `chat_shard_metadata` reports role `chat-canary` and bootstrap version `10`.
 - `dm_notification_owners` retains foreign keys to local `dm` and `channels`
   but no longer references the control-plane `users` table.
 - `message_notification_owners` retains foreign keys to local `messages` and
@@ -88,7 +90,7 @@ npx wrangler d1 execute "$CANARY_DB" --remote \
   present and empty. The message and DM reconciliation seen tables are also
   present and empty, together with the notification reconciliation seen table.
 - All listed tables and indexes are present.
-- Each of the three projection triggers reports:
+- Each of the six channel and channel-report projection triggers reports:
   - `emits_domain_events = 1`;
   - `advances_watermark = 1`;
   - `writes_local_projection = 0`.

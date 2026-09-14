@@ -21,7 +21,7 @@ performing synchronous scatter-gather across Chat shards. It intentionally has
 no foreign keys to account or channel tables because those records are owned by
 different databases after partitioning.
 
-## Implemented foundation
+## Implemented producer and consumer path
 
 Migration `0069_channel_report_control_projections.sql`:
 
@@ -37,22 +37,26 @@ oversized content, mismatched aggregate types, invalid channel IDs, and invalid
 timestamps. A higher delete watermark prevents a delayed older upsert from
 resurrecting a removed report.
 
-Nothing currently calls the event parser or writer. Existing report routes
-still use `channel_reports`, so adding this code alone changes no runtime path.
+Migration `0070_channel_report_projection_events.sql` makes report mutations
+atomic with their projection effects in the monolith: insert, update, and
+delete advance a deletion-preserving watermark, maintain the same-database
+control projection, and append a versioned `channel_report` domain event in the
+same SQLite transaction. The bounded shared projection consumer now dispatches
+those report events through the strict parser and idempotent writer.
+
+Fresh Chat-shard bootstrap version `10` replaces the monolith-compatible
+report triggers with event-only variants. A shard therefore advances its local
+watermark and event ledger without retaining the control projection. The
+dispatcher remains default-off and no shard routing is enabled, so existing
+report routes still use canonical `channel_reports` in the current database.
 
 ## Next implementation steps
 
-1. Add same-transaction canonical report triggers or explicit write batches
-   that increment the report source version and append a shard-local domain
-   event.
-2. Extend the bounded domain-event consumer to dispatch report events to the
-   new strict parser and control writer without treating them as invalid
-   channel-projection events.
-3. Replace same-database projection writes with event-only behavior in the Chat
-   shard bootstrap while preserving monolith compatibility.
-4. Reconcile and copy frozen canonical report rows into a canary Chat shard.
-5. Compare canonical report versions and control projection watermarks.
-6. Only after shadow evidence is clean, switch global admin reads to the
+1. Reconcile and copy frozen canonical report rows into a canary Chat shard.
+2. Compare canonical report versions and control projection watermarks.
+3. Exercise report insert, moderation update, and deletion through the
+   default-off canary dispatcher, including retry and dead-letter behavior.
+4. Only after shadow evidence is clean, switch global admin reads to the
    projection and route admin mutations back to the canonical shard.
 
 ## Tradeoffs and risks
@@ -70,9 +74,9 @@ still use `channel_reports`, so adding this code alone changes no runtime path.
 - Cross-database delivery is eventually consistent. A newly submitted report
   may appear in the global inbox slightly later, while duplicate-report checks
   and canonical moderation remain shard-local and strongly consistent.
-- The schema and writer are deliberately unused until the producer, consumer,
-  reconciliation, and rollout gates exist. Applying only part of the sequence
-  must not be treated as permission to route reports.
+- The event path is wired but remains inactive without an explicitly enabled,
+  allowlisted canary dispatcher. Applying only part of the sequence must not be
+  treated as permission to route reports.
 
 No migration, deployment, or production data movement is authorized by this
 document.

@@ -773,6 +773,10 @@ Implemented so far:
 - added default-off, bounded retention for delivered events after 30 days and
   dead events after 90 days; unresolved events and channel version watermarks
   are never included;
+- added versioned channel-report control projections plus atomic report
+  insert/update/delete events; the shared bounded consumer validates and
+  applies them, while fresh Chat-shard bootstrap keeps only event and watermark
+  state and never a local admin-inbox projection;
 - added read-only, cursor-bounded reconciliation between one Chat source and
   control projection state without reading event payloads or authorization
   fields;

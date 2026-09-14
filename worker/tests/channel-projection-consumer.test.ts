@@ -26,6 +26,34 @@ function eventRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function reportEventRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "report-event-1",
+    channel_id: "general",
+    aggregate_type: "channel_report",
+    aggregate_id: "report-1",
+    event_type: "channel_report_projection_upsert",
+    source_version: 1,
+    payload_json: JSON.stringify({
+      channel_name: "General",
+      channel_owner_uid: "owner-1",
+      reporter_uid: "private-reporter",
+      reporter_auth_uid: null,
+      reporter_device_id: "private-device",
+      reason: "spam",
+      details: "private-details",
+      created_at: "2026-09-10T00:00:00.000Z",
+      status: "open",
+      resolution_note: null,
+      resolved_at: null,
+      inbox_message_id: "inbox-1",
+      state: "active",
+    }),
+    attempt_count: 1,
+    ...overrides,
+  };
+}
+
 class BoundStatement {
   readonly database: FakeDatabase;
   readonly sql: string;
@@ -208,6 +236,61 @@ test("source acknowledgement occurs only after the separate control batch commit
     && operation.sql.includes("status = 'delivered'")
   );
   assert.ok(acknowledgement);
+});
+
+test("shared projection drain dispatches report events to the report projection", async () => {
+  const source = new FakeDatabase();
+  const control = new FakeDatabase();
+  source.candidates = [{
+    id: "report-event-1",
+    created_at: "2026-09-10T00:00:00.000Z",
+  }];
+  source.row = reportEventRow();
+
+  const result = await drainChannelProjectionEvents({
+    sourceDatabase: source as unknown as D1Database,
+    controlDatabase: control as unknown as D1Database,
+    nowMs: Date.parse("2026-09-10T00:01:00.000Z"),
+  });
+
+  assert.deepEqual(result, { claimed: 1, delivered: 1, retried: 0, dead: 0 });
+  assert.ok(control.operations.some((operation) =>
+    operation.kind === "batch"
+    && operation.sql.includes("channel_report_projection_watermarks")
+  ));
+  assert.ok(control.operations.some((operation) =>
+    operation.kind === "batch"
+    && operation.sql.includes("channel_report_control_projections")
+  ));
+  assert.equal(
+    source.operations.some((operation) =>
+      operation.kind === "run" && operation.sql.includes("status = 'delivered'")
+    ),
+    true,
+  );
+});
+
+test("invalid report events become dead without exposing their payload", async () => {
+  const source = new FakeDatabase();
+  const control = new FakeDatabase();
+  source.candidates = [{
+    id: "report-event-1",
+    created_at: "2026-09-10T00:00:00.000Z",
+  }];
+  source.row = reportEventRow({
+    payload_json: JSON.stringify({ state: "active", secret: "must-not-leak" }),
+  });
+
+  const result = await drainChannelProjectionEvents({
+    sourceDatabase: source as unknown as D1Database,
+    controlDatabase: control as unknown as D1Database,
+    nowMs: Date.parse("2026-09-10T00:01:00.000Z"),
+  });
+
+  assert.deepEqual(result, { claimed: 1, delivered: 0, retried: 0, dead: 1 });
+  const serializedOperations = JSON.stringify(source.operations);
+  assert.match(serializedOperations, /invalid_channel_report_projection_event/);
+  assert.doesNotMatch(serializedOperations, /must-not-leak/);
 });
 
 test("failed control writes retain a bounded retry without leaking the exception", async () => {

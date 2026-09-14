@@ -18,6 +18,7 @@ function createPreparedDatabase(): DatabaseSync {
     CREATE TABLE channels (
       id TEXT PRIMARY KEY,
       owner_uid TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Canary',
       show_on_profile INTEGER NOT NULL DEFAULT 0,
       created_at TEXT,
       projection_source_version INTEGER NOT NULL DEFAULT 1
@@ -32,8 +33,46 @@ function createPreparedDatabase(): DatabaseSync {
       projected_at TEXT NOT NULL,
       source_version INTEGER NOT NULL DEFAULT 1
     );
-    CREATE TABLE channel_report_control_projections (report_id TEXT PRIMARY KEY);
-    CREATE TABLE channel_report_projection_watermarks (report_id TEXT PRIMARY KEY);
+    CREATE TABLE channel_report_control_projections (
+      report_id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      channel_name TEXT NOT NULL,
+      channel_owner_uid TEXT NOT NULL,
+      reporter_uid TEXT NOT NULL,
+      reporter_auth_uid TEXT,
+      reporter_device_id TEXT,
+      reason TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      resolution_note TEXT,
+      resolved_at TEXT,
+      inbox_message_id TEXT,
+      source_version INTEGER NOT NULL,
+      projected_at TEXT NOT NULL
+    );
+    CREATE TABLE channel_report_projection_watermarks (
+      report_id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      source_version INTEGER NOT NULL,
+      state TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE channel_reports (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      reporter_uid TEXT NOT NULL,
+      reporter_auth_uid TEXT,
+      reporter_device_id TEXT,
+      reason TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      resolution_note TEXT,
+      resolved_at TEXT,
+      inbox_message_id TEXT,
+      projection_source_version INTEGER NOT NULL DEFAULT 1
+    );
     CREATE TABLE channel_projection_versions (
       channel_id TEXT PRIMARY KEY,
       source_version INTEGER NOT NULL,
@@ -99,6 +138,12 @@ function createPreparedDatabase(): DatabaseSync {
       BEGIN SELECT 1; END;
     CREATE TRIGGER channel_control_projection_delete
       AFTER DELETE ON channels BEGIN SELECT 1; END;
+    CREATE TRIGGER channel_report_projection_insert
+      AFTER INSERT ON channel_reports BEGIN SELECT 1; END;
+    CREATE TRIGGER channel_report_projection_update
+      AFTER UPDATE OF status ON channel_reports BEGIN SELECT 1; END;
+    CREATE TRIGGER channel_report_projection_delete
+      AFTER DELETE ON channel_reports BEGIN SELECT 1; END;
   `);
   return database;
 }
@@ -156,7 +201,7 @@ test("canary triggers emit events without writing a local control projection", (
   `).get();
   assert.deepEqual({ ...metadata }, {
     shard_role: "chat-canary",
-    bootstrap_version: 9,
+    bootstrap_version: 10,
   });
   const notificationOwnerForeignKeys = database.prepare(`
     SELECT "table" AS referenced_table
@@ -239,6 +284,31 @@ test("canary triggers emit events without writing a local control projection", (
     ) VALUES (?, ?, ?, ?, ?)
   `).run("canary-room_live", "owner-3", 0, "2026-09-10T01:00:00.000Z", 1);
 
+  database.prepare(`
+    INSERT INTO channel_reports (
+      id, channel_id, reporter_uid, reason, created_at, status
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    "report-1",
+    "canary-room",
+    "private-reporter",
+    "spam",
+    "2026-09-10T01:01:00.000Z",
+    "open",
+  );
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS rows FROM channel_report_control_projections").get()?.rows,
+    0,
+  );
+  assert.equal(
+    database.prepare(`
+      SELECT COUNT(*) AS rows FROM domain_events
+      WHERE aggregate_type = 'channel_report'
+        AND event_type = 'channel_report_projection_upsert'
+    `).get()?.rows,
+    1,
+  );
+
   const recreatedWatermark = database.prepare(`
     SELECT source_version, state
     FROM channel_projection_versions
@@ -254,7 +324,7 @@ test("canary triggers emit events without writing a local control projection", (
       FROM domain_events
       WHERE channel_id = ?
     `).get("canary-room")?.rows,
-    4,
+    5,
   );
   assert.equal(
     database.prepare(`
@@ -271,8 +341,10 @@ test("canary bootstrap and audit avoid channel secrets and event payload output"
     /CREATE TRIGGER[\s\S]+?END;/g,
   )].map((match) => match[0]).join("\n");
   assert.doesNotMatch(triggerDefinitions, /channel_control_projections/);
+  assert.doesNotMatch(triggerDefinitions, /channel_report_control_projections/);
   assert.match(triggerDefinitions, /domain_events/);
   assert.match(triggerDefinitions, /channel_projection_versions/);
+  assert.match(triggerDefinitions, /channel_report_projection_watermarks/);
 
   assert.match(auditSource, /PRAGMA quick_check/);
   assert.match(auditSource, /PRAGMA foreign_key_check/);

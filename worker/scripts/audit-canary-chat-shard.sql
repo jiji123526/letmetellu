@@ -101,14 +101,25 @@ ORDER BY channel_id;
 SELECT
   name,
   CASE WHEN sql LIKE '%domain_events%' THEN 1 ELSE 0 END AS emits_domain_events,
-  CASE WHEN sql LIKE '%channel_projection_versions%' THEN 1 ELSE 0 END AS advances_watermark,
-  CASE WHEN sql LIKE '%channel_control_projections%' THEN 1 ELSE 0 END AS writes_local_projection
+  CASE
+    WHEN sql LIKE '%channel_projection_versions%'
+      OR sql LIKE '%channel_report_projection_watermarks%'
+    THEN 1 ELSE 0
+  END AS advances_watermark,
+  CASE
+    WHEN sql LIKE '%channel_control_projections%'
+      OR sql LIKE '%channel_report_control_projections%'
+    THEN 1 ELSE 0
+  END AS writes_local_projection
 FROM sqlite_schema
 WHERE type = 'trigger'
   AND name IN (
     'channel_control_projection_insert',
     'channel_control_projection_update',
-    'channel_control_projection_delete'
+    'channel_control_projection_delete',
+    'channel_report_projection_insert',
+    'channel_report_projection_update',
+    'channel_report_projection_delete'
   )
 ORDER BY name;
 

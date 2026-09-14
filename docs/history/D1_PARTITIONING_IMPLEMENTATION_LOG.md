@@ -5,6 +5,28 @@ This log records incremental work toward the proposed
 Production still uses one D1 database. No shard databases, virtual-bucket map,
 placement overrides, data migration, or cutover have been created.
 
+## 2026-09-14: durable channel-report projection events
+
+- Added same-transaction report source-version, watermark, monolith projection,
+  and durable domain-event maintenance for insert, update, and delete.
+- Extended the existing bounded projection consumer to dispatch
+  `channel_report` events through the strict report parser and version-guarded
+  control writer. Invalid events use a content-free dead-letter code.
+- Advanced fresh canary bootstrap to version 10. Its report triggers preserve
+  the local watermark and event ledger but remove all local control-projection
+  writes; the audit now inspects all six channel/report triggers.
+
+Verification:
+
+- trigger lifecycle, shared consumer, dead-letter, bootstrap, preflight, and
+  cleanup regression tests passed;
+- Worker TypeScript compilation passed.
+
+The dispatcher remains default-off. Frozen report reconciliation/copy,
+canonical-versus-projection comparison, admin read switching, and mutation
+routing remain separate gates. No production configuration, deployment,
+remote database, or routing changed.
+
 ## 2026-09-14: channel-report projection foundation
 
 - Added canonical report source versions plus a self-contained, indexed

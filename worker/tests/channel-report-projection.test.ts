@@ -12,6 +12,10 @@ const migration = readFileSync(
   new URL("../migrations/0069_channel_report_control_projections.sql", import.meta.url),
   "utf8",
 );
+const eventMigration = readFileSync(
+  new URL("../migrations/0070_channel_report_projection_events.sql", import.meta.url),
+  "utf8",
+);
 
 function eventRow(
   overrides: Partial<ChannelReportProjectionEventRow> = {},
@@ -180,6 +184,113 @@ test("report projection migration backfills existing reports without account for
       FROM pragma_foreign_key_list('channel_report_control_projections')
     `).get()?.count,
     0,
+  );
+});
+
+test("report mutations atomically advance projections and durable events", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    CREATE TABLE channels (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner_uid TEXT NOT NULL
+    );
+    CREATE TABLE channel_reports (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      reporter_uid TEXT NOT NULL,
+      reporter_auth_uid TEXT,
+      reporter_device_id TEXT,
+      reason TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolution_note TEXT,
+      resolved_at TEXT,
+      inbox_message_id TEXT
+    );
+    CREATE TABLE domain_events (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL,
+      aggregate_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      source_version INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempt_count INTEGER NOT NULL,
+      next_attempt_at TEXT NOT NULL,
+      lease_until TEXT,
+      last_error_code TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(channel_id, event_type, aggregate_id, source_version)
+    );
+    INSERT INTO channels VALUES ('room-one', 'Room One', 'private-owner');
+  `);
+  database.exec(migration);
+  database.exec(eventMigration);
+
+  database.prepare(`
+    INSERT INTO channel_reports (
+      id, channel_id, reporter_uid, reporter_device_id, reason, details,
+      created_at, status, inbox_message_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "report-1",
+    "room-one",
+    "private-reporter",
+    "private-device",
+    "spam",
+    "private-details",
+    "2026-09-14T00:00:00.000Z",
+    "open",
+    "inbox-1",
+  );
+  assert.deepEqual({ ...database.prepare(`
+    SELECT source_version, status FROM channel_report_control_projections
+    WHERE report_id = 'report-1'
+  `).get() }, { source_version: 1, status: "open" });
+
+  database.prepare(`
+    UPDATE channel_reports
+    SET status = 'resolved', resolution_note = 'handled',
+      resolved_at = '2026-09-14T01:00:00.000Z'
+    WHERE id = 'report-1'
+  `).run();
+  assert.deepEqual({ ...database.prepare(`
+    SELECT projection_source_version, status
+    FROM channel_reports WHERE id = 'report-1'
+  `).get() }, { projection_source_version: 2, status: "resolved" });
+  assert.deepEqual({ ...database.prepare(`
+    SELECT source_version, status FROM channel_report_control_projections
+    WHERE report_id = 'report-1'
+  `).get() }, { source_version: 2, status: "resolved" });
+
+  database.prepare("DELETE FROM channel_reports WHERE id = 'report-1'").run();
+  assert.equal(
+    database.prepare(`
+      SELECT report_id FROM channel_report_control_projections
+      WHERE report_id = 'report-1'
+    `).get(),
+    undefined,
+  );
+  assert.deepEqual({ ...database.prepare(`
+    SELECT source_version, state FROM channel_report_projection_watermarks
+    WHERE report_id = 'report-1'
+  `).get() }, { source_version: 3, state: "deleted" });
+  assert.deepEqual(
+    database.prepare(`
+      SELECT event_type, source_version
+      FROM domain_events
+      WHERE aggregate_id = 'report-1'
+      ORDER BY source_version
+    `).all().map((row) => ({ ...row })),
+    [
+      { event_type: "channel_report_projection_upsert", source_version: 1 },
+      { event_type: "channel_report_projection_upsert", source_version: 2 },
+      { event_type: "channel_report_projection_delete", source_version: 3 },
+    ],
   );
 });
 

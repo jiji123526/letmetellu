@@ -4,6 +4,29 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-report mutations now emit durable projection events — 2026-09-14
+
+- Added migration `0070`. Channel-report insert, moderation update, and delete
+  now advance a deletion-preserving source watermark and append a versioned
+  domain event in the same SQLite transaction. Monolith operation also keeps
+  the existing control projection synchronized in that transaction.
+- Extended the bounded shared projection consumer to recognize
+  `channel_report` events, validate them with the strict report contract, apply
+  monotonic control writes, and dead-letter malformed events with a fixed code
+  that does not expose report content.
+- Fresh canary bootstrap metadata is version `10`. Its report triggers are
+  event-only, so the Chat shard never retains a local copy of the admin report
+  projection. The read-only audit now verifies all six channel/report triggers.
+- SQLite coverage exercises report insert, update, delete, consumer delivery,
+  invalid-event handling, and the event-only canary overlay.
+
+Trade-off: each monolith report mutation performs bounded extra writes for the
+watermark, projection, and event ledger, and the internal event payload contains
+the sensitive fields required by the admin inbox. On a real Chat shard, admin
+visibility becomes eventually consistent with dispatcher delivery. The
+dispatcher remains default-off; no deployment, remote migration, routing, or
+production data movement occurred in this step.
+
 ### Channel-report sharding now has a control-projection foundation — 2026-09-14
 
 - Added migration `0069` with a non-authoritative report projection and a
@@ -21,8 +44,8 @@ This file records both the original CSS-to-TSX porting constraints and the datab
   to be empty, and its read-only audit exposes only their aggregate row counts.
 
 Trade-off: control D1 will hold a second operational copy of sensitive report
-data and report visibility will eventually be asynchronous. This foundation is
-not wired into producers, consumers, or reads yet, so current behavior is
+data and report visibility will eventually be asynchronous. At this foundation
+step producers and consumers were not yet wired, so current behavior remained
 unchanged. No deployment, remote migration, production routing, or data
 movement occurred in this step.
 

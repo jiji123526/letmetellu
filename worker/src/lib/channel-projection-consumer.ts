@@ -1,3 +1,8 @@
+import {
+  applyChannelReportProjectionEvent,
+  parseChannelReportProjectionEvent,
+} from "./channel-report-projection.ts";
+
 const PROJECTION_BATCH_SIZE = 10;
 const PROJECTION_LEASE_MS = 2 * 60 * 1000;
 const MAX_PROJECTION_ATTEMPTS = 5;
@@ -363,12 +368,17 @@ export async function drainChannelProjectionEvents(input: {
   };
 
   for (const row of rows) {
-    const event = parseChannelProjectionEvent(row);
+    const isReportEvent = row.aggregate_type === "channel_report";
+    const event = isReportEvent
+      ? parseChannelReportProjectionEvent(row)
+      : parseChannelProjectionEvent(row);
     if (!event) {
       await markDead(
         input.sourceDatabase,
         row.id,
-        "invalid_channel_projection_event",
+        isReportEvent
+          ? "invalid_channel_report_projection_event"
+          : "invalid_channel_projection_event",
         new Date(nowMs).toISOString(),
       );
       result.dead += 1;
@@ -376,11 +386,19 @@ export async function drainChannelProjectionEvents(input: {
     }
 
     try {
-      await applyChannelProjectionEvent(
-        input.controlDatabase,
-        event,
-        new Date(nowMs).toISOString(),
-      );
+      if (isReportEvent) {
+        await applyChannelReportProjectionEvent(
+          input.controlDatabase,
+          event as NonNullable<ReturnType<typeof parseChannelReportProjectionEvent>>,
+          new Date(nowMs).toISOString(),
+        );
+      } else {
+        await applyChannelProjectionEvent(
+          input.controlDatabase,
+          event as ChannelProjectionEvent,
+          new Date(nowMs).toISOString(),
+        );
+      }
       await markDelivered(
         input.sourceDatabase,
         row.id,
