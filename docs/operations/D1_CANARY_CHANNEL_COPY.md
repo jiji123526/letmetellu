@@ -2,7 +2,7 @@
 
 ## Current scope
 
-The mutation operator currently supports four commands:
+The mutation operator currently supports five commands:
 
 1. `start`: run the full read-only preflight and create one version-pinned copy
    job on the destination canary.
@@ -12,13 +12,16 @@ The mutation operator currently supports four commands:
    policy/config stage and persist its resume cursor on the destination.
 4. `copy-messages`: pin one source-history boundary, copy at most 50 canonical
    messages, and persist the source cursor in the same destination batch.
+5. `copy-message-dependents`: copy at most 100 message actor identities or
+   rebuild at most 100 link-index rows from copied canonical message text.
 
 The policy/config command covers moderators, blocks, banned words, channel
 moderation, petitions, config, and upload tickets in that fixed dependency
-order. The message command copies canonical message rows only. It does not yet
-copy DMs, reports, actor identities, pending deletion state, links, or any
-other remaining manifest table. Gallery and FTS rows are produced by the
-destination message triggers but still require explicit reconciliation. It
+order. The message commands now copy canonical rows, then message actor
+identities, and rebuild link rows from copied message text. They do not yet
+copy DMs, reports, pending deletion state, or any other remaining manifest
+table. Gallery and FTS rows are produced by destination message triggers and
+checked by a separate read-only verification route. The operator
 does not freeze writes, route traffic, enable shadow reads, dispatch projection
 events, or clean up a failed partial copy.
 
@@ -95,6 +98,26 @@ curl --fail-with-body \
   --data "{\"action\":\"copy-messages\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\"}"
 ```
 
+After `messages_copied`, repeat the dependent command until it returns
+`stage: message_links_rebuilt` and `hasMore: false`:
+
+```bash
+curl --fail-with-body \
+  "$CANARY_WORKER_URL/internal/d1-canary/copy" \
+  -H "Content-Type: application/json" \
+  -H "X-Canary-Copy-Token: $D1_CANARY_COPY_TOKEN" \
+  --data "{\"action\":\"copy-message-dependents\",\"shard\":\"canary-a\",\"channel\":\"$CHANNEL_ID\"}"
+```
+
+Use the distinct read-only operator token to verify actor counts and derived
+state after the dependent stage:
+
+```bash
+curl --fail-with-body \
+  "$CANARY_WORKER_URL/internal/d1-canary/copy-verify?shard=canary-a&channel=$CHANNEL_ID" \
+  -H "X-Canary-Operator-Token: $D1_CANARY_OPERATOR_TOKEN"
+```
+
 Each successful response reports only the stage, status, batch count,
 cumulative count for the current stage, and whether that stage has another
 batch. It never returns copied row values.
@@ -105,7 +128,8 @@ controls appropriate to the operator host.
 
 ## State and idempotency
 
-Bootstrap version 4 adds the message snapshot and timestamp cursor fields to
+Bootstrap version 5 adds the dependent stages to the existing message snapshot
+and timestamp cursor fields in
 `canary_channel_copy_jobs`. A job stores only:
 
 - channel ID;
@@ -150,6 +174,19 @@ foreign-key dependency. Each call reads at most 51 rows and writes at most 50
 message rows plus one cursor update. The message inserts and cursor advancement
 share one destination batch, making an ambiguous retry safe.
 
+`copy-message-dependents` first selects only `record_type = 'message'` actor
+rows whose canonical messages fall inside the pinned snapshot. After all actor
+rows are committed, it scans the destination messages and rebuilds
+`message_links` using the same `http://`, `https://`, and `www.` contract as
+normal message writes. It never trusts or copies the source link table. Both
+sub-stages use at most 101 selected rows, at most 100 inserted rows, and the
+same atomic cursor advancement contract.
+
+The GET-only `copy-verify` route compares source/destination actor counts and
+checks destination gallery, link, and FTS relationships. It returns aggregate
+counts and fixed blocker codes only; no message text, actor identity, device
+hash, link URL, or media path is selected into the response.
+
 The canonical stage requires the current source row version to equal the job
 version before writing. Parent/live inserts and job-stage advancement share one
 destination D1 batch. A second source-version read runs afterward; if it
@@ -178,8 +215,9 @@ detects a change, the job is marked failed and routing remains unchanged.
   job failed. It is safer to restart from a clean destination than to copy a
   transient mixture of previous and pending deletion states.
 - Destination message triggers build FTS and gallery rows as canonical messages
-  arrive. `message_links`, actor identities, derived-row counts, and FTS/gallery
-  integrity are not yet a completed cutover gate.
+  arrive. Actor rows and link rows now have bounded stages, while a clean
+  read-only verification is still only a point-in-time prerequisite—not a
+  completed cutover gate.
 - A pre-existing destination row or a concurrent operator call fails closed
   instead of overwriting private policy state. There is still no automated
   partial-copy cleanup.

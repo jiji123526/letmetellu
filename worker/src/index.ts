@@ -22,6 +22,7 @@ import { handleNotifications } from "./routes/notifications";
 import { handleCanaryProjectionReconciliation } from "./routes/canary-projection-operations";
 import { handleCanaryChannelCopyPreflight } from "./routes/canary-channel-copy-operations";
 import { handleCanaryChannelCopyMutation } from "./routes/canary-channel-copy-mutations";
+import { handleCanaryChannelCopyVerification } from "./routes/canary-channel-copy-verification";
 import {
   getSlowCoreRequestThresholdMs,
   getOperationalRouteDetail,
@@ -275,6 +276,8 @@ export default {
         response = await handleCanaryChannelCopyPreflight(request, env);
       } else if (url.pathname === "/internal/d1-canary/copy") {
         response = await handleCanaryChannelCopyMutation(request, env);
+      } else if (url.pathname === "/internal/d1-canary/copy-verify") {
+        response = await handleCanaryChannelCopyVerification(request, env);
       } else if (url.pathname.startsWith("/api/messages")) {
         response = await handleMessages(
           request,

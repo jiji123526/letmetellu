@@ -16,7 +16,9 @@ export type CopyStage =
   | "config_copied"
   | "upload_tickets_copied"
   | "message_roots_copied"
-  | "messages_copied";
+  | "messages_copied"
+  | "message_actors_copied"
+  | "message_links_rebuilt";
 type CopyStatus = "active" | "failed" | "complete";
 
 export const CANARY_POLICY_COPY_BATCH_SIZE = 100;

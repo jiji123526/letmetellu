@@ -738,12 +738,52 @@ Tradeoffs:
   the cost of more operator calls. No normal production request executes this
   code, and no remote database or routing configuration changed in this step.
 
+### Message dependents and read-only derived verification
+
+- Raised the empty-canary bootstrap overlay to version 5 and added explicit
+  `message_actors_copied` and `message_links_rebuilt` job stages.
+- Added the copy-secret-gated `copy-message-dependents` command. It copies only
+  `record_type = 'message'` actor rows whose messages belong to the pinned
+  parent/live snapshot, then rebuilds link rows from destination canonical
+  message text instead of trusting the source derived table.
+- Both dependent stages select at most 101 rows, insert at most 100, and commit
+  rows with their resume cursor in one destination batch. Source channel drift
+  and active admin deletion undo continue to fail closed.
+- Added a separate operator-secret, GET-only `copy-verify` route. It compares
+  source and destination message-actor counts and checks destination gallery,
+  link, and FTS relationships using only aggregate counts and fixed blocker
+  codes.
+- The verification route has no write or repair path, no browser proxy or CORS
+  contract, and does not return message bodies, actor IDs, device hashes, URLs,
+  or media paths.
+- Actual SQLite coverage exercises a 101-row actor copy split across two calls,
+  canonical-text link rebuilding, successful gallery/link/FTS verification,
+  deliberate gallery mismatch detection, authorization, and method/scope
+  rejection.
+
+Tradeoffs:
+
+- Actor completeness is compared by count at the pinned snapshot. Exact
+  row-by-row reconciliation is deferred to the final frozen delta because
+  exposing or hashing private actor values inside routine audit output would
+  expand the security surface.
+- Gallery and FTS are produced incrementally by existing destination triggers,
+  which adds write amplification during message backfill but avoids trusting
+  stale derived source rows. Link rebuilding adds a second bounded scan of the
+  copied message text.
+- The verification query contains bounded channel-scoped aggregate subqueries
+  and is operator-only. It is not on any user request path, but its latency must
+  still be measured on a representative canary before widening the allowlist.
+- A clean verification result is point-in-time evidence only. Message mutation
+  deltas, partial-copy cleanup, DMs, reports, and final write-freeze/cutover
+  remain required, and no remote database or production setting changed.
+
 ## Next implementation step
 
-Add the message-dependent actor-identity stage and read-only derived-state
-reconciliation. Actor records must follow their canonical messages; gallery and
-FTS output should be checked against those messages, and link state should be
-rebuilt from canonical text rather than blindly copied. Then define message
-mutation/delta reconciliation and partial-copy cleanup before any remote copy.
-DMs and reports remain later explicit contracts, and the final write-freeze and
-cutover protocol is still required before routing.
+Define partial-copy cleanup before any remote copy. Cleanup must be separately
+authorized, idempotent, aware of canary projection events, and restricted to a
+failed or explicitly abandoned copy job. After that, define the frozen message
+mutation/delta reconciliation protocol so edits, reactions, reports, deletion
+changes, and boundary races are closed before routing. DMs and reports remain
+later explicit contracts, and the final write-freeze/cutover protocol is still
+required.

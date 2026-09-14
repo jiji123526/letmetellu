@@ -4,6 +4,30 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### D1 canary rebuilds message dependents and verifies derived state — 2026-09-13
+
+- The isolated canary copy job now advances through bounded message-actor and
+  link-rebuild stages after canonical message history is present. Actor rows
+  are limited to the pinned message snapshot; links are derived again from the
+  copied canonical text rather than copied from the source link index.
+- Each call selects at most 101 rows and inserts at most 100 with atomic cursor
+  advancement. Bootstrap metadata is now version 5.
+- A separate GET-only, operator-secret verification route compares aggregate
+  actor counts and checks gallery, link, and FTS relationships. Responses
+  contain numeric counts and fixed reason codes only, never message text,
+  private actor identifiers, device hashes, URLs, or media paths.
+- SQLite tests cover multi-batch actor resume, link rebuilding, successful
+  derived verification, deliberate mismatch detection, and the hidden
+  authorization/method boundary.
+
+Trade-off: destination message triggers intentionally rebuild gallery and FTS
+during message insertion, adding backfill write amplification; link rebuilding
+adds a bounded second scan. Actor comparison is count-based until the final
+frozen reconciliation. Verification is operator-only and point-in-time, so
+partial-copy cleanup and mutation-delta handling are still required before any
+remote copy or routing. No Worker deployment, remote database, production
+configuration, or user request path changed in this step.
+
 ### D1 canary message history copy is bounded and parent-first — 2026-09-13
 
 - The isolated canary copy operator now pins a finite `(created_at, id)` source
