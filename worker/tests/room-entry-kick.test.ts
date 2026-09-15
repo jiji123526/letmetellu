@@ -48,7 +48,8 @@ test("client closes realtime and renders denied entry state", () => {
   assert.match(chatView, /roomAccessRemovedTitle/);
   assert.match(realtime, /event\.type === "user-kicked"/);
   assert.match(realtime, /event\.type === "entry-denied"/);
-  assert.match(realtime, /setEntryDenied\(true\)/);
+  assert.match(realtime, /if \(!isOwner && kickedUid === uid\)/);
+  assert.match(realtime, /event\.type === "entry-denied"[\s\S]*if \(!isOwner\)/);
 });
 
 test("message actions collapse moderation into a two-option user menu", () => {

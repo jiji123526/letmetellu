@@ -681,12 +681,14 @@ export function useChatRealtimeSync({
       }
 
       if (event.type === "entry-denied") {
-        setEntryDenied(true);
+        if (!isOwner) {
+          setEntryDenied(true);
+        }
       }
 
       if (event.type === "user-kicked") {
         const kickedUid = event.uid as string;
-        if (kickedUid === uid) {
+        if (!isOwner && kickedUid === uid) {
           setEntryDenied(true);
         }
         if (isOwner) {
