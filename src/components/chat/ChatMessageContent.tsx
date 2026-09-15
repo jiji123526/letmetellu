@@ -5,6 +5,10 @@ import { useLocale } from "@/hooks/useLocale";
 import { MediaLoadingDots } from "./MediaLoadingDots";
 import { MessageEmbeds } from "./MessageEmbeds";
 import { highlightText } from "./search-highlight";
+import {
+  getRememberedMessageMediaGeometry,
+  rememberMessageMediaGeometry,
+} from "@/lib/message-media-geometry";
 
 interface MessageImageProps {
   src: string;
@@ -193,10 +197,21 @@ export function MessageImage({
 }: MessageImageProps) {
   const { t } = useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
-  const hasStableDimensions = Number.isFinite(width)
+  const rememberedGeometry = getRememberedMessageMediaGeometry(src);
+  const suppliedDimensionsAreStable = Number.isFinite(width)
     && Number.isFinite(height)
     && Number(width) > 0
     && Number(height) > 0;
+  const effectiveWidth = suppliedDimensionsAreStable
+    ? Number(width)
+    : rememberedGeometry?.width;
+  const effectiveHeight = suppliedDimensionsAreStable
+    ? Number(height)
+    : rememberedGeometry?.height;
+  const hasStableDimensions = Number.isFinite(effectiveWidth)
+    && Number.isFinite(effectiveHeight)
+    && Number(effectiveWidth) > 0
+    && Number(effectiveHeight) > 0;
   const initiallyReady = readyMessageImages.has(src);
   const [shouldLoad, setShouldLoad] = useState(
     () => eager || !hasStableDimensions || initiallyReady,
@@ -224,9 +239,9 @@ export function MessageImage({
 
   const reservedStyle = hasStableDimensions
     ? {
-        width: `${Number(width)}px`,
+        width: `${Number(effectiveWidth)}px`,
         maxWidth: "100%",
-        aspectRatio: `${Number(width)} / ${Number(height)}`,
+        aspectRatio: `${Number(effectiveWidth)} / ${Number(effectiveHeight)}`,
       }
     : undefined;
 
@@ -234,6 +249,7 @@ export function MessageImage({
     <div
       ref={containerRef}
       data-message-media
+      data-history-layout-stable={hasStableDimensions ? "" : undefined}
       className="relative inline-block select-none"
       style={reservedStyle}
       onContextMenu={(event) => event.preventDefault()}
@@ -281,6 +297,7 @@ export function MessageImage({
             : { display: loaded ? "block" : "none", width: "auto", maxWidth: "100%", objectFit: "contain", userSelect: "none" }}
           onLoad={(event) => {
             const image = event.currentTarget;
+            rememberMessageMediaGeometry(src, image.naturalWidth, image.naturalHeight);
             void (typeof image.decode === "function" ? image.decode().catch(() => {}) : Promise.resolve())
               .finally(() => {
                 rememberReadyMessageImage(src);

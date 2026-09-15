@@ -481,7 +481,10 @@ function waitForRelevantPendingLayout(
   if (signal.aborted) return Promise.resolve();
   const hasPendingLayout = () => [...container.querySelectorAll(
     "[data-history-layout-pending]",
-  )].some((node) => isBeforeOrInsideTarget(node, target));
+  )].some((node) => (
+    isBeforeOrInsideTarget(node, target)
+    && !node.closest("[data-history-layout-stable]")
+  ));
   if (!hasPendingLayout()) return Promise.resolve();
 
   return new Promise<void>((resolve) => {
@@ -572,7 +575,10 @@ async function waitForGalleryTargetReadiness(
     await waitForRelevantPendingLayout(container, target, controller.signal);
 
     const relevantMedia = [...container.querySelectorAll("img, video")]
-      .filter((node) => isBeforeOrInsideTarget(node, target));
+      .filter((node) => (
+        isBeforeOrInsideTarget(node, target)
+        && !node.closest("[data-history-layout-stable]")
+      ));
     await Promise.all(relevantMedia.map((node) => {
       if (node instanceof HTMLImageElement) {
         return waitForImageReady(node, controller.signal);
