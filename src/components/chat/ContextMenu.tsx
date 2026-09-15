@@ -479,9 +479,7 @@ export function ContextMenu({
                   ...ACTION_ITEM_STYLE,
                   color: "#d32f2f",
                   opacity: isBlockedUser && !isEntryDeniedUser ? 0.45 : 1,
-                  cursor: isBlockedUser && !isEntryDeniedUser ? "default" : "pointer",
                 }}
-                disabled={isBlockedUser && !isEntryDeniedUser}
                 onClick={() => { onBlock(msg); onClose(); }}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
@@ -497,10 +495,8 @@ export function ContextMenu({
                   ...ACTION_ITEM_STYLE,
                   color: "#d32f2f",
                   opacity: isEntryDeniedUser ? 0.45 : 1,
-                  cursor: isEntryDeniedUser ? "default" : "pointer",
                   borderBottom: "none",
                 }}
-                disabled={isEntryDeniedUser}
                 onClick={() => { onKick(msg); onClose(); }}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
