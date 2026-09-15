@@ -555,9 +555,9 @@ export function ContextMenu({
                 style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f", borderBottom: "none" }}
                 onClick={() => setShowUserManagement(true)}
               >
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" style={{ transform: "translateY(-1px)" }} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M2 21v-2a7 7 0 0 1 14 0v2" />
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" style={{ transform: "translateY(-1px) scale(1.1)" }} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="7" r="4" />
+                  <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
                 </svg>
                 <span>{t("userManagement")}</span>
                 <svg
