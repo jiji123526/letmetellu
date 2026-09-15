@@ -269,9 +269,11 @@ export function useChatContextMenuActions({
 
   const onBlock = useCallback((targetMessage: { id: string; uid: string; text: string; dm?: boolean }) => {
     const blockUid = targetMessage.uid;
-    const blocked = blockedUsers.some((entry) => entry.uid === blockUid);
+    const sendOnlyBlocked = blockedUsers.some((entry) =>
+      entry.uid === blockUid && entry.mode !== "deny_entry"
+    );
 
-    if (blocked) {
+    if (sendOnlyBlocked) {
       void adminAction("unblock", channelId, { uid: blockUid });
       setBlockedUsers((previous) => previous.filter((entry) => entry.uid !== blockUid));
       flashBanner(`${text.anonLabel}#${blockUid.slice(-4)} ${text.anonUnblockedLabel}`, "#2a9d4e");
@@ -284,7 +286,10 @@ export function useChatContextMenuActions({
       message_kind: targetMessage.dm ? "dm" : "message",
       reason,
     });
-    setBlockedUsers((previous) => [...previous, { uid: blockUid, reason }]);
+    setBlockedUsers((previous) => [
+      ...previous.filter((entry) => entry.uid !== blockUid),
+      { uid: blockUid, reason, mode: "send_only" },
+    ]);
     flashBanner(`${text.anonLabel}#${blockUid.slice(-4)} ${text.anonBlockedLabel}`, "#d32f2f");
   }, [
     blockedUsers,

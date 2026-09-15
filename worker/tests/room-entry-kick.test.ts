@@ -50,3 +50,13 @@ test("client closes realtime and renders denied entry state", () => {
   assert.match(realtime, /event\.type === "entry-denied"/);
   assert.match(realtime, /setEntryDenied\(true\)/);
 });
+
+test("message actions collapse moderation into a two-option user menu", () => {
+  const menu = read("../../src/components/chat/ContextMenu.tsx");
+  const actions = read("../../src/components/chat/useChatContextMenuActions.ts");
+  assert.match(menu, /setShowUserManagement\(true\)/);
+  assert.match(menu, /t\("userManagement"\)/);
+  assert.match(menu, /t\("messageBlock"\)/);
+  assert.match(menu, /t\("entryBlock"\)/);
+  assert.match(actions, /entry\.mode !== "deny_entry"/);
+});

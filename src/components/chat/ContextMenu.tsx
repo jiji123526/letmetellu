@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 const REACTIONS = ["👍", "👎", "🫪", "❓"];
@@ -130,6 +130,7 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const bubbleNodeRef = useRef<HTMLElement | null>(null);
+  const [showUserManagement, setShowUserManagement] = useState(false);
   const { t } = useLocale();
 
   // Calculate positioning first
@@ -470,6 +471,43 @@ export function ContextMenu({
               </div>
             )}
           </>
+        ) : showUserManagement ? (
+          <>
+            {onBlock && (
+              <button
+                style={{
+                  ...ACTION_ITEM_STYLE,
+                  color: isBlockedUser && !isEntryDeniedUser ? "#2a9d4e" : "#d32f2f",
+                }}
+                onClick={() => { onBlock(msg); onClose(); }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M4.93 4.93l14.14 14.14" />
+                </svg>
+                <span>{t("messageBlock")}</span>
+                {isBlockedUser && !isEntryDeniedUser && <span style={{ marginLeft: "auto" }}>✓</span>}
+              </button>
+            )}
+            {onKick && (
+              <button
+                style={{
+                  ...ACTION_ITEM_STYLE,
+                  color: isEntryDeniedUser ? "#2a9d4e" : "#d32f2f",
+                  borderBottom: "none",
+                }}
+                onClick={() => { onKick(msg); onClose(); }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 17l5-5-5-5" />
+                  <path d="M15 12H3" />
+                  <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+                </svg>
+                <span>{t("entryBlock")}</span>
+                {isEntryDeniedUser && <span style={{ marginLeft: "auto" }}>✓</span>}
+              </button>
+            )}
+          </>
         ) : (
           <>
             {onReply && (
@@ -512,24 +550,18 @@ export function ContextMenu({
               </button>
             )}
 
-            {isAdmin && !isMyMessage && onBlock && !isEntryDeniedUser && !msg.protected_sender && (
-              <button style={{ ...ACTION_ITEM_STYLE, color: isBlockedUser && !isEntryDeniedUser ? "#2a9d4e" : "#d32f2f" }} onClick={() => { onBlock(msg); onClose(); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M4.93 4.93l14.14 14.14" />
+            {isAdmin && !isMyMessage && (onBlock || onKick) && !msg.protected_sender && (
+              <button
+                style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f", borderBottom: "none" }}
+                onClick={() => setShowUserManagement(true)}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M2 21v-2a7 7 0 0 1 14 0v2" />
+                  <path d="M19 8v6M16 11h6" />
                 </svg>
-                <span>{isBlockedUser && !isEntryDeniedUser ? t("unblock") : t("block")}</span>
-              </button>
-            )}
-
-            {isAdmin && !isMyMessage && onKick && !msg.protected_sender && (
-              <button style={{ ...ACTION_ITEM_STYLE, color: isEntryDeniedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onKick(msg); onClose(); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isEntryDeniedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10 17l5-5-5-5" />
-                  <path d="M15 12H3" />
-                  <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
-                </svg>
-                <span>{isEntryDeniedUser ? t("allowRoomEntry") : t("removeFromRoom")}</span>
+                <span>{t("userManagement")}</span>
+                <span style={{ marginLeft: "auto", color: "var(--meta)" }}>›</span>
               </button>
             )}
 
