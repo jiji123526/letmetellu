@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getBlockedDeviceLookup, hashBlockedDeviceId } from "../src/lib/actor-identities.ts";
+import {
+  getActorBlockMode,
+  getBlockedDeviceLookup,
+  hashBlockedDeviceId,
+} from "../src/lib/actor-identities.ts";
 import type { Env } from "../src/types.ts";
 
 const env = {
@@ -27,4 +31,33 @@ test("getBlockedDeviceLookup returns both raw and hashed lookup forms", async ()
 
   const empty = await getBlockedDeviceLookup(null, env);
   assert.deepEqual(empty, { raw: "", hashed: "" });
+});
+
+test("getActorBlockMode uses the strongest matching block returned by the query", async () => {
+  let sql = "";
+  const queryEnv = {
+    INTERNAL_SECRET: env.INTERNAL_SECRET,
+    DB: {
+      prepare(statement: string) {
+        sql = statement;
+        return {
+          bind() {
+            return {
+              first: async () => ({ mode: "deny_entry" }),
+            };
+          },
+        };
+      },
+    },
+  } as unknown as Env;
+
+  const mode = await getActorBlockMode({
+    env: queryEnv,
+    channelId: "room",
+    uid: "visitor",
+    deviceId: "device-123",
+  });
+
+  assert.equal(mode, "deny_entry");
+  assert.match(sql, /ORDER BY CASE mode WHEN 'deny_entry' THEN 0 ELSE 1 END/);
 });

@@ -58,7 +58,9 @@ interface ContextMenuProps {
   onDeleteWithReplies?: (msgId: string) => void;
   onEdit?: (msgId: string) => void;
   onBlock?: (msg: { id: string; uid: string; text: string; dm?: boolean }) => void;
+  onKick?: (msg: { id: string; uid: string; text: string; dm?: boolean }) => void;
   isBlockedUser?: boolean;
+  isEntryDeniedUser?: boolean;
   onDismissReportMessage?: (msgId: string) => void;
   onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
@@ -115,7 +117,9 @@ export function ContextMenu({
   onDeleteWithReplies,
   onEdit,
   onBlock,
+  onKick,
   isBlockedUser,
+  isEntryDeniedUser,
   onDismissReportMessage,
   onReportAction,
   onPetitionAction,
@@ -508,13 +512,24 @@ export function ContextMenu({
               </button>
             )}
 
-            {isAdmin && !isMyMessage && onBlock && !msg.protected_sender && (
-              <button style={{ ...ACTION_ITEM_STYLE, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg); onClose(); }}>
+            {isAdmin && !isMyMessage && onBlock && !isEntryDeniedUser && !msg.protected_sender && (
+              <button style={{ ...ACTION_ITEM_STYLE, color: isBlockedUser && !isEntryDeniedUser ? "#2a9d4e" : "#d32f2f" }} onClick={() => { onBlock(msg); onClose(); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M4.93 4.93l14.14 14.14" />
                 </svg>
-                <span>{isBlockedUser ? t("unblock") : t("block")}</span>
+                <span>{isBlockedUser && !isEntryDeniedUser ? t("unblock") : t("block")}</span>
+              </button>
+            )}
+
+            {isAdmin && !isMyMessage && onKick && !msg.protected_sender && (
+              <button style={{ ...ACTION_ITEM_STYLE, color: isEntryDeniedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onKick(msg); onClose(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isEntryDeniedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 17l5-5-5-5" />
+                  <path d="M15 12H3" />
+                  <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+                </svg>
+                <span>{isEntryDeniedUser ? t("allowRoomEntry") : t("removeFromRoom")}</span>
               </button>
             )}
 

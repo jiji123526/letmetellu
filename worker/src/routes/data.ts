@@ -30,6 +30,7 @@ import {
 } from "../lib/unified-timeline-metrics";
 import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session";
+import { isEntryDeniedRequest } from "../lib/actor-identities";
 
 const CHANNEL_READ_TOKEN_TYPES = new Set([
   "messages",
@@ -121,6 +122,19 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
     : "ko";
   if (reportsChannel && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
+  }
+  if (!isOwner && !isPlatformAdminViewer) {
+    const entryDenied = await isEntryDeniedRequest({
+      request,
+      env,
+      channelId: parentChannelId,
+      additionalUid: channelReadAccess?.viewer === "visitor"
+        ? channelReadAccess.subject
+        : null,
+    });
+    if (entryDenied) {
+      return Response.json({ error: "entry_denied" }, { status: 403 });
+    }
   }
 
   if (passcode) {

@@ -1,6 +1,8 @@
 import type { Env } from "../types.ts";
+import { verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "./anonymous-identity.ts";
 
 export type ActorRecordType = "message" | "dm";
+export type BlockMode = "send_only" | "deny_entry";
 
 const BLOCKED_DEVICE_HASH_CONTEXT = "blocked-device-v1";
 
@@ -52,6 +54,66 @@ export async function isBlockedActor(input: {
     "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
   ).bind(channelId, uid, lookup.raw, lookup.hashed, lookup.raw).first();
   return Boolean(blocked);
+}
+
+export async function getActorBlockMode(input: {
+  env: Env;
+  channelId: string;
+  uid: string;
+  additionalUid?: string | null;
+  deviceId: string | null;
+}): Promise<BlockMode | null> {
+  const { env, channelId, uid, additionalUid, deviceId } = input;
+  const lookup = await getBlockedDeviceLookup(deviceId, env);
+  const blocked = await env.DB.prepare(
+    `SELECT mode
+     FROM blocked
+     WHERE channel_id = ?
+       AND (uid = ? OR uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?)
+     ORDER BY CASE mode WHEN 'deny_entry' THEN 0 ELSE 1 END
+     LIMIT 1`
+  ).bind(
+    channelId,
+    uid,
+    additionalUid || "",
+    lookup.raw,
+    lookup.hashed,
+    lookup.raw,
+  ).first<{ mode: BlockMode }>();
+  return blocked?.mode || null;
+}
+
+export async function isEntryDeniedActor(input: {
+  env: Env;
+  channelId: string;
+  uid: string;
+  additionalUid?: string | null;
+  deviceId: string | null;
+}): Promise<boolean> {
+  return await getActorBlockMode(input) === "deny_entry";
+}
+
+export async function isEntryDeniedRequest(input: {
+  request: Request;
+  env: Env;
+  channelId: string;
+  additionalUid?: string | null;
+}): Promise<boolean> {
+  const { request, env, channelId, additionalUid } = input;
+  const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
+  const deviceToken = request.headers.get("X-Device-Token") || "";
+  const [anonymous, device] = await Promise.all([
+    anonymousToken ? verifyAnonymousIdentityToken(anonymousToken, env) : null,
+    deviceToken ? verifyDeviceIdentityToken(deviceToken, env) : null,
+  ]);
+  if (!anonymous && !device && !additionalUid) return false;
+  return isEntryDeniedActor({
+    env,
+    channelId,
+    uid: anonymous?.uid || "",
+    additionalUid,
+    deviceId: device?.device_id || null,
+  });
 }
 
 export async function resolveActorIdentity(input: {

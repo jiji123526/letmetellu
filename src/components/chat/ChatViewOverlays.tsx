@@ -33,6 +33,7 @@ interface GalleryItem {
 interface BlockedUser {
   uid: string;
   reason: string;
+  mode?: "send_only" | "deny_entry";
 }
 
 interface FullViewImageState {

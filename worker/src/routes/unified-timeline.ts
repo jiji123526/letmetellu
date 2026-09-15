@@ -22,6 +22,7 @@ import { authorizeRoomToken } from "./passcode.ts";
 import { hydrateUnifiedReportTimeline } from "./report-timeline-adapter.ts";
 import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token.ts";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session.ts";
+import { isEntryDeniedRequest } from "../lib/actor-identities.ts";
 
 function roundedDuration(startedAt: number) {
   return Math.round((performance.now() - startedAt) * 10) / 10;
@@ -98,6 +99,19 @@ export async function handleUnifiedTimeline(
     && await isPlatformAdmin(trustedUserId, readEnv);
   if (isReportsChannel(parentChannelId, env) && !isOwner) {
     return Response.json({ error: "owner access required" }, { status: 403 });
+  }
+  if (!isOwner && !isPlatformAdminViewer) {
+    const entryDenied = await isEntryDeniedRequest({
+      request,
+      env,
+      channelId: parentChannelId,
+      additionalUid: channelReadAccess?.viewer === "visitor"
+        ? channelReadAccess.subject
+        : null,
+    });
+    if (entryDenied) {
+      return Response.json({ error: "entry_denied" }, { status: 403 });
+    }
   }
 
   if (passcode && !isOwner && !isPlatformAdminViewer) {

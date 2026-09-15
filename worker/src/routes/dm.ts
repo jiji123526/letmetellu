@@ -4,7 +4,7 @@ import { getReportsChannelOwnerId, isReportsChannel } from "../lib/special-chann
 import { attachUploadTicket } from "../lib/upload-tickets.ts";
 import { checkBannedWords, checkMessageLength, getChannelPasscodeInfo } from "../lib/validation.ts";
 import { ensureActiveLiveSession } from "../lib/live-sessions.ts";
-import { hashBlockedDeviceId, isBlockedActor } from "../lib/actor-identities.ts";
+import { hashBlockedDeviceId, isBlockedActor, isEntryDeniedActor } from "../lib/actor-identities.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { readDmThreads } from "../lib/dm-threads.ts";
@@ -114,6 +114,15 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     const requesterUid = await getAnonymousRequesterUid(request, env);
     if (!isOwner && !requesterUid) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
+    }
+    const requesterDeviceId = !isOwner ? await getRequesterDeviceId(request, env) : null;
+    if (!isOwner && await isEntryDeniedActor({
+      env,
+      channelId: parentChannelId,
+      uid: requesterUid!,
+      deviceId: requesterDeviceId,
+    })) {
+      return Response.json({ error: "entry_denied" }, { status: 403 });
     }
     const dm = await readDmThreads(
       env,

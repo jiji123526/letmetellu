@@ -20,6 +20,7 @@ interface GalleryItem {
 interface BlockedUser {
   uid: string;
   reason: string;
+  mode?: "send_only" | "deny_entry";
 }
 
 interface ChatViewLayerStackProps {
@@ -139,7 +140,9 @@ export function ChatViewLayerStack({
           onDeleteWithReplies={contextMenuActions.onDeleteWithReplies}
           onEdit={contextMenuActions.onEdit}
           onBlock={contextMenuActions.onBlock}
+          onKick={contextMenuActions.onKick}
           isBlockedUser={contextMenuActions.isBlockedUser}
+          isEntryDeniedUser={contextMenuActions.isEntryDeniedUser}
           onDismissReportMessage={contextMenuActions.onDismissReportMessage}
           onReportAction={contextMenuActions.onReportAction}
           onPetitionAction={contextMenuActions.onPetitionAction}

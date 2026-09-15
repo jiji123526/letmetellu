@@ -22,7 +22,7 @@ interface AdminPanelProps {
   dmEnabled: boolean;
   showOnProfile: boolean;
   notice: string;
-  blockedUsers: { uid: string; reason: string }[];
+  blockedUsers: { uid: string; reason: string; mode?: "send_only" | "deny_entry" }[];
   onToggleView: () => void;
   onPetitionToggle: () => void;
   onDmToggle: () => void;
@@ -674,14 +674,21 @@ export function AdminPanel(props: AdminPanelProps) {
             ) : blockedUsers.map((blocked, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px", borderBottom: "0.5px solid var(--hairline)", gap: "10px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: "3px", flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: "var(--bubble-font-size, 14px)", fontWeight: 400 }}>{t("anon")}#{blocked.uid.slice(-4)}</span>
+                  <span style={{ fontSize: "var(--bubble-font-size, 14px)", fontWeight: 400 }}>
+                    {t("anon")}#{blocked.uid.slice(-4)}
+                    {blocked.mode === "deny_entry" && (
+                      <span style={{ marginLeft: "6px", color: "#d32f2f", fontSize: "calc(var(--bubble-font-size) - 3px)" }}>
+                        {t("roomEntryRemoved")}
+                      </span>
+                    )}
+                  </span>
                   {blocked.reason && <span style={{ fontSize: "calc(var(--bubble-font-size) - 2px)", color: "var(--meta)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>&quot;{blocked.reason}&quot;</span>}
                 </div>
                 <button
                   style={{ background: "none", border: "1px solid #d32f2f", color: "#d32f2f", fontSize: "calc(var(--bubble-font-size) - 3px)", fontWeight: 400, padding: "5px 10px", borderRadius: "8px", cursor: "pointer", fontFamily: "inherit" }}
                   onClick={() => onUnblock(blocked.uid)}
                 >
-                  {t("unblock")}
+                  {blocked.mode === "deny_entry" ? t("allowRoomEntry") : t("unblock")}
                 </button>
               </div>
             ))}

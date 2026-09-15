@@ -290,7 +290,9 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       return Response.json({ ok: true });
     }
 
-    case "block": {
+    case "block":
+    case "kick": {
+      const mode = action === "kick" ? "deny_entry" : "send_only";
       const reason = typeof payload?.reason === "string" ? payload.reason : "";
       const messageId = typeof payload?.message_id === "string" ? payload.message_id : "";
       const messageKind = payload?.message_kind === "dm" ? "dm" : "message";
@@ -340,8 +342,8 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
           .bind(uid, channel_id),
         env.DB.prepare(
-          "INSERT INTO blocked (id, uid, reason, device_id, channel_id) VALUES (?, ?, ?, ?, ?)"
-        ).bind(crypto.randomUUID(), uid, reason, deviceId, channel_id),
+          "INSERT INTO blocked (id, uid, reason, device_id, channel_id, mode) VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(crypto.randomUUID(), uid, reason, deviceId, channel_id, mode),
       ]);
 
       // Broadcast block so the blocked user's UI updates immediately
@@ -349,7 +351,12 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       const blockStub = env.CHAT_ROOM.get(blockDoId);
       await blockStub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "user-blocked", uid, device_id: deviceId }),
+        body: JSON.stringify({
+          type: mode === "deny_entry" ? "user-kicked" : "user-blocked",
+          uid,
+          device_id: deviceId,
+          mode,
+        }),
       }));
 
       return Response.json({ ok: true });

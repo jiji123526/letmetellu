@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { fetchInit, fetchOwnerModerationState } from "@/lib/api-chat";
+import { fetchInit, fetchOwnerModerationState, InitRequestError } from "@/lib/api-chat";
 import {
   completeChatPerformanceCycle,
   finishChatPerformanceRequest,
@@ -21,7 +21,7 @@ import {
 import { recordRecentChannel } from "@/lib/recent-channels";
 import { mergeServerMessageSnapshot } from "./chatMessageUtils";
 import type { Message, MessagePageCursor } from "./chatTypes";
-import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
+import type { BlockedUser, Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import type {
   ChatTimelineItem,
   UnifiedTimelineCursor,
@@ -55,8 +55,9 @@ interface UseChatChannelBootstrapArgs {
   setInitialPageEndCursor: Dispatch<SetStateAction<MessagePageCursor | null>>;
   setHistoryMode: Dispatch<SetStateAction<"latest" | "context">>;
   setNewerMessageCount: Dispatch<SetStateAction<number>>;
-  setBlockedUsers: Dispatch<SetStateAction<{ uid: string; reason: string }[]>>;
+  setBlockedUsers: Dispatch<SetStateAction<BlockedUser[]>>;
   setViewerBlocked: Dispatch<SetStateAction<boolean>>;
+  setEntryDenied: Dispatch<SetStateAction<boolean>>;
   setViewerModerationStatus: Dispatch<SetStateAction<InitData["viewerModerationStatus"]>>;
   setViewerAccess: Dispatch<SetStateAction<InitData["viewerAccess"]>>;
   setUnifiedTimelineEnabled: (enabled: boolean) => void;
@@ -115,6 +116,7 @@ export function useChatChannelBootstrap({
   setNewerMessageCount,
   setBlockedUsers,
   setViewerBlocked,
+  setEntryDenied,
   setViewerModerationStatus,
   setViewerAccess,
   setUnifiedTimelineEnabled,
@@ -388,7 +390,9 @@ export function useChatChannelBootstrap({
           return;
         }
         console.error(error);
-        if (error instanceof Error && error.message.includes("Init failed: 404")) {
+        if (error instanceof InitRequestError && error.code === "entry_denied") {
+          setEntryDenied(true);
+        } else if (error instanceof InitRequestError && error.status === 404) {
           clearChannelLocalState(channelId);
           setShowChannelDeleted(true);
         }
@@ -406,6 +410,7 @@ export function useChatChannelBootstrap({
     applyInitDataRef,
     initRequestIdRef,
     setLoading,
+    setEntryDenied,
     setPasscodeGate,
     setShowChannelDeleted,
     setUid,

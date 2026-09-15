@@ -19,7 +19,7 @@ import {
 import { useChatHistoryNavigation } from "./useChatHistoryNavigation";
 import { useChatModeration } from "./useChatModeration";
 import type { Message, MessagePageCursor } from "./chatTypes";
-import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
+import type { BlockedUser, Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 import { useChatLiveSession } from "./useChatLiveSession";
 import { useChatReplyParents } from "./useChatReplyParents";
 import { useChatReportsSearch } from "./useChatReportsSearch";
@@ -134,8 +134,9 @@ export function ChatView({ channelId }: { channelId: string }) {
   const [initialPageStartCursor, setInitialPageStartCursor] = useState<MessagePageCursor | null>(null);
   const [initialPageEndCursor, setInitialPageEndCursor] = useState<MessagePageCursor | null>(null);
   const [channel, setChannel] = useState<Channel | null>(null);
-  const [blockedUsers, setBlockedUsers] = useState<{ uid: string; reason: string }[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [viewerBlocked, setViewerBlocked] = useState(false);
+  const [entryDenied, setEntryDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [cachedAppearance] = useState(() => readChannelAppearance(channelId));
   const [cachedBackground] = useState(() => readChannelBackground(channelId));
@@ -249,7 +250,7 @@ export function ChatView({ channelId }: { channelId: string }) {
   }, []);
 
   const { connected, showReconnectNotice, liveCount, subscribe, send } = useRealtime(
-    channelId,
+    loading || entryDenied ? null : channelId,
     uid,
     authUserId,
   );
@@ -515,6 +516,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setNewerMessageCount,
     setBlockedUsers,
     setViewerBlocked,
+    setEntryDenied,
     setViewerModerationStatus,
     setViewerAccess,
     setUnifiedTimelineEnabled,
@@ -728,6 +730,7 @@ export function ChatView({ channelId }: { channelId: string }) {
     setPasscodeGate,
     setViewerBlocked,
     setBlockedUsers,
+    setEntryDenied,
     setBanner,
     setShowChannelDeleted,
     text: {
@@ -962,6 +965,7 @@ export function ChatView({ channelId }: { channelId: string }) {
       anonLabel: t("anon"),
       anonBlockedLabel: t("anonBlocked"),
       anonUnblockedLabel: t("anonUnblocked"),
+      anonKickedLabel: t("anonKicked"),
       reportDismissedBanner: t("reportDismissedBanner"),
       deleteFailed: t("deleteFailed"),
       messageDeleted: t("messageDeleted"),
@@ -1042,6 +1046,20 @@ export function ChatView({ channelId }: { channelId: string }) {
             setPasscodeGate(passcodeGate);
             setLoading(false);
           });
+        }}
+      />
+    );
+  }
+
+  if (entryDenied) {
+    return (
+      <ChatViewDeletedState
+        title={t("roomAccessRemovedTitle")}
+        message={t("roomAccessRemovedMessage")}
+        confirmLabel={t("goToDashboard")}
+        onConfirm={() => {
+          removeRecentChannel(channelId);
+          window.location.href = "/dashboard";
         }}
       />
     );

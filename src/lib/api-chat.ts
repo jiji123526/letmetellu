@@ -55,6 +55,16 @@ export class MediaUploadTooLargeError extends Error {
   }
 }
 
+export class InitRequestError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string | null,
+  ) {
+    super(`Init failed: ${status}${code ? ` (${code})` : ""}`);
+    this.name = "InitRequestError";
+  }
+}
+
 export function isMediaUploadTooLarge(blob: Blob): boolean {
   return blob.size > MAX_MEDIA_UPLOAD_SIZE;
 }
@@ -88,7 +98,13 @@ async function requestInit(channelId: string) {
   const res = await fetch(`/api/init?channel=${channelId}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Init failed: ${res.status}`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null) as { error?: unknown } | null;
+    throw new InitRequestError(
+      res.status,
+      typeof payload?.error === "string" ? payload.error : null,
+    );
+  }
   const data = await res.json();
   if (typeof data?.anonymousUid === "string") {
     setAnonymousIdentity(data.anonymousUid);
