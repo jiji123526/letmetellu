@@ -558,10 +558,9 @@ export function ContextMenu({
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="9" cy="7" r="4" />
                   <path d="M2 21v-2a7 7 0 0 1 14 0v2" />
-                  <path d="M19 8v6M16 11h6" />
                 </svg>
                 <span>{t("userManagement")}</span>
-                <span style={{ marginLeft: "auto", color: "var(--meta)" }}>›</span>
+                <span style={{ marginLeft: "auto", color: "#d32f2f", fontSize: "24px", lineHeight: 0.7 }}>›</span>
               </button>
             )}
 
