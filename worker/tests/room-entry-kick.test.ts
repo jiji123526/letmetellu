@@ -59,5 +59,8 @@ test("message actions collapse moderation into a two-option user menu", () => {
   assert.match(menu, /t\("userManagement"\)/);
   assert.match(menu, /t\("messageBlock"\)/);
   assert.match(menu, /t\("entryBlock"\)/);
+  assert.match(menu, /disabled=\{isBlockedUser && !isEntryDeniedUser\}/);
+  assert.match(menu, /disabled=\{isEntryDeniedUser\}/);
+  assert.doesNotMatch(menu, />✓</);
   assert.match(actions, /entry\.mode !== "deny_entry"/);
 });

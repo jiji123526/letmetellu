@@ -477,8 +477,11 @@ export function ContextMenu({
               <button
                 style={{
                   ...ACTION_ITEM_STYLE,
-                  color: isBlockedUser && !isEntryDeniedUser ? "#2a9d4e" : "#d32f2f",
+                  color: "#d32f2f",
+                  opacity: isBlockedUser && !isEntryDeniedUser ? 0.45 : 1,
+                  cursor: isBlockedUser && !isEntryDeniedUser ? "default" : "pointer",
                 }}
+                disabled={isBlockedUser && !isEntryDeniedUser}
                 onClick={() => { onBlock(msg); onClose(); }}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
@@ -486,16 +489,18 @@ export function ContextMenu({
                   <path d="M4.93 4.93l14.14 14.14" />
                 </svg>
                 <span>{t("messageBlock")}</span>
-                {isBlockedUser && !isEntryDeniedUser && <span style={{ marginLeft: "auto" }}>✓</span>}
               </button>
             )}
             {onKick && (
               <button
                 style={{
                   ...ACTION_ITEM_STYLE,
-                  color: isEntryDeniedUser ? "#2a9d4e" : "#d32f2f",
+                  color: "#d32f2f",
+                  opacity: isEntryDeniedUser ? 0.45 : 1,
+                  cursor: isEntryDeniedUser ? "default" : "pointer",
                   borderBottom: "none",
                 }}
+                disabled={isEntryDeniedUser}
                 onClick={() => { onKick(msg); onClose(); }}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -504,7 +509,6 @@ export function ContextMenu({
                   <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
                 </svg>
                 <span>{t("entryBlock")}</span>
-                {isEntryDeniedUser && <span style={{ marginLeft: "auto" }}>✓</span>}
               </button>
             )}
           </>
