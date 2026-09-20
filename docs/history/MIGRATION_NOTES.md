@@ -15,6 +15,17 @@ Trade-off: ordinary passcode typos no longer appear in the dashboard's aggregate
 
 Deployment note: Worker-only; no frontend deployment or D1 migration is required. Enter one wrong channel passcode and confirm the response remains `403 wrong_passcode` without increasing the generic forbidden count, then exceed the attempt limit and confirm `429 rate_limited` is still recorded.
 
+### Limited-beta channel capacity increases to 100 — 2026-09-20
+
+- The service-wide normal-channel ceiling increases from 50 to 100. Live-session channel rows remain excluded from this capacity calculation.
+- The existing maximum of five normal channels per owner is unchanged.
+- Capacity reads, atomic channel creation and the post-failure error classification now share one server constant so the dashboard cannot advertise a different ceiling from the write path.
+- The capacity dialog keeps its earlier general beta-limit wording rather than exposing the exact service-wide ceiling in the interface.
+
+Trade-off: the beta can now hold twice as many independently active channels, increasing the possible aggregate message, media and moderation load. This does not double baseline traffic by itself, and the existing per-owner limit, upload controls, rate limits and channel-local pagination remain unchanged.
+
+Deployment note: deploy the Worker first, then the frontend. No D1 migration or backfill is required. Verify the capacity endpoint returns `limit: 100`, the 100th normal channel can be created, the 101st is rejected with the beta-capacity response, and one owner still cannot create a sixth normal channel.
+
 ### Gallery jumps stop waiting for geometry-stable media bytes — 2026-09-13
 
 - Production inspection separated the gallery list, unified context lookup and D1 execution from the client-side jump. Sample gallery/context responses completed in roughly `83–245 ms`, with reported D1 SQL time around `4.7–25.3 ms`; the remaining delay came from hidden staging waiting for image/video bytes and decode before committing the scroll.

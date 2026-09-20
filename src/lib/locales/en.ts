@@ -658,7 +658,7 @@ export const en: Record<LocaleKeys, string> = {
   betaNoticeDetail: "Some features may change or be temporarily unstable during beta, and channel creation may be limited to keep the service reliable. Please let us know through Support if something feels wrong.",
   betaNoticeConfirm: "Got it",
   betaCapacityTitle: "Beta channel capacity reached",
-  betaCapacityDescription: "To keep the beta reliable, we are currently offering up to 50 channels.<br>We hope you will look forward to the full launch.",
+  betaCapacityDescription: "To keep the beta reliable, channel creation is currently limited.<br>We hope you will look forward to the full launch.",
   betaCapacityConfirm: "Got it",
   visitSurveyEyebrow: "A quick check-in",
   visitSurveyQuestion: "Anything we should fix?",

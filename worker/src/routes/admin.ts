@@ -18,6 +18,8 @@ import {
   undoPendingDeletion,
 } from "../lib/pending-admin-deletions";
 
+const BETA_CHANNEL_LIMIT = 100;
+
 function normalizeBubbleColor(value: unknown): unknown {
   return typeof value === "string" && value.toLowerCase() === "#3b8df0"
     ? "#3598fe"
@@ -130,7 +132,11 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         WHERE id NOT LIKE '%_live'
       `).first<{ count: number }>();
       const count = Number(row?.count || 0);
-      return Response.json({ count, limit: 50, can_create: count < 50 });
+      return Response.json({
+        count,
+        limit: BETA_CHANNEL_LIMIT,
+        can_create: count < BETA_CHANNEL_LIMIT,
+      });
     }
 
     case "create-channel": {
@@ -152,8 +158,15 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
           SELECT COUNT(*)
           FROM channels
           WHERE id NOT LIKE '%_live'
-        ) < 50
-      `).bind(channel_id, userId, name || "My Channel", instanceId, userId).run();
+        ) < ?
+      `).bind(
+        channel_id,
+        userId,
+        name || "My Channel",
+        instanceId,
+        userId,
+        BETA_CHANNEL_LIMIT,
+      ).run();
       if (!result.meta.changes) {
         const counts = await env.DB.prepare(`
           SELECT
@@ -162,7 +175,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
           FROM channels
           WHERE id NOT LIKE '%_live'
         `).bind(userId).first<{ total_count: number; owner_count: number }>();
-        if (Number(counts?.total_count || 0) >= 50) {
+        if (Number(counts?.total_count || 0) >= BETA_CHANNEL_LIMIT) {
           return Response.json({ error: "beta channel limit reached" }, { status: 403 });
         }
         return Response.json({ error: "channel limit reached" }, { status: 403 });
