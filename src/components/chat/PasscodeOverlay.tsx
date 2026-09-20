@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Link from "next/link";
 import { notifyRoomAccessGranted } from "@/lib/api-core";
 import { verifyPasscode } from "@/lib/api-chat";
 import { useLocale } from "@/hooks/useLocale";
@@ -147,6 +148,32 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
         >
           {loading ? "..." : t("enterChannel")}
         </button>
+
+        <Link
+          href="/dashboard"
+          replace
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "100%",
+            minHeight: "44px",
+            marginTop: "10px",
+            padding: "12px",
+            border: "1px solid var(--input-border)",
+            borderRadius: "12px",
+            background: "transparent",
+            color: "var(--gray-text)",
+            fontSize: "var(--bubble-font-size)",
+            fontWeight: 500,
+            fontFamily: "inherit",
+            lineHeight: 1,
+            textDecoration: "none",
+            boxSizing: "border-box",
+          }}
+        >
+          {t("passcodeBackToDashboard")}
+        </Link>
       </div>
     </div>
   );

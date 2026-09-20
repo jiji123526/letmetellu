@@ -270,6 +270,7 @@ export const ko = {
   passcodeRequired: "이 채널은 비밀번호가 필요합니다",
   passcodeInput: "비밀번호 입력",
   enterChannel: "입장",
+  passcodeBackToDashboard: "대시보드로 돌아가기",
   blockReason: "차단 사유",
   petitionPrefix: "이의 제기",
   reportPrefix: "🚨 신고된 채팅",

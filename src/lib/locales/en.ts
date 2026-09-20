@@ -272,6 +272,7 @@ export const en: Record<LocaleKeys, string> = {
   passcodeRequired: "This channel requires a passcode",
   passcodeInput: "Enter passcode",
   enterChannel: "Enter",
+  passcodeBackToDashboard: "Back to dashboard",
   blockReason: "Block reason",
   petitionPrefix: "Appeal",
   reportPrefix: "🚨 Reported message",

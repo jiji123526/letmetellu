@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Passcode gate offers an explicit dashboard exit — 2026-09-20
+
+- Visitors who cannot or do not want to enter a protected channel can now leave the full-screen passcode gate through a localized `Back to dashboard` action.
+- The secondary action uses the existing input-border and text tokens, keeps a 44-pixel mobile touch target and remains visually subordinate to the channel-entry button.
+- Dashboard navigation replaces the protected-channel history entry so pressing Back does not immediately reopen the same passcode gate.
+
+Trade-off: replacing the history entry means the browser Back action from the dashboard returns to the page before the protected channel rather than to the gate. This matches the explicit exit intent and avoids a navigation loop.
+
+Deployment note: frontend-only; no Worker deployment or D1 migration is required. Verify the action in Korean and English, including a direct protected-channel entry and an entry opened from the dashboard.
+
 ### Wrong channel passcodes no longer pollute core health — 2026-09-20
 
 - An incorrect channel passcode is an expected access rejection, but the global Worker wrapper previously recorded every `403` as a generic `forbidden` operational event.
