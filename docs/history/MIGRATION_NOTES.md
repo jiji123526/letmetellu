@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Wrong channel passcodes no longer pollute core health — 2026-09-20
+
+- An incorrect channel passcode is an expected access rejection, but the global Worker wrapper previously recorded every `403` as a generic `forbidden` operational event.
+- Passcode verification now classifies this specific response as `passcode_rejected`. It remains available as a bounded security/audit signal but is excluded from the super-admin forbidden counter, route-problem list and core-health severity calculation.
+- Actual repeated guessing still reaches the existing five-attempt-per-minute limiter. Its `429 rate_limited` event remains visible and can still contribute to abuse-oriented degraded health thresholds.
+- Other authorization failures continue to use the generic `forbidden` classification, so this does not weaken monitoring for owner, moderation, report or cross-channel access boundaries.
+
+Trade-off: ordinary passcode typos no longer appear in the dashboard's aggregate 403 count. Investigation of passcode-specific rejection volume requires querying `passcode_rejected`, while sustained guessing remains visible through the stronger rate-limit signal.
+
+Deployment note: Worker-only; no frontend deployment or D1 migration is required. Enter one wrong channel passcode and confirm the response remains `403 wrong_passcode` without increasing the generic forbidden count, then exceed the attempt limit and confirm `429 rate_limited` is still recorded.
+
 ### Gallery jumps stop waiting for geometry-stable media bytes — 2026-09-13
 
 - Production inspection separated the gallery list, unified context lookup and D1 execution from the client-side jump. Sample gallery/context responses completed in roughly `83–245 ms`, with reported D1 SQL time around `4.7–25.3 ms`; the remaining delay came from hidden staging waiting for image/video bytes and decode before committing the scroll.

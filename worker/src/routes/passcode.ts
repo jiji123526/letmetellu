@@ -1,4 +1,5 @@
 import { hashRateLimitIdentifier } from "../lib/durable-rate-limit.ts";
+import { withOperationalEventOverride } from "../lib/operational-events.ts";
 import { invalidatePasscodeCache } from "../lib/validation.ts";
 import type { Env } from "../types.ts";
 
@@ -230,7 +231,10 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
 
   const verification = await verifyStoredPasscode(passcode, channel.passcode);
   if (!verification.verified) {
-    return Response.json({ error: "wrong_passcode" }, { status: 403 });
+    return withOperationalEventOverride(
+      Response.json({ error: "wrong_passcode" }, { status: 403 }),
+      "passcode_rejected",
+    );
   }
 
   let currentStoredHash = channel.passcode;
@@ -261,7 +265,10 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
       }
       const latestVerification = await verifyStoredPasscode(passcode, latest.passcode);
       if (!latestVerification.verified) {
-        return Response.json({ error: "wrong_passcode" }, { status: 403 });
+        return withOperationalEventOverride(
+          Response.json({ error: "wrong_passcode" }, { status: 403 }),
+          "passcode_rejected",
+        );
       }
       currentStoredHash = latest.passcode;
     }
