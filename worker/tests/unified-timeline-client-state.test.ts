@@ -744,7 +744,7 @@ test("unified timeline proxy forwards anonymous identity cookies for joined view
   );
   assert.match(
     unifiedTimelineRouteSource,
-    /const \{ anonymousToken \} = readIdentityTokens\(request\.headers\.get\("cookie"\)\)/,
+    /const \{ anonymousToken, deviceToken \} = readIdentityTokens\(request\.headers\.get\("cookie"\)\)/,
   );
   assert.match(
     unifiedTimelineRouteSource,
@@ -753,6 +753,10 @@ test("unified timeline proxy forwards anonymous identity cookies for joined view
   assert.match(
     unifiedTimelineRouteSource,
     /if \(forwardedAnonymousToken\) headers\["X-Anonymous-Token"\] = forwardedAnonymousToken/,
+  );
+  assert.match(
+    unifiedTimelineRouteSource,
+    /if \(forwardedDeviceToken\) headers\["X-Device-Token"\] = forwardedDeviceToken/,
   );
 });
 

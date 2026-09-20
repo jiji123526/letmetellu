@@ -66,8 +66,14 @@ export function useRealtime(
       );
       if (socket !== wsRef.current || socket.readyState !== WebSocket.OPEN) return;
       if (response.status === 204) return;
-      if (!response.ok) return;
-      const data = await response.json() as { token?: string; mode?: "admin" | "viewer" | "room" };
+      if (!response.ok) {
+        const error = await response.json().catch(() => null) as { error?: unknown } | null;
+        if (error?.error === "entry_denied") {
+          handlersRef.current.forEach((handler) => handler({ type: "entry-denied" }));
+        }
+        return;
+      }
+      const data = await response.json() as { token?: string; mode?: "admin" | "viewer" | "room" | "public" };
       if (!data.token) return;
       const requestId = crypto.randomUUID();
       latestRoomAuthRequest.current = requestId;
@@ -75,7 +81,7 @@ export function useRealtime(
         socket.send(JSON.stringify({ type: "auth-admin", token: data.token, requestId }));
       } else if (data.mode === "viewer") {
         socket.send(JSON.stringify({ type: "auth-viewer", token: data.token, requestId }));
-      } else if (data.mode === "room") {
+      } else if (data.mode === "room" || data.mode === "public") {
         socket.send(JSON.stringify({ type: "auth-room-viewer", token: data.token, requestId }));
       }
     } catch {

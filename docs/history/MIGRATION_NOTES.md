@@ -4,6 +4,38 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Passcode gate offers an explicit dashboard exit — 2026-09-20
+
+- Visitors who cannot or do not want to enter a protected channel can now leave the full-screen passcode gate through a localized `Back to dashboard` action.
+- The secondary action uses the existing input-border and text tokens, keeps a 44-pixel mobile touch target and remains visually subordinate to the channel-entry button.
+- Dashboard navigation replaces the protected-channel history entry so pressing Back does not immediately reopen the same passcode gate.
+
+Trade-off: replacing the history entry means the browser Back action from the dashboard returns to the page before the protected channel rather than to the gate. This matches the explicit exit intent and avoids a navigation loop.
+
+Deployment note: frontend-only; no Worker deployment or D1 migration is required. Verify the action in Korean and English, including a direct protected-channel entry and an entry opened from the dashboard.
+
+### Wrong channel passcodes no longer pollute core health — 2026-09-20
+
+- An incorrect channel passcode is an expected access rejection, but the global Worker wrapper previously recorded every `403` as a generic `forbidden` operational event.
+- Passcode verification now classifies this specific response as `passcode_rejected`. It remains available as a bounded security/audit signal but is excluded from the super-admin forbidden counter, route-problem list and core-health severity calculation.
+- Actual repeated guessing still reaches the existing five-attempt-per-minute limiter. Its `429 rate_limited` event remains visible and can still contribute to abuse-oriented degraded health thresholds.
+- Other authorization failures continue to use the generic `forbidden` classification, so this does not weaken monitoring for owner, moderation, report or cross-channel access boundaries.
+
+Trade-off: ordinary passcode typos no longer appear in the dashboard's aggregate 403 count. Investigation of passcode-specific rejection volume requires querying `passcode_rejected`, while sustained guessing remains visible through the stronger rate-limit signal.
+
+Deployment note: Worker-only; no frontend deployment or D1 migration is required. Enter one wrong channel passcode and confirm the response remains `403 wrong_passcode` without increasing the generic forbidden count, then exceed the attempt limit and confirm `429 rate_limited` is still recorded.
+
+### Limited-beta channel capacity increases to 100 — 2026-09-20
+
+- The service-wide normal-channel ceiling increases from 50 to 100. Live-session channel rows remain excluded from this capacity calculation.
+- The existing maximum of five normal channels per owner is unchanged.
+- Capacity reads, atomic channel creation and the post-failure error classification now share one server constant so the dashboard cannot advertise a different ceiling from the write path.
+- The capacity dialog keeps its earlier general beta-limit wording rather than exposing the exact service-wide ceiling in the interface.
+
+Trade-off: the beta can now hold twice as many independently active channels, increasing the possible aggregate message, media and moderation load. This does not double baseline traffic by itself, and the existing per-owner limit, upload controls, rate limits and channel-local pagination remain unchanged.
+
+Deployment note: deploy the Worker first, then the frontend. No D1 migration or backfill is required. Verify the capacity endpoint returns `limit: 100`, the 100th normal channel can be created, the 101st is rejected with the beta-capacity response, and one owner still cannot create a sixth normal channel.
+
 ### `/ch/10997` passed isolated copy preflight except for the unapplied source foundation — 2026-09-14
 
 - Added and deployed a dedicated preflight-only Worker. It exposes one
@@ -291,7 +323,6 @@ gallery/FTS integrity still require reconciliation, followed by partial-copy
 cleanup and a final write-freeze/delta protocol. Fifty-row batches reduce D1 and
 trigger pressure but require more operator calls. No remote database, Worker
 configuration, deployment, or production route changed in this step.
-
 ### Gallery jumps stop waiting for geometry-stable media bytes — 2026-09-13
 
 - Production inspection separated the gallery list, unified context lookup and D1 execution from the client-side jump. Sample gallery/context responses completed in roughly `83–245 ms`, with reported D1 SQL time around `4.7–25.3 ms`; the remaining delay came from hidden staging waiting for image/video bytes and decode before committing the scroll.
@@ -338,11 +369,20 @@ was changed in this step.
 - Failed or timed-out preloads are removed from the in-memory request map so a
   later visible request can retry. External preview images also use
   `no-referrer` and asynchronous decoding.
+- FXTwitter multi-photo metadata no longer exposes the unreliable
+  `mosaic.fxtwitter.com` composite directly to browsers. The Worker retrieves
+  the matching JSON metadata and selects only the first validated
+  `pbs.twimg.com` photo URL; if no safe photo exists, it omits the broken image.
+- Worker preview cache version `v4` and browser Cache API version `v3`
+  invalidate previously stored mosaic URLs. The obsolete browser `v2` cache is
+  deleted asynchronously.
 
 Tradeoff: stopping the skeleton after 12 seconds can expose an empty reserved
 media frame until a very slow response completes. This is preferable to an
 indefinite loading animation and does not add a Worker image proxy, bandwidth
-cost, or new SSRF surface.
+cost, or new SSRF surface. Multi-photo Twitter previews show the first photo
+rather than a generated collage and require one additional bounded FXTwitter
+API request on a cold metadata fetch.
 
 ### Global-notice reads use layered short-lived caches — 2026-09-08
 

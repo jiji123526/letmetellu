@@ -70,6 +70,8 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   assert.match(messageEmbedsSource, /className="preview-media-skeleton"/);
   assert.match(messageEmbedsSource, /image\.decode\(\)/);
   assert.match(messageEmbedsSource, /PREVIEW_IMAGE_LOAD_TIMEOUT_MS = 12_000/);
+  assert.match(messageEmbedsSource, /PREVIEW_CACHE_NAME = "letmetellu-link-previews-v9"/);
+  assert.match(messageEmbedsSource, /window\.caches\.delete\(cacheName\)/);
   assert.match(messageEmbedsSource, /previewImageRequests\.delete\(data\.image\)/);
   assert.match(messageEmbedsSource, /referrerPolicy="no-referrer"/);
   assert.match(messageEmbedsSource, /<PreviewImage\s+key=\{data\.image\}/);
@@ -91,6 +93,15 @@ test("mounted preview prefetch is bounded and connection-aware", () => {
   );
   assert.match(globalStylesSource, /\.link-preview-skeleton/);
   assert.match(globalStylesSource, /\.preview-media-skeleton/);
+  assert.match(
+    globalStylesSource,
+    /\[data-bubble\]:has\(\.message-embeds\)\s*\{[\s\S]*width: calc\(320px \+ var\(--bubble-font-size\) \* 1\.176\);[\s\S]*max-width: 100%/,
+  );
+  assert.match(
+    globalStylesSource,
+    /\[data-bubble\]:has\(\.message-embeds\) \.link-preview-card,[\s\S]*width: 100% !important/,
+  );
+  assert.match(messageEmbedsSource, /className="link-preview-card"[\s\S]*width: "100%"/);
 });
 
 test("successful sends warm previews without delaying acknowledgement", () => {

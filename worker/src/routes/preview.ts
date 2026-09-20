@@ -10,13 +10,19 @@ import {
   PREVIEW_EMPTY_CACHE_TTL_SECONDS,
   PREVIEW_SUCCESS_CACHE_TTL_SECONDS,
 } from "../lib/preview-cache-policy";
+import {
+  extractTwitterStatusId,
+  firstFxTwitterMosaicPhotoUrl,
+  isFxTwitterMosaicUrl,
+} from "../lib/twitter-preview";
 
 const PREVIEW_FETCH_TIMEOUT_MS = 5000;
 const PREVIEW_MAX_RESPONSE_BYTES = 512 * 1024;
 const PREVIEW_MAX_REDIRECTS = 5;
 const PREVIEW_RATE_LIMIT_WINDOW_MS = 60_000;
 const PREVIEW_RATE_LIMIT_MAX = 60;
-const PREVIEW_CACHE_VERSION = "v3";
+const PREVIEW_CACHE_VERSION = "v10";
+const TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60;
 
 function getPreviewRequestIp(request: Request): string {
   return request.headers.get("CF-Connecting-IP")
@@ -101,6 +107,10 @@ async function readResponseTextWithLimit(response: Response): Promise<string> {
 
   html += decoder.decode();
   return html;
+}
+
+function logFxTwitterMediaFailure(stage: string): void {
+  console.warn("fxtwitter media preview unavailable", { stage });
 }
 
 async function cachePreview(cacheKey: Request, response: Response): Promise<void> {
@@ -207,6 +217,7 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
         title: "",
         description: "",
         image: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+        icon: "",
         video: "",
         siteName: "YouTube",
         url: rawUrl,
@@ -233,18 +244,39 @@ export async function handlePreview(request: Request, env: Env): Promise<Respons
 
     const html = await readResponseTextWithLimit(response);
 
-    const metadata = parsePreviewMetadata(html, response.url || fetchUrl.toString());
+    const metadata = parsePreviewMetadata(
+      html,
+      response.url || fetchUrl.toString(),
+      previewUrl.toString(),
+    );
 
+    let twitterMediaLookupFailed = false;
     if (previewUrl.toString().match(/https?:\/\/(twitter\.com|x\.com)\//)) {
       metadata.video = "";
+      if (isFxTwitterMosaicUrl(metadata.image)) {
+        const statusId = extractTwitterStatusId(previewUrl.toString());
+        if (statusId) {
+          metadata.image = firstFxTwitterMosaicPhotoUrl(metadata.image, statusId);
+          twitterMediaLookupFailed = !metadata.image;
+          if (twitterMediaLookupFailed) {
+            logFxTwitterMediaFailure("invalid_mosaic_url");
+          }
+        } else {
+          metadata.image = "";
+          twitterMediaLookupFailed = true;
+          logFxTwitterMediaFailure("missing_status_id");
+        }
+      }
     }
 
     const hasUsefulMetadata = Boolean(metadata.title || metadata.image);
     const previewResponse = Response.json({ ...metadata, url: rawUrl }, {
       headers: {
-        "Cache-Control": `public, max-age=${hasUsefulMetadata
-          ? PREVIEW_SUCCESS_CACHE_TTL_SECONDS
-          : PREVIEW_EMPTY_CACHE_TTL_SECONDS}`,
+        "Cache-Control": `public, max-age=${twitterMediaLookupFailed
+          ? TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS
+          : hasUsefulMetadata
+            ? PREVIEW_SUCCESS_CACHE_TTL_SECONDS
+            : PREVIEW_EMPTY_CACHE_TTL_SECONDS}`,
       },
     });
     await cachePreview(cacheKey, previewResponse);

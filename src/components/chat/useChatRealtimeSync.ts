@@ -31,7 +31,7 @@ import type {
   ChatTimelineSource,
   UnifiedTimelineCursor,
 } from "./chatTimelineState";
-import type { Channel, InitData, PasscodeGateState } from "./chatViewTypes";
+import type { BlockedUser, Channel, InitData, PasscodeGateState } from "./chatViewTypes";
 
 interface BannerState {
   text: string;
@@ -122,7 +122,8 @@ interface UseChatRealtimeSyncArgs {
   setDmMessages: Dispatch<SetStateAction<Message[]>>;
   setPasscodeGate: Dispatch<SetStateAction<PasscodeGateState | null>>;
   setViewerBlocked: Dispatch<SetStateAction<boolean>>;
-  setBlockedUsers: Dispatch<SetStateAction<{ uid: string; reason: string }[]>>;
+  setBlockedUsers: Dispatch<SetStateAction<BlockedUser[]>>;
+  setEntryDenied: Dispatch<SetStateAction<boolean>>;
   setBanner: Dispatch<SetStateAction<BannerState | null>>;
   setShowChannelDeleted: Dispatch<SetStateAction<boolean>>;
   text: {
@@ -179,6 +180,7 @@ export function useChatRealtimeSync({
   setPasscodeGate,
   setViewerBlocked,
   setBlockedUsers,
+  setEntryDenied,
   setBanner,
   setShowChannelDeleted,
   text,
@@ -678,6 +680,25 @@ export function useChatRealtimeSync({
         }
       }
 
+      if (event.type === "entry-denied") {
+        if (!isOwner) {
+          setEntryDenied(true);
+        }
+      }
+
+      if (event.type === "user-kicked") {
+        const kickedUid = event.uid as string;
+        if (!isOwner && kickedUid === uid) {
+          setEntryDenied(true);
+        }
+        if (isOwner) {
+          setBlockedUsers((previous) => [
+            ...previous.filter((item) => item.uid !== kickedUid),
+            { uid: kickedUid, reason: "", mode: "deny_entry" },
+          ]);
+        }
+      }
+
       if (event.type === "user-unblocked") {
         const unblockedUid = event.uid as string;
         if (unblockedUid === uid) {
@@ -774,6 +795,7 @@ export function useChatRealtimeSync({
     setPasscodeGate,
     setViewerBlocked,
     setBlockedUsers,
+    setEntryDenied,
     setBanner,
     setShowChannelDeleted,
     getViewingChannelId,

@@ -18,6 +18,8 @@ import {
   undoPendingDeletion,
 } from "../lib/pending-admin-deletions";
 
+const BETA_CHANNEL_LIMIT = 100;
+
 function normalizeBubbleColor(value: unknown): unknown {
   return typeof value === "string" && value.toLowerCase() === "#3b8df0"
     ? "#3598fe"
@@ -130,7 +132,11 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         WHERE id NOT LIKE '%_live'
       `).first<{ count: number }>();
       const count = Number(row?.count || 0);
-      return Response.json({ count, limit: 50, can_create: count < 50 });
+      return Response.json({
+        count,
+        limit: BETA_CHANNEL_LIMIT,
+        can_create: count < BETA_CHANNEL_LIMIT,
+      });
     }
 
     case "create-channel": {
@@ -152,8 +158,15 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
           SELECT COUNT(*)
           FROM channels
           WHERE id NOT LIKE '%_live'
-        ) < 50
-      `).bind(channel_id, userId, name || "My Channel", instanceId, userId).run();
+        ) < ?
+      `).bind(
+        channel_id,
+        userId,
+        name || "My Channel",
+        instanceId,
+        userId,
+        BETA_CHANNEL_LIMIT,
+      ).run();
       if (!result.meta.changes) {
         const counts = await env.DB.prepare(`
           SELECT
@@ -162,7 +175,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
           FROM channels
           WHERE id NOT LIKE '%_live'
         `).bind(userId).first<{ total_count: number; owner_count: number }>();
-        if (Number(counts?.total_count || 0) >= 50) {
+        if (Number(counts?.total_count || 0) >= BETA_CHANNEL_LIMIT) {
           return Response.json({ error: "beta channel limit reached" }, { status: 403 });
         }
         return Response.json({ error: "channel limit reached" }, { status: 403 });
@@ -290,7 +303,9 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       return Response.json({ ok: true });
     }
 
-    case "block": {
+    case "block":
+    case "kick": {
+      const mode = action === "kick" ? "deny_entry" : "send_only";
       const reason = typeof payload?.reason === "string" ? payload.reason : "";
       const messageId = typeof payload?.message_id === "string" ? payload.message_id : "";
       const messageKind = payload?.message_kind === "dm" ? "dm" : "message";
@@ -340,8 +355,8 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
           .bind(uid, channel_id),
         env.DB.prepare(
-          "INSERT INTO blocked (id, uid, reason, device_id, channel_id) VALUES (?, ?, ?, ?, ?)"
-        ).bind(crypto.randomUUID(), uid, reason, deviceId, channel_id),
+          "INSERT INTO blocked (id, uid, reason, device_id, channel_id, mode) VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(crypto.randomUUID(), uid, reason, deviceId, channel_id, mode),
       ]);
 
       // Broadcast block so the blocked user's UI updates immediately
@@ -349,7 +364,12 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       const blockStub = env.CHAT_ROOM.get(blockDoId);
       await blockStub.fetch(new Request("http://internal/broadcast", {
         method: "POST",
-        body: JSON.stringify({ type: "user-blocked", uid, device_id: deviceId }),
+        body: JSON.stringify({
+          type: mode === "deny_entry" ? "user-kicked" : "user-blocked",
+          uid,
+          device_id: deviceId,
+          mode,
+        }),
       }));
 
       return Response.json({ ok: true });

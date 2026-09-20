@@ -46,9 +46,11 @@ export async function GET(request: Request) {
       : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
 
-  const { anonymousToken } = readIdentityTokens(request.headers.get("cookie"));
+  const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
   const forwardedAnonymousToken = request.headers.get("X-Anonymous-Token") || anonymousToken;
+  const forwardedDeviceToken = request.headers.get("X-Device-Token") || deviceToken;
   if (forwardedAnonymousToken) headers["X-Anonymous-Token"] = forwardedAnonymousToken;
+  if (forwardedDeviceToken) headers["X-Device-Token"] = forwardedDeviceToken;
   const channelReadToken = channelId
     ? readChannelReadTokenCookie(request.headers.get("cookie"), channelId)
     : null;

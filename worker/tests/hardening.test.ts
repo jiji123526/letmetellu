@@ -34,6 +34,11 @@ import { getPreviewFailureCacheTtl } from "../src/lib/preview-cache-policy.ts";
 import { assertAllowedPreviewUrl, isBlockedPreviewHostname, PreviewError } from "../src/lib/preview-policy.ts";
 import { buildManagedMediaPath, extractMediaKey, normalizeManagedMediaUrl } from "../src/lib/media.ts";
 import { extractYouTubeVideoId } from "../src/lib/youtube-preview.ts";
+import {
+  extractTwitterStatusId,
+  firstFxTwitterMosaicPhotoUrl,
+  isFxTwitterMosaicUrl,
+} from "../src/lib/twitter-preview.ts";
 
 test("D1 overloads are transient and init retry jitter stays bounded", () => {
   assert.equal(
@@ -139,6 +144,7 @@ test("preview metadata supports standard title fallback and relative images", ()
     title: "Legacy & Article",
     description: "Older page description",
     image: "https://www.example.com/images/card.jpg",
+    icon: "",
     video: "",
     siteName: "example.com",
   });
@@ -174,6 +180,48 @@ test("YouTube preview IDs support common share, live and reordered watch URLs", 
   assert.equal(extractYouTubeVideoId("https://www.youtube.com/watch?si=test&v=dQw4w9WgXcQ"), "dQw4w9WgXcQ");
   assert.equal(extractYouTubeVideoId("https://example.com/watch?v=dQw4w9WgXcQ"), null);
   assert.equal(extractYouTubeVideoId("https://youtube.com/watch?v=invalid"), null);
+});
+
+test("Twitter previews derive the first photo from validated mosaic paths", () => {
+  const statusId = "2097686264564895818";
+  const mosaicUrl =
+    `https://mosaic.fxtwitter.com/jpeg/${statusId}/HRx6hx6bAAAQLpU/HRx6hx8bEAAqgcF`;
+
+  assert.equal(
+    extractTwitterStatusId(`https://x.com/example/status/${statusId}`),
+    statusId,
+  );
+  assert.equal(extractTwitterStatusId("https://example.com/status/123"), null);
+  assert.equal(isFxTwitterMosaicUrl(mosaicUrl), true);
+  assert.equal(
+    firstFxTwitterMosaicPhotoUrl(mosaicUrl, statusId),
+    "https://pbs.twimg.com/media/HRx6hx6bAAAQLpU?format=jpg&name=orig",
+  );
+  assert.equal(firstFxTwitterMosaicPhotoUrl(mosaicUrl, "999"), "");
+  assert.equal(
+    firstFxTwitterMosaicPhotoUrl(
+      `https://attacker.example/jpeg/${statusId}/HRx6hx6bAAAQLpU`,
+      statusId,
+    ),
+    "",
+  );
+  assert.equal(
+    firstFxTwitterMosaicPhotoUrl(
+      `https://mosaic.fxtwitter.com/jpeg/${statusId}/..%2Fsecret`,
+      statusId,
+    ),
+    "",
+  );
+});
+
+test("Twitter media lookup failures are observable and briefly cached", () => {
+  const source = readFileSync(new URL("../src/routes/preview.ts", import.meta.url), "utf8");
+
+  assert.match(source, /TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS = 60/);
+  assert.match(source, /fxtwitter media preview unavailable/);
+  assert.match(source, /"invalid_mosaic_url"/);
+  assert.match(source, /"missing_status_id"/);
+  assert.match(source, /twitterMediaLookupFailed\s*\?\s*TWITTER_MEDIA_FAILURE_CACHE_TTL_SECONDS/);
 });
 
 test("upload access and quota checks stay ahead of request-body consumption", () => {

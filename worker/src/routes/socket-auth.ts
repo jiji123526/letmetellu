@@ -4,6 +4,7 @@ import { getParentChannelId, isPlatformAdmin, isReportsChannel } from "../lib/sp
 import type { Env } from "../types";
 import { authorizeRoomToken } from "./passcode";
 import { getTrustedUserId } from "../lib/trusted-identity";
+import { isEntryDeniedActor } from "../lib/actor-identities";
 
 export async function handleSocketAuth(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -37,18 +38,15 @@ export async function handleSocketAuth(request: Request, env: Env): Promise<Resp
     return Response.json({ mode: "viewer", userId: trustedUserId });
   }
 
-  if (!channel.passcode) {
-    return new Response(null, { status: 204 });
-  }
-
   const roomToken = request.headers.get("X-Room-Token") || "";
-  if (!roomToken) {
-    return new Response(null, { status: 204 });
-  }
-
-  const decodedRoom = await authorizeRoomToken(roomToken, parentChannelId, channel.passcode, env);
-  if (!decodedRoom) {
-    return Response.json({ error: "invalid room token" }, { status: 403 });
+  if (channel.passcode) {
+    if (!roomToken) {
+      return new Response(null, { status: 204 });
+    }
+    const decodedRoom = await authorizeRoomToken(roomToken, parentChannelId, channel.passcode, env);
+    if (!decodedRoom) {
+      return Response.json({ error: "invalid room token" }, { status: 403 });
+    }
   }
 
   const anonymousToken = request.headers.get("X-Anonymous-Token") || "";
@@ -66,8 +64,17 @@ export async function handleSocketAuth(request: Request, env: Env): Promise<Resp
     ? { deviceId: verifiedDevice.device_id, token: deviceToken }
     : await createDeviceIdentity(env);
 
+  if (await isEntryDeniedActor({
+    env,
+    channelId: parentChannelId,
+    uid: anonymousIdentity.uid,
+    deviceId: deviceIdentity.deviceId,
+  })) {
+    return Response.json({ error: "entry_denied" }, { status: 403 });
+  }
+
   return Response.json({
-    mode: "room",
+    mode: channel.passcode ? "room" : "public",
     userId: anonymousIdentity.uid,
     anonymousUid: anonymousIdentity.uid,
     anonymousToken: anonymousIdentity.token,

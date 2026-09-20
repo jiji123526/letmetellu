@@ -64,10 +64,6 @@ export async function GET(request: Request) {
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
   const parentChannelId = getParentChannelId(channelId);
   const roomToken = readRoomTokenCookie(request.headers.get("cookie"), parentChannelId);
-  if (!session?.user?.id && !roomToken) {
-    return new NextResponse(null, { status: 204 });
-  }
-
   const { anonymousToken, deviceToken } = readIdentityTokens(request.headers.get("cookie"));
   const headers: Record<string, string> = {};
   if (session?.user?.id) {
@@ -88,14 +84,17 @@ export async function GET(request: Request) {
     return new NextResponse(null, { status: 204 });
   }
   const authData = await authRes.json().catch(() => ({})) as {
-    mode?: "admin" | "viewer" | "room";
+    error?: string;
+    mode?: "admin" | "viewer" | "room" | "public";
     userId?: string;
     anonymousUid?: string;
     anonymousToken?: string;
     deviceToken?: string;
   };
   if (!authRes.ok || !authData.mode || !authData.userId) {
-    const response = NextResponse.json({ error: "not authorized" }, { status: 403 });
+    const response = NextResponse.json({
+      error: authData.error === "entry_denied" ? "entry_denied" : "not authorized",
+    }, { status: 403 });
     clearRoomTokenResponseCookie(response, request, parentChannelId);
     return response;
   }

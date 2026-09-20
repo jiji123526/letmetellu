@@ -12,6 +12,12 @@ export interface UnifiedTimelineBootstrap {
   page_end_cursor: UnifiedTimelineCursor | null;
 }
 
+export interface BlockedUser {
+  uid: string;
+  reason: string;
+  mode?: "send_only" | "deny_entry";
+}
+
 export interface Channel {
   id: string;
   owner_uid: string;
@@ -38,7 +44,7 @@ export interface InitData {
   messages?: Message[];
   page_start_cursor?: MessagePageCursor | null;
   page_end_cursor?: MessagePageCursor | null;
-  blocked?: { uid: string; reason: string }[];
+  blocked?: BlockedUser[];
   viewerBlocked?: boolean;
   viewerModerationStatus?: "frozen" | null;
   dm?: Message[];

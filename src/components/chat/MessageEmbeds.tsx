@@ -10,12 +10,22 @@ interface PreviewData {
   title: string;
   description: string;
   image: string;
+  icon: string;
   video: string;
   siteName: string;
   url: string;
 }
 
-const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v2";
+const PREVIEW_CACHE_NAME = "letmetellu-link-previews-v9";
+const LEGACY_PREVIEW_CACHE_NAMES = [
+  "letmetellu-link-previews-v8",
+  "letmetellu-link-previews-v7",
+  "letmetellu-link-previews-v6",
+  "letmetellu-link-previews-v5",
+  "letmetellu-link-previews-v4",
+  "letmetellu-link-previews-v3",
+  "letmetellu-link-previews-v2",
+];
 const LEGACY_PREVIEW_STORAGE_KEY = "letmetellu_link_previews_v1";
 const PREVIEW_CACHE_LIMIT = 200;
 const PREVIEW_CACHED_AT_HEADER = "X-Letmetellu-Preview-Cached-At";
@@ -123,6 +133,7 @@ function isPreviewData(value: unknown): value is PreviewData {
   return typeof candidate.title === "string"
     && typeof candidate.description === "string"
     && typeof candidate.image === "string"
+    && (candidate.icon === undefined || typeof candidate.icon === "string")
     && typeof candidate.video === "string"
     && typeof candidate.siteName === "string"
     && typeof candidate.url === "string";
@@ -133,6 +144,7 @@ function compactPreviewData(data: PreviewData): PreviewData {
     title: data.title.slice(0, 500),
     description: data.description.slice(0, 1000),
     image: data.image.slice(0, 4096),
+    icon: (data.icon || "").slice(0, 4096),
     video: data.video.slice(0, 4096),
     siteName: data.siteName.slice(0, 200),
     url: data.url.slice(0, 4096),
@@ -160,6 +172,9 @@ function openPersistentPreviewCache(): Promise<Cache | null> {
   }
 
   if (!("caches" in window)) return Promise.resolve(null);
+  LEGACY_PREVIEW_CACHE_NAMES.forEach((cacheName) => {
+    void window.caches.delete(cacheName).catch(() => false);
+  });
   persistentPreviewCachePromise = window.caches.open(PREVIEW_CACHE_NAME).catch(() => null);
   return persistentPreviewCachePromise;
 }
@@ -234,7 +249,10 @@ function fetchPreviewNow(url: string, forceRefresh: boolean): Promise<PreviewDat
   return fetch(`/api/preview?url=${encodeURIComponent(url)}`)
     .then((response) => response.ok ? response.json() as Promise<PreviewData | null> : null)
     .then((result) => {
-      const normalized = result && (result.title || result.image) ? result : null;
+      const normalized = result
+        && (result.title || result.image || result.siteName || result.icon)
+        ? result
+        : null;
       if (normalized) {
         const now = Date.now();
         previewCache.set(url, normalized);
@@ -627,7 +645,7 @@ function LinkPreviewCard({
         maxWidth: "100%",
         borderRadius: "12px",
         overflow: "hidden",
-        width: "min(320px, 100%)",
+        width: "100%",
         background: isMine ? "rgba(0,0,0,.15)" : "rgba(0,0,0,.05)",
         textDecoration: "none",
         color: "inherit",
@@ -650,8 +668,20 @@ function LinkPreviewCard({
       {hasTextMetadata && (
         <div style={{ padding: "10px 12px" }}>
           {data.siteName && (
-            <div style={{ fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
-              {data.siteName}
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "calc(var(--bubble-font-size) - 5px)", color: "var(--meta)", marginBottom: "2px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
+              {data.icon && (
+                <img
+                  src={data.icon}
+                  alt=""
+                  width={16}
+                  height={16}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  style={{ width: "16px", height: "16px", objectFit: "contain", borderRadius: "3px", flex: "0 0 auto" }}
+                />
+              )}
+              <span>{data.siteName}</span>
             </div>
           )}
           {data.title && (

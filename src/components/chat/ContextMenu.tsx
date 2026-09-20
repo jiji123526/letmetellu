@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/hooks/useLocale";
 
 const REACTIONS = ["👍", "👎", "🫪", "❓"];
@@ -58,7 +58,9 @@ interface ContextMenuProps {
   onDeleteWithReplies?: (msgId: string) => void;
   onEdit?: (msgId: string) => void;
   onBlock?: (msg: { id: string; uid: string; text: string; dm?: boolean }) => void;
+  onKick?: (msg: { id: string; uid: string; text: string; dm?: boolean }) => void;
   isBlockedUser?: boolean;
+  isEntryDeniedUser?: boolean;
   onDismissReportMessage?: (msgId: string) => void;
   onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
@@ -115,7 +117,9 @@ export function ContextMenu({
   onDeleteWithReplies,
   onEdit,
   onBlock,
+  onKick,
   isBlockedUser,
+  isEntryDeniedUser,
   onDismissReportMessage,
   onReportAction,
   onPetitionAction,
@@ -126,6 +130,7 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const bubbleNodeRef = useRef<HTMLElement | null>(null);
+  const [showUserManagement, setShowUserManagement] = useState(false);
   const { t } = useLocale();
 
   // Calculate positioning first
@@ -466,6 +471,43 @@ export function ContextMenu({
               </div>
             )}
           </>
+        ) : showUserManagement ? (
+          <>
+            {onBlock && (
+              <button
+                style={{
+                  ...ACTION_ITEM_STYLE,
+                  color: "#d32f2f",
+                  opacity: isBlockedUser && !isEntryDeniedUser ? 0.45 : 1,
+                }}
+                onClick={() => { onBlock(msg); onClose(); }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M4.93 4.93l14.14 14.14" />
+                </svg>
+                <span>{t("messageBlock")}</span>
+              </button>
+            )}
+            {onKick && (
+              <button
+                style={{
+                  ...ACTION_ITEM_STYLE,
+                  color: "#d32f2f",
+                  opacity: isEntryDeniedUser ? 0.45 : 1,
+                  borderBottom: "none",
+                }}
+                onClick={() => { onKick(msg); onClose(); }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 17l5-5-5-5" />
+                  <path d="M15 12H3" />
+                  <path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" />
+                </svg>
+                <span>{t("entryBlock")}</span>
+              </button>
+            )}
+          </>
         ) : (
           <>
             {onReply && (
@@ -508,13 +550,30 @@ export function ContextMenu({
               </button>
             )}
 
-            {isAdmin && !isMyMessage && onBlock && !msg.protected_sender && (
-              <button style={{ ...ACTION_ITEM_STYLE, color: isBlockedUser ? "#2a9d4e" : "#d32f2f", borderBottom: "none" }} onClick={() => { onBlock(msg); onClose(); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" fill="none" stroke={isBlockedUser ? "#2a9d4e" : "#d32f2f"} strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M4.93 4.93l14.14 14.14" />
+            {isAdmin && !isMyMessage && (onBlock || onKick) && !msg.protected_sender && (
+              <button
+                style={{ ...ACTION_ITEM_STYLE, color: "#d32f2f", borderBottom: "none" }}
+                onClick={() => setShowUserManagement(true)}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" className="flex-shrink-0" style={{ transform: "translateY(-1px) scale(1.1)" }} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="7" r="4" />
+                  <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
                 </svg>
-                <span>{isBlockedUser ? t("unblock") : t("block")}</span>
+                <span>{t("userManagement")}</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  className="ml-auto flex-shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
               </button>
             )}
 

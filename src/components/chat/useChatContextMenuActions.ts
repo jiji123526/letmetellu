@@ -9,6 +9,7 @@ import type {
   ChatTimelineMutationItem,
   ChatTimelineSource,
 } from "./chatTimelineState";
+import type { BlockedUser } from "./chatViewTypes";
 
 interface BannerState {
   text: string;
@@ -25,16 +26,12 @@ interface ContextMenuState {
   bubbleEl: HTMLElement;
 }
 
-interface BlockedUser {
-  uid: string;
-  reason: string;
-}
-
 interface ContextMenuText {
   deleteLabel: string;
   anonLabel: string;
   anonBlockedLabel: string;
   anonUnblockedLabel: string;
+  anonKickedLabel: string;
   reportDismissedBanner: string;
   deleteFailed: string;
   messageDeleted: string;
@@ -85,7 +82,9 @@ export interface UseChatContextMenuActionsResult {
   onDeleteWithReplies?: (msgId: string) => void;
   onEdit?: (msgId: string) => void;
   onBlock?: (message: { id: string; uid: string; text: string; dm?: boolean }) => void;
+  onKick?: (message: { id: string; uid: string; text: string; dm?: boolean }) => void;
   isBlockedUser: boolean;
+  isEntryDeniedUser: boolean;
   onDismissReportMessage?: (msgId: string) => void;
   onReportAction?: (action: "warn_owner" | "freeze_channel" | "unfreeze_channel" | "delete_channel" | "resolve" | "dismiss") => void;
   onPetitionAction?: (action: "accept_petition" | "reject_petition" | "unfreeze_channel") => void;
@@ -270,9 +269,11 @@ export function useChatContextMenuActions({
 
   const onBlock = useCallback((targetMessage: { id: string; uid: string; text: string; dm?: boolean }) => {
     const blockUid = targetMessage.uid;
-    const blocked = blockedUsers.some((entry) => entry.uid === blockUid);
+    const sendOnlyBlocked = blockedUsers.some((entry) =>
+      entry.uid === blockUid && entry.mode !== "deny_entry"
+    );
 
-    if (blocked) {
+    if (sendOnlyBlocked) {
       void adminAction("unblock", channelId, { uid: blockUid });
       setBlockedUsers((previous) => previous.filter((entry) => entry.uid !== blockUid));
       flashBanner(`${text.anonLabel}#${blockUid.slice(-4)} ${text.anonUnblockedLabel}`, "#2a9d4e");
@@ -285,7 +286,10 @@ export function useChatContextMenuActions({
       message_kind: targetMessage.dm ? "dm" : "message",
       reason,
     });
-    setBlockedUsers((previous) => [...previous, { uid: blockUid, reason }]);
+    setBlockedUsers((previous) => [
+      ...previous.filter((entry) => entry.uid !== blockUid),
+      { uid: blockUid, reason, mode: "send_only" },
+    ]);
     flashBanner(`${text.anonLabel}#${blockUid.slice(-4)} ${text.anonBlockedLabel}`, "#d32f2f");
   }, [
     blockedUsers,
@@ -293,6 +297,39 @@ export function useChatContextMenuActions({
     flashBanner,
     setBlockedUsers,
     text.anonBlockedLabel,
+    text.anonLabel,
+    text.anonUnblockedLabel,
+  ]);
+
+  const onKick = useCallback((targetMessage: { id: string; uid: string; text: string; dm?: boolean }) => {
+    const kickUid = targetMessage.uid;
+    const denied = blockedUsers.some((entry) =>
+      entry.uid === kickUid && entry.mode === "deny_entry"
+    );
+    if (denied) {
+      void adminAction("unblock", channelId, { uid: kickUid });
+      setBlockedUsers((previous) => previous.filter((entry) => entry.uid !== kickUid));
+      flashBanner(`${text.anonLabel}#${kickUid.slice(-4)} ${text.anonUnblockedLabel}`, "#2a9d4e");
+      return;
+    }
+
+    const reason = targetMessage.text?.slice(0, 50) || "";
+    void adminAction("kick", channelId, {
+      message_id: targetMessage.id,
+      message_kind: targetMessage.dm ? "dm" : "message",
+      reason,
+    });
+    setBlockedUsers((previous) => [
+      ...previous.filter((entry) => entry.uid !== kickUid),
+      { uid: kickUid, reason, mode: "deny_entry" },
+    ]);
+    flashBanner(`${text.anonLabel}#${kickUid.slice(-4)} ${text.anonKickedLabel}`, "#d32f2f");
+  }, [
+    blockedUsers,
+    channelId,
+    flashBanner,
+    setBlockedUsers,
+    text.anonKickedLabel,
     text.anonLabel,
     text.anonUnblockedLabel,
   ]);
@@ -336,6 +373,9 @@ export function useChatContextMenuActions({
   const canModerateReport = Boolean(contextMenu?.msg.report_meta && canUseAdminMutations);
   const canModeratePetition = Boolean(contextMenu?.msg.petition_meta && canUseAdminMutations);
   const isBlockedUser = Boolean(contextMenu && blockedUsers.some((entry) => entry.uid === contextMenu.msg.uid));
+  const isEntryDeniedUser = Boolean(contextMenu && blockedUsers.some((entry) =>
+    entry.uid === contextMenu.msg.uid && entry.mode === "deny_entry"
+  ));
   const isReported = Boolean(contextMenu && isMessageReported(contextMenu.msg.id));
   const reportActionPending = Boolean(
     canUseAdminMutations
@@ -358,7 +398,9 @@ export function useChatContextMenuActions({
     onDeleteWithReplies: canDeleteWithReplies ? onDeleteWithReplies : undefined,
     onEdit: canEdit ? onEdit : undefined,
     onBlock: canBlock ? onBlock : undefined,
+    onKick: canBlock ? onKick : undefined,
     isBlockedUser,
+    isEntryDeniedUser,
     onDismissReportMessage: canDismissReportMessage ? onDismissReportMessage : undefined,
     onReportAction: canModerateReport ? onReportAction : undefined,
     onPetitionAction: canModeratePetition ? onPetitionAction : undefined,

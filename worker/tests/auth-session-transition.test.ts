@@ -35,7 +35,7 @@ test("chat socket lifecycle is bound to the current authenticated identity", () 
   assert.match(realtimeSource, /authenticated=\$\{expectedAuthentication\}/);
   assert.match(
     chatViewSource,
-    /useRealtime\(\s*channelId,\s*uid,\s*authUserId,\s*\)/,
+    /useRealtime\(\s*loading \|\| entryDenied \? null : channelId,\s*uid,\s*authUserId,\s*\)/,
   );
   assert.match(socketTokenSource, /expectedAuthentication === "1" && !session\?\.user\?\.id/);
   assert.match(socketTokenSource, /expectedAuthentication === "0" && !!session\?\.user\?\.id/);

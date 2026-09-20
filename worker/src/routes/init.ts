@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { createAnonymousIdentity, createDeviceIdentity, verifyAnonymousIdentityToken, verifyDeviceIdentityToken } from "../lib/anonymous-identity";
-import { getBlockedDeviceLookup } from "../lib/actor-identities";
+import { getActorBlockMode, getBlockedDeviceLookup } from "../lib/actor-identities";
 import { getUserLocale } from "../lib/channel-moderation";
 import {
   endLiveSession,
@@ -387,6 +387,21 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
       : await createDeviceIdentity(env);
     identityMs = roundedDuration(identityStartedAt);
 
+    if (!isOwner && !isPlatformAdminViewer) {
+      const actorBlockMode = await getActorBlockMode({
+        env,
+        channelId: parentChannelId,
+        uid: anonymousIdentity.uid,
+        additionalUid: channelReadAccess?.viewer === "visitor"
+          ? channelReadAccess.subject
+          : null,
+        deviceId: deviceIdentity.deviceId,
+      });
+      if (actorBlockMode === "deny_entry") {
+        return Response.json({ error: "entry_denied" }, { status: 403 });
+      }
+    }
+
     routeStage = "verify_room_access";
     const accessStartedAt = performance.now();
 
@@ -485,7 +500,7 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         viewerBlockedIndex = statements.length;
         statements.push(
           readEnv.DB.prepare(
-            "SELECT 1 FROM blocked WHERE channel_id = ? AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
+            "SELECT 1 FROM blocked WHERE channel_id = ? AND mode = 'send_only' AND (uid = ? OR device_id = ? OR device_id = ? OR fingerprint = ?) LIMIT 1"
           ).bind(parentChannelId, viewerUid, viewerDeviceLookup.raw, viewerDeviceLookup.hashed, viewerDeviceLookup.raw)
         );
       }

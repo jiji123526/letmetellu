@@ -42,11 +42,13 @@ export async function GET(request: Request) {
   const roomToken = request.headers.get("X-Room-Token")
     || (parentChannelId ? readRoomTokenCookie(request.headers.get("cookie"), parentChannelId) : null);
   if (roomToken) headers["X-Room-Token"] = roomToken;
-  const { anonymousToken: cookieAnonymousToken } = readIdentityTokens(
+  const { anonymousToken: cookieAnonymousToken, deviceToken: cookieDeviceToken } = readIdentityTokens(
     request.headers.get("cookie"),
   );
   const anonymousToken = request.headers.get("X-Anonymous-Token") || cookieAnonymousToken;
+  const deviceToken = request.headers.get("X-Device-Token") || cookieDeviceToken;
   if (anonymousToken) headers["X-Anonymous-Token"] = anonymousToken;
+  if (deviceToken) headers["X-Device-Token"] = deviceToken;
   if (request.headers.get("X-Unified-Timeline-Shadow") === "1") {
     headers["X-Unified-Timeline-Shadow"] = "1";
   }
