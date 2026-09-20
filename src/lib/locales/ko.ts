@@ -656,7 +656,7 @@ export const ko = {
   betaNoticeDetail: "베타 기간에는 일부 기능이 변경되거나 잠시 불안정할 수 있으며, 안정적인 운영을 위해 채널 생성이 제한될 수 있어요. 불편한 점은 이용 문의로 알려주세요.",
   betaNoticeConfirm: "확인했어요",
   betaCapacityTitle: "베타 채널 모집이 마감되었어요",
-  betaCapacityDescription: "안정적인 베타 운영을 위해 현재는 채널수를 제한하고 있어요.<br>더 나은 모습으로 준비할 정식 출시를 기대해 주세요.",
+  betaCapacityDescription: "안정적인 베타 운영을 위해 현재는 최대 100개 채널을 제공하고 있어요.<br>더 나은 모습으로 준비할 정식 출시를 기대해 주세요.",
   betaCapacityConfirm: "확인했어요",
   visitSurveyEyebrow: "잠깐만 확인할게요",
   visitSurveyQuestion: "고쳤으면 하는 점이 있나요?",

@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Limited-beta channel capacity increases to 100 — 2026-09-20
+
+- The service-wide normal-channel ceiling increases from 50 to 100. Live-session channel rows remain excluded from this capacity calculation.
+- The existing maximum of five normal channels per owner is unchanged.
+- Capacity reads, atomic channel creation and the post-failure error classification now share one server constant so the dashboard cannot advertise a different ceiling from the write path.
+- Korean and English capacity dialogs now state the 100-channel beta ceiling explicitly.
+
+Trade-off: the beta can now hold twice as many independently active channels, increasing the possible aggregate message, media and moderation load. This does not double baseline traffic by itself, and the existing per-owner limit, upload controls, rate limits and channel-local pagination remain unchanged.
+
+Deployment note: deploy the Worker first, then the frontend. No D1 migration or backfill is required. Verify the capacity endpoint returns `limit: 100`, the 100th normal channel can be created, the 101st is rejected with the beta-capacity response, and one owner still cannot create a sixth normal channel.
+
 ### Gallery jumps stop waiting for geometry-stable media bytes — 2026-09-13
 
 - Production inspection separated the gallery list, unified context lookup and D1 execution from the client-side jump. Sample gallery/context responses completed in roughly `83–245 ms`, with reported D1 SQL time around `4.7–25.3 ms`; the remaining delay came from hidden staging waiting for image/video bytes and decode before committing the scroll.
