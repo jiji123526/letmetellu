@@ -6,6 +6,30 @@ Production still routes every request to one D1 database. One empty, unrouted
 Chat canary now exists for the first channel-copy exercise; no virtual-bucket
 map, placement override, channel data migration, or cutover has been created.
 
+## 2026-09-20: main reconciliation and canary migration identity alignment
+
+- Merged the current production `main` into the partitioning branch and
+  preserved both channel-database routing and the newer entry-denial,
+  passcode-health, gallery, and link-preview behavior.
+- Verified that D1 tracks the complete migration filename. Production had
+  already recorded `0064_blocked_entry_mode.sql` and still listed the seven
+  partitioning migrations as pending; the empty canary had recorded the seven
+  partitioning migrations and listed only `0064_blocked_entry_mode.sql`.
+- Kept both `0064` prefixes unchanged. Renumbering an already-recorded file
+  would make Wrangler attempt the same schema operation again under a new name.
+- Applied only the missing blocked-entry migration to the empty, unrouted
+  `letsplay-chat-10997-canary-20260914` database. A follow-up check reported no
+  pending migrations, `shard_role=chat-canary`, bootstrap version 11, the
+  expected `blocked.mode` column, and `PRAGMA quick_check=ok`.
+- Worker and frontend TypeScript checks passed after the merge, together with
+  all 491 Worker hardening tests.
+
+The next gate remains the reviewed application of the seven partitioning
+foundation migrations to the production source database. That is a production
+schema and write-path change and must not be combined with channel copy or
+routing. No production database, Worker deployment, channel copy, maintenance
+mode, or routing changed in this reconciliation step.
+
 ## 2026-09-14: isolated `/ch/10997` copy preflight
 
 - Added and deployed `letsplay-d1-canary-preflight-10997`, a narrow Worker

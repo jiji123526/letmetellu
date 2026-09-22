@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### D1 migration identity is aligned after merging the partitioning branch with main — 2026-09-20
+
+- D1 migration state was checked on both the production source and the empty `/ch/10997` canary after merging current `main`. Wrangler identifies a migration by its complete filename, so `0064_blocked_entry_mode.sql` and `0064_channel_control_projections.sql` are distinct despite sharing a numeric prefix.
+- The existing files were deliberately not renumbered: both remote databases had already recorded complementary filenames, and a rename would cause Wrangler to treat an already-applied schema operation as pending again.
+- Only the missing blocked-entry migration was applied to the empty, unrouted canary. It now has no pending migrations, retains `chat-canary` bootstrap version 11, exposes the expected `blocked.mode` column and passes `PRAGMA quick_check`.
+
+Trade-off: the repository retains two filenames beginning with `0064`, so operators must review complete migration names rather than infer state from the numeric prefix alone. This is safer than rewriting remote migration history or replaying non-idempotent schema changes.
+
+Deployment note: the canary receives no application traffic and is not bound to the production Worker. No production D1 migration, Worker deployment, copy, maintenance mode or routing change occurred. The seven partitioning foundation migrations remain pending on the production source and require a separate approval.
+
 ### Passcode gate offers an explicit dashboard exit — 2026-09-20
 
 - Visitors who cannot or do not want to enter a protected channel can now leave the full-screen passcode gate through a localized `Back to dashboard` action.

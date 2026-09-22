@@ -57,9 +57,20 @@ add it to production bindings yet.
 
 Apply every repository migration through `0070`:
 
+> D1 records migrations by the complete filename, not only by the numeric
+> prefix. The repository intentionally contains both
+> `0064_blocked_entry_mode.sql` and
+> `0064_channel_control_projections.sql`. Do not renumber either file after a
+> remote database has recorded it; renaming would make Wrangler treat the same
+> schema change as a new pending migration. Confirm the complete pending-name
+> list before every apply.
+
 ```bash
 npx wrangler d1 migrations apply "$CANARY_DB" --remote
 ```
+
+Immediately rerun `d1 migrations list` and require `No migrations to apply`
+before applying the Chat-shard overlay.
 
 Apply the one-time Chat-shard overlay:
 
