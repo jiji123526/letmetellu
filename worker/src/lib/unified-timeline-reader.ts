@@ -269,6 +269,9 @@ async function readDmRootCandidates(
   candidateLimit: number,
   metrics: UnifiedTimelineReadMetrics,
 ): Promise<RootCandidate[]> {
+  const parentChannelId = channelId.endsWith("_live")
+    ? channelId.slice(0, -5)
+    : channelId;
   let innerQuery = "SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL";
   const params: unknown[] = [channelId];
   if (!viewer.owner) {
@@ -279,11 +282,11 @@ async function readDmRootCandidates(
           SELECT 1
           FROM dm_notification_owners notification_owner
           WHERE notification_owner.dm_id = dm.id
-            AND notification_owner.channel_id = dm.channel_id
+            AND notification_owner.channel_id = ?
             AND notification_owner.user_id = ?
         )
       )`;
-      params.push(viewer.anonymousUid, viewer.accountUid);
+      params.push(viewer.anonymousUid, parentChannelId, viewer.accountUid);
     } else {
       innerQuery += " AND uid = ?";
       params.push(viewer.anonymousUid);
@@ -497,17 +500,20 @@ async function resolveTargetRoot(
         )`;
     if (!viewer.owner) {
       if (viewer.accountUid) {
+        const parentChannelId = channelId.endsWith("_live")
+          ? channelId.slice(0, -5)
+          : channelId;
         query += ` AND (
           d.uid = ?
           OR EXISTS (
             SELECT 1
             FROM dm_notification_owners notification_owner
             WHERE notification_owner.dm_id = d.id
-              AND notification_owner.channel_id = d.channel_id
+              AND notification_owner.channel_id = ?
               AND notification_owner.user_id = ?
           )
         )`;
-        params.push(viewer.anonymousUid, viewer.accountUid);
+        params.push(viewer.anonymousUid, parentChannelId, viewer.accountUid);
       } else {
         query += " AND d.uid = ?";
         params.push(viewer.anonymousUid);

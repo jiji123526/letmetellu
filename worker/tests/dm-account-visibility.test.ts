@@ -34,7 +34,12 @@ test("legacy DM reads match a signed-in visitor by device or account", async () 
   assert.equal(calls.length, 1);
   assert.match(calls[0].query, /FROM dm_notification_owners notification_owner/);
   assert.match(calls[0].query, /notification_owner\.user_id = \?/);
-  assert.deepEqual(calls[0].params, ["channel-a", "device-b", "account-a"]);
+  assert.deepEqual(calls[0].params, [
+    "channel-a",
+    "device-b",
+    "channel-a",
+    "account-a",
+  ]);
 });
 
 test("legacy guest DM reads remain device-bound", async () => {
@@ -49,4 +54,20 @@ test("legacy guest DM reads remain device-bound", async () => {
   assert.match(calls[0].query, /AND uid = \?/);
   assert.doesNotMatch(calls[0].query, /dm_notification_owners/);
   assert.deepEqual(calls[0].params, ["channel-a", "device-b"]);
+});
+
+test("live DM account ownership is scoped through the parent channel", async () => {
+  const { env, calls } = createEnv();
+  await readDmThreads(env, "channel-a_live", {
+    owner: false,
+    anonymousUid: "device-b",
+    accountUid: "account-a",
+  });
+
+  assert.deepEqual(calls[0].params, [
+    "channel-a_live",
+    "device-b",
+    "channel-a",
+    "account-a",
+  ]);
 });

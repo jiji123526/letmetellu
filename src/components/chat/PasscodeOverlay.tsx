@@ -36,7 +36,11 @@ export function PasscodeOverlay({ channelId, channelName, profileImage, bubbleCo
       onSuccess();
     } else {
       setShake(true);
-      setError(t("wrongPasscode"));
+      setError(
+        result.error === "too_many_attempts"
+          ? t("tooManyPasscodeAttempts")
+          : t("wrongPasscode"),
+      );
       setTimeout(() => setShake(false), 500);
       setPasscode("");
       inputRef.current?.focus();

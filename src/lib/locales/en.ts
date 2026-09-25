@@ -269,6 +269,7 @@ export const en: Record<LocaleKeys, string> = {
   passcodeHintPlaceholder: "Passcode hint (optional)",
   passcodeHintPublic: "The hint is public to every visitor on the passcode screen.",
   wrongPasscode: "Wrong passcode",
+  tooManyPasscodeAttempts: "Too many attempts. Wait for a bit.",
   passcodeRequired: "This channel requires a passcode",
   passcodeInput: "Enter passcode",
   enterChannel: "Enter",

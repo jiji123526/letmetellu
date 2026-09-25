@@ -176,7 +176,7 @@ function createFixture(input: {
                 row.uid === params[1]
                 || (
                   accountScoped
-                  && row.notification_user_id === params[2]
+                  && row.notification_user_id === params[3]
                 )
               )
             : dmRoots;
@@ -185,7 +185,7 @@ function createFixture(input: {
               visibleRoots,
               sql,
               params,
-              accountScoped ? 3 : visitorScoped ? 2 : 1,
+              accountScoped ? 4 : visitorScoped ? 2 : 1,
             ),
           };
         }

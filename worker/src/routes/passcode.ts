@@ -7,7 +7,7 @@ const PASSCODE_HASH_PREFIX = "pbkdf2-sha256$";
 const PASSCODE_PBKDF2_ITERATIONS = 100_000;
 const LEGACY_PASSCODE_HASH_PATTERN = /^[a-f0-9]{64}$/i;
 type InternalSecretUsage = "sign" | "verify";
-const PASSCODE_VERIFY_LIMIT = 5;
+const PASSCODE_VERIFY_LIMIT = 10;
 const PASSCODE_VERIFY_WINDOW_MS = 60_000;
 
 function toBase64(bytes: Uint8Array): string {

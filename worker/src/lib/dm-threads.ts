@@ -56,6 +56,9 @@ export async function readDmThreads(
     accountUid: string | null;
   },
 ): Promise<PrivateDmMessage[]> {
+  const parentChannelId = channelId.endsWith("_live")
+    ? channelId.slice(0, -5)
+    : channelId;
   const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at";
   let rootQuery = `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ?`;
   const rootParams: unknown[] = [channelId];
@@ -67,11 +70,11 @@ export async function readDmThreads(
           SELECT 1
           FROM dm_notification_owners notification_owner
           WHERE notification_owner.dm_id = dm.id
-            AND notification_owner.channel_id = dm.channel_id
+            AND notification_owner.channel_id = ?
             AND notification_owner.user_id = ?
         )
       )`;
-      rootParams.push(viewer.anonymousUid, viewer.accountUid);
+      rootParams.push(viewer.anonymousUid, parentChannelId, viewer.accountUid);
     } else {
       rootQuery += " AND uid = ?";
       rootParams.push(viewer.anonymousUid);

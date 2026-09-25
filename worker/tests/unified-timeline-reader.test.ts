@@ -137,9 +137,10 @@ test("visitor DM candidate reads also match the trusted account identity", async
   assert.ok(dmCall);
   assert.match(dmCall.query, /FROM dm_notification_owners notification_owner/);
   assert.match(dmCall.query, /notification_owner\.user_id = \?/);
-  assert.deepEqual(dmCall.params.slice(0, 3), [
+  assert.deepEqual(dmCall.params.slice(0, 4), [
     "channel-a",
     "device-b",
+    "channel-a",
     "account-a",
   ]);
 });
@@ -273,5 +274,9 @@ test("centered DM target resolution accepts the trusted account identity", async
   assert.ok(targetCall);
   assert.match(targetCall.query, /FROM dm_notification_owners notification_owner/);
   assert.match(targetCall.query, /notification_owner\.user_id = \?/);
-  assert.deepEqual(targetCall.params.slice(-2), ["device-b", "account-a"]);
+  assert.deepEqual(targetCall.params.slice(-3), [
+    "device-b",
+    "channel-a",
+    "account-a",
+  ]);
 });

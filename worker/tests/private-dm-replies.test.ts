@@ -72,7 +72,7 @@ function createFakeEnv(options: {
         if (sql.includes("SELECT id, image FROM dm") && sql.includes("pending_delete_at IS NULL")) {
           return params[0] === root.id
               && params[1] === root.channel_id
-              && (params[2] === root.uid || params[4] === options.notificationOwner)
+              && (params[2] === root.uid || params[5] === options.notificationOwner)
             ? { id: root.id, image: root.image }
             : null;
         }
@@ -104,7 +104,7 @@ function createFakeEnv(options: {
           if (
             sql.includes("FROM dm_notification_owners notification_owner")
             && params[1] !== root.uid
-            && params[2] !== options.notificationOwner
+            && params[3] !== options.notificationOwner
           ) {
             return { results: [] };
           }

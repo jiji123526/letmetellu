@@ -406,7 +406,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
                SELECT 1
                FROM dm_notification_owners notification_owner
                WHERE notification_owner.dm_id = dm.id
-                 AND notification_owner.channel_id = dm.channel_id
+                 AND notification_owner.channel_id = ?
                  AND notification_owner.user_id = ?
              )
            )
@@ -418,6 +418,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       channelId,
       requesterUid,
       requesterAccountUid,
+      parentChannelId,
       requesterAccountUid,
     ).first<{ id: string; image: string | null }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
@@ -442,7 +443,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
                  SELECT 1
                  FROM dm_notification_owners notification_owner
                  WHERE notification_owner.dm_id = dm.id
-                   AND notification_owner.channel_id = dm.channel_id
+                   AND notification_owner.channel_id = ?
                    AND notification_owner.user_id = ?
                )
              )
@@ -452,6 +453,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         channelId,
         requesterUid,
         requesterAccountUid,
+        parentChannelId,
         requesterAccountUid,
       ),
     ]);

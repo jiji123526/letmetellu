@@ -267,6 +267,7 @@ export const ko = {
   passcodeHintPlaceholder: "비밀번호 힌트 (선택)",
   passcodeHintPublic: "힌트는 비밀번호 입력 화면에서 모든 방문자에게 공개됩니다.",
   wrongPasscode: "비밀번호가 틀렸습니다",
+  tooManyPasscodeAttempts: "시도 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   passcodeRequired: "이 채널은 비밀번호가 필요합니다",
   passcodeInput: "비밀번호 입력",
   enterChannel: "입장",
