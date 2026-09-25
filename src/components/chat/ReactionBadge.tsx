@@ -54,7 +54,9 @@ export const ReactionBadge = memo(function ReactionBadge({ messageId, reactions:
               gap: "3px",
               borderRadius: "12px",
               border: "1px solid",
-              background: "var(--gray-bubble)",
+              background: data.mine
+                ? "color-mix(in srgb, var(--bubble-sent, #3598fe) 16%, var(--gray-bubble))"
+                : "var(--gray-bubble)",
               borderColor: data.mine
                 ? "var(--bubble-sent, #3598fe)"
                 : "var(--hairline)",
