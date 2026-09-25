@@ -44,20 +44,41 @@ export interface PrivateDmMessage {
   created_at: string;
   dm: true;
   dm_reply?: true;
+  viewer_owned?: true;
 }
 
 export async function readDmThreads(
   env: Env,
   channelId: string,
-  viewer: { owner: true } | { owner: false; anonymousUid: string },
+  viewer: { owner: true } | {
+    owner: false;
+    anonymousUid: string;
+    accountUid: string | null;
+  },
 ): Promise<PrivateDmMessage[]> {
   const rootSelectColumns = "id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at";
-  const rootQuery = viewer.owner
-    ? `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC`
-    : `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ? AND uid = ? AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC`;
-  const rootStatement = viewer.owner
-    ? env.DB.prepare(rootQuery).bind(channelId)
-    : env.DB.prepare(rootQuery).bind(channelId, viewer.anonymousUid);
+  let rootQuery = `SELECT ${rootSelectColumns} FROM (SELECT ${rootSelectColumns} FROM dm WHERE channel_id = ?`;
+  const rootParams: unknown[] = [channelId];
+  if (!viewer.owner) {
+    if (viewer.accountUid) {
+      rootQuery += ` AND (
+        uid = ?
+        OR EXISTS (
+          SELECT 1
+          FROM dm_notification_owners notification_owner
+          WHERE notification_owner.dm_id = dm.id
+            AND notification_owner.channel_id = dm.channel_id
+            AND notification_owner.user_id = ?
+        )
+      )`;
+      rootParams.push(viewer.anonymousUid, viewer.accountUid);
+    } else {
+      rootQuery += " AND uid = ?";
+      rootParams.push(viewer.anonymousUid);
+    }
+  }
+  rootQuery += " AND pending_delete_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 50) ORDER BY created_at ASC, id ASC";
+  const rootStatement = env.DB.prepare(rootQuery).bind(...rootParams);
   const roots = (await rootStatement.all<DmRootRow>()).results || [];
   if (roots.length === 0) return [];
 
@@ -86,6 +107,7 @@ export async function readDmThreads(
     channel_id: root.channel_id,
     created_at: root.created_at,
     dm: true,
+    ...(!viewer.owner ? { viewer_owned: true as const } : {}),
   }));
   messages.push(...replies.map((reply) => ({
     id: reply.id,

@@ -61,6 +61,7 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const session = await auth();
   const body = await request.json() as Record<string, unknown>;
   const channelId = typeof body.channel_id === "string" ? body.channel_id : "";
   if (!channelId) {
@@ -70,7 +71,7 @@ export async function DELETE(request: Request) {
   const workerUrl = process.env.NEXT_PUBLIC_WORKER_URL || "http://localhost:8787";
   const response = await fetch(`${workerUrl}/api/dm`, {
     method: "DELETE",
-    headers: workerHeaders(request, null, channelId),
+    headers: workerHeaders(request, session?.user?.id, channelId),
     body: JSON.stringify(body),
   });
   const data = await response.json();

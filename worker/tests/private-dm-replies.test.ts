@@ -36,6 +36,9 @@ function normalizeSql(sql: string): string {
 
 function createFakeEnv(options: {
   dmOwner?: string;
+  rootUid?: string;
+  rootAuthUid?: string;
+  notificationOwner?: string;
   insertChanges?: number;
   uploadTicket?: { id: string; key: string };
   replyMedia?: Array<{ id: string; image: string | null }>;
@@ -47,8 +50,8 @@ function createFakeEnv(options: {
   const root = {
     id: "dm-a",
     client_message_id: "client-dm-a",
-    uid: SENDER_ID,
-    auth_uid: SENDER_ID,
+    uid: options.rootUid || SENDER_ID,
+    auth_uid: options.rootAuthUid || options.rootUid || SENDER_ID,
     nick: null,
     text: "private question",
     image: null,
@@ -66,8 +69,10 @@ function createFakeEnv(options: {
         if (sql.includes("SELECT passcode, owner_uid FROM channels")) {
           return { passcode: null, owner_uid: OWNER_ID };
         }
-        if (sql.includes("SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")) {
-          return params[0] === root.id && params[1] === root.channel_id && params[2] === root.uid
+        if (sql.includes("SELECT id, image FROM dm") && sql.includes("pending_delete_at IS NULL")) {
+          return params[0] === root.id
+              && params[1] === root.channel_id
+              && (params[2] === root.uid || params[4] === options.notificationOwner)
             ? { id: root.id, image: root.image }
             : null;
         }
@@ -96,7 +101,14 @@ function createFakeEnv(options: {
           && sql.includes("FROM (SELECT id, client_message_id, uid, auth_uid, nick, text, image")
           && sql.includes("FROM dm WHERE channel_id = ?")
         ) {
-          if (sql.includes("AND uid = ?") && params[1] !== SENDER_ID) return { results: [] };
+          if (
+            sql.includes("FROM dm_notification_owners notification_owner")
+            && params[1] !== root.uid
+            && params[2] !== options.notificationOwner
+          ) {
+            return { results: [] };
+          }
+          if (sql.includes("AND uid = ?") && params[1] !== root.uid) return { results: [] };
           return { results: [root] };
         }
         if (sql.includes("FROM dm_replies WHERE dm_id IN")) {
@@ -166,13 +178,21 @@ async function senderDeleteRequest(
   env: Env,
   senderUid: string,
   dmId = "dm-a",
+  accountUid?: string,
 ): Promise<Request> {
   const sender = await createAnonymousIdentity(env, senderUid);
+  const authenticatedHeaders = accountUid
+    ? {
+        "X-Internal-Token": INTERNAL_SECRET,
+        "X-User-Id": accountUid,
+      }
+    : {};
   return new Request("https://api.example.test/api/dm", {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
       "X-Anonymous-Token": sender.token,
+      ...authenticatedHeaders,
     },
     body: JSON.stringify({ dm_id: dmId, channel_id: CHANNEL_ID }),
   });
@@ -193,6 +213,7 @@ async function senderPostRequest(
       "X-Device-Token": device.token,
       "X-Internal-Token": INTERNAL_SECRET,
       "X-Notification-Actor-User-Id": notificationUserId,
+      "X-User-Id": notificationUserId,
     },
     body: JSON.stringify({
       client_message_id: crypto.randomUUID(),
@@ -202,14 +223,19 @@ async function senderPostRequest(
   });
 }
 
-test("authenticated anonymous DM sends persist private notification ownership", async () => {
+test("authenticated DM sends keep public identity anonymous and persist private account ownership", async () => {
   const { env, writes } = createFakeEnv();
   const response = await handleDm(
     await senderPostRequest(env, "member-a"),
     env,
   );
+  const payload = await response.json() as {
+    dm?: { uid?: string; auth_uid?: string | null };
+  };
 
   assert.equal(response.status, 200);
+  assert.equal(payload.dm?.uid, SENDER_ID);
+  assert.equal(payload.dm?.auth_uid, SENDER_ID);
   assert.ok(writes.some((write) =>
     write.includes("INSERT INTO dm_notification_owners")
     && write.includes('"member-a"')
@@ -337,6 +363,7 @@ test("sender thread reads are scoped to the signed anonymous identity", async ()
 
   assert.equal(response.status, 200);
   assert.deepEqual(data.dm?.map((message) => message.id), ["dm-a"]);
+  assert.equal(data.dm?.[0]?.viewer_owned, true);
 
   const other = await createAnonymousIdentity(env, "other-sender");
   const otherResponse = await handleDm(new Request(
@@ -344,6 +371,31 @@ test("sender thread reads are scoped to the signed anonymous identity", async ()
     { headers: { "X-Anonymous-Token": other.token } },
   ), env);
   assert.deepEqual((await otherResponse.json() as { dm?: Message[] }).dm, []);
+});
+
+test("the same account reads its DM thread from another device without exposing its account ID", async () => {
+  const { env } = createFakeEnv({
+    rootUid: "device-a",
+    notificationOwner: "account-a",
+  });
+  const otherDevice = await createAnonymousIdentity(env, "device-b");
+  const response = await handleDm(new Request(
+    `https://api.example.test/api/dm?channel=${CHANNEL_ID}`,
+    {
+      headers: {
+        "X-Anonymous-Token": otherDevice.token,
+        "X-Internal-Token": INTERNAL_SECRET,
+        "X-User-Id": "account-a",
+      },
+    },
+  ), env);
+  const data = await response.json() as { dm?: Message[] };
+
+  assert.equal(response.status, 200);
+  assert.equal(data.dm?.[0]?.uid, "device-a");
+  assert.equal(data.dm?.[0]?.auth_uid, "device-a");
+  assert.equal(data.dm?.[0]?.viewer_owned, true);
+  assert.doesNotMatch(JSON.stringify(data), /account-a/);
 });
 
 test("sender thread reads include the owner's private reply image", async () => {
@@ -384,7 +436,7 @@ test("the original sender can delete their DM root and its private replies", asy
   assert.equal((await response.json() as { ok?: boolean }).ok, true);
   assert.ok(writes.some((write) => write.includes("DELETE FROM dm_replies WHERE dm_id = ?")));
   assert.ok(writes.some((write) =>
-    write.includes("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
+    write.includes("DELETE FROM dm WHERE id = ? AND channel_id = ?")
   ));
   assert.ok(writes.some((write) => write.includes("DELETE FROM upload_tickets")));
   assert.ok(writes.some((write) => write.includes('["dm","reply-a"]')));
@@ -403,6 +455,21 @@ test("another anonymous identity cannot delete a sender's DM", async () => {
   assert.equal(response.status, 404);
   assert.deepEqual(writes, []);
   assert.deepEqual(broadcasts, []);
+});
+
+test("the same account can delete its DM from another device", async () => {
+  const { env, writes } = createFakeEnv({
+    rootUid: "device-a",
+    rootAuthUid: "device-a",
+    notificationOwner: "account-a",
+  });
+  const response = await handleDm(
+    await senderDeleteRequest(env, "device-b", "dm-a", "account-a"),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.ok(writes.some((write) => write.includes("DELETE FROM dm WHERE")));
 });
 
 test("sender deletion rejects an owner reply id and an unsigned request", async () => {

@@ -96,7 +96,9 @@ export function useChatInteractions({
       document.activeElement.blur();
     }
     const rect = element.getBoundingClientRect();
-    const isOwn = effectiveAdmin ? !!message.is_admin : message.uid === uid;
+    const isOwn = effectiveAdmin
+      ? !!message.is_admin
+      : message.uid === uid || message.viewer_owned === true;
     setContextMenu({
       msg: message,
       isSent,

@@ -17,6 +17,7 @@ import { resolveUnifiedTimelineRollout } from "../lib/unified-timeline-rollout";
 import { readSelectedBootstrap } from "../lib/bootstrap-read-mode";
 import { getChannelAppearanceVersion } from "../lib/channel-appearance";
 import { readUnifiedTimelinePage } from "../lib/unified-timeline-reader";
+import { markViewerOwnedMessages } from "../lib/viewer-message-ownership";
 import { serializeUnifiedTimelinePage } from "../lib/unified-timeline-api";
 import {
   createUnifiedTimelineMetricRecord,
@@ -417,7 +418,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
               channelId,
               isOwner
                 ? { owner: true }
-                : { owner: false, anonymousUid: anonymousIdentity.uid },
+                : {
+                    owner: false,
+                    anonymousUid: anonymousIdentity.uid,
+                    accountUid: trustedUserId || null,
+                  },
             ),
           ]);
           return { messagePage, dmMessages };
@@ -429,7 +434,11 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
             channelId,
             isOwner
               ? { owner: true }
-              : { owner: false, anonymousUid: anonymousIdentity.uid },
+              : {
+                  owner: false,
+                  anonymousUid: anonymousIdentity.uid,
+                  accountUid: trustedUserId || null,
+                },
           );
           logUnifiedTimelineMetric(createUnifiedTimelineMetricRecord({
             metrics: page.metrics,
@@ -469,7 +478,12 @@ export async function handleInit(request: Request, env: Env): Promise<Response> 
         responseUnifiedTimelineEnabled = false;
       }
     }
-    const rawMessages = messagePage?.messages || [];
+    const rawMessages = await markViewerOwnedMessages(
+      readEnv,
+      channelId,
+      isOwner ? null : trustedUserId || null,
+      messagePage?.messages || [],
+    );
     const configRows = sharedConfig.configRows;
     const config = new Map(configRows.map((row) => [row.id, row.text]));
     const liveRow = sharedConfig.liveRow;

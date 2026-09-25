@@ -31,6 +31,7 @@ import {
 import { authorizeChannelReadToken, createChannelAccessToken } from "../lib/channel-read-token";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session";
 import { isEntryDeniedRequest } from "../lib/actor-identities";
+import { markViewerOwnedMessages } from "../lib/viewer-message-ownership";
 
 const CHANNEL_READ_TOKEN_TYPES = new Set([
   "messages",
@@ -189,9 +190,15 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
         direction,
         limit: 50,
       });
-      const messages = reportsChannel && isOwner
+      const hydratedMessages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(expandedResults as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : expandedResults;
+      const messages = await markViewerOwnedMessages(
+        readEnv,
+        channelId,
+        isOwner ? null : trustedUserId || null,
+        hydratedMessages as VisibleMessageRow[],
+      );
       const responsePayload = {
         messages,
         has_more: hasMore,
@@ -338,9 +345,15 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
       const pageStart = contextPageRows[0] as { id?: string; created_at?: string } | undefined;
       const pageEnd = contextPageRows.at(-1) as { id?: string; created_at?: string } | undefined;
       const messages = await expandVisibleRootThreads(readEnv, channelId, contextPageRows);
-      const responseMessages = reportsChannel && isOwner
+      const hydratedMessages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(messages as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : messages;
+      const responseMessages = await markViewerOwnedMessages(
+        readEnv,
+        channelId,
+        isOwner ? null : trustedUserId || null,
+        hydratedMessages as VisibleMessageRow[],
+      );
       return withChannelReadToken(Response.json({
         messages: responseMessages,
         target_id: messageId,
@@ -376,9 +389,15 @@ export async function handleData(request: Request, env: Env): Promise<Response> 
 
       const foundMessages = parentResult.results || [];
       const foundIds = new Set(foundMessages.map((message) => String(message.id)));
-      const responseMessages = reportsChannel && isOwner
+      const hydratedMessages = reportsChannel && isOwner
         ? await hydrateReportInboxMessages(foundMessages as Array<{ id: string }>, readEnv, reportsOwnerLocale)
         : foundMessages;
+      const responseMessages = await markViewerOwnedMessages(
+        readEnv,
+        channelId,
+        isOwner ? null : trustedUserId || null,
+        hydratedMessages as VisibleMessageRow[],
+      );
 
       return withChannelReadToken(Response.json({
         messages: responseMessages,

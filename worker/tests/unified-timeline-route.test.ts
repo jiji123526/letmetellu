@@ -169,16 +169,23 @@ function createFixture(input: {
           };
         }
         if (sql.includes("FROM dm WHERE")) {
-          const visitorScoped = sql.includes("AND uid = ?");
+          const accountScoped = sql.includes("FROM dm_notification_owners notification_owner");
+          const visitorScoped = accountScoped || sql.includes("AND uid = ?");
           const visibleRoots = visitorScoped
-            ? dmRoots.filter((row) => row.uid === params[1])
+            ? dmRoots.filter((row) =>
+                row.uid === params[1]
+                || (
+                  accountScoped
+                  && row.notification_user_id === params[2]
+                )
+              )
             : dmRoots;
           return {
             results: selectRootWindow(
               visibleRoots,
               sql,
               params,
-              visitorScoped ? 2 : 1,
+              accountScoped ? 3 : visitorScoped ? 2 : 1,
             ),
           };
         }

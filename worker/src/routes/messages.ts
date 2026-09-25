@@ -469,7 +469,7 @@ export async function handleMessages(
 
       // Store authenticated notification ownership privately instead of
       // exposing account IDs through the public messages row.
-      if (!liveChannel && !report && notificationActorUserId) {
+      if (!report && notificationActorUserId) {
         stmts.push(
           env.DB.prepare(`
             INSERT INTO message_notification_owners (
@@ -601,6 +601,10 @@ export async function handleMessages(
       requestChannelId = String(channel_id);
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      const accountActorUserId =
+        request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
+          ? request.headers.get("X-Notification-Actor-User-Id")
+          : null;
       if (liveChannel) {
         routeStage = "load_live_state";
         if (!await ensureActiveLiveSession(env, parentChannelId)) {
@@ -639,10 +643,29 @@ export async function handleMessages(
       }
 
       routeStage = "load_message_owner";
-      const msg = await env.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ? AND deleted != 2")
-        .bind(message_id, requestChannelId).first();
+      const msg = await env.DB.prepare(`
+        SELECT
+          message.uid,
+          message.image,
+          EXISTS (
+            SELECT 1
+            FROM message_notification_owners account_owner
+            WHERE account_owner.message_id = message.id
+              AND account_owner.channel_id = ?
+              AND account_owner.user_id = ?
+          ) AS account_owned
+        FROM messages message
+        WHERE message.id = ? AND message.channel_id = ? AND message.deleted != 2
+      `).bind(
+        parentChannelId,
+        accountActorUserId,
+        message_id,
+        requestChannelId,
+      ).first<{ uid: string; image: string | null; account_owned: number }>();
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
-      if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
+      if (msg.uid !== requesterUid && !msg.account_owned) {
+        return Response.json({ error: "not owner" }, { status: 403 });
+      }
 
       if (soft) {
         routeStage = "soft_delete_message";
@@ -695,6 +718,9 @@ export async function handleMessages(
       const internalToken = request.headers.get("X-Internal-Token");
       const verifiedUserId = request.headers.get("X-User-Id");
       const hasVerifiedIdentity = internalToken === env.INTERNAL_SECRET && !!verifiedUserId;
+      const accountActorUserId = internalToken === env.INTERNAL_SECRET
+        ? request.headers.get("X-Notification-Actor-User-Id")
+        : null;
 
       // Passcode gate
       liveChannel = requestChannelId.endsWith("_live");
@@ -795,10 +821,29 @@ export async function handleMessages(
       }
 
       routeStage = "load_message_owner";
-      const msg = await env.DB.prepare("SELECT uid, created_at FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
-        .bind(message_id, requestChannelId).first<{ uid: string; created_at: string }>();
+      const msg = await env.DB.prepare(`
+        SELECT
+          message.uid,
+          message.created_at,
+          EXISTS (
+            SELECT 1
+            FROM message_notification_owners account_owner
+            WHERE account_owner.message_id = message.id
+              AND account_owner.channel_id = ?
+              AND account_owner.user_id = ?
+          ) AS account_owned
+        FROM messages message
+        WHERE message.id = ? AND message.channel_id = ? AND message.deleted = 0
+      `).bind(
+        parentChannelId,
+        accountActorUserId,
+        message_id,
+        requestChannelId,
+      ).first<{ uid: string; created_at: string; account_owned: number }>();
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
-      if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
+      if (msg.uid !== requesterUid && !msg.account_owned) {
+        return Response.json({ error: "not owner" }, { status: 403 });
+      }
 
       routeStage = "update_message_text";
       await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND deleted = 0")

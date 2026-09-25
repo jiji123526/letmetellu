@@ -127,7 +127,13 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     const dm = await readDmThreads(
       env,
       channelId,
-      isOwner ? { owner: true } : { owner: false, anonymousUid: requesterUid! },
+      isOwner
+        ? { owner: true }
+        : {
+            owner: false,
+            anonymousUid: requesterUid!,
+            accountUid: trustedUserId,
+          },
     );
     const protectedUid = await getReportsChannelOwnerId(env);
     return Response.json({
@@ -385,12 +391,35 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
 
     const requesterUid = await getAnonymousRequesterUid(request, env);
+    const requesterAccountUid = getTrustedUserId(request, env);
     if (!requesterUid) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
     const dm = await env.DB.prepare(
-      "SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ? AND pending_delete_at IS NULL LIMIT 1"
-    ).bind(dmId, channelId, requesterUid).first<{ id: string; image: string | null }>();
+      `SELECT id, image FROM dm
+       WHERE id = ? AND channel_id = ?
+         AND (
+           uid = ?
+           OR (
+             ? IS NOT NULL
+             AND EXISTS (
+               SELECT 1
+               FROM dm_notification_owners notification_owner
+               WHERE notification_owner.dm_id = dm.id
+                 AND notification_owner.channel_id = dm.channel_id
+                 AND notification_owner.user_id = ?
+             )
+           )
+         )
+         AND pending_delete_at IS NULL
+       LIMIT 1`
+    ).bind(
+      dmId,
+      channelId,
+      requesterUid,
+      requesterAccountUid,
+      requesterAccountUid,
+    ).first<{ id: string; image: string | null }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
 
     const replyRows = await env.DB.prepare(
@@ -402,8 +431,29 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         "DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'"
       ).bind(dmId),
       env.DB.prepare("DELETE FROM dm_replies WHERE dm_id = ?").bind(dmId),
-      env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
-        .bind(dmId, channelId, requesterUid),
+      env.DB.prepare(
+        `DELETE FROM dm
+         WHERE id = ? AND channel_id = ?
+           AND (
+             uid = ?
+             OR (
+               ? IS NOT NULL
+               AND EXISTS (
+                 SELECT 1
+                 FROM dm_notification_owners notification_owner
+                 WHERE notification_owner.dm_id = dm.id
+                   AND notification_owner.channel_id = dm.channel_id
+                   AND notification_owner.user_id = ?
+               )
+             )
+           )`
+      ).bind(
+        dmId,
+        channelId,
+        requesterUid,
+        requesterAccountUid,
+        requesterAccountUid,
+      ),
     ]);
     await Promise.all([
       deleteMediaByUrl(env, dm.image),
@@ -457,9 +507,10 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     // Passcode gate
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const authenticatedUserId = getTrustedUserId(request, env);
     const notificationActorUserId =
       request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
-        ? request.headers.get("X-Notification-Actor-User-Id")
+        ? request.headers.get("X-Notification-Actor-User-Id") || authenticatedUserId
         : null;
     if (isLiveChannel) {
       if (!await ensureActiveLiveSession(env, parentChannelId)) {
@@ -608,7 +659,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       ).bind(id, parentChannelId, requesterUid, deviceIdHash, created_at),
     ];
 
-    if (!isLiveChannel && notificationActorUserId) {
+    if (notificationActorUserId) {
       statements.push(
         env.DB.prepare(`
           INSERT INTO dm_notification_owners (

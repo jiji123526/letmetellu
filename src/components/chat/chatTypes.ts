@@ -45,6 +45,7 @@ export interface Message {
   channel_id?: string;
   dm?: boolean;
   dm_reply?: boolean;
+  viewer_owned?: boolean;
   deleted?: boolean;
   edited?: boolean;
   report?: number;

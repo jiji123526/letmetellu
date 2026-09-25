@@ -14,6 +14,7 @@ export interface ChatMessageSnapshot {
   created_at: string;
   channel_id?: string;
   dm?: boolean;
+  viewer_owned?: boolean;
   deleted?: boolean;
   edited?: boolean;
   report?: number;
@@ -131,6 +132,7 @@ function messagesEqual(left: ChatMessageSnapshot, right: ChatMessageSnapshot): b
     && left.created_at === right.created_at
     && left.channel_id === right.channel_id
     && left.dm === right.dm
+    && left.viewer_owned === right.viewer_owned
     && left.deleted === right.deleted
     && left.edited === right.edited
     && left.report === right.report

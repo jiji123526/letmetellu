@@ -14,6 +14,7 @@ import {
   type UnifiedTimelineSource,
 } from "./unified-timeline.ts";
 import type { UnifiedTimelineViewer } from "./unified-timeline-viewer.ts";
+import { markViewerOwnedMessages } from "./viewer-message-ownership.ts";
 
 type TimelineDirection = "before" | "after";
 
@@ -271,8 +272,22 @@ async function readDmRootCandidates(
   let innerQuery = "SELECT * FROM dm WHERE channel_id = ? AND pending_delete_at IS NULL";
   const params: unknown[] = [channelId];
   if (!viewer.owner) {
-    innerQuery += " AND uid = ?";
-    params.push(viewer.anonymousUid);
+    if (viewer.accountUid) {
+      innerQuery += ` AND (
+        uid = ?
+        OR EXISTS (
+          SELECT 1
+          FROM dm_notification_owners notification_owner
+          WHERE notification_owner.dm_id = dm.id
+            AND notification_owner.channel_id = dm.channel_id
+            AND notification_owner.user_id = ?
+        )
+      )`;
+      params.push(viewer.anonymousUid, viewer.accountUid);
+    } else {
+      innerQuery += " AND uid = ?";
+      params.push(viewer.anonymousUid);
+    }
   }
   innerQuery = appendRootCursorRange(innerQuery, params, "dm", cursor, direction);
   innerQuery += direction === "after"
@@ -284,7 +299,7 @@ async function readDmRootCandidates(
   recordQueryResult(metrics, result);
   return (result.results || []).map((row) => ({
     source: "dm",
-    row,
+    row: viewer.owner ? row : { ...row, viewer_owned: true },
     cursor: rootCursor("dm", row),
   }));
 }
@@ -443,7 +458,13 @@ export async function readUnifiedTimelinePage(
   const roots = direction === "after"
     ? candidates.slice(0, limit)
     : candidates.slice(Math.max(0, candidates.length - limit));
-  const items = await expandRootCandidates(env, channelId, roots, metrics);
+  const expandedItems = await expandRootCandidates(env, channelId, roots, metrics);
+  const items = await markViewerOwnedMessages(
+    env,
+    channelId,
+    viewer.owner ? null : viewer.accountUid,
+    expandedItems,
+  );
 
   return {
     items,
@@ -475,13 +496,29 @@ async function resolveTargetRoot(
           ?
         )`;
     if (!viewer.owner) {
-      query += " AND d.uid = ?";
-      params.push(viewer.anonymousUid);
+      if (viewer.accountUid) {
+        query += ` AND (
+          d.uid = ?
+          OR EXISTS (
+            SELECT 1
+            FROM dm_notification_owners notification_owner
+            WHERE notification_owner.dm_id = d.id
+              AND notification_owner.channel_id = d.channel_id
+              AND notification_owner.user_id = ?
+          )
+        )`;
+        params.push(viewer.anonymousUid, viewer.accountUid);
+      } else {
+        query += " AND d.uid = ?";
+        params.push(viewer.anonymousUid);
+      }
     }
     const result = await env.DB.prepare(query).bind(...params).all<RootRow>();
     recordQueryResult(metrics, result);
     const row = result.results?.[0] || null;
-    return row ? { source, row, cursor: rootCursor(source, row) } : null;
+    if (!row) return null;
+    const visibleRow = viewer.owner ? row : { ...row, viewer_owned: true };
+    return { source, row: visibleRow, cursor: rootCursor(source, row) };
   }
 
   const row = await readVisibleTargetRoot(
@@ -527,7 +564,13 @@ export async function readUnifiedTimelineContextPage(
     target,
     ...after.slice(0, radius),
   ];
-  const items = await expandRootCandidates(env, channelId, roots, metrics);
+  const expandedItems = await expandRootCandidates(env, channelId, roots, metrics);
+  const items = await markViewerOwnedMessages(
+    env,
+    channelId,
+    viewer.owner ? null : viewer.accountUid,
+    expandedItems,
+  );
   return {
     items,
     hasMore: before.length > radius || after.length > radius,

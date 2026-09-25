@@ -1,9 +1,10 @@
 import type { Env } from "../types.ts";
 import { verifyAnonymousIdentityToken } from "./anonymous-identity.ts";
+import { getTrustedUserId } from "./trusted-identity.ts";
 
 export type UnifiedTimelineViewer =
   | { owner: true }
-  | { owner: false; anonymousUid: string };
+  | { owner: false; anonymousUid: string; accountUid: string | null };
 
 export async function resolveUnifiedTimelineViewer(
   request: Request,
@@ -16,5 +17,9 @@ export async function resolveUnifiedTimelineViewer(
   if (!token) return null;
   const identity = await verifyAnonymousIdentityToken(token, env);
   if (!identity) return null;
-  return { owner: false, anonymousUid: identity.uid };
+  return {
+    owner: false,
+    anonymousUid: identity.uid,
+    accountUid: getTrustedUserId(request, env),
+  };
 }

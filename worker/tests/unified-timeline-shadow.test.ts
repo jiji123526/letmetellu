@@ -11,7 +11,27 @@ test("shadow viewer accepts only a signed anonymous identity", async () => {
   const verified = await resolveUnifiedTimelineViewer(new Request("https://example.test", {
     headers: { "X-Anonymous-Token": identity.token },
   }), env, false);
-  assert.deepEqual(verified, { owner: false, anonymousUid: "visitor-a" });
+  assert.deepEqual(verified, {
+    owner: false,
+    anonymousUid: "visitor-a",
+    accountUid: null,
+  });
+
+  const authenticated = await resolveUnifiedTimelineViewer(new Request(
+    "https://example.test",
+    {
+      headers: {
+        "X-Anonymous-Token": identity.token,
+        "X-Internal-Token": "test-internal-secret",
+        "X-User-Id": "account-a",
+      },
+    },
+  ), env, false);
+  assert.deepEqual(authenticated, {
+    owner: false,
+    anonymousUid: "visitor-a",
+    accountUid: "account-a",
+  });
 
   const forged = await resolveUnifiedTimelineViewer(new Request(
     "https://example.test?uid=visitor-a",

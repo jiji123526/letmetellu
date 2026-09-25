@@ -114,12 +114,34 @@ test("visitor DM candidate reads are scoped to the server-resolved identity", as
   await readUnifiedTimelinePage(
     env,
     "channel-a",
-    { owner: false, anonymousUid: "signed-visitor-a" },
+    { owner: false, anonymousUid: "signed-visitor-a", accountUid: null },
   );
   const dmCall = calls.find((call) => call.query.includes("FROM dm WHERE"));
   assert.ok(dmCall);
   assert.match(dmCall.query, /channel_id = \?[\s\S]*uid = \?/);
   assert.deepEqual(dmCall.params.slice(0, 2), ["channel-a", "signed-visitor-a"]);
+});
+
+test("visitor DM candidate reads also match the trusted account identity", async () => {
+  const { env, calls } = createEnv({});
+  await readUnifiedTimelinePage(
+    env,
+    "channel-a",
+    {
+      owner: false,
+      anonymousUid: "device-b",
+      accountUid: "account-a",
+    },
+  );
+  const dmCall = calls.find((call) => call.query.includes("FROM dm WHERE"));
+  assert.ok(dmCall);
+  assert.match(dmCall.query, /FROM dm_notification_owners notification_owner/);
+  assert.match(dmCall.query, /notification_owner\.user_id = \?/);
+  assert.deepEqual(dmCall.params.slice(0, 3), [
+    "channel-a",
+    "device-b",
+    "account-a",
+  ]);
 });
 
 test("owner candidate reads do not add a visitor UID predicate", async () => {
@@ -219,7 +241,7 @@ test("centered DM target resolution applies the signed visitor UID", async () =>
   await readUnifiedTimelineContextPage(
     env,
     "channel-a",
-    { owner: false, anonymousUid: "visitor-a" },
+    { owner: false, anonymousUid: "visitor-a", accountUid: null },
     "dm",
     "dm-reply",
   );
@@ -227,4 +249,29 @@ test("centered DM target resolution applies the signed visitor UID", async () =>
   assert.ok(targetCall);
   assert.match(targetCall.query, /d\.uid = \?/);
   assert.equal(targetCall.params.at(-1), "visitor-a");
+});
+
+test("centered DM target resolution accepts the trusted account identity", async () => {
+  const { env, calls } = createEnv({
+    dmRoots: [
+      {
+        id: "dm-root",
+        created_at: "2026-08-17T02:00:00.000Z",
+        uid: "device-a",
+        auth_uid: "account-a",
+      },
+    ],
+  });
+  await readUnifiedTimelineContextPage(
+    env,
+    "channel-a",
+    { owner: false, anonymousUid: "device-b", accountUid: "account-a" },
+    "dm",
+    "dm-reply",
+  );
+  const targetCall = calls.find((call) => call.query.includes("SELECT d.* FROM dm d"));
+  assert.ok(targetCall);
+  assert.match(targetCall.query, /FROM dm_notification_owners notification_owner/);
+  assert.match(targetCall.query, /notification_owner\.user_id = \?/);
+  assert.deepEqual(targetCall.params.slice(-2), ["device-b", "account-a"]);
 });
