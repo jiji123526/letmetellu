@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### The production source now has the D1 partitioning projection foundation — 2026-09-26
+
+- Applied the seven reviewed source migrations from `0064_channel_control_projections.sql` through `0070_channel_report_projection_events.sql` to `letsplay-db-prod-cutover-20260906-v3`. No Worker configuration, channel placement or user route was changed.
+- Verification found no pending migrations; 53 normal channels, control projections and persistent projection-version rows matched exactly; all 57 DM replies remained present; canonical and projected report counts both remained zero; and the new domain-event ledger had no backlog.
+- Foreign-key validation returned no rows, `PRAGMA quick_check` returned `ok`, and a public `zziks` channel initialization smoke test returned `200` after the schema change.
+
+Trade-off: channel and report lifecycle mutations now incur the extra projection, version-watermark and durable-event writes needed for later cross-database delivery. These operations are low-frequency and bounded, but the added write amplification begins before any channel receives shard-level isolation.
+
+Deployment note: production schema changed, but the production Worker and frontend were not redeployed. No channel data was copied, no maintenance mode was enabled and no traffic was routed to the canary. The next gate is the dedicated-secret, metadata-only `/ch/10997` copy preflight.
+
 ### D1 migration identity is aligned after merging the partitioning branch with main — 2026-09-20
 
 - D1 migration state was checked on both the production source and the empty `/ch/10997` canary after merging current `main`. Wrangler identifies a migration by its complete filename, so `0064_blocked_entry_mode.sql` and `0064_channel_control_projections.sql` are distinct despite sharing a numeric prefix.

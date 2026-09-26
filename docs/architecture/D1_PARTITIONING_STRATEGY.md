@@ -816,9 +816,10 @@ Exit gate:
 
 ### Phase 3: two-shard canary
 
-Status: preparation in progress; one empty WNAM Chat canary has passed the
-version-11 bootstrap and read-only audit but remains unrouted and absent from
-production bindings. Empty-shard bootstrap, read-only audit, version-pinned
+Status: preparation in progress; the production source projection/event
+foundation is applied, and one empty WNAM Chat canary has passed the version-11
+bootstrap and read-only audit but remains unrouted and absent from production
+bindings. Empty-shard bootstrap, read-only audit, version-pinned
 copy, bounded policy/message/DM/notification/report reconciliation, cleanup,
 and a one-channel report-dispatch exercise are implemented as default-off,
 dedicated-secret operators. Isolated operator deployment, remote preflight and

@@ -6,6 +6,34 @@ Production still routes every request to one D1 database. One empty, unrouted
 Chat canary now exists for the first channel-copy exercise; no virtual-bucket
 map, placement override, channel data migration, or cutover has been created.
 
+## 2026-09-26: production source projection foundation applied
+
+- Confirmed that the only pending production-source migrations were the seven
+  reviewed partitioning migrations from
+  `0064_channel_control_projections.sql` through
+  `0070_channel_report_projection_events.sql`, then applied all seven without
+  deploying a Worker or changing channel placement.
+- Each remote migration completed successfully. Follow-up migration inspection
+  reported no pending files.
+- Post-migration checks found 53 normal channels, 53 channel control
+  projections, and 53 channel projection-version rows. The 57 existing DM
+  replies remained present. Canonical and projected channel-report counts were
+  both zero, and no domain-event backlog existed after the foundation apply.
+- `PRAGMA foreign_key_check` returned no rows and `PRAGMA quick_check` returned
+  `ok`. A production smoke read of `/api/init?channel=zziks` returned `200`;
+  its Worker stage completed in approximately 203 ms.
+
+Trade-off: low-frequency channel and report mutations now perform the bounded
+projection, watermark, and domain-event writes required for later physical
+separation. The source remains the single authoritative application database,
+so this adds preparation write amplification before it provides shard-level
+isolation. No channel was copied, frozen, shadow-routed, or cut over.
+
+The former `source_projection_schema_missing` preflight blocker should now be
+resolved. The next gate is to rerun the dedicated metadata-only `/ch/10997`
+copy preflight. That route requires the existing operator secret; rotate it
+explicitly rather than attempting to retrieve the Cloudflare-stored value.
+
 ## 2026-09-20: main reconciliation and canary migration identity alignment
 
 - Merged the current production `main` into the partitioning branch and
