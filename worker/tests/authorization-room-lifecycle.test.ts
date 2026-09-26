@@ -264,7 +264,7 @@ test("init, data, upload and DM routes retain lifecycle authorization gates", ()
   assert.match(initSource, /if \(!channel\)[\s\S]*status: 404/);
   assert.match(dataSource, /if \(!exists\)[\s\S]*status: 404/);
   assert.match(dataSource, /authorizeRoomToken\(roomToken, parentChannelId, passcode, env\)/);
-  assert.match(uploadSource, /if \(!await ensureActiveLiveSession\(env, parentChannelId\)\)/);
+  assert.match(uploadSource, /if \(!await ensureActiveLiveSession\(channelEnv, parentChannelId\)\)/);
   assert.match(uploadSource, /if \(!exists\)[\s\S]*status: 404/);
   assert.match(dmSource, /if \(!await ensureActiveLiveSession\(channelEnv, parentChannelId\)\)/);
   assert.match(dmSource, /if \(!exists\)[\s\S]*status: 404/);

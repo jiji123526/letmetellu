@@ -34,6 +34,10 @@ const notificationEventsSource = readFileSync(
   new URL("../src/lib/notification-events.ts", import.meta.url),
   "utf8",
 );
+const uploadSource = readFileSync(
+  new URL("../src/routes/upload.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -242,4 +246,24 @@ test("notification fanout separates channel metadata from control state", () => 
     /input\.env\.DB\.prepare\(`\s*SELECT\s+pref\.user_id,/,
   );
   assert.match(notificationEventsSource, /input\.env\.DB\.batch\(statements\)/);
+});
+
+test("uploads and standard media keys resolve channel placement", () => {
+  const uploadStart = uploadSource.indexOf("export async function handleUpload");
+  const mediaStart = uploadSource.indexOf("export async function handleMediaServe");
+  assert.ok(uploadStart >= 0 && mediaStart > uploadStart);
+  const mutationSource = uploadSource.slice(uploadStart, mediaStart);
+  const mediaSource = uploadSource.slice(mediaStart);
+
+  assert.match(mutationSource, /resolveChannelDatabase\(env, parentChannelId\)/);
+  assert.match(mutationSource, /ensureActiveLiveSession\(channelEnv, parentChannelId\)/);
+  assert.match(mutationSource, /enforceUploadQuota\(\{\s*env: channelEnv,/);
+  assert.match(mutationSource, /createUploadTicket\(\{\s*env: channelEnv,/);
+  assert.doesNotMatch(mutationSource, /\benv\.DB\.(?:prepare|batch)/);
+
+  assert.match(mediaSource, /readChannelIdFromMediaKey\(decodedKey\)/);
+  assert.match(mediaSource, /resolveChannelDatabase\(env, parentChannelId\)/);
+  assert.match(mediaSource, /mediaEnv\.DB\.prepare\(\s*"SELECT channel_id, purpose, status, expires_at FROM upload_tickets/);
+  assert.match(mediaSource, /getChannelPasscodeInfo\(parentChannelId, mediaEnv\)/);
+  assert.match(mediaSource, /Legacy or malformed keys still fall back/);
 });

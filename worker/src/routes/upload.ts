@@ -11,6 +11,7 @@ import {
 } from "../lib/public-background-cache.ts";
 import { authorizeRoomToken, isCurrentRoomTokenBinding } from "./passcode.ts";
 import { getChannelPasscodeInfo } from "../lib/validation.ts";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access.ts";
 
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
@@ -102,8 +103,12 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
   // Passcode gate
   const parentChannelId = getParentChannelId(channelId);
+  const channelEnv = withDatabase(
+    env,
+    (await resolveChannelDatabase(env, parentChannelId)).database,
+  );
   if (channelId.endsWith("_live") && purpose !== "channel-asset") {
-    if (!await ensureActiveLiveSession(env, parentChannelId)) {
+    if (!await ensureActiveLiveSession(channelEnv, parentChannelId)) {
       return Response.json({ error: "live_session_ended" }, { status: 403 });
     }
   }
@@ -111,7 +116,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   const internalUserId = request.headers.get("X-User-Id") || "";
   let ownerUpload = false;
   if (internalRequest && internalUserId) {
-    const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+    const channel = await channelEnv.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
       .bind(parentChannelId).first<{ owner_uid: string }>();
     ownerUpload = channel?.owner_uid === internalUserId;
     if (!ownerUpload) return Response.json({ error: "not owner" }, { status: 403 });
@@ -130,7 +135,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   let anonymousPayload: { uid: string } | null = null;
   let ipHash: string | null = null;
   if (purpose !== "channel-asset") {
-    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, channelEnv);
     if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     if (!ownerUpload && passcode) {
       const roomToken = request.headers.get("X-Room-Token");
@@ -150,7 +155,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
     ipHash = await hashUploadIp(getUploadRequestIp(request), env);
     const quota = await enforceUploadQuota({
-      env,
+      env: channelEnv,
       channelId,
       uid: ownerUpload ? null : anonymousPayload!.uid,
       ipHash,
@@ -201,7 +206,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
   }
 
   const ticket = await createUploadTicket({
-    env,
+    env: channelEnv,
     key,
     channelId,
     uid: ownerUpload ? internalUserId : anonymousPayload!.uid,
@@ -231,12 +236,18 @@ export async function handleMediaServe(
     passcode: string | null;
     owner_uid: string;
   } | null = null;
+  let mediaEnv = env;
 
   if (inferredChannelId) {
+    const parentChannelId = getParentChannelId(inferredChannelId);
+    mediaEnv = withDatabase(
+      env,
+      (await resolveChannelDatabase(env, parentChannelId)).database,
+    );
     // Message and DM uploads already have a unique indexed key in
     // upload_tickets. Resolve that first so the common media path needs only
     // one narrow D1 read instead of a channel lookup plus a ticket lookup.
-    const ticket = await env.DB.prepare(
+    const ticket = await mediaEnv.DB.prepare(
       "SELECT channel_id, purpose, status, expires_at FROM upload_tickets WHERE key = ? LIMIT 1"
     ).bind(decodedKey).first<{
       channel_id: string;
@@ -260,7 +271,7 @@ export async function handleMediaServe(
     // far less often and are cached for much longer, so fall back to the
     // channel row only when no message/DM ticket resolved the key.
     if (!mediaRow && !pendingTicket) {
-      mediaRow = await env.DB.prepare(
+      mediaRow = await mediaEnv.DB.prepare(
         `SELECT id AS channel_id,
                 CASE
                   WHEN profile_image IS NOT NULL AND substr(profile_image, -length(?)) = ? THEN 'channel-profile'
@@ -275,7 +286,7 @@ export async function handleMediaServe(
     }
   }
 
-  if (!mediaRow && !pendingTicket) {
+  if (!mediaRow && !pendingTicket && !inferredChannelId) {
     // Legacy or malformed keys still fall back to the wider reverse lookup.
     const mediaLookupResults = await env.DB.batch([
       env.DB.prepare(
@@ -311,7 +322,7 @@ export async function handleMediaServe(
 
   if (!mediaRow && !pendingTicket && inferredChannelId) {
     const parentChannelId = getParentChannelId(inferredChannelId);
-    resolvedChannelInfo = await getChannelPasscodeInfo(parentChannelId, env);
+    resolvedChannelInfo = await getChannelPasscodeInfo(parentChannelId, mediaEnv);
     if (!resolvedChannelInfo.exists) {
       return new Response("not found", { status: 404 });
     }
@@ -324,7 +335,7 @@ export async function handleMediaServe(
   if (pendingTicket && pendingTicket.purpose !== "channel-asset") {
     if (pendingTicket.expires_at <= new Date().toISOString()) {
       await env.MEDIA.delete(decodedKey).catch(() => {});
-      await env.DB.prepare("DELETE FROM upload_tickets WHERE key = ?").bind(decodedKey).run();
+      await mediaEnv.DB.prepare("DELETE FROM upload_tickets WHERE key = ?").bind(decodedKey).run();
     }
     return new Response("not found", { status: 404 });
   }
@@ -337,8 +348,14 @@ export async function handleMediaServe(
       : null;
 
     const parentChannelId = getParentChannelId(mediaRow.channel_id);
+    if (!inferredChannelId) {
+      mediaEnv = withDatabase(
+        env,
+        (await resolveChannelDatabase(env, parentChannelId)).database,
+      );
+    }
     const { exists, passcode, owner_uid } = resolvedChannelInfo
-      || await getChannelPasscodeInfo(parentChannelId, env);
+      || await getChannelPasscodeInfo(parentChannelId, mediaEnv);
     if (!exists) {
       return new Response("not found", { status: 404 });
     }

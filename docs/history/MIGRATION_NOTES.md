@@ -4,6 +4,24 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Upload tickets and media access now follow channel placement — 2026-09-26
+
+- Upload authorization, per-channel quotas and ticket creation use the selected
+  channel database; image bytes continue to use the shared R2 bucket.
+- Standard `channel-id/object` media keys resolve placement locally before
+  ticket or channel-asset lookup. Only malformed/legacy keys retain the wider
+  primary reverse lookup, avoiding seven unnecessary primary queries for normal
+  missing objects.
+- Frontend and Worker TypeScript checks and all 503 Worker hardening tests pass.
+
+Trade-off: keeping R2 shared avoids binary migration and duplicate storage, but
+scheduled expired-ticket cleanup must be extended across active shard bindings
+before routing is enabled. This remaining lifecycle task is explicitly kept as
+an activation blocker.
+
+Deployment note: no production binding, placement variable, Worker or route
+changed; the code exists only on the partitioning feature branch.
+
 ### Private-DM traffic now honors the channel-database boundary — 2026-09-26
 
 - DM list access checks, root sends, owner replies and sender deletion now use

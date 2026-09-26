@@ -7,6 +7,27 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-26: upload tickets and media authorization respect placement
+
+- Routed upload ownership, live-state, passcode, quota and ticket writes to the
+  resolved channel database while leaving binary objects in the shared R2
+  bucket.
+- Standard media keys already begin with the normal or live channel ID. Media
+  reads now use that prefix to resolve the database before looking up a ticket
+  or channel asset, without a control-D1 lookup.
+- Limited the former seven-query reverse lookup to malformed or legacy keys
+  that do not expose a valid channel prefix. Standard missing/unlinked objects
+  no longer scan the primary database before authorization.
+- Frontend and Worker TypeScript checks and all 503 Worker hardening tests pass.
+
+Trade-off: this keeps one shared R2 namespace and avoids copying binary data,
+but upload-ticket cleanup must eventually run for every configured channel
+database. The current scheduled maintenance pass still targets control D1 only,
+so scheduler fan-out remains an activation blocker.
+
+Deployment note: no production binding, placement variable or Worker changed.
+This is feature-branch preparation only.
+
 ## 2026-09-26: private-DM reads and mutations respect channel placement
 
 - Routed DM thread entry checks, root creation, owner replies and sender
