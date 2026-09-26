@@ -7,6 +7,24 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-26: realtime access-policy reads respect placement
+
+- Routed the ChatRoom Durable Object's first passcode load through the same
+  channel placement resolver used by HTTP authorization.
+- Routed live-join session validation through the selected channel database as
+  well. A moved channel can no longer authenticate against a stale primary
+  passcode or inspect stale primary live state while its messages use a shard.
+- Durable Object connection/presence state itself remains in the existing DO;
+  only its canonical channel-state reads changed.
+- Worker TypeScript and all 507 hardening tests pass.
+
+Trade-off: the first DO access-policy load and each explicit live-join action
+perform local placement resolution. This adds no network lookup; the existing
+single passcode read and live-state read simply target the authoritative D1.
+
+Deployment note: feature branch only; no Worker or placement configuration was
+deployed.
+
 ## 2026-09-26: existing-channel admin mutations respect placement
 
 - Resolved the channel database once for owner authorization and reused it for

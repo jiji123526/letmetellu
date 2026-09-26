@@ -4,6 +4,7 @@ import { getLiveJoinDisposition, readLiveSessionState } from "../lib/live-sessio
 import { isPlatformAdmin, isReportsChannel } from "../lib/special-channels";
 import { authorizeRoomToken } from "../routes/passcode";
 import { advanceChannelRateLimit, type ChannelRateLimitBucket } from "../lib/channel-rate-limit";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access";
 
 interface Connection {
   uid: string;
@@ -37,7 +38,8 @@ export class ChatRoom {
 
   private async ensurePasscode(channelId: string): Promise<boolean> {
     if (this.passcodeLoaded) return true;
-    const channel = await this.env.DB.prepare(
+    const resolvedDatabase = await resolveChannelDatabase(this.env, channelId);
+    const channel = await resolvedDatabase.database.prepare(
       "SELECT passcode FROM channels WHERE id = ?"
     ).bind(channelId).first() as { passcode: string | null } | null;
     if (!channel) return false;
@@ -298,7 +300,9 @@ export class ChatRoom {
       }
       if (data.type === "join-live" && connection.authorized) {
         const wasInLive = connection.inLive;
-        const liveSession = await readLiveSessionState(this.env, connection.channelId);
+        const resolvedDatabase = await resolveChannelDatabase(this.env, connection.channelId);
+        const channelEnv = withDatabase(this.env, resolvedDatabase.database);
+        const liveSession = await readLiveSessionState(channelEnv, connection.channelId);
         const requestedSessionId = typeof data.sessionId === "string" ? data.sessionId : "";
         const disposition = getLiveJoinDisposition(liveSession, requestedSessionId);
         if (disposition === "ended") {

@@ -50,6 +50,10 @@ const adminSource = readFileSync(
   new URL("../src/routes/admin.ts", import.meta.url),
   "utf8",
 );
+const chatRoomSource = readFileSync(
+  new URL("../src/realtime/chat-room.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -324,4 +328,24 @@ test("existing-channel admin mutations use the resolved channel database", () =>
     /const ownerProfile = await env\.DB\.prepare\("SELECT name FROM users WHERE id = \?"\)/,
   );
   assert.match(adminSource, /deleteChannel\(channel_id, env\)/);
+});
+
+test("realtime access policy and live joins use channel placement", () => {
+  assert.equal(
+    chatRoomSource.match(/resolveChannelDatabase\(this\.env, channelId\)/g)?.length,
+    1,
+  );
+  assert.match(
+    chatRoomSource,
+    /resolvedDatabase\.database\.prepare\(\s*"SELECT passcode FROM channels WHERE id = \?"/,
+  );
+  assert.match(
+    chatRoomSource,
+    /resolveChannelDatabase\(this\.env, connection\.channelId\)/,
+  );
+  assert.match(
+    chatRoomSource,
+    /readLiveSessionState\(channelEnv, connection\.channelId\)/,
+  );
+  assert.doesNotMatch(chatRoomSource, /this\.env\.DB\.prepare/);
 });

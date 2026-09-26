@@ -4,6 +4,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Realtime passcode and live-join reads follow channel placement — 2026-09-26
+
+- The channel Durable Object now resolves the authoritative database before
+  its first passcode read and before validating an explicit live-session join.
+- Connection and presence state remain in the same Durable Object. This only
+  prevents the realtime edge from consulting stale primary channel rows after
+  a channel moves.
+- Worker TypeScript and all 507 hardening tests pass.
+
+Trade-off: placement resolution runs at those two boundaries, but the current
+static map is local and does not add a D1, KV or cache request.
+
+Deployment note: no production configuration or deployment changed.
+
 ### Existing-channel owner controls now follow channel placement — 2026-09-26
 
 - Owner authorization and channel-local settings/mutations now share one

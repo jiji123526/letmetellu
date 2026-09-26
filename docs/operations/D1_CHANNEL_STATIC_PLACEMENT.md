@@ -30,9 +30,9 @@ Do not add these variables or a Chat binding to the production Worker until:
 
 1. every channel-local read and mutation resolves the same placement (ordinary
    message, DM, passcode verification, notification access and request-time
-   upload/media plus existing-channel owner controls are complete; scheduled
-   cleanup, platform moderation/report actions and channel lifecycle coverage
-   remains);
+   upload/media, realtime access-policy reads and existing-channel owner
+   controls are complete; scheduled cleanup, platform moderation/report
+   actions and channel lifecycle coverage remains);
 2. control-only account, auth, push and global operational state remains on
    control D1;
 3. frozen final reconciliation and integrity checks pass;
