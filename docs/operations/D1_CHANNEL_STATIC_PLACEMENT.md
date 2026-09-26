@@ -28,7 +28,9 @@ could split reads and writes across two databases.
 
 Do not add these variables or a Chat binding to the production Worker until:
 
-1. every channel-local read and mutation resolves the same placement;
+1. every channel-local read and mutation resolves the same placement (ordinary
+   message mutations are complete; DM, upload/config/moderation and channel
+   lifecycle mutation coverage remains);
 2. control-only account, auth, push and global operational state remains on
    control D1;
 3. frozen final reconciliation and integrity checks pass;

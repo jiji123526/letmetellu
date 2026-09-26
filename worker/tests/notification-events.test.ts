@@ -160,3 +160,67 @@ test("owner reply recipient receives reply notification instead of duplicate own
     ["test-room", "member-1", "owner-1"],
   );
 });
+
+test("channel metadata can come from a shard while recipients remain in control DB", async () => {
+  const channelCalls: Array<{ sql: string; params: unknown[] }> = [];
+  const controlCalls: Array<{ sql: string; params: unknown[] }> = [];
+  const channelDb = {
+    prepare(sql: string) {
+      const call = { sql, params: [] as unknown[] };
+      channelCalls.push(call);
+      return {
+        bind(...params: unknown[]) {
+          call.params = params;
+          return this;
+        },
+        async first() {
+          return { id: "test-room", name: "Test", owner_uid: "owner-1", passcode: null };
+        },
+      };
+    },
+  };
+  const controlDb = {
+    prepare(sql: string) {
+      const call = { sql, params: [] as unknown[] };
+      controlCalls.push(call);
+      return {
+        bind(...params: unknown[]) {
+          call.params = params;
+          return this;
+        },
+        async all() {
+          return { results: [] };
+        },
+      };
+    },
+    async batch() {
+      assert.fail("an empty recipient set must not write an outbox row");
+    },
+  };
+  const controlEnv = {
+    DB: controlDb,
+    INTERNAL_SECRET: "test-secret",
+  } as unknown as Env;
+  const channelEnv = {
+    ...controlEnv,
+    DB: channelDb,
+  } as unknown as Env;
+
+  assert.equal(await queueChannelNotification({
+    env: controlEnv,
+    channelEnv,
+    channelId: "test-room",
+    event: "channel_message",
+    eventId: "message-shard-1",
+    actorUserId: "member-1",
+    includeOwner: true,
+    memberImportance: "all",
+  }), 0);
+
+  assert.equal(channelCalls.length, 1);
+  assert.match(channelCalls[0].sql, /FROM channels/);
+  assert.deepEqual(channelCalls[0].params, ["test-room"]);
+  assert.equal(controlCalls.length, 1);
+  assert.match(controlCalls[0].sql, /FROM notification_preferences/);
+  assert.deepEqual(controlCalls[0].params, ["test-room", "member-1"]);
+});

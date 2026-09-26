@@ -2,9 +2,35 @@
 
 This log records incremental work toward the proposed
 [D1 partitioning strategy](../architecture/D1_PARTITIONING_STRATEGY.md).
-Production still routes every request to one D1 database. One empty, unrouted
-Chat canary now exists for the first channel-copy exercise; no virtual-bucket
-map, placement override, channel data migration, or cutover has been created.
+Production still routes every request to one D1 database. The `zziks` snapshot
+has been copied and verified in an unrouted Chat canary, and the branch now has
+a fail-closed static placement seam. Production placement configuration remains
+unset, so no application request is routed to the canary yet.
+
+## 2026-09-26: ordinary message mutations respect channel placement
+
+- Routed message create, edit, soft/hard delete and reaction mutations through
+  the resolved parent-channel database. Normal and `_live` requests share the
+  same placement, and message links, actor identities, upload-ticket attachment
+  state, reply targets and moderation checks stay beside the canonical message.
+- Split post-commit work explicitly: realtime fan-out and operational events
+  remain on the control environment, while link indexing remains on the
+  channel database.
+- Split push notification reads without duplicating global state. Channel name,
+  owner and passcode come from the channel database; notification preferences,
+  subscriptions and outbox rows remain in control D1.
+- Added both structural boundary tests and a two-database notification test.
+  TypeScript and all 501 Worker hardening tests pass.
+
+Trade-off: each message mutation now resolves a local static placement once.
+There is no added network lookup, but a routed channel requires its complete
+message-related row family to be present on that shard. Other mutation families
+(DM, upload/config/moderation and channel lifecycle) must cross the same boundary
+before the placement map can be activated.
+
+Deployment note: production placement variables are still absent and this work
+exists only on the feature branch. No Worker was deployed and no production
+traffic changed databases.
 
 ## 2026-09-26: fail-closed static channel placement resolver
 

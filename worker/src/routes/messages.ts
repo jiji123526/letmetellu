@@ -18,6 +18,7 @@ import { isValidClientMessageId } from "../lib/message-idempotency.ts";
 import { normalizeRequestedReplyId, resolveReplyRootId } from "../lib/message-threads.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
 import { queueChannelNotification } from "../lib/notification-events.ts";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access.ts";
 
 const MESSAGE_RATE_LIMIT_WINDOW_MS = 10_000;
 const MESSAGE_RATE_LIMIT_MAX = 5;
@@ -94,7 +95,8 @@ async function retryPostCommitTask(task: () => Promise<void>): Promise<void> {
 }
 
 async function completePersistedMessageDelivery(input: {
-  env: Env;
+  controlEnv: Env;
+  channelEnv: Env;
   parentChannelId: string;
   requestChannelId: string;
   messageId: string;
@@ -103,7 +105,8 @@ async function completePersistedMessageDelivery(input: {
   message: PersistedMessage;
 }): Promise<void> {
   const {
-    env,
+    controlEnv,
+    channelEnv,
     parentChannelId,
     requestChannelId,
     messageId,
@@ -114,11 +117,11 @@ async function completePersistedMessageDelivery(input: {
   const tasks = [
     {
       stage: "sync_message_links",
-      run: () => syncNewMessageLink(env, messageId, requestChannelId, createdAt, text),
+      run: () => syncNewMessageLink(channelEnv, messageId, requestChannelId, createdAt, text),
     },
     {
       stage: "broadcast_message",
-      run: () => broadcastPersistedMessage(env, parentChannelId, message),
+      run: () => broadcastPersistedMessage(controlEnv, parentChannelId, message),
     },
   ];
   const results = await Promise.allSettled(
@@ -129,7 +132,7 @@ async function completePersistedMessageDelivery(input: {
     const stage = tasks[index].stage;
     console.error("post-commit message delivery failed", stage, result.reason);
     await recordOperationalEvent({
-      env,
+      env: controlEnv,
       severity: "error",
       route: "POST /api/messages",
       eventType: "message_post_commit_failed",
@@ -189,6 +192,7 @@ export async function handleMessages(
   let requestChannelId: string | null = null;
   let parentChannelId: string | null = null;
   let liveChannel = false;
+  let channelEnv = env;
 
   try {
     if (request.method === "POST") {
@@ -231,15 +235,19 @@ export async function handleMessages(
       // Passcode gate — check if channel requires passcode for writing
       liveChannel = requestChannelId.endsWith("_live");
       parentChannelId = liveChannel ? requestChannelId.replace(/_live$/, "") : requestChannelId;
+      channelEnv = withDatabase(
+        env,
+        (await resolveChannelDatabase(env, parentChannelId)).database,
+      );
       if (liveChannel) {
         routeStage = "load_live_state";
-        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+        if (!await ensureActiveLiveSession(channelEnv, parentChannelId)) {
           return Response.json({ error: "live_session_ended" }, { status: 403 });
         }
       }
       routeStage = "load_channel_state";
       const channelStartedAt = performance.now();
-      const channelRead = await retrySafeD1Read(() => env.DB.prepare(`
+      const channelRead = await retrySafeD1Read(() => channelEnv.DB.prepare(`
           SELECT id, is_frozen, owner_uid, passcode,
             (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
           FROM channels
@@ -252,7 +260,7 @@ export async function handleMessages(
       const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
       if (isChannelOwner) {
         routeStage = "load_owner_moderation";
-        const moderation = await getChannelModeration(parentChannelId, env);
+        const moderation = await getChannelModeration(parentChannelId, channelEnv);
         if (isOwnerModerationBlocked(moderation)) {
           return Response.json({ error: "owner_suspended" }, { status: 403 });
         }
@@ -300,7 +308,7 @@ export async function handleMessages(
 
       routeStage = "check_idempotency";
       const idempotencyStartedAt = performance.now();
-      const existingMessageRead = await retrySafeD1Read(() => env.DB.prepare(
+      const existingMessageRead = await retrySafeD1Read(() => channelEnv.DB.prepare(
           "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
         ).bind(clientMessageId).first<PersistedMessage>());
       const existingMessage = existingMessageRead.value;
@@ -351,13 +359,13 @@ export async function handleMessages(
       const policyStartedAt = performance.now();
       const [blocked, allowedByBannedWords] = await Promise.all([
         isBlockedActor({
-          env,
+          env: channelEnv,
           channelId: parentChannelId,
           uid: requesterUid,
           deviceId: requesterDeviceId,
         }),
         text
-          ? checkBannedWords(text as string, parentChannelId, env)
+          ? checkBannedWords(text as string, parentChannelId, channelEnv)
           : Promise.resolve(true),
       ]);
       sendTimings.policy = roundedDuration(policyStartedAt);
@@ -370,7 +378,7 @@ export async function handleMessages(
       routeStage = "resolve_reply_target";
       const replyStartedAt = performance.now();
       const resolvedReplyTo = requestedReplyTo
-        ? await resolveReplyRootId(env, requestChannelId, requestedReplyTo)
+        ? await resolveReplyRootId(channelEnv, requestChannelId, requestedReplyTo)
         : null;
       sendTimings.reply = roundedDuration(replyStartedAt);
       if (requestedReplyTo && !resolvedReplyTo) {
@@ -379,7 +387,7 @@ export async function handleMessages(
 
       routeStage = "resolve_reply_notification_owner";
       const replyNotificationOwner = resolvedReplyTo
-        ? await env.DB.prepare(`
+        ? await channelEnv.DB.prepare(`
           SELECT
             owner.user_id,
             message.uid AS message_uid
@@ -404,7 +412,7 @@ export async function handleMessages(
 
       routeStage = "resolve_report_target";
       const resolvedReportedMessage = requestedReportedMessageId
-        ? await env.DB.prepare(
+        ? await channelEnv.DB.prepare(
           "SELECT id FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0"
         ).bind(requestedReportedMessageId, requestChannelId).first<{ id: string }>()
         : null;
@@ -422,7 +430,7 @@ export async function handleMessages(
           return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
         }
         const attachment = await attachUploadTicket({
-          env,
+          env: channelEnv,
           ticketId: upload_id,
           imageUrl: image as string,
           channelId: requestChannelId,
@@ -443,7 +451,7 @@ export async function handleMessages(
       const senderUid = requesterUid;
       const isAdmin = isChannelOwner ? 1 : 0;
       const stmts = [
-        env.DB.prepare(`
+        channelEnv.DB.prepare(`
           INSERT INTO messages (id, client_message_id, uid, auth_uid, nick, text, is_admin, channel_id, image, image_w, image_h, reply_to, root_id, report, reported_msg_id, gallery_id, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
@@ -471,7 +479,7 @@ export async function handleMessages(
       // exposing account IDs through the public messages row.
       if (!liveChannel && !report && notificationActorUserId) {
         stmts.push(
-          env.DB.prepare(`
+          channelEnv.DB.prepare(`
             INSERT INTO message_notification_owners (
               message_id,
               channel_id,
@@ -492,7 +500,7 @@ export async function handleMessages(
         routeStage = "persist_message_identities";
         const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
         stmts.push(
-          env.DB.prepare(
+          channelEnv.DB.prepare(
             `INSERT OR REPLACE INTO message_actor_identities
               (record_id, record_type, channel_id, uid, device_id_hash, created_at)
              VALUES (?, 'message', ?, ?, ?, ?)`
@@ -502,11 +510,11 @@ export async function handleMessages(
       routeStage = "persist_message_batch";
       const persistStartedAt = performance.now();
       try {
-        await env.DB.batch(stmts);
+        await channelEnv.DB.batch(stmts);
         sendTimings.persist = roundedDuration(persistStartedAt);
       } catch (error) {
         routeStage = "resolve_batch_conflict";
-        const duplicate = await env.DB.prepare(
+        const duplicate = await channelEnv.DB.prepare(
           "SELECT * FROM messages WHERE client_message_id = ? LIMIT 1"
         ).bind(clientMessageId).first<PersistedMessage>();
         if (duplicate?.uid === requesterUid && duplicate.channel_id === requestChannelId) {
@@ -532,7 +540,8 @@ export async function handleMessages(
       // The sender only waits for authoritative D1 persistence. Link indexing
       // and realtime fan-out continue with the request lifetime and retry once.
       const postCommitDelivery = completePersistedMessageDelivery({
-        env,
+        controlEnv: env,
+        channelEnv,
         parentChannelId,
         requestChannelId,
         messageId: id,
@@ -545,6 +554,7 @@ export async function handleMessages(
         if (!liveChannel) {
           ctx.waitUntil(queueChannelNotification({
             env,
+            channelEnv,
             ctx,
             channelId: parentChannelId,
             event: report ? "message_report" : "channel_message",
@@ -564,6 +574,7 @@ export async function handleMessages(
           ) {
             ctx.waitUntil(queueChannelNotification({
               env,
+              channelEnv,
               ctx,
               channelId: parentChannelId,
               event: "message_reply",
@@ -601,9 +612,13 @@ export async function handleMessages(
       requestChannelId = String(channel_id);
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      channelEnv = withDatabase(
+        env,
+        (await resolveChannelDatabase(env, parentChannelId)).database,
+      );
       if (liveChannel) {
         routeStage = "load_live_state";
-        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+        if (!await ensureActiveLiveSession(channelEnv, parentChannelId)) {
           return Response.json({ error: "live_session_ended" }, { status: 403 });
         }
       }
@@ -613,7 +628,7 @@ export async function handleMessages(
         const internalToken = request.headers.get("X-Internal-Token");
         const verifiedUserId = request.headers.get("X-User-Id");
         const reportChannel = internalToken === env.INTERNAL_SECRET && verifiedUserId
-          ? await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+          ? await channelEnv.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
             .bind(parentChannelId).first<{ owner_uid: string }>()
           : null;
         if (!reportChannel || reportChannel.owner_uid !== verifiedUserId) {
@@ -621,7 +636,7 @@ export async function handleMessages(
         }
       }
       routeStage = "verify_room_access";
-      const { exists: delChannelExists, passcode: delPasscode } = await getChannelPasscodeInfo(parentChannelId, env);
+      const { exists: delChannelExists, passcode: delPasscode } = await getChannelPasscodeInfo(parentChannelId, channelEnv);
       if (!delChannelExists) return Response.json({ error: "channel not found" }, { status: 404 });
       if (delPasscode) {
         const roomToken = request.headers.get("X-Room-Token");
@@ -639,35 +654,35 @@ export async function handleMessages(
       }
 
       routeStage = "load_message_owner";
-      const msg = await env.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ? AND deleted != 2")
+      const msg = await channelEnv.DB.prepare("SELECT uid, image FROM messages WHERE id = ? AND channel_id = ? AND deleted != 2")
         .bind(message_id, requestChannelId).first();
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
       if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
 
       if (soft) {
         routeStage = "soft_delete_message";
-        await env.DB.batch([
-          env.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
+        await channelEnv.DB.batch([
+          channelEnv.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
             .bind(message_id),
-          env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
+          channelEnv.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
             .bind(message_id),
-          env.DB.prepare("UPDATE messages SET deleted = 1, text = '삭제된 채팅입니다', image = NULL, gallery_id = NULL WHERE id = ? AND channel_id = ?")
+          channelEnv.DB.prepare("UPDATE messages SET deleted = 1, text = '삭제된 채팅입니다', image = NULL, gallery_id = NULL WHERE id = ? AND channel_id = ?")
             .bind(message_id, requestChannelId),
         ]);
       } else {
         routeStage = "hard_delete_message";
-        await env.DB.batch([
-          env.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
+        await channelEnv.DB.batch([
+          channelEnv.DB.prepare("DELETE FROM message_links WHERE message_id = ?")
             .bind(message_id),
-          env.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
+          channelEnv.DB.prepare("DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'message'")
             .bind(message_id),
-          env.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
+          channelEnv.DB.prepare("DELETE FROM messages WHERE id = ? AND channel_id = ?")
             .bind(message_id, requestChannelId),
         ]);
       }
       routeStage = "delete_message_media";
       await deleteMediaByUrl(env, msg.image as string | null | undefined);
-      await deleteUploadTicketByAttachment(env, "message", message_id as string);
+      await deleteUploadTicketByAttachment(channelEnv, "message", message_id as string);
 
       routeStage = "broadcast_delete";
       const doId = env.CHAT_ROOM.idFromName(parentChannelId);
@@ -699,14 +714,18 @@ export async function handleMessages(
       // Passcode gate
       liveChannel = requestChannelId.endsWith("_live");
       parentChannelId = liveChannel ? requestChannelId.replace(/_live$/, "") : requestChannelId;
+      channelEnv = withDatabase(
+        env,
+        (await resolveChannelDatabase(env, parentChannelId)).database,
+      );
       if (liveChannel) {
         routeStage = "load_live_state";
-        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+        if (!await ensureActiveLiveSession(channelEnv, parentChannelId)) {
           return Response.json({ error: "live_session_ended" }, { status: 403 });
         }
       }
       routeStage = "load_channel_state";
-      const channel = await env.DB.prepare(`
+      const channel = await channelEnv.DB.prepare(`
         SELECT id, is_frozen, owner_uid, passcode,
           (SELECT is_frozen FROM channels WHERE id = ?) AS target_is_frozen
         FROM channels
@@ -716,7 +735,7 @@ export async function handleMessages(
       const isChannelOwner = hasVerifiedIdentity && (channel as any).owner_uid === verifiedUserId;
       if (isChannelOwner) {
         routeStage = "load_owner_moderation";
-        const moderation = await getChannelModeration(parentChannelId, env);
+        const moderation = await getChannelModeration(parentChannelId, channelEnv);
         if (isOwnerModerationBlocked(moderation)) {
           return Response.json({ error: "owner_suspended" }, { status: 403 });
         }
@@ -782,12 +801,12 @@ export async function handleMessages(
       routeStage = "check_block_and_banned_words";
       const [blocked, allowedByBannedWords] = await Promise.all([
         isBlockedActor({
-          env,
+          env: channelEnv,
           channelId: parentChannelId,
           uid: requesterUid,
           deviceId: requesterDeviceId,
         }),
-        checkBannedWords(text, parentChannelId, env),
+        checkBannedWords(text, parentChannelId, channelEnv),
       ]);
       if (blocked) return Response.json({ error: "blocked" }, { status: 403 });
       if (!allowedByBannedWords) {
@@ -795,16 +814,16 @@ export async function handleMessages(
       }
 
       routeStage = "load_message_owner";
-      const msg = await env.DB.prepare("SELECT uid, created_at FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
+      const msg = await channelEnv.DB.prepare("SELECT uid, created_at FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
         .bind(message_id, requestChannelId).first<{ uid: string; created_at: string }>();
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
       if (msg.uid !== requesterUid) return Response.json({ error: "not owner" }, { status: 403 });
 
       routeStage = "update_message_text";
-      await env.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND deleted = 0")
+      await channelEnv.DB.prepare("UPDATE messages SET text = ?, edited = 1 WHERE id = ? AND deleted = 0")
         .bind(text, message_id).run();
       routeStage = "sync_message_links";
-      await syncMessageLink(env, message_id as string, requestChannelId, msg.created_at, text);
+      await syncMessageLink(channelEnv, message_id as string, requestChannelId, msg.created_at, text);
 
       routeStage = "broadcast_edit";
       await chatRoom.fetch(new Request("http://internal/broadcast", {
@@ -829,9 +848,13 @@ export async function handleMessages(
 
       parentChannelId = requestChannelId.endsWith("_live") ? requestChannelId.replace(/_live$/, "") : requestChannelId;
       liveChannel = requestChannelId.endsWith("_live");
+      channelEnv = withDatabase(
+        env,
+        (await resolveChannelDatabase(env, parentChannelId)).database,
+      );
       if (liveChannel) {
         routeStage = "load_live_state";
-        if (!await ensureActiveLiveSession(env, parentChannelId)) {
+        if (!await ensureActiveLiveSession(channelEnv, parentChannelId)) {
           return Response.json({ error: "live_session_ended" }, { status: 403 });
         }
       }
@@ -841,7 +864,7 @@ export async function handleMessages(
       routeStage = "verify_channel_access";
       if (isReportsChannel(parentChannelId, env)) {
         const reportChannel = isVerifiedAdmin
-          ? await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+          ? await channelEnv.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
             .bind(parentChannelId).first<{ owner_uid: string }>()
           : null;
         if (!reportChannel || reportChannel.owner_uid !== verifiedUserId) {
@@ -850,19 +873,19 @@ export async function handleMessages(
       }
       if (isVerifiedAdmin) {
         routeStage = "load_channel_state";
-        const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+        const channel = await channelEnv.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
           .bind(parentChannelId).first();
         if (!channel || channel.owner_uid !== verifiedUserId) {
           return Response.json({ error: "not owner" }, { status: 403 });
         }
         routeStage = "load_owner_moderation";
-        const moderation = await getChannelModeration(parentChannelId, env);
+        const moderation = await getChannelModeration(parentChannelId, channelEnv);
         if (isOwnerModerationBlocked(moderation)) {
           return Response.json({ error: "owner_suspended" }, { status: 403 });
         }
       }
       routeStage = "verify_room_access";
-      const { exists: patchChannelExists, passcode: patchPasscode } = await getChannelPasscodeInfo(parentChannelId, env);
+      const { exists: patchChannelExists, passcode: patchPasscode } = await getChannelPasscodeInfo(parentChannelId, channelEnv);
       if (!patchChannelExists) return Response.json({ error: "channel not found" }, { status: 404 });
       if (patchPasscode && !isVerifiedAdmin) {
         const roomToken = request.headers.get("X-Room-Token");
@@ -885,7 +908,7 @@ export async function handleMessages(
       if (!isVerifiedAdmin) {
         routeStage = "check_block_status";
         const blocked = await isBlockedActor({
-          env,
+          env: channelEnv,
           channelId: parentChannelId,
           uid: reactionUid,
           deviceId: requesterDeviceId,
@@ -894,7 +917,7 @@ export async function handleMessages(
       }
 
       routeStage = "load_reactions";
-      const msg = await env.DB.prepare("SELECT reactions FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
+      const msg = await channelEnv.DB.prepare("SELECT reactions FROM messages WHERE id = ? AND channel_id = ? AND deleted = 0")
         .bind(message_id, requestChannelId).first() as { reactions: string } | null;
       if (!msg) return Response.json({ error: "not found" }, { status: 404 });
 
@@ -908,7 +931,7 @@ export async function handleMessages(
       }
 
       routeStage = "persist_reactions";
-      await env.DB.prepare("UPDATE messages SET reactions = ? WHERE id = ? AND deleted = 0")
+      await channelEnv.DB.prepare("UPDATE messages SET reactions = ? WHERE id = ? AND deleted = 0")
         .bind(JSON.stringify(reactions), message_id).run();
 
       routeStage = "broadcast_reaction";

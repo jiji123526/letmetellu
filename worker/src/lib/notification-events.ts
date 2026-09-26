@@ -25,6 +25,8 @@ interface ChannelRow {
 
 interface QueueChannelNotificationInput {
   env: Env;
+  /** Canonical channel state may live outside the control database. */
+  channelEnv?: Env;
   ctx?: ExecutionContext;
   channelId: string;
   event: ChannelNotificationEvent;
@@ -138,7 +140,8 @@ function payloadFor(input: {
 export async function queueChannelNotification(
   input: QueueChannelNotificationInput,
 ): Promise<number> {
-  const channel = await input.env.DB.prepare(`
+  const channelEnv = input.channelEnv || input.env;
+  const channel = await channelEnv.DB.prepare(`
     SELECT id, name, owner_uid, passcode
     FROM channels
     WHERE id = ? AND id NOT LIKE '%_live'

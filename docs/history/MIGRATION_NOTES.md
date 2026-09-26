@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Message writes now honor the channel-database boundary — 2026-09-26
+
+- Message creation, editing, deletion and reactions now resolve the parent
+  channel once and keep canonical message rows plus their local dependents on
+  that database. The corresponding live channel follows the same placement.
+- Realtime Durable Object delivery and operational logging remain control-plane
+  concerns. Push fanout reads channel metadata from the channel shard but keeps
+  preferences, subscriptions and outbox delivery state in control D1.
+- Added explicit two-database regression coverage; TypeScript and all 501 Worker
+  hardening tests pass.
+
+Trade-off: this closes the ordinary-message mutation gap but does not authorize
+cutover by itself. DM, upload/config/moderation and channel-lifecycle mutations
+still require routing coverage, and the canary must receive a final frozen delta
+before production placement can be enabled.
+
+Deployment note: no production variable, binding, Worker or route changed. The
+feature branch continues to resolve all production traffic to primary because
+the placement configuration is intentionally unset.
+
 ### `zziks` reversible frozen reconciliation is complete — 2026-09-26
 
 - Paused ordinary production HTTP writes and scheduled work only after the isolated finalizer, dedicated secret and maintenance rejection were verified. Reads remained available; routing stayed on the source database throughout.

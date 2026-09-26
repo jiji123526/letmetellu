@@ -26,6 +26,14 @@ const initSource = readFileSync(
   new URL("../src/routes/init.ts", import.meta.url),
   "utf8",
 );
+const messagesSource = readFileSync(
+  new URL("../src/routes/messages.ts", import.meta.url),
+  "utf8",
+);
+const notificationEventsSource = readFileSync(
+  new URL("../src/lib/notification-events.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -184,4 +192,36 @@ test("init separates channel and control database reads", () => {
   );
   assert.match(initSource, /isPlatformAdmin\(trustedUserId, env\)/);
   assert.doesNotMatch(initSource, /channel_init_shard_not_ready/);
+});
+
+test("message mutations use the resolved channel database", () => {
+  assert.equal(
+    messagesSource.match(/resolveChannelDatabase\(env, parentChannelId\)/g)?.length,
+    4,
+  );
+  assert.doesNotMatch(messagesSource, /\benv\.DB\.(?:prepare|batch)/);
+  assert.match(
+    messagesSource,
+    /completePersistedMessageDelivery\(\{[\s\S]*?controlEnv: env,[\s\S]*?channelEnv,/,
+  );
+  assert.match(
+    messagesSource,
+    /queueChannelNotification\(\{[\s\S]*?env,[\s\S]*?channelEnv,/,
+  );
+});
+
+test("notification fanout separates channel metadata from control state", () => {
+  assert.match(
+    notificationEventsSource,
+    /const channelEnv = input\.channelEnv \|\| input\.env;/,
+  );
+  assert.match(
+    notificationEventsSource,
+    /channelEnv\.DB\.prepare\(`\s*SELECT id, name, owner_uid, passcode/,
+  );
+  assert.match(
+    notificationEventsSource,
+    /input\.env\.DB\.prepare\(`\s*SELECT\s+pref\.user_id,/,
+  );
+  assert.match(notificationEventsSource, /input\.env\.DB\.batch\(statements\)/);
 });
