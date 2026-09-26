@@ -4,6 +4,17 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `zziks` reversible frozen reconciliation is complete — 2026-09-26
+
+- Paused ordinary production HTTP writes and scheduled work only after the isolated finalizer, dedicated secret and maintenance rejection were verified. Reads remained available; routing stayed on the source database throughout.
+- Reconciled the frozen message set and rebuilt dependents, then verified DMs, DM replies, message notification ownership and channel reports. The first DM completion stopped on `dm_activity_mismatch`; production writes were reopened before diagnosis, the monotonic-watermark verifier was corrected and fully tested, and the operation resumed from its saved stage in a second short window.
+- Final source/canary aggregates matched: one channel, 5,139 messages, 14 DM roots, 13 DM replies, 198 gallery rows, 353 message-link rows, 331 message-notification owners and zero channel reports. The canary job is at `delta_channel_reports_verified`, foreign-key check returned no rows and `PRAGMA quick_check` returned `ok`.
+- Removed the production maintenance flag and verified an ordinary mutation reaches normal validation rather than maintenance rejection. A public `zziks` initialization returned `200` with about 220 ms total server timing after reopening.
+
+Trade-off: the copy is now a verified frozen snapshot only through the report gate. Writes made after reopening remain canonical solely in the source database, so the canary will diverge until a later approved final delta. Keeping service available is safer than leaving global maintenance active while the irreversible dispatch, shadow-read and routing gates are still unfinished.
+
+Deployment note: no channel traffic was routed to the canary, no projection event was dispatched and no source row was deleted or tombstoned. The next step is the separately reviewed isolated report-dispatch exercise; it is intentionally not chained to this maintenance window because processing an event disables ordinary automated cleanup.
+
 ### Frozen DM verification now honors monotonic activity watermarks — 2026-09-26
 
 - The first `zziks` frozen pass stopped safely at `delta_dm_dependents_copied` because both source and destination contained one DM whose `activity_at` was newer than its latest remaining reply.
