@@ -4,6 +4,25 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Existing-channel owner controls now follow channel placement — 2026-09-26
+
+- Owner authorization and channel-local settings/mutations now share one
+  resolved database: profile and appearance, notices/rules/welcome state,
+  passcode, DM/petition toggles, emoji presets, freeze, block/kick/unblock,
+  banned words, live state and staged deletion/Undo.
+- Account profile data, the reports-channel operator identity, Durable Object
+  broadcasts, R2 objects and push delivery remain outside the channel shard.
+- Channel creation/capacity remains control-plane work. Complete channel
+  deletion is intentionally unchanged until canonical shard deletion and
+  control-plane cleanup jobs are separated.
+- Worker TypeScript and all 506 hardening tests pass.
+
+Trade-off: placement is resolved for each owner action, but the static resolver
+is local and adds no database request. The remaining lifecycle split is still
+an activation blocker; this commit does not make partial deletion safe.
+
+Deployment note: no production configuration or deployment changed.
+
 ### Notification access now splits channel authority from account state — 2026-09-26
 
 - Channel ownership and passcode state are read from the resolved channel

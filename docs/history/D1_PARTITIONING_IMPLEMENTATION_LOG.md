@@ -7,6 +7,29 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-26: existing-channel admin mutations respect placement
+
+- Resolved the channel database once for owner authorization and reused it for
+  profile/appearance, notice, rules, welcome text, passcode, DM and petition
+  toggles, emoji presets, manual freeze, block/kick/unblock, banned words,
+  live-session state and server-backed delete/Undo mutations.
+- Kept global account profile lookup, reports-channel identity, realtime
+  delivery, shared R2 and push delivery infrastructure on their existing
+  control/service boundaries.
+- Deliberately left channel creation/capacity on control D1 and left complete
+  channel deletion on its existing lifecycle path. The latter still needs an
+  explicit canonical-delete/control-cleanup split before routing activation.
+- Added boundary regression coverage. Worker TypeScript and all 506 hardening
+  tests pass.
+
+Trade-off: every existing-channel admin request performs local placement
+resolution before ownership validation. The resolver is an in-memory static
+map and adds no D1 round trip. Frontend and Worker deployments must still be
+coordinated because these mutations become shard-authoritative together.
+
+Deployment note: feature branch only. No production binding, placement
+variable, Worker or route changed.
+
 ## 2026-09-26: notification access separates channel authority from account state
 
 - Notification preference reads now resolve channel ownership and passcode

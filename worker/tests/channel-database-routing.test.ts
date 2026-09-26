@@ -46,6 +46,10 @@ const notificationsSource = readFileSync(
   new URL("../src/routes/notifications.ts", import.meta.url),
   "utf8",
 );
+const adminSource = readFileSync(
+  new URL("../src/routes/admin.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -297,4 +301,27 @@ test("notification access separates channel authority from account association",
   assert.match(accessSource, /resolveChannelDatabase\(env, channelId\)/);
   assert.match(accessSource, /resolvedDatabase\.database\.prepare\(`\s*SELECT id, owner_uid, passcode/);
   assert.match(accessSource, /env\.DB\.prepare\(`\s*SELECT 1\s*FROM user_recent_channels/);
+});
+
+test("existing-channel admin mutations use the resolved channel database", () => {
+  assert.match(adminSource, /resolveChannelDatabase\(env, channel_id\)/);
+  assert.match(
+    adminSource,
+    /channelEnv = withDatabase\(env, resolvedDatabase\.database\)/,
+  );
+  assert.match(
+    adminSource,
+    /channelEnv\.DB\.prepare\("SELECT owner_uid FROM channels WHERE id = \?"\)/,
+  );
+  assert.match(adminSource, /getChannelModeration\(channel_id, channelEnv\)/);
+  assert.match(adminSource, /stageMessageDeletion\(channelEnv,/);
+  assert.match(adminSource, /stageDmDeletion\(channelEnv,/);
+  assert.match(adminSource, /stageDmReplyDeletion\(channelEnv,/);
+  assert.match(adminSource, /undoPendingDeletion\(channelEnv,/);
+  assert.match(adminSource, /endLiveSession\(channelEnv,/);
+  assert.match(
+    adminSource,
+    /const ownerProfile = await env\.DB\.prepare\("SELECT name FROM users WHERE id = \?"\)/,
+  );
+  assert.match(adminSource, /deleteChannel\(channel_id, env\)/);
 });

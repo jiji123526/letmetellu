@@ -11,6 +11,7 @@ import { createPasscodeHash } from "./passcode";
 import { queueChannelNotification } from "../lib/notification-events";
 import { isTrustedInternalRequest } from "../lib/trusted-identity";
 import { deleteChannel } from "../lib/channel-cleanup";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access";
 import {
   stageDmDeletion,
   stageDmReplyDeletion,
@@ -109,16 +110,19 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
   const body = await request.json() as { action: string; channel_id: string; payload?: Record<string, unknown> };
   const { action, channel_id, payload } = body;
+  let channelEnv = env;
 
   // These actions do not target an existing owned channel.
   if (action !== "create-channel" && action !== "channel-capacity") {
-    const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+    const resolvedDatabase = await resolveChannelDatabase(env, channel_id);
+    channelEnv = withDatabase(env, resolvedDatabase.database);
+    const channel = await channelEnv.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
       .bind(channel_id).first();
     if (!channel || channel.owner_uid !== userId) {
       return Response.json({ error: "not owner" }, { status: 403 });
     }
 
-    const moderation = await getChannelModeration(channel_id, env);
+    const moderation = await getChannelModeration(channel_id, channelEnv);
     if (isOwnerModerationBlocked(moderation) && action !== "submit-moderation-petition") {
       return Response.json({ error: "owner_suspended" }, { status: 403 });
     }
@@ -198,7 +202,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         return Response.json({ error: "petition_required" }, { status: 400 });
       }
 
-      const moderation = await getChannelModeration(channel_id, env);
+      const moderation = await getChannelModeration(channel_id, channelEnv);
       if (!isOwnerModerationBlocked(moderation)) {
         return Response.json({ error: "petition_unavailable" }, { status: 409 });
       }
@@ -206,7 +210,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         return Response.json({ error: "petition_exists" }, { status: 409 });
       }
 
-      const channel = await env.DB.prepare("SELECT id, name, owner_uid FROM channels WHERE id = ?")
+      const channel = await channelEnv.DB.prepare("SELECT id, name, owner_uid FROM channels WHERE id = ?")
         .bind(channel_id)
         .first<{ id: string; name: string; owner_uid: string }>();
       if (!channel || channel.owner_uid !== userId) {
@@ -253,7 +257,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         locale: reportsOwnerLocale,
       });
 
-      await env.DB.prepare(`
+      await channelEnv.DB.prepare(`
         INSERT INTO channel_petitions (
           id, channel_id, owner_uid, text, status, created_at, inbox_message_id
         ) VALUES (?, ?, ?, ?, 'open', ?, ?)
@@ -270,7 +274,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         status: "frozen",
         petition_status: "open",
         current_petition_id: petitionId,
-      }, env);
+      }, channelEnv);
 
       await postReportsInboxMessage({
         env,
@@ -288,7 +292,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
     case "freeze": {
       const frozen = payload?.frozen ? 1 : 0;
-      await env.DB.prepare("UPDATE channels SET is_frozen = ? WHERE id = ?")
+      await channelEnv.DB.prepare("UPDATE channels SET is_frozen = ? WHERE id = ?")
         .bind(frozen, channel_id).run();
 
       // Broadcast freeze change to parent channel DO (where clients connect)
@@ -317,7 +321,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
       if (messageId) {
         const resolved = await resolveActorIdentity({
-          env,
+          env: channelEnv,
           recordId: messageId,
           recordType: messageKind as ActorRecordType,
           channelId: channel_id,
@@ -328,10 +332,10 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         } else {
           const liveChannelId = `${channel_id}_live`;
           const fallbackRow = messageKind === "dm"
-            ? await env.DB.prepare(
+            ? await channelEnv.DB.prepare(
               "SELECT uid, auth_uid FROM dm WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
             ).bind(messageId, channel_id, liveChannelId).first<{ uid: string; auth_uid: string | null }>()
-            : await env.DB.prepare(
+            : await channelEnv.DB.prepare(
               "SELECT uid, auth_uid FROM messages WHERE id = ? AND channel_id IN (?, ?) LIMIT 1"
             ).bind(messageId, channel_id, liveChannelId).first<{ uid: string; auth_uid: string | null }>();
           if (!fallbackRow?.uid) {
@@ -351,10 +355,10 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         return Response.json({ error: "cannot_block_platform_admin" }, { status: 403 });
       }
 
-      await env.DB.batch([
-        env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
+      await channelEnv.DB.batch([
+        channelEnv.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
           .bind(uid, channel_id),
-        env.DB.prepare(
+        channelEnv.DB.prepare(
           "INSERT INTO blocked (id, uid, reason, device_id, channel_id, mode) VALUES (?, ?, ?, ?, ?, ?)"
         ).bind(crypto.randomUUID(), uid, reason, deviceId, channel_id, mode),
       ]);
@@ -377,44 +381,44 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
     case "unblock": {
       const { uid: unblockUid } = payload || {};
-      const blockedEntry = await env.DB.prepare(
+      const blockedEntry = await channelEnv.DB.prepare(
         "SELECT COALESCE(device_id, fingerprint) AS device_id FROM blocked WHERE uid = ? AND channel_id = ? LIMIT 1"
       ).bind(unblockUid, channel_id).first();
-      await env.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
+      await channelEnv.DB.prepare("DELETE FROM blocked WHERE uid = ? AND channel_id = ?")
         .bind(unblockUid, channel_id).run();
       // Clean up old petition DMs from this user
-      const petitionRows = await env.DB.prepare(`
+      const petitionRows = await channelEnv.DB.prepare(`
         SELECT dm.id, dm.image
         FROM dm
         WHERE dm.uid = ? AND dm.channel_id = ? AND dm.text LIKE '[이의 제기]%'
       `).bind(unblockUid, channel_id).all<{ id: string; image: string | null }>();
       const petitionIds = (petitionRows.results || []).map((row) => row.id);
       const petitionReplies = petitionIds.length > 0
-        ? await env.DB.prepare(`
+        ? await channelEnv.DB.prepare(`
             SELECT id, image
             FROM dm_replies
             WHERE dm_id IN (${petitionIds.map(() => "?").join(", ")})
           `).bind(...petitionIds).all<{ id: string; image: string | null }>()
         : { results: [] as Array<{ id: string; image: string | null }> };
-      await env.DB.batch([
-        env.DB.prepare(`
+      await channelEnv.DB.batch([
+        channelEnv.DB.prepare(`
           DELETE FROM dm_replies
           WHERE dm_id IN (
             SELECT id FROM dm
             WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'
           )
         `).bind(unblockUid, channel_id),
-        env.DB.prepare("DELETE FROM dm WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'")
+        channelEnv.DB.prepare("DELETE FROM dm WHERE uid = ? AND channel_id = ? AND text LIKE '[이의 제기]%'")
           .bind(unblockUid, channel_id),
       ]);
       await Promise.all([
         ...(petitionRows.results || []).map((row) => deleteMediaByUrl(env, row.image)),
-        ...(petitionRows.results || []).map((row) => deleteUploadTicketByAttachment(env, "dm", row.id)),
+        ...(petitionRows.results || []).map((row) => deleteUploadTicketByAttachment(channelEnv, "dm", row.id)),
         ...(petitionReplies.results || []).map((row) => deleteMediaByUrl(env, row.image)),
-        ...(petitionReplies.results || []).map((row) => deleteUploadTicketByAttachment(env, "dm", row.id)),
+        ...(petitionReplies.results || []).map((row) => deleteUploadTicketByAttachment(channelEnv, "dm", row.id)),
       ]);
       // Clean up old report messages about this user
-      await env.DB.prepare("DELETE FROM messages WHERE uid = ? AND channel_id = ? AND report = 1")
+      await channelEnv.DB.prepare("DELETE FROM messages WHERE uid = ? AND channel_id = ? AND report = 1")
         .bind(unblockUid, channel_id).run();
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
@@ -440,7 +444,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       if (typeof message_id !== "string" || !message_id) {
         return Response.json({ error: "missing message id" }, { status: 400 });
       }
-      const pending = await stageMessageDeletion(env, channel_id, userId, message_id);
+      const pending = await stageMessageDeletion(channelEnv, channel_id, userId, message_id);
       if (!pending) return Response.json({ error: "message not found" }, { status: 404 });
 
       const doId = env.CHAT_ROOM.idFromName(channel_id);
@@ -462,7 +466,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       if (typeof dm_id !== "string" || !dm_id) {
         return Response.json({ error: "missing dm id" }, { status: 400 });
       }
-      const pending = await stageDmDeletion(env, channel_id, userId, dm_id);
+      const pending = await stageDmDeletion(channelEnv, channel_id, userId, dm_id);
       if (!pending) return Response.json({ error: "dm not found" }, { status: 404 });
 
       const doId2 = env.CHAT_ROOM.idFromName(channel_id);
@@ -488,7 +492,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       if (typeof reply_id !== "string" || !reply_id) {
         return Response.json({ error: "missing reply id" }, { status: 400 });
       }
-      const pending = await stageDmReplyDeletion(env, channel_id, userId, reply_id);
+      const pending = await stageDmReplyDeletion(channelEnv, channel_id, userId, reply_id);
       if (!pending) return Response.json({ error: "dm reply not found" }, { status: 404 });
 
       const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(channel_id));
@@ -508,7 +512,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       if (typeof deletion_id !== "string" || !deletion_id) {
         return Response.json({ error: "missing deletion id" }, { status: 400 });
       }
-      const restored = await undoPendingDeletion(env, channel_id, userId, deletion_id);
+      const restored = await undoPendingDeletion(channelEnv, channel_id, userId, deletion_id);
       if (!restored) {
         return Response.json({ error: "undo window expired" }, { status: 409 });
       }
@@ -550,7 +554,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       let normalizedBackgroundImage: string | null | undefined;
       const normalizedBubbleColor = normalizeBubbleColor(bubble_color);
       const currentAppearance = hasAppearanceUpdate
-        ? await env.DB.prepare(
+        ? await channelEnv.DB.prepare(
             `SELECT bubble_color, background_type, background_color, background_image,
                     background_overlay, background_blur
              FROM channels
@@ -645,7 +649,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
       if (updates.length > 0) {
         values.push(channel_id);
-        await env.DB.prepare(`UPDATE channels SET ${updates.join(", ")} WHERE id = ?`)
+        await channelEnv.DB.prepare(`UPDATE channels SET ${updates.join(", ")} WHERE id = ?`)
           .bind(...values).run();
 
         const doId = env.CHAT_ROOM.idFromName(channel_id);
@@ -703,7 +707,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
         }
       }
       // Upsert into config table
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`notice_${channel_id}`, noticeText, channel_id, noticeText).run();
 
@@ -723,7 +727,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
     case "set-rules": {
       const { rules } = payload || {};
       const rulesText = (rules as string) || "[]";
-      await env.DB.prepare("UPDATE channels SET notice = ? WHERE id = ?")
+      await channelEnv.DB.prepare("UPDATE channels SET notice = ? WHERE id = ?")
         .bind(rulesText, channel_id).run();
 
       // Broadcast rules change so non-admin sees the ℹ️ icon appear/disappear
@@ -740,7 +744,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
     case "add-banned-word": {
       const { word, expires } = payload || {};
       if (!word) return Response.json({ error: "missing word" }, { status: 400 });
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO banned_words (id, word, channel_id, expires) VALUES (?, ?, ?, ?)"
       ).bind(crypto.randomUUID(), word, channel_id, expires || null).run();
       invalidateBannedWordsCache(channel_id);
@@ -750,7 +754,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
     case "remove-banned-word": {
       const { word } = payload || {};
       if (!word) return Response.json({ error: "missing word" }, { status: 400 });
-      await env.DB.prepare("DELETE FROM banned_words WHERE word = ? AND channel_id = ?")
+      await channelEnv.DB.prepare("DELETE FROM banned_words WHERE word = ? AND channel_id = ?")
         .bind(word, channel_id).run();
       invalidateBannedWordsCache(channel_id);
       return Response.json({ ok: true });
@@ -772,7 +776,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       } catch {
         return Response.json({ error: "invalid welcome config" }, { status: 400 });
       }
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`welcome_${channel_id}`, config || "", channel_id, config || "").run();
       return Response.json({ ok: true });
@@ -790,7 +794,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       }
       // Hints are intentionally public on the locked-channel screen. Clear the
       // hint whenever the passcode itself is removed.
-      await env.DB.prepare("UPDATE channels SET passcode = ?, passcode_hint = ? WHERE id = ?")
+      await channelEnv.DB.prepare("UPDATE channels SET passcode = ?, passcode_hint = ? WHERE id = ?")
         .bind(hashedPasscode, hashedPasscode ? normalizedHint || null : null, channel_id).run();
       invalidatePasscodeCache(channel_id);
       const passcodeDoId = env.CHAT_ROOM.idFromName(channel_id);
@@ -804,7 +808,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
     case "set-petition": {
       const { enabled } = payload || {};
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`petition_${channel_id}`, enabled ? "true" : "false", channel_id, enabled ? "true" : "false").run();
       const petDoId = env.CHAT_ROOM.idFromName(channel_id);
@@ -818,7 +822,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
     case "set-dm": {
       const { enabled } = payload || {};
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`dm_${channel_id}`, enabled ? "true" : "false", channel_id, enabled ? "true" : "false").run();
       const dmDoId = env.CHAT_ROOM.idFromName(channel_id);
@@ -832,7 +836,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
 
     case "set-emoji-presets": {
       const { emojis } = payload || {};
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`liveEmojis_${channel_id}`, emojis || "[]", channel_id, emojis || "[]").run();
 
@@ -856,13 +860,13 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       );
       const liveState = JSON.stringify(liveSession);
 
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT INTO config (id, text, channel_id) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET text = ?, updated_at = datetime('now')"
       ).bind(`live_${channel_id}`, liveState, channel_id, liveState).run();
 
       // Create a temporary channel entry for the _live channel (FK constraint)
       const liveChannelId = `${channel_id}_live`;
-      await env.DB.prepare(
+      await channelEnv.DB.prepare(
         "INSERT OR IGNORE INTO channels (id, owner_uid, name) VALUES (?, ?, ?)"
       ).bind(liveChannelId, userId, "Live").run();
 
@@ -904,7 +908,7 @@ export async function handleAdmin(request: Request, env: Env, ctx?: ExecutionCon
       if (!expectedSessionId) {
         return Response.json({ error: "missing_live_session_id" }, { status: 400 });
       }
-      const result = await endLiveSession(env, channel_id, "manual", expectedSessionId);
+      const result = await endLiveSession(channelEnv, channel_id, "manual", expectedSessionId);
       if (result.status === "session_changed") {
         return Response.json({
           error: "live_session_changed",
