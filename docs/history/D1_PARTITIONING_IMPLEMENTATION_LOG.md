@@ -6,6 +6,24 @@ Production still routes every request to one D1 database. One empty, unrouted
 Chat canary now exists for the first channel-copy exercise; no virtual-bucket
 map, placement override, channel data migration, or cutover has been created.
 
+## 2026-09-26: fail-closed static channel placement resolver
+
+- Added a local, versioned canary placement map for the first bounded channel
+  cutover. With no configuration, every channel still resolves to primary
+  placement version 1.
+- An exact parent allowlist routes both the normal and `_live` forms to the
+  same canary binding while unrelated channels remain on primary. Resolution
+  performs no control-D1, KV, or cache lookup.
+- Invalid versions, unknown shards, duplicate channels, live IDs, reports
+  placement, missing bindings and bindings that alias control D1 fail closed
+  instead of silently falling back and risking split-brain writes.
+- Production configuration remains unset. This commit only creates the
+  placement decision seam; mutation routes must use it before activation.
+
+Trade-off: a static map keeps first-entry latency low but requires a Worker
+deployment to move a channel. Failing the entire malformed configuration is
+less available than fallback, but prevents ambiguous authority.
+
 ## 2026-09-26: `zziks` resumable initial backfill completed
 
 - Deployed `letsplay-d1-canary-copy-zziks`, an isolated Worker with only the
