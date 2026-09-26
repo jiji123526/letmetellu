@@ -4,6 +4,20 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Passcode verification and legacy upgrades follow channel placement — 2026-09-26
+
+- Passcode reads, compare-and-swap legacy hash upgrades and conflict rereads
+  now use the selected channel database.
+- Token signing and brute-force rate limiting remain shared services, so no
+  secret or Durable Object state is duplicated per shard.
+- Worker TypeScript and all 504 hardening tests pass.
+
+Trade-off: this closes the visitor verification path, but owner-driven passcode
+configuration still belongs to the unfinished admin mutation boundary.
+
+Deployment note: the feature branch only changed; production still has no
+placement configuration.
+
 ### Upload tickets and media access now follow channel placement — 2026-09-26
 
 - Upload authorization, per-channel quotas and ticket creation use the selected

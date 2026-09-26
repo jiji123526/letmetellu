@@ -38,6 +38,10 @@ const uploadSource = readFileSync(
   new URL("../src/routes/upload.ts", import.meta.url),
   "utf8",
 );
+const passcodeSource = readFileSync(
+  new URL("../src/routes/passcode.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -266,4 +270,16 @@ test("uploads and standard media keys resolve channel placement", () => {
   assert.match(mediaSource, /mediaEnv\.DB\.prepare\(\s*"SELECT channel_id, purpose, status, expires_at FROM upload_tickets/);
   assert.match(mediaSource, /getChannelPasscodeInfo\(parentChannelId, mediaEnv\)/);
   assert.match(mediaSource, /Legacy or malformed keys still fall back/);
+});
+
+test("passcode verification and legacy upgrades use channel placement", () => {
+  const handlerStart = passcodeSource.indexOf("export async function handleVerifyPasscode");
+  const verifyTokenStart = passcodeSource.indexOf("export async function verifyRoomToken");
+  assert.ok(handlerStart >= 0 && verifyTokenStart > handlerStart);
+  const handlerSource = passcodeSource.slice(handlerStart, verifyTokenStart);
+
+  assert.match(handlerSource, /resolveChannelDatabase\(env, channel_id\)/);
+  assert.match(handlerSource, /channelEnv\.DB\.prepare\("SELECT passcode FROM channels/);
+  assert.match(handlerSource, /channelEnv\.DB\.prepare\(\s*"UPDATE channels SET passcode/);
+  assert.doesNotMatch(handlerSource, /\benv\.DB\.(?:prepare|batch)/);
 });

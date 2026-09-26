@@ -7,6 +7,23 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-26: passcode verification respects channel placement
+
+- Routed passcode lookup and the successful legacy-hash upgrade through the
+  resolved channel database. Token signing and Durable Object attempt limiting
+  continue to use shared infrastructure and secrets.
+- The compare-and-swap upgrade and its conflict reread now stay on the same
+  channel database, preventing an old primary row from issuing a token after a
+  channel is routed.
+- Worker TypeScript and all 504 hardening tests pass.
+
+Trade-off: placement is resolved before the rate-limit call, but resolution is
+the local static map and adds no D1 request. Admin-side passcode changes are
+still part of the larger admin mutation boundary and remain an activation
+blocker.
+
+Deployment note: no production configuration or deployment changed.
+
 ## 2026-09-26: upload tickets and media authorization respect placement
 
 - Routed upload ownership, live-state, passcode, quota and ticket writes to the

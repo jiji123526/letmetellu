@@ -2,6 +2,7 @@ import { hashRateLimitIdentifier } from "../lib/durable-rate-limit.ts";
 import { withOperationalEventOverride } from "../lib/operational-events.ts";
 import { invalidatePasscodeCache } from "../lib/validation.ts";
 import type { Env } from "../types.ts";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access.ts";
 
 const PASSCODE_HASH_PREFIX = "pbkdf2-sha256$";
 const PASSCODE_PBKDF2_ITERATIONS = 100_000;
@@ -191,8 +192,12 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
     return Response.json({ error: "missing fields" }, { status: 400 });
   }
 
+  const channelEnv = withDatabase(
+    env,
+    (await resolveChannelDatabase(env, channel_id)).database,
+  );
   // Get channel's stored passcode hash
-  const channel = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
+  const channel = await channelEnv.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
     .bind(channel_id).first() as { passcode: string | null } | null;
 
   if (!channel) {
@@ -243,7 +248,7 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
   // time they are successfully used. This invalidates old room tokens once.
   if (verification.needsUpgrade) {
     const upgradedHash = await createPasscodeHash(passcode);
-    const upgradeResult = await env.DB.prepare(
+    const upgradeResult = await channelEnv.DB.prepare(
       "UPDATE channels SET passcode = ? WHERE id = ? AND passcode = ?"
     ).bind(upgradedHash, channel_id, channel.passcode).run();
 
@@ -257,7 +262,7 @@ export async function handleVerifyPasscode(request: Request, env: Env): Promise<
         console.error("Legacy passcode upgrade broadcast failed", channel_id, error);
       });
     } else {
-      const latest = await env.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
+      const latest = await channelEnv.DB.prepare("SELECT passcode FROM channels WHERE id = ?")
         .bind(channel_id)
         .first<{ passcode: string | null }>();
       if (!latest?.passcode) {
