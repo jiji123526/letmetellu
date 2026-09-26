@@ -39,7 +39,7 @@ audited failed-copy cleanup path.
 
 The final verification compares source and destination counts for roots,
 replies, DM actors, and notification owners. It also rejects orphaned
-dependents and verifies each destination root's `activity_at` equals the latest
+dependents and verifies each destination root's `activity_at` never predates the latest
 of its creation time and reply times. Active server-backed deletion Undo or a
 changed source channel version fails closed.
 

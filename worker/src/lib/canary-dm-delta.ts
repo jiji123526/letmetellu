@@ -536,14 +536,15 @@ async function readVerificationCounts(database: D1Database, channelId: string) {
         AS orphan_notification_owner_count,
       (SELECT COUNT(*) FROM dm AS root
         WHERE root.channel_id IN (?, ?)
-          AND COALESCE(root.activity_at, '') != COALESCE((
-            SELECT MAX(value) FROM (
-              SELECT root.created_at AS value
-              UNION ALL
-              SELECT reply.created_at AS value
-              FROM dm_replies AS reply WHERE reply.dm_id = root.id
+          AND (
+            root.activity_at IS NULL
+            OR COALESCE(root.activity_at, '') < COALESCE(root.created_at, '')
+            OR EXISTS (
+              SELECT 1 FROM dm_replies AS reply
+              WHERE reply.dm_id = root.id
+                AND COALESCE(reply.created_at, '') > COALESCE(root.activity_at, '')
             )
-          ), '')) AS activity_mismatch_count
+          )) AS activity_mismatch_count
   `).bind(
     channelId, `${channelId}_live`,
     channelId, `${channelId}_live`,

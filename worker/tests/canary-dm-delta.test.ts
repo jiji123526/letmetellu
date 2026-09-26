@@ -299,3 +299,26 @@ test("DM completion detects derived activity drift without exposing rows", async
   assert.deepEqual(body.blockers, ["dm_activity_mismatch"]);
   assert.doesNotMatch(JSON.stringify(body), /private-|2000-01-01/);
 });
+
+test("DM completion accepts a retained activity watermark after its latest reply is deleted", async () => {
+  const source = createDatabase();
+  const destination = createDatabase(true);
+  const sourceRoot = insertDm(source, 0);
+  const destinationRoot = insertDm(destination, 0);
+  insertReply(source, sourceRoot.id, 0);
+  insertReply(destination, destinationRoot.id, 0);
+  source.prepare("DELETE FROM dm_replies WHERE dm_id = ?").run(sourceRoot.id);
+  destination.prepare("DELETE FROM dm_replies WHERE dm_id = ?").run(destinationRoot.id);
+  destination.prepare(`
+    UPDATE canary_channel_copy_jobs SET stage = 'delta_dm_dependents_copied'
+  `).run();
+
+  const response = await handleCanaryMessageDelta(
+    request("complete-dm"),
+    env(source, destination),
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json() as { stage: string; blockers: string[] };
+  assert.equal(body.stage, "delta_dm_verified");
+  assert.deepEqual(body.blockers, []);
+});

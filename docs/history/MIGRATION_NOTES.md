@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Frozen DM verification now honors monotonic activity watermarks — 2026-09-26
+
+- The first `zziks` frozen pass stopped safely at `delta_dm_dependents_copied` because both source and destination contained one DM whose `activity_at` was newer than its latest remaining reply.
+- Read-only aggregate comparison confirmed the same one-row condition on both databases. This is expected after a latest reply is deleted: DM activity is a monotonic ordering watermark and is not reduced on deletion.
+- Verification now rejects only missing or regressed activity values—values older than the root or any remaining reply—while accepting a retained newer watermark. A regression test covers reply insertion followed by deletion, and the existing stale-activity test still rejects a genuinely old value.
+
+Trade-off: the verifier no longer demands exact equality with the currently visible latest reply because that would contradict the production ordering model. Exact source values are still copied during the bounded canonical upsert; count, orphan and monotonic-floor checks remain in place.
+
+Operational note: the blocker halted the operator without changing routing. Production writes were reopened before investigation; finalization must be resumed only in a new short maintenance window after the corrected isolated Worker passes tests and is redeployed.
+
 ### `zziks` frozen-finalization authority is isolated and ready — 2026-09-26
 
 - Added a dedicated finalization Worker exposing only the secret-protected frozen-delta endpoint for messages, message dependents, DMs, notification ownership and channel reports.
