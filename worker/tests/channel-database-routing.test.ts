@@ -42,6 +42,10 @@ const passcodeSource = readFileSync(
   new URL("../src/routes/passcode.ts", import.meta.url),
   "utf8",
 );
+const notificationsSource = readFileSync(
+  new URL("../src/routes/notifications.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -282,4 +286,15 @@ test("passcode verification and legacy upgrades use channel placement", () => {
   assert.match(handlerSource, /channelEnv\.DB\.prepare\("SELECT passcode FROM channels/);
   assert.match(handlerSource, /channelEnv\.DB\.prepare\(\s*"UPDATE channels SET passcode/);
   assert.doesNotMatch(handlerSource, /\benv\.DB\.(?:prepare|batch)/);
+});
+
+test("notification access separates channel authority from account association", () => {
+  const accessStart = notificationsSource.indexOf("async function resolveChannelAccess");
+  const devicesStart = notificationsSource.indexOf("async function listActiveDevices");
+  assert.ok(accessStart >= 0 && devicesStart > accessStart);
+  const accessSource = notificationsSource.slice(accessStart, devicesStart);
+
+  assert.match(accessSource, /resolveChannelDatabase\(env, channelId\)/);
+  assert.match(accessSource, /resolvedDatabase\.database\.prepare\(`\s*SELECT id, owner_uid, passcode/);
+  assert.match(accessSource, /env\.DB\.prepare\(`\s*SELECT 1\s*FROM user_recent_channels/);
 });

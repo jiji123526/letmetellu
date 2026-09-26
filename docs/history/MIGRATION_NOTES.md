@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Notification access now splits channel authority from account state — 2026-09-26
+
+- Channel ownership and passcode state are read from the resolved channel
+  database. Recent-channel membership, notification preferences, push
+  subscriptions and delivery outbox records remain in control D1.
+- The channel and account association checks execute in parallel, preserving
+  owner-or-associated authorization without relying on an impossible
+  cross-database join after a channel moves.
+- Worker TypeScript and all 505 hardening tests pass.
+
+Trade-off: notification settings access uses two bounded indexed reads rather
+than a single join. This is the explicit cost of keeping global account state
+centralized while channel authority is physically isolated.
+
+Deployment note: this is feature-branch preparation only; no production
+binding, placement configuration or Worker changed.
+
 ### Passcode verification and legacy upgrades follow channel placement — 2026-09-26
 
 - Passcode reads, compare-and-swap legacy hash upgrades and conflict rereads

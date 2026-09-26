@@ -7,6 +7,26 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-26: notification access separates channel authority from account state
+
+- Notification preference reads now resolve channel ownership and passcode
+  state from the selected channel database while keeping recent-channel
+  association, user preferences, push subscriptions and outbox state in
+  control D1.
+- The two independent lookups run in parallel. This replaces the former
+  single-database join, which cannot remain correct once a channel is moved
+  away from the control database.
+- Added structural boundary coverage and kept the existing notification API
+  behavior checks. Worker TypeScript and all 505 hardening tests pass.
+
+Trade-off: an authenticated notification settings read now performs two small
+parallel indexed reads instead of one join. The extra control read is bounded
+to one account-channel association row and avoids either duplicating account
+state onto every shard or searching shards for a user.
+
+Deployment note: no production binding, placement variable, Worker or route
+changed. Production continues to use the primary database.
+
 ## 2026-09-26: passcode verification respects channel placement
 
 - Routed passcode lookup and the successful legacy-hash upgrade through the

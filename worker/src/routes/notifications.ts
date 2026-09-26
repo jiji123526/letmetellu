@@ -10,6 +10,7 @@ import {
 import { getTrustedUserId } from "../lib/trusted-identity.ts";
 import type { Env } from "../types.ts";
 import { authorizeRoomToken } from "./passcode.ts";
+import { resolveChannelDatabase } from "../lib/database-access.ts";
 
 const PREFERENCE_MUTATION_LIMIT = 30;
 const SUBSCRIPTION_MUTATION_LIMIT = 30;
@@ -20,7 +21,6 @@ interface ChannelAccessRow {
   id: string;
   owner_uid: string;
   passcode: string | null;
-  associated: number;
 }
 
 interface PushDeviceRow {
@@ -79,21 +79,25 @@ async function resolveChannelAccess(
   userId: string,
   channelId: string,
 ): Promise<{ ok: true; accessBinding: string | null } | { ok: false; response: Response }> {
-  const channel = await env.DB.prepare(`
-    SELECT c.id, c.owner_uid, c.passcode,
-           EXISTS(
-             SELECT 1
-             FROM user_recent_channels recent
-             WHERE recent.user_id = ? AND recent.channel_id = c.id
-           ) AS associated
-    FROM channels c
-    WHERE c.id = ? AND c.id NOT LIKE '%_live'
-    LIMIT 1
-  `).bind(userId, channelId).first<ChannelAccessRow>();
+  const resolvedDatabase = await resolveChannelDatabase(env, channelId);
+  const [channel, association] = await Promise.all([
+    resolvedDatabase.database.prepare(`
+      SELECT id, owner_uid, passcode
+      FROM channels
+      WHERE id = ? AND id NOT LIKE '%_live'
+      LIMIT 1
+    `).bind(channelId).first<ChannelAccessRow>(),
+    env.DB.prepare(`
+      SELECT 1
+      FROM user_recent_channels
+      WHERE user_id = ? AND channel_id = ?
+      LIMIT 1
+    `).bind(userId, channelId).first(),
+  ]);
   if (!channel) {
     return { ok: false, response: Response.json({ error: "channel_not_found" }, { status: 404 }) };
   }
-  if (channel.owner_uid !== userId && !channel.associated) {
+  if (channel.owner_uid !== userId && !association) {
     return { ok: false, response: Response.json({ error: "channel_not_associated" }, { status: 403 }) };
   }
   if (!channel.passcode || channel.owner_uid === userId) {

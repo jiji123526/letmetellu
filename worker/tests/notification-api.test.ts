@@ -296,12 +296,12 @@ test(
 
     assert.match(
       route,
-      /FROM user_recent_channels recent[\s\S]*recent\.user_id = \? AND recent\.channel_id = c\.id/,
+      /FROM user_recent_channels[\s\S]*WHERE user_id = \? AND channel_id = \?/,
     );
 
     assert.match(
       route,
-      /channel\.owner_uid !== userId && !channel\.associated/,
+      /channel\.owner_uid !== userId && !association/,
     );
 
     assert.match(
