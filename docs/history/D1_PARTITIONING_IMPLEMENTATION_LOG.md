@@ -7,6 +7,29 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-26: private-DM reads and mutations respect channel placement
+
+- Routed DM thread entry checks, root creation, owner replies and sender
+  deletion through the resolved parent-channel database. Upload tickets,
+  message actor identities, notification ownership and DM replies remain with
+  their canonical DM root.
+- Extended owner-reply requests with the current `channel_id`. A shard cannot
+  be discovered safely from only a globally ambiguous DM UUID after physical
+  separation, so the route resolves placement first and then constrains the
+  lookup by both `dm_id` and `channel_id`.
+- Kept anonymous/device token verification, Durable Object rate limiting,
+  media deletion, protected-room token signing and push outbox delivery on
+  their existing control/infrastructure boundaries.
+- Frontend and Worker TypeScript checks pass, together with all 502 Worker
+  hardening tests.
+
+Trade-off: the DM reply API now requires channel context. This adds one small
+request field and rejects stale/incorrect context with `404`, but avoids a
+cross-database search or global DM locator on every reply.
+
+Deployment note: the feature branch only was changed. Production placement
+configuration remains unset, and no Worker or frontend was deployed.
+
 ## 2026-09-26: ordinary message mutations respect channel placement
 
 - Routed message create, edit, soft/hard delete and reaction mutations through

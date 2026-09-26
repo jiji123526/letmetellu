@@ -140,7 +140,25 @@ test("private DM GET separates channel and control database reads", () => {
     /getChannelPasscodeInfo\(parentChannelId, readEnv\)/,
   );
   assert.match(getSource, /readDmThreads\(\s*readEnv,/);
+  assert.match(getSource, /isEntryDeniedActor\(\{\s*env: readEnv,/);
   assert.match(getSource, /getReportsChannelOwnerId\(env\)/);
+});
+
+test("private DM mutations resolve and constrain the channel database", () => {
+  assert.equal(
+    dmSource.match(/resolveChannelDatabase\(env, parentChannelId\)/g)?.length,
+    4,
+  );
+  assert.doesNotMatch(dmSource, /\benv\.DB\.(?:prepare|batch)/);
+  assert.match(
+    dmSource,
+    /const channelId = typeof body\.channel_id === "string" \? body\.channel_id : "";/,
+  );
+  assert.match(
+    dmSource,
+    /WHERE dm\.id = \? AND dm\.channel_id = \? AND dm\.pending_delete_at IS NULL/,
+  );
+  assert.match(dmSource, /queueChannelNotification\(\{[\s\S]*?env,[\s\S]*?channelEnv,/);
 });
 
 test("init separates channel and control database reads", () => {

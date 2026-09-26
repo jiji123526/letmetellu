@@ -14,7 +14,7 @@ import { deleteMediaByUrl } from "../lib/media.ts";
 import { deleteUploadTicketByAttachment } from "../lib/upload-tickets.ts";
 import { parseMediaDimensions } from "../lib/media-dimensions.ts";
 import { queueChannelNotification } from "../lib/notification-events.ts";
-import { resolveChannelDatabase } from "../lib/database-access.ts";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access.ts";
 import { createD1ReadSessionEnv } from "../lib/d1-read-session.ts";
 
 const PETITION_PREFIXES = ["[Appeal]", "[이의 제기]"];
@@ -125,7 +125,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
     const requesterDeviceId = !isOwner ? await getRequesterDeviceId(request, env) : null;
     if (!isOwner && await isEntryDeniedActor({
-      env,
+      env: readEnv,
       channelId: parentChannelId,
       uid: requesterUid!,
       deviceId: requesterDeviceId,
@@ -154,6 +154,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     if (!trustedUserId) return Response.json({ error: "owner access required" }, { status: 401 });
     const body = await request.json() as Record<string, unknown>;
     const dmId = typeof body.dm_id === "string" ? body.dm_id : "";
+    const channelId = typeof body.channel_id === "string" ? body.channel_id : "";
     const clientReplyId = typeof body.client_reply_id === "string" ? body.client_reply_id : "";
     const rawText = typeof body.text === "string" ? body.text : "";
     const image = typeof body.image === "string" ? body.image : "";
@@ -164,6 +165,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
     if (
       !dmId
+      || !channelId
       || !isValidClientMessageId(clientReplyId)
       || (!rawText.trim() && !image)
       || (body.image !== undefined && typeof body.image !== "string")
@@ -177,7 +179,14 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
     }
 
-    const dm = await env.DB.prepare(`
+    const parentChannelId = channelId.endsWith("_live")
+      ? channelId.replace(/_live$/, "")
+      : channelId;
+    const channelEnv = withDatabase(
+      env,
+      (await resolveChannelDatabase(env, parentChannelId)).database,
+    );
+    const dm = await channelEnv.DB.prepare(`
       SELECT
         dm.id,
         dm.channel_id,
@@ -190,9 +199,9 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       END
       LEFT JOIN dm_notification_owners notification_owner
         ON notification_owner.dm_id = dm.id
-      WHERE dm.id = ? AND dm.pending_delete_at IS NULL
+      WHERE dm.id = ? AND dm.channel_id = ? AND dm.pending_delete_at IS NULL
       LIMIT 1
-    `).bind(dmId).first<{
+    `).bind(dmId, channelId).first<{
       id: string;
       channel_id: string;
       owner_uid: string;
@@ -202,18 +211,15 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     if (dm.owner_uid !== trustedUserId) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
-    const parentChannelId = dm.channel_id.endsWith("_live")
-      ? dm.channel_id.replace(/_live$/, "")
-      : dm.channel_id;
-    const moderation = await getChannelModeration(parentChannelId, env);
+    const moderation = await getChannelModeration(parentChannelId, channelEnv);
     if (isOwnerModerationBlocked(moderation)) {
       return Response.json({ error: "owner_suspended" }, { status: 403 });
     }
-    if (rawText && !await checkBannedWords(rawText, parentChannelId, env)) {
+    if (rawText && !await checkBannedWords(rawText, parentChannelId, channelEnv)) {
       return Response.json({ error: "banned_word" }, { status: 403 });
     }
 
-    const existing = await env.DB.prepare(`
+    const existing = await channelEnv.DB.prepare(`
       SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at
       FROM dm_replies
       WHERE owner_uid = ? AND client_reply_id = ?
@@ -231,7 +237,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       created_at: string;
     }>();
     if (existing) {
-      if (existing.dm_id !== dmId) {
+      if (existing.dm_id !== dmId || existing.channel_id !== channelId) {
         return Response.json({ error: "client_reply_id_conflict" }, { status: 409 });
       }
       return Response.json({
@@ -263,7 +269,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     const createdAt = new Date().toISOString();
     let result: D1Result;
     try {
-      result = await env.DB.prepare(`
+      result = await channelEnv.DB.prepare(`
         INSERT INTO dm_replies (id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at)
         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE NOT EXISTS (
@@ -288,7 +294,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         DM_REPLY_LIMIT - 1,
       ).run();
     } catch (error) {
-      const duplicate = await env.DB.prepare(`
+      const duplicate = await channelEnv.DB.prepare(`
         SELECT id, client_reply_id, dm_id, channel_id, owner_uid, text, image, image_w, image_h, created_at
         FROM dm_replies
         WHERE owner_uid = ? AND client_reply_id = ?
@@ -305,7 +311,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         image_h: number | null;
         created_at: string;
       }>();
-      if (duplicate?.dm_id === dmId) {
+      if (duplicate?.dm_id === dmId && duplicate.channel_id === channelId) {
         return Response.json({ ok: true, duplicate: true, reply: serializeDmReply(duplicate) });
       }
       throw error;
@@ -315,7 +321,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
     if (image) {
       const attachment = await attachUploadTicket({
-        env,
+        env: channelEnv,
         ticketId: uploadId,
         imageUrl: image,
         channelId: dm.channel_id,
@@ -325,7 +331,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         attachedRecordId: id,
       });
       if (!attachment.ok) {
-        await env.DB.prepare("DELETE FROM dm_replies WHERE id = ?").bind(id).run();
+        await channelEnv.DB.prepare("DELETE FROM dm_replies WHERE id = ?").bind(id).run();
         return Response.json({ error: attachment.error }, { status: 400 });
       }
     }
@@ -342,6 +348,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     ) {
       ctx.waitUntil(queueChannelNotification({
         env,
+        channelEnv,
         ctx,
         channelId: parentChannelId,
         event: "message_reply",
@@ -380,7 +387,11 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     const parentChannelId = channelId.endsWith("_live")
       ? channelId.replace(/_live$/, "")
       : channelId;
-    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    const channelEnv = withDatabase(
+      env,
+      (await resolveChannelDatabase(env, parentChannelId)).database,
+    );
+    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, channelEnv);
     if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     if (isReportsChannel(parentChannelId, env)) {
       return Response.json({ error: "owner access required" }, { status: 403 });
@@ -396,28 +407,28 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     if (!requesterUid) {
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
-    const dm = await env.DB.prepare(
+    const dm = await channelEnv.DB.prepare(
       "SELECT id, image FROM dm WHERE id = ? AND channel_id = ? AND uid = ? AND pending_delete_at IS NULL LIMIT 1"
     ).bind(dmId, channelId, requesterUid).first<{ id: string; image: string | null }>();
     if (!dm) return Response.json({ error: "dm not found" }, { status: 404 });
 
-    const replyRows = await env.DB.prepare(
+    const replyRows = await channelEnv.DB.prepare(
       "SELECT id, image FROM dm_replies WHERE dm_id = ?"
     ).bind(dmId).all<{ id: string; image: string | null }>();
     const replies = replyRows.results || [];
-    await env.DB.batch([
-      env.DB.prepare(
+    await channelEnv.DB.batch([
+      channelEnv.DB.prepare(
         "DELETE FROM message_actor_identities WHERE record_id = ? AND record_type = 'dm'"
       ).bind(dmId),
-      env.DB.prepare("DELETE FROM dm_replies WHERE dm_id = ?").bind(dmId),
-      env.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
+      channelEnv.DB.prepare("DELETE FROM dm_replies WHERE dm_id = ?").bind(dmId),
+      channelEnv.DB.prepare("DELETE FROM dm WHERE id = ? AND channel_id = ? AND uid = ?")
         .bind(dmId, channelId, requesterUid),
     ]);
     await Promise.all([
       deleteMediaByUrl(env, dm.image),
-      deleteUploadTicketByAttachment(env, "dm", dmId),
+      deleteUploadTicketByAttachment(channelEnv, "dm", dmId),
       ...replies.map((reply) => deleteMediaByUrl(env, reply.image)),
-      ...replies.map((reply) => deleteUploadTicketByAttachment(env, "dm", reply.id)),
+      ...replies.map((reply) => deleteUploadTicketByAttachment(channelEnv, "dm", reply.id)),
     ]);
 
     const chatRoom = env.CHAT_ROOM.get(env.CHAT_ROOM.idFromName(parentChannelId));
@@ -465,19 +476,23 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     // Passcode gate
     const isLiveChannel = (channel_id as string).endsWith("_live");
     const parentChannelId = isLiveChannel ? (channel_id as string).replace(/_live$/, "") : channel_id as string;
+    const channelEnv = withDatabase(
+      env,
+      (await resolveChannelDatabase(env, parentChannelId)).database,
+    );
     const notificationActorUserId =
       request.headers.get("X-Internal-Token") === env.INTERNAL_SECRET
         ? request.headers.get("X-Notification-Actor-User-Id")
         : null;
     if (isLiveChannel) {
-      if (!await ensureActiveLiveSession(env, parentChannelId)) {
+      if (!await ensureActiveLiveSession(channelEnv, parentChannelId)) {
         return Response.json({ error: "live_session_ended" }, { status: 403 });
       }
     }
     if (isReportsChannel(parentChannelId, env)) {
       return Response.json({ error: "owner access required" }, { status: 403 });
     }
-    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, env);
+    const { exists, passcode } = await getChannelPasscodeInfo(parentChannelId, channelEnv);
     if (!exists) return Response.json({ error: "channel not found" }, { status: 404 });
     if (passcode) {
       const roomToken = request.headers.get("X-Room-Token");
@@ -497,7 +512,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       return Response.json({ error: "anonymous_identity_required" }, { status: 401 });
     }
 
-    const existingDm = await env.DB.prepare(
+    const existingDm = await channelEnv.DB.prepare(
       "SELECT * FROM dm WHERE client_message_id = ? LIMIT 1"
     ).bind(clientMessageId).first<DmRoot>();
     if (existingDm) {
@@ -537,16 +552,16 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
 
     const [configRows, blocked, allowedByBannedWords] = await Promise.all([
-      env.DB.prepare(
+      channelEnv.DB.prepare(
         "SELECT id, text FROM config WHERE channel_id = ? AND id IN (?, ?)"
       ).bind(parentChannelId, `dm_${parentChannelId}`, `petition_${parentChannelId}`).all<{ id: string; text: string }>(),
       isBlockedActor({
-        env,
+        env: channelEnv,
         channelId: parentChannelId,
         uid: requesterUid,
         deviceId: requesterDeviceId,
       }),
-      rawText ? checkBannedWords(rawText, parentChannelId, env) : Promise.resolve(true),
+      rawText ? checkBannedWords(rawText, parentChannelId, channelEnv) : Promise.resolve(true),
     ]);
 
     const config = new Map((configRows.results || []).map((row) => [row.id, row.text]));
@@ -558,7 +573,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
       if (!petitionEnabled || !isPetition || image) {
         return Response.json({ error: "blocked" }, { status: 403 });
       }
-      const existingPetition = await env.DB.prepare(
+      const existingPetition = await channelEnv.DB.prepare(
         "SELECT 1 FROM dm WHERE uid = ? AND channel_id = ? AND (text LIKE ? OR text LIKE ?) LIMIT 1"
       ).bind(requesterUid, channel_id, "[Appeal]%", "[이의 제기]%").first();
       if (existingPetition) {
@@ -578,7 +593,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         return Response.json({ error: "invalid_upload_ticket" }, { status: 400 });
       }
       const attachment = await attachUploadTicket({
-        env,
+        env: channelEnv,
         ticketId: upload_id,
         imageUrl: image as string,
         channelId: channel_id as string,
@@ -594,7 +609,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     const created_at = new Date().toISOString();
     const deviceIdHash = await hashBlockedDeviceId(requesterDeviceId, env);
     const statements = [
-      env.DB.prepare(
+      channelEnv.DB.prepare(
         "INSERT INTO dm (id, client_message_id, uid, auth_uid, nick, text, image, image_w, image_h, channel_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       ).bind(
         id,
@@ -609,7 +624,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
         channel_id,
         created_at,
       ),
-      env.DB.prepare(
+      channelEnv.DB.prepare(
         `INSERT OR REPLACE INTO message_actor_identities
           (record_id, record_type, channel_id, uid, device_id_hash, created_at)
          VALUES (?, 'dm', ?, ?, ?, ?)`
@@ -618,7 +633,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
 
     if (!isLiveChannel && notificationActorUserId) {
       statements.push(
-        env.DB.prepare(`
+        channelEnv.DB.prepare(`
           INSERT INTO dm_notification_owners (
             dm_id,
             channel_id,
@@ -636,9 +651,9 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     }
 
     try {
-      await env.DB.batch(statements);
+      await channelEnv.DB.batch(statements);
     } catch (error) {
-      const duplicate = await env.DB.prepare(
+      const duplicate = await channelEnv.DB.prepare(
         "SELECT * FROM dm WHERE client_message_id = ? LIMIT 1"
       ).bind(clientMessageId).first<DmRoot>();
       if (duplicate?.uid === requesterUid && duplicate.channel_id === channel_id) {
@@ -678,6 +693,7 @@ export async function handleDm(request: Request, env: Env, ctx?: ExecutionContex
     if (ctx) {
       ctx.waitUntil(queueChannelNotification({
         env,
+        channelEnv,
         ctx,
         channelId: parentChannelId,
         event: "dm",

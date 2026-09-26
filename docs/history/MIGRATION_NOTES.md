@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Private-DM traffic now honors the channel-database boundary — 2026-09-26
+
+- DM list access checks, root sends, owner replies and sender deletion now use
+  the resolved parent-channel database, including live-channel normalization.
+- Owner replies now carry the channel ID already known by the chat UI. The
+  Worker selects the shard from that parent and requires the DM row to match
+  both the submitted channel and DM ID before authorization or mutation.
+- Channel-local upload tickets, actor identities and notification ownership
+  stay beside the DM. Realtime rate limiting, media storage and global push
+  preferences/outbox remain outside the shard.
+- Frontend and Worker TypeScript checks and all 502 Worker hardening tests pass.
+
+Trade-off: adding channel context changes the DM-reply request contract, but it
+eliminates an otherwise unavoidable cross-shard lookup. Old clients that omit
+the field fail closed with a validation error; deployment must therefore keep
+frontend and Worker versions coordinated when cutover is eventually enabled.
+
+Deployment note: no production binding, placement variable, Worker, frontend
+or route changed. The feature branch still defaults every channel to primary.
+
 ### Message writes now honor the channel-database boundary — 2026-09-26
 
 - Message creation, editing, deletion and reactions now resolve the parent

@@ -819,6 +819,7 @@ export async function fetchDmThreads(channelId: string) {
 export async function sendDmReply(payload: {
   client_reply_id: string;
   dm_id: string;
+  channel_id: string;
   text: string;
   image?: string;
   image_w?: number;

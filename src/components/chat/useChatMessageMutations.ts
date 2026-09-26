@@ -365,6 +365,7 @@ export function useChatMessageMutations({
       const result = await sendDmReply({
         client_reply_id: submissionId,
         dm_id: replyingTo.reply_to || replyingTo.id,
+        channel_id: replyChannelId,
         text: nextText,
         image: upload?.url,
         image_w: photos[0]?.width,

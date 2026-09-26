@@ -24,6 +24,14 @@ const messageProxySource = readFileSync(
   new URL("../../src/app/api/messages/route.ts", import.meta.url),
   "utf8",
 );
+const chatApiSource = readFileSync(
+  new URL("../../src/lib/api-chat.ts", import.meta.url),
+  "utf8",
+);
+const messageMutationsSource = readFileSync(
+  new URL("../../src/components/chat/useChatMessageMutations.ts", import.meta.url),
+  "utf8",
+);
 
 const INTERNAL_SECRET = "private-dm-test-secret";
 const CHANNEL_ID = "channel-a";
@@ -158,7 +166,7 @@ function ownerRequest(body: Record<string, unknown>, headers: HeadersInit = {}):
       "X-User-Id": OWNER_ID,
       ...headers,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ channel_id: CHANNEL_ID, ...body }),
   });
 }
 
@@ -228,6 +236,14 @@ test("DM owner replies are wired to the normal targeted reply notification", () 
   assert.match(
     messageProxySource,
     /headers\["X-Notification-Actor-User-Id"\] = session\.user\.id/,
+  );
+  assert.match(
+    chatApiSource,
+    /sendDmReply\(payload: \{[\s\S]*?channel_id: string;/,
+  );
+  assert.match(
+    messageMutationsSource,
+    /sendDmReply\(\{[\s\S]*?channel_id: replyChannelId,/,
   );
 });
 
