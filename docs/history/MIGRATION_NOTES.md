@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `zziks` initial Chat-shard backfill is complete and verified — 2026-09-26
+
+- Deployed the isolated copy Worker, installed separately scoped operator/copy/cleanup secrets and reran the clean preflight before creating any destination state.
+- The resumable online pass copied one canonical channel, five config rows, 199 upload tickets, 4,010 root messages and 1,129 replies. Destination triggers rebuilt 198 gallery rows; bounded dependent stages copied 3,822 message-actor rows and rebuilt 353 links.
+- Derived-state verification returned ready with no blockers. The source and canary both contained exactly 5,139 messages after the pass; the canary had one expected pending projection event, no foreign-key error and `PRAGMA quick_check=ok`.
+
+Trade-off: this is a point-in-time initial backfill, not a traffic cutover. It deliberately leaves the copy job active at `message_links_rebuilt`; DMs, notification ownership, reports and mutations that occur after the pinned message boundary still require frozen reconciliation. Batches reduce D1 pressure and make retries safe but require many operator round trips.
+
+Deployment note: only the isolated migration Worker was deployed. Production still reads and writes the original D1, and no maintenance mode, event dispatch, shadow read, source tombstone or routing override was enabled. The next step requires an explicit maintenance decision because the current finalizer pauses global HTTP writes and scheduled work.
+
 ### `zziks` has a clean D1 canary preflight and a narrow copy operator — 2026-09-26
 
 - The original `10997` canary target no longer existed in the production source, so the still-empty canary was reassigned to `zziks`. A fresh preflight found projection version 1, 5,139 messages, 14 DM roots, 13 DM replies, 198 gallery rows, 353 link rows and no copy blocker; every destination count remained zero.

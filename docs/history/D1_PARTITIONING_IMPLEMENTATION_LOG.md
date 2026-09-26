@@ -6,6 +6,32 @@ Production still routes every request to one D1 database. One empty, unrouted
 Chat canary now exists for the first channel-copy exercise; no virtual-bucket
 map, placement override, channel data migration, or cutover has been created.
 
+## 2026-09-26: `zziks` resumable initial backfill completed
+
+- Deployed `letsplay-d1-canary-copy-zziks`, an isolated Worker with only the
+  reviewed preflight, initial-copy, verification, and failed-copy cleanup
+  routes. It has no production route or application binding.
+- Installed distinct operator, copy, and cleanup secrets, then reran preflight
+  through that exact deployment. The source remained at projection version 1,
+  the destination remained empty, and no blocker was present.
+- Copied the canonical channel and five config rows, then copied 199 upload
+  tickets through the bounded policy stages. No moderator, block, banned-word,
+  moderation, or petition row existed for this channel.
+- Copied 4,010 root messages and 1,129 replies in batches of at most 50. The
+  destination triggers rebuilt 198 gallery rows; bounded dependent stages
+  copied 3,822 message-actor rows and rebuilt 353 link rows.
+- Aggregate derived-state verification returned `ready=true` with no blocker.
+  Direct cross-checks found exactly 5,139 messages in both source and canary,
+  one expected pending channel-projection event on the canary, no foreign-key
+  errors, and `PRAGMA quick_check=ok`.
+
+This remains an online initial snapshot. The source is still authoritative and
+continues serving all traffic; no DM row has been copied, no write maintenance
+was enabled, and no event was dispatched. The next gate is the frozen message
+and DM reconciliation, which the current implementation permits only while
+global HTTP writes and scheduled work are paused. That user-visible maintenance
+decision must be explicit before continuing.
+
 ## 2026-09-26: `zziks` selected and isolated initial-copy operator prepared
 
 - Rotated the secret on the existing preflight-only Worker and reran the
