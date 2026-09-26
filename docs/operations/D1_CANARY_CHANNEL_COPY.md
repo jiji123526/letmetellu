@@ -30,6 +30,14 @@ copy under a stricter authorization boundary.
 Do not use this operator on a remote database until all later manifest stages
 and explicit partial-copy cleanup are implemented and reviewed.
 
+For the first `zziks` exercise, deploy the narrow
+`wrangler.channel-zziks-copy.toml` configuration. Its entrypoint exposes only
+preflight, initial copy, derived-state verification, and failed-copy cleanup.
+It has no application routes, browser CORS, cron, Durable Object, R2, write
+maintenance flag, final-delta command, projection dispatcher, or production
+Worker binding. Store the three operator secrets with `wrangler secret put`;
+never add them to the TOML file.
+
 ## Security boundary
 
 The mutation route requires a dedicated `D1_CANARY_COPY_TOKEN` between 32 and

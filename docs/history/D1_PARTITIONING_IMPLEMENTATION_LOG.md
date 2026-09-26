@@ -6,6 +6,29 @@ Production still routes every request to one D1 database. One empty, unrouted
 Chat canary now exists for the first channel-copy exercise; no virtual-bucket
 map, placement override, channel data migration, or cutover has been created.
 
+## 2026-09-26: `zziks` selected and isolated initial-copy operator prepared
+
+- Rotated the secret on the existing preflight-only Worker and reran the
+  metadata-only check for `zziks` after the original `10997` channel was no
+  longer present in the source database.
+- The clean preflight pinned source projection version 1 and found 5,139
+  messages, 14 DM roots, 13 DM replies, 198 gallery rows, 353 link rows, no
+  active cleanup/Undo/pending-deletion blocker, and a completely empty canary.
+- Added a second isolated Worker entrypoint and Wrangler configuration for the
+  initial-copy exercise. It exposes only preflight, bounded initial copy,
+  derived-state verification, and explicit failed-copy cleanup.
+- The operator has source/canary D1 bindings but no application routes, CORS,
+  cron, Durable Object, R2, write-maintenance flag, final-delta route,
+  dispatcher, or production Worker binding. Operator, copy, and cleanup
+  permissions remain separate secrets.
+- Worker TypeScript compilation, 17 targeted operator/copy/cleanup tests, and
+  the complete 493-test hardening suite passed.
+
+The next gate is to deploy this isolated Worker, install its three secrets,
+rerun preflight through that exact deployment, and start only the resumable
+online backfill. No source write freeze, final delta, shadow read, tombstone,
+or routing is authorized by this step.
+
 ## 2026-09-26: production source projection foundation applied
 
 - Confirmed that the only pending production-source migrations were the seven

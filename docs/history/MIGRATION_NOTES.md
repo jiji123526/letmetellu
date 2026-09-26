@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `zziks` has a clean D1 canary preflight and a narrow copy operator — 2026-09-26
+
+- The original `10997` canary target no longer existed in the production source, so the still-empty canary was reassigned to `zziks`. A fresh preflight found projection version 1, 5,139 messages, 14 DM roots, 13 DM replies, 198 gallery rows, 353 link rows and no copy blocker; every destination count remained zero.
+- Added an isolated copy Worker that exposes only preflight, bounded initial-copy commands, derived-state verification and explicit failed-copy cleanup. It has no application API, browser CORS, cron, Durable Object, R2, write-maintenance/final-delta path, dispatcher or production Worker route.
+- Read-only, copy and cleanup privileges use distinct secrets. TypeScript, targeted boundary tests and all 493 Worker hardening tests pass.
+
+Trade-off: a separate operational Worker and three secrets add inventory and credential-rotation work. Keeping this authority outside the production Worker prevents browser/application traffic from reaching migration mutations and lets the operator be removed after the exercise.
+
+Deployment note: the preflight remained read-only and no channel data was copied by this code change. Deploy only the isolated operator configuration; do not deploy the production Worker or enable routing, maintenance, final delta or event dispatch.
+
 ### The production source now has the D1 partitioning projection foundation — 2026-09-26
 
 - Applied the seven reviewed source migrations from `0064_channel_control_projections.sql` through `0070_channel_report_projection_events.sql` to `letsplay-db-prod-cutover-20260906-v3`. No Worker configuration, channel placement or user route was changed.

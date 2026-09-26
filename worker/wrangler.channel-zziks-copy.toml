@@ -1,0 +1,24 @@
+name = "letsplay-d1-canary-copy-zziks"
+main = "src/canary-copy-operator.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat", "enable_nodejs_http_modules"]
+workers_dev = true
+preview_urls = false
+
+# Isolated manual operator only. No application routes, cron triggers, Durable
+# Objects, R2, browser origin, or production Worker binding is present.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "letsplay-db-prod-cutover-20260906-v3"
+database_id = "bda67bc6-0b9f-4785-a63b-8e30c50b51a7"
+remote = true
+
+[[d1_databases]]
+binding = "CHAT_DB_CANARY_A"
+database_name = "letsplay-chat-10997-canary-20260914"
+database_id = "d4118b7f-e65d-49ac-81ee-57f1b267ba01"
+remote = true
+
+[vars]
+REPORTS_CHANNEL_ID = "reports"
