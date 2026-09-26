@@ -4,6 +4,16 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `zziks` frozen-finalization authority is isolated and ready — 2026-09-26
+
+- Added a dedicated finalization Worker exposing only the secret-protected frozen-delta endpoint for messages, message dependents, DMs, notification ownership and channel reports.
+- The operator has only the source and selected Chat-canary D1 bindings. It has no application routes, browser CORS, cron trigger, Durable Object, R2 binding, projection dispatcher or production Worker route.
+- Its configuration requires write-maintenance mode locally and deliberately omits projection dispatch. TypeScript, focused route-boundary checks and all 495 Worker hardening tests pass before the production pause begins.
+
+Trade-off: a fourth short-lived migration Worker and finalize credential add temporary operational inventory. Keeping the authority out of the user-facing Worker sharply reduces the exposed mutation surface and lets the operator be removed after the migration exercise.
+
+Deployment note: creating and deploying this isolated operator does not pause production or reroute traffic. Global writes are paused only after the operator is ready, and must be restored after frozen reconciliation whether it succeeds or fails.
+
 ### `zziks` initial Chat-shard backfill is complete and verified — 2026-09-26
 
 - Deployed the isolated copy Worker, installed separately scoped operator/copy/cleanup secrets and reran the clean preflight before creating any destination state.
