@@ -4,6 +4,22 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Placement-aware scheduled-maintenance scopes are ready — 2026-09-27
+
+- The static placement map can now produce one primary scope excluding routed
+  channels plus one include-only scope per active shard.
+- This prevents future cleanup fan-out from mutating both a routed canonical
+  row and its retained primary rollback copy.
+- Unit coverage verifies two routed channels on different shards are assigned
+  exactly once; Worker TypeScript passes.
+
+Trade-off: this commit prepares authority scopes only. Each maintenance query
+still needs an explicit include/exclude filter before the scheduled handler can
+safely fan out.
+
+Deployment note: no scheduler, binding, variable or production deployment
+changed.
+
 ### Platform report and petition actions now follow channel placement — 2026-09-27
 
 - The reports UI sends the canonical channel ID with every report/petition

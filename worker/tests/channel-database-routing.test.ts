@@ -58,6 +58,10 @@ const channelReportsSource = readFileSync(
   new URL("../src/routes/channel-reports.ts", import.meta.url),
   "utf8",
 );
+const databaseAccessSource = readFileSync(
+  new URL("../src/lib/database-access.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -391,5 +395,20 @@ test("platform report actions require channel context and split canonical and co
   assert.match(
     channelReportsSource,
     /input\.env\.DB !== input\.controlEnv\.DB[\s\S]*channel_delete_shard_not_ready/,
+  );
+});
+
+test("maintenance scopes exclude routed channels from primary and include them on one shard", () => {
+  assert.match(
+    databaseAccessSource,
+    /export function getChannelDatabaseMaintenanceScopes/,
+  );
+  assert.match(
+    databaseAccessSource,
+    /shardId: PRIMARY_DATABASE_SHARD_ID,[\s\S]*excludeChannelIds: parentChannelIds/,
+  );
+  assert.match(
+    databaseAccessSource,
+    /filter\(\(entry\) => entry\.shardId === shardId\)[\s\S]*map\(\(entry\) => entry\.channelId\)/,
   );
 });

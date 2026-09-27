@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getChannelDatabaseCacheScope,
+  getChannelDatabaseMaintenanceScopes,
   getControlDatabase,
   PRIMARY_DATABASE_PLACEMENT_VERSION,
   PRIMARY_DATABASE_SHARD_ID,
@@ -71,6 +72,34 @@ test("an explicit static placement routes only its parent and live channel", asy
   );
   assert.equal(unrelated.database, env.DB);
   assert.equal(unrelated.placementVersion, PRIMARY_DATABASE_PLACEMENT_VERSION);
+});
+
+test("maintenance scopes assign each configured channel to exactly one database", () => {
+  const env = createCanaryEnv({
+    CHAT_DB_CANARY_B: { prepare() {}, batch() {} } as unknown as D1Database,
+    D1_CHANNEL_PLACEMENTS: "canary-a:zziks,canary-b:second",
+  });
+  const scopes = getChannelDatabaseMaintenanceScopes(env);
+
+  assert.equal(scopes.length, 3);
+  assert.deepEqual(scopes[0], {
+    shardId: PRIMARY_DATABASE_SHARD_ID,
+    database: env.DB,
+    includeChannelIds: [],
+    excludeChannelIds: ["zziks", "second"],
+  });
+  assert.deepEqual(scopes[1], {
+    shardId: "canary-a",
+    database: env.CHAT_DB_CANARY_A,
+    includeChannelIds: ["zziks"],
+    excludeChannelIds: [],
+  });
+  assert.deepEqual(scopes[2], {
+    shardId: "canary-b",
+    database: env.CHAT_DB_CANARY_B,
+    includeChannelIds: ["second"],
+    excludeChannelIds: [],
+  });
 });
 
 test("static placement configuration fails closed instead of falling back", async () => {

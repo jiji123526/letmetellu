@@ -7,6 +7,26 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: placement-aware maintenance scopes prepared
+
+- Added a fail-closed maintenance-scope projection from the same static map
+  used by request routing. With no placement it returns the existing primary
+  database only.
+- With placements, the primary scope explicitly excludes every routed parent
+  channel and each configured shard receives only its own parent-channel
+  include list. Normal and `_live` records can therefore be matched to one
+  authoritative maintenance scope without touching the rollback copy.
+- Added executable and structural coverage for a two-shard map. Worker
+  TypeScript checks pass.
+
+Trade-off: maintenance code must now opt into these scopes and add bounded
+channel filters to channel-local cleanup queries. The scope helper alone does
+not fan out work or change scheduled behavior.
+
+Deployment note: no production behavior changed. The scheduled handler still
+runs its existing single-primary maintenance path until the next stages adapt
+each channel-local cleanup family.
+
 ## 2026-09-27: platform moderation actions respect placement
 
 - Added the channel ID already present in report and petition metadata to every

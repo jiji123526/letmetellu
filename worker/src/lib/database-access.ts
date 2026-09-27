@@ -22,6 +22,13 @@ export interface ResolvedChannelDatabase {
   database: D1Database;
 }
 
+export interface ChannelDatabaseMaintenanceScope {
+  shardId: string;
+  database: D1Database;
+  includeChannelIds: string[];
+  excludeChannelIds: string[];
+}
+
 export function getControlDatabase(env: Env): D1Database {
   return env.DB;
 }
@@ -35,6 +42,40 @@ export function getChannelDatabaseCacheScope(
   resolved: Pick<ResolvedChannelDatabase, "shardId" | "placementVersion">,
 ): string {
   return `${resolved.shardId}:${resolved.placementVersion}`;
+}
+
+export function getChannelDatabaseMaintenanceScopes(
+  env: Env,
+): ChannelDatabaseMaintenanceScope[] {
+  const configured = parseStaticChannelPlacements(env);
+  if (!configured) {
+    return [{
+      shardId: PRIMARY_DATABASE_SHARD_ID,
+      database: env.DB,
+      includeChannelIds: [],
+      excludeChannelIds: [],
+    }];
+  }
+
+  const parentChannelIds = configured.placements.map((entry) => entry.channelId);
+  const scopes: ChannelDatabaseMaintenanceScope[] = [{
+    shardId: PRIMARY_DATABASE_SHARD_ID,
+    database: env.DB,
+    includeChannelIds: [],
+    excludeChannelIds: parentChannelIds,
+  }];
+  for (const shardId of new Set(configured.placements.map((entry) => entry.shardId))) {
+    const source = resolveCanaryProjectionSource(env, shardId);
+    scopes.push({
+      shardId,
+      database: source.database,
+      includeChannelIds: configured.placements
+        .filter((entry) => entry.shardId === shardId)
+        .map((entry) => entry.channelId),
+      excludeChannelIds: [],
+    });
+  }
+  return scopes;
 }
 
 function parseStaticChannelPlacements(env: Env): {
