@@ -357,14 +357,18 @@ async function fetchChannelReportById(reportId: string, env: Env): Promise<Chann
   `).bind(reportId).first<ChannelReportRow>();
 }
 
-async function fetchChannelPetitionById(petitionId: string, env: Env): Promise<ChannelPetitionInboxRow | null> {
-  return env.DB.prepare(`
+async function fetchChannelPetitionById(
+  petitionId: string,
+  channelEnv: Env,
+  controlEnv: Env = channelEnv,
+): Promise<ChannelPetitionInboxRow | null> {
+  const petition = await channelEnv.DB.prepare(`
     SELECT
       cp.id,
       cp.channel_id,
       ch.name AS channel_name,
       cp.owner_uid,
-      u.name AS owner_name,
+      NULL AS owner_name,
       cp.text,
       cp.status,
       cp.created_at,
@@ -374,10 +378,14 @@ async function fetchChannelPetitionById(petitionId: string, env: Env): Promise<C
       cp.inbox_message_id
     FROM channel_petitions cp
     INNER JOIN channels ch ON ch.id = cp.channel_id
-    LEFT JOIN users u ON u.id = cp.owner_uid
     WHERE cp.id = ?
     LIMIT 1
   `).bind(petitionId).first<ChannelPetitionInboxRow>();
+  if (!petition) return null;
+  const owner = await controlEnv.DB.prepare("SELECT name FROM users WHERE id = ? LIMIT 1")
+    .bind(petition.owner_uid)
+    .first<{ name: string | null }>();
+  return { ...petition, owner_name: owner?.name || null };
 }
 
 export async function hydrateReportInboxMessages<T extends { id: string }>(
@@ -468,16 +476,17 @@ async function requireReportsChannelOwner(request: Request, env: Env): Promise<s
 
 async function syncReportInboxMessage(
   reportId: string,
-  env: Env,
+  channelEnv: Env,
+  controlEnv: Env,
   locale: UserLocale,
 ): Promise<{ report: ReportMeta; message_text: string } | null> {
-  const updated = await fetchChannelReportById(reportId, env);
+  const updated = await fetchChannelReportById(reportId, channelEnv);
   if (!updated) return null;
-  const reportMeta = buildReportMeta(updated, env, locale);
+  const reportMeta = buildReportMeta(updated, controlEnv, locale);
   const reportText = formatReportMessageFromMeta(reportMeta, locale);
   if (updated.inbox_message_id) {
     await editReportsInboxMessage({
-      env,
+      env: controlEnv,
       messageId: updated.inbox_message_id,
       text: reportText,
       extra: { report_meta: reportMeta },
@@ -488,11 +497,12 @@ async function syncReportInboxMessage(
 
 async function syncChannelReportInboxMessages(
   channelId: string,
-  env: Env,
+  channelEnv: Env,
+  controlEnv: Env,
   locale: UserLocale,
 ): Promise<Array<{ message_id: string; report: ReportMeta; message_text: string }>> {
   const parentChannelId = getParentChannelId(channelId);
-  const rows = await env.DB.prepare(`
+  const rows = await channelEnv.DB.prepare(`
     SELECT
       cr.id,
       cr.channel_id,
@@ -519,10 +529,10 @@ async function syncChannelReportInboxMessages(
   const updates: Array<{ message_id: string; report: ReportMeta; message_text: string }> = [];
   for (const row of rows.results || []) {
     if (!row.inbox_message_id) continue;
-    const reportMeta = buildReportMeta(row, env, locale);
+    const reportMeta = buildReportMeta(row, controlEnv, locale);
     const messageText = formatReportMessageFromMeta(reportMeta, locale);
     await editReportsInboxMessage({
-      env,
+      env: controlEnv,
       messageId: row.inbox_message_id,
       text: messageText,
       extra: { report_meta: reportMeta },
@@ -577,14 +587,16 @@ async function maybeSendAutomaticOwnerWarning(input: {
 
 async function handleReportResolutionAction(input: {
   reportId: string;
+  channelId: string;
   action: "resolve" | "dismiss";
   resolutionNote: string;
   actorUserId: string;
   actorLocale: UserLocale;
   env: Env;
+  controlEnv: Env;
 }): Promise<Response> {
   const existing = await fetchChannelReportById(input.reportId, input.env);
-  if (!existing) {
+  if (!existing || existing.channel_id !== input.channelId) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
   if (existing.status !== "open") {
@@ -603,7 +615,7 @@ async function handleReportResolutionAction(input: {
   }
 
   await appendModerationAuditLog({
-    env: input.env,
+    env: input.controlEnv,
     actorUserId: input.actorUserId,
     action: input.action === "resolve" ? "report_resolved" : "report_dismissed",
     targetType: "channel_report",
@@ -621,7 +633,12 @@ async function handleReportResolutionAction(input: {
     },
   });
 
-  const synced = await syncReportInboxMessage(input.reportId, input.env, input.actorLocale);
+  const synced = await syncReportInboxMessage(
+    input.reportId,
+    input.env,
+    input.controlEnv,
+    input.actorLocale,
+  );
   if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
@@ -636,20 +653,22 @@ async function handleReportResolutionAction(input: {
 
 async function handleModerationAction(input: {
   reportId: string;
+  channelId: string;
   action: "warn_owner" | "send_suspend_notice" | "freeze_channel" | "unfreeze_channel" | "delete_channel";
   resolutionNote: string;
   actorUserId: string;
   actorLocale: UserLocale;
   env: Env;
+  controlEnv: Env;
 }): Promise<Response> {
   const existing = await fetchChannelReportById(input.reportId, input.env);
-  if (!existing) {
+  if (!existing || existing.channel_id !== input.channelId) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
 
   const moderation = await getChannelModeration(existing.channel_id, input.env);
   const moderationBefore = { ...moderation };
-  const ownerLocale = await getUserLocale(existing.channel_owner_uid, input.env);
+  const ownerLocale = await getUserLocale(existing.channel_owner_uid, input.controlEnv);
 
   if (input.action === "warn_owner") {
     if (existing.status !== "open") {
@@ -660,6 +679,7 @@ async function handleModerationAction(input: {
     const warnedReportCount = Math.max(moderation.warned_report_count, await countOpenChannelReports(existing.channel_id, input.env));
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
       text: ownerLocale === "en"
@@ -687,7 +707,7 @@ async function handleModerationAction(input: {
       input.env,
     );
     await appendModerationAuditLog({
-      env: input.env,
+      env: input.controlEnv,
       actorUserId: input.actorUserId,
       action: "warn_owner",
       targetType: "channel",
@@ -709,6 +729,7 @@ async function handleModerationAction(input: {
     const suspensionReason = input.resolutionNote || reportReasonLabel(existing.reason, ownerLocale);
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
       text: ownerLocale === "en"
@@ -736,7 +757,7 @@ async function handleModerationAction(input: {
       input.env,
     );
     await appendModerationAuditLog({
-      env: input.env,
+      env: input.controlEnv,
       actorUserId: input.actorUserId,
       action: "send_suspend_notice",
       targetType: "channel",
@@ -771,6 +792,7 @@ async function handleModerationAction(input: {
     }, input.env);
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
       text: ownerLocale === "en"
@@ -790,7 +812,7 @@ async function handleModerationAction(input: {
     await broadcastFreezeChange(existing.channel_id, true, input.env);
     await broadcastModerationStateChange(existing.channel_id, "frozen", input.env);
     await appendModerationAuditLog({
-      env: input.env,
+      env: input.controlEnv,
       actorUserId: input.actorUserId,
       action: "freeze_channel",
       targetType: "channel",
@@ -826,6 +848,7 @@ async function handleModerationAction(input: {
     }, input.env);
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: existing.channel_id,
       ownerUid: existing.channel_owner_uid,
       text: ownerLocale === "en"
@@ -843,7 +866,7 @@ async function handleModerationAction(input: {
     await broadcastFreezeChange(existing.channel_id, false, input.env);
     await broadcastModerationStateChange(existing.channel_id, "active", input.env);
     await appendModerationAuditLog({
-      env: input.env,
+      env: input.controlEnv,
       actorUserId: input.actorUserId,
       action: "unfreeze_channel",
       targetType: "channel",
@@ -869,6 +892,9 @@ async function handleModerationAction(input: {
     if (openPetition) {
       return Response.json({ error: "petition_pending" }, { status: 409 });
     }
+    if (input.env.DB !== input.controlEnv.DB) {
+      return Response.json({ error: "channel_delete_shard_not_ready" }, { status: 503 });
+    }
 
     const deletedText = [
       formatReportMessageFromMeta(buildReportMeta(existing, input.env, input.actorLocale), input.actorLocale),
@@ -877,13 +903,13 @@ async function handleModerationAction(input: {
     ].join("\n");
     if (existing.inbox_message_id) {
       await editReportsInboxMessage({
-        env: input.env,
+        env: input.controlEnv,
         messageId: existing.inbox_message_id,
         text: deletedText,
       });
     }
     await appendModerationAuditLog({
-      env: input.env,
+      env: input.controlEnv,
       actorUserId: input.actorUserId,
       action: "delete_channel",
       targetType: "channel",
@@ -895,7 +921,7 @@ async function handleModerationAction(input: {
         report_status: existing.status,
       },
     });
-    await deleteChannel(existing.channel_id, input.env);
+    await deleteChannel(existing.channel_id, input.controlEnv);
     return Response.json({
       ok: true,
       report_id: existing.id,
@@ -909,6 +935,7 @@ async function handleModerationAction(input: {
     const reportUpdates = await syncChannelReportInboxMessages(
       existing.channel_id,
       input.env,
+      input.controlEnv,
       input.actorLocale,
     );
     const selectedUpdate = reportUpdates.find((update) => update.report.report_id === existing.id);
@@ -931,7 +958,12 @@ async function handleModerationAction(input: {
     });
   }
 
-  const synced = await syncReportInboxMessage(existing.id, input.env, input.actorLocale);
+  const synced = await syncReportInboxMessage(
+    existing.id,
+    input.env,
+    input.controlEnv,
+    input.actorLocale,
+  );
   if (!synced) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
@@ -946,17 +978,23 @@ async function handleModerationAction(input: {
 
 async function handleChannelPetitionAction(input: {
   petitionId: string;
+  channelId: string;
   action: "accept_petition" | "reject_petition" | "unfreeze_channel";
   resolutionNote: string;
   actorUserId: string;
   actorLocale: UserLocale;
   env: Env;
+  controlEnv: Env;
 }): Promise<Response> {
-  const petition = await fetchChannelPetitionById(input.petitionId, input.env);
-  if (!petition) {
+  const petition = await fetchChannelPetitionById(
+    input.petitionId,
+    input.env,
+    input.controlEnv,
+  );
+  if (!petition || petition.channel_id !== input.channelId) {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
   }
-  const ownerLocale = await getUserLocale(petition.owner_uid, input.env);
+  const ownerLocale = await getUserLocale(petition.owner_uid, input.controlEnv);
   const moderationBefore = await getChannelModeration(petition.channel_id, input.env);
   if (input.action === "unfreeze_channel") {
     if (moderationBefore.status !== "frozen") {
@@ -977,6 +1015,7 @@ async function handleChannelPetitionAction(input: {
     }, input.env);
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: petition.channel_id,
       ownerUid: petition.owner_uid,
       text: ownerLocale === "en"
@@ -996,10 +1035,11 @@ async function handleChannelPetitionAction(input: {
     const reportUpdates = await syncChannelReportInboxMessages(
       petition.channel_id,
       input.env,
+      input.controlEnv,
       input.actorLocale,
     );
     await appendModerationAuditLog({
-      env: input.env,
+      env: input.controlEnv,
       actorUserId: input.actorUserId,
       action: "unfreeze_channel",
       targetType: "channel",
@@ -1034,15 +1074,19 @@ async function handleChannelPetitionAction(input: {
       },
     });
 
-    const updated = await fetchChannelPetitionById(petition.id, input.env);
+    const updated = await fetchChannelPetitionById(
+      petition.id,
+      input.env,
+      input.controlEnv,
+    );
     if (!updated) {
       return Response.json({ error: "petition_not_found" }, { status: 404 });
     }
-    const petitionMeta = buildPetitionMeta(updated, input.env, input.actorLocale);
+    const petitionMeta = buildPetitionMeta(updated, input.controlEnv, input.actorLocale);
     const petitionText = formatPetitionMessageFromMeta(petitionMeta, input.actorLocale);
     if (updated.inbox_message_id) {
       await editReportsInboxMessage({
-        env: input.env,
+        env: input.controlEnv,
         messageId: updated.inbox_message_id,
         text: petitionText,
         extra: { petition_meta: petitionMeta },
@@ -1088,6 +1132,7 @@ async function handleChannelPetitionAction(input: {
     }, input.env);
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: petition.channel_id,
       ownerUid: petition.owner_uid,
       text: ownerLocale === "en"
@@ -1112,6 +1157,7 @@ async function handleChannelPetitionAction(input: {
     }, input.env);
     await sendOwnerModerationNotice({
       env: input.env,
+      controlEnv: input.controlEnv,
       channelId: petition.channel_id,
       ownerUid: petition.owner_uid,
       text: ownerLocale === "en"
@@ -1130,7 +1176,7 @@ async function handleChannelPetitionAction(input: {
   }
 
   await appendModerationAuditLog({
-    env: input.env,
+    env: input.controlEnv,
     actorUserId: input.actorUserId,
     action: nextStatus === "accepted" ? "accept_petition" : "reject_petition",
     targetType: "channel_petition",
@@ -1175,18 +1221,23 @@ async function handleChannelPetitionAction(input: {
   const reportUpdates = await syncChannelReportInboxMessages(
     petition.channel_id,
     input.env,
+    input.controlEnv,
     input.actorLocale,
   );
 
-  const updated = await fetchChannelPetitionById(petition.id, input.env);
+  const updated = await fetchChannelPetitionById(
+    petition.id,
+    input.env,
+    input.controlEnv,
+  );
   if (!updated) {
     return Response.json({ error: "petition_not_found" }, { status: 404 });
   }
-  const petitionMeta = buildPetitionMeta(updated, input.env, input.actorLocale);
+  const petitionMeta = buildPetitionMeta(updated, input.controlEnv, input.actorLocale);
   const petitionText = formatPetitionMessageFromMeta(petitionMeta, input.actorLocale);
   if (updated.inbox_message_id) {
     await editReportsInboxMessage({
-      env: input.env,
+      env: input.controlEnv,
       messageId: updated.inbox_message_id,
       text: petitionText,
       extra: { petition_meta: petitionMeta },
@@ -1212,8 +1263,16 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
   const body = await request.json() as Record<string, unknown>;
   const reportId = typeof body.report_id === "string" ? body.report_id : "";
   const petitionId = typeof body.petition_id === "string" ? body.petition_id : "";
+  const channelId = typeof body.channel_id === "string"
+    ? getParentChannelId(body.channel_id)
+    : "";
   const action = typeof body.action === "string" ? body.action : "";
   const resolutionNote = typeof body.resolution_note === "string" ? body.resolution_note.trim().slice(0, MAX_DETAILS_LENGTH) : "";
+  if (!channelId) {
+    return Response.json({ error: "channel_id_required" }, { status: 400 });
+  }
+  const resolvedDatabase = await resolveChannelDatabase(env, channelId);
+  const channelEnv = withDatabase(env, resolvedDatabase.database);
 
   if (petitionId) {
     if (action !== "accept_petition" && action !== "reject_petition" && action !== "unfreeze_channel") {
@@ -1221,11 +1280,13 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
     }
     return handleChannelPetitionAction({
       petitionId,
+      channelId,
       action,
       resolutionNote,
       actorUserId,
       actorLocale,
-      env,
+      env: channelEnv,
+      controlEnv: env,
     });
   }
 
@@ -1236,11 +1297,13 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
   if (action === "resolve" || action === "dismiss") {
     return handleReportResolutionAction({
       reportId,
+      channelId,
       action,
       resolutionNote,
       actorUserId,
       actorLocale,
-      env,
+      env: channelEnv,
+      controlEnv: env,
     });
   }
 
@@ -1253,11 +1316,13 @@ async function handleChannelReportAction(request: Request, env: Env): Promise<Re
   ) {
     return handleModerationAction({
       reportId,
+      channelId,
       action,
       resolutionNote,
       actorUserId,
       actorLocale,
-      env,
+      env: channelEnv,
+      controlEnv: env,
     });
   }
 

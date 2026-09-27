@@ -7,6 +7,31 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: platform moderation actions respect placement
+
+- Added the channel ID already present in report and petition metadata to every
+  super-admin action request. The Worker resolves that channel first and then
+  requires the canonical report or petition row to match it, preventing a
+  caller from selecting a different shard with a forged context value.
+- Report resolution, warning/suspension, freeze/unfreeze and petition decisions
+  now mutate canonical report, petition, moderation, channel and owner-DM state
+  on the selected channel database.
+- Kept reports-inbox message edits, user locale/name reads and moderation audit
+  logs in control D1. Petition owner display names are joined explicitly from
+  control instead of relying on a copied shard user row.
+- Fail closed with `channel_delete_shard_not_ready` for complete deletion of a
+  routed channel. Cross-database canonical deletion and cleanup recovery must
+  exist before this destructive action can be enabled.
+- Frontend and Worker TypeScript checks and all 509 hardening tests pass.
+
+Trade-off: moderation requests now carry one non-secret channel identifier and
+may perform a small control user lookup. This removes an otherwise unbounded
+report-ID-to-shard search. Frontend and Worker rollout must be coordinated.
+
+Deployment note: no production configuration, migration, Worker or frontend
+was deployed. Reports-inbox refresh hydration and complete channel deletion
+remain activation blockers.
+
 ## 2026-09-27: channel-report creation respects placement
 
 - Routed the canonical channel lookup, duplicate-report check, report insert,

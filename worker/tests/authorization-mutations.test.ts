@@ -413,6 +413,7 @@ test("platform admin reaches target-scoped report and petition lookup", async ()
     const current = createFakeEnv();
     const response = await handleChannelReports(jsonRequest("PATCH", {
       action,
+      channel_id: "channel-a",
       [idField]: "missing-target",
     }, {
       "Content-Type": "application/json",

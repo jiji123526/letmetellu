@@ -558,6 +558,7 @@ export async function submitChannelReport(payload: {
 }
 
 export async function actOnChannelReport(payload: {
+  channel_id: string;
   report_id?: string;
   petition_id?: string;
   action:

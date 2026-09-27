@@ -373,3 +373,23 @@ test("channel report creation keeps canonical report state on the channel databa
     /queueChannelNotification\(\{\s*env,\s*channelEnv,/,
   );
 });
+
+test("platform report actions require channel context and split canonical and control writes", () => {
+  const actionStart = channelReportsSource.indexOf("async function handleChannelReportAction");
+  const handlerStart = channelReportsSource.indexOf("export async function handleChannelReports");
+  assert.ok(actionStart >= 0 && handlerStart > actionStart);
+  const actionSource = channelReportsSource.slice(actionStart, handlerStart);
+
+  assert.match(actionSource, /const channelId = typeof body\.channel_id === "string"/);
+  assert.match(actionSource, /resolveChannelDatabase\(env, channelId\)/);
+  assert.match(actionSource, /env: channelEnv,\s*controlEnv: env/);
+  assert.match(channelReportsSource, /existing\.channel_id !== input\.channelId/);
+  assert.match(
+    channelReportsSource,
+    /appendModerationAuditLog\(\{\s*env: input\.controlEnv,/,
+  );
+  assert.match(
+    channelReportsSource,
+    /input\.env\.DB !== input\.controlEnv\.DB[\s\S]*channel_delete_shard_not_ready/,
+  );
+});

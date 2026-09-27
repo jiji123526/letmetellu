@@ -152,6 +152,7 @@ export function useChatModeration({
     setReportActionPendingId(report.report_id);
     try {
       const result = await actOnChannelReport({
+        channel_id: report.channel_id,
         report_id: report.report_id,
         action,
       }) as {
@@ -219,6 +220,7 @@ export function useChatModeration({
     setReportActionPendingId(petition.petition_id);
     try {
       const result = await actOnChannelReport({
+        channel_id: petition.channel_id,
         petition_id: petition.petition_id,
         action,
       }) as {

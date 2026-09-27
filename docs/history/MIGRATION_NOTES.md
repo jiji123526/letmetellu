@@ -4,6 +4,26 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Platform report and petition actions now follow channel placement — 2026-09-27
+
+- The reports UI sends the canonical channel ID with every report/petition
+  action. The Worker resolves placement from it and verifies the fetched target
+  belongs to the same channel before mutating anything.
+- Canonical report, petition, moderation, freeze state and owner notices use the
+  channel database. Reports-inbox edits, account labels/locales and moderation
+  audit logs remain in control D1.
+- Routed-channel deletion returns a safe `503` until a retryable cross-database
+  deletion lifecycle is implemented; non-destructive moderation remains
+  available.
+- Frontend and Worker TypeScript checks and all 509 hardening tests pass.
+
+Trade-off: the API contract now includes `channel_id`, so frontend and Worker
+versions must move together. Explicit routing avoids scanning databases by a
+globally opaque report or petition UUID.
+
+Deployment note: feature branch only. No production deployment or placement
+configuration changed.
+
 ### New channel reports now follow channel placement — 2026-09-27
 
 - Canonical report creation, duplicate detection, report hydration and
