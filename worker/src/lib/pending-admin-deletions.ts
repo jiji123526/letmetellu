@@ -1,6 +1,7 @@
 import type { Env } from "../types.ts";
 import { deleteMediaByUrl, extractMediaKey } from "./media.ts";
 import { deleteUploadTicketByAttachment } from "./upload-tickets.ts";
+import type { ChannelDatabaseMaintenanceScope } from "./database-access.ts";
 
 export const ADMIN_DELETE_UNDO_MS = 5_000;
 export const ADMIN_DELETE_ID_CHUNK_SIZE = 90;
@@ -374,14 +375,29 @@ export async function finalizeExpiredAdminDeletions(
   env: Env,
   nowMs = Date.now(),
   limit = 50,
+  scope?: Pick<ChannelDatabaseMaintenanceScope, "includeChannelIds" | "excludeChannelIds">,
 ): Promise<number> {
+  const expand = (channelIds: string[]) => channelIds.flatMap((channelId) => [channelId, `${channelId}_live`]);
+  const includeIds = expand(scope?.includeChannelIds || []);
+  const excludeIds = expand(scope?.excludeChannelIds || []);
+  const predicates = ["expires_at <= ?"];
+  const bindings: Array<string | number> = [new Date(nowMs).toISOString()];
+  if (includeIds.length > 0) {
+    predicates.push(`channel_id IN (${includeIds.map(() => "?").join(", ")})`);
+    bindings.push(...includeIds);
+  }
+  if (excludeIds.length > 0) {
+    predicates.push(`channel_id NOT IN (${excludeIds.map(() => "?").join(", ")})`);
+    bindings.push(...excludeIds);
+  }
+  bindings.push(limit);
   const { results } = await env.DB.prepare(`
     SELECT *
     FROM pending_admin_deletions
-    WHERE expires_at <= ?
+    WHERE ${predicates.join(" AND ")}
     ORDER BY expires_at ASC, id ASC
     LIMIT ?
-  `).bind(new Date(nowMs).toISOString(), limit).all<PendingDeletionRow>();
+  `).bind(...bindings).all<PendingDeletionRow>();
 
   let finalized = 0;
   for (const row of results || []) {

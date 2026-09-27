@@ -7,6 +7,30 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: channel-local scheduled maintenance follows placement
+
+- Fan out expired-live-session handling, expired admin-deletion finalization,
+  pending upload-ticket cleanup and message-actor-identity retention across the
+  placement-aware maintenance scopes.
+- Added include/exclude predicates for both normal and `_live` channel IDs.
+  Primary skips routed rollback copies, while each shard processes only its
+  assigned channels.
+- Kept channel-cleanup job retries, notification retention, push-subscription
+  retention, rate-limit rows and operational/moderation/support audit retention
+  on control D1 and execute them exactly once per scheduled run.
+- Scope fan-out is sequential, avoiding D1 connection fan-out and keeping the
+  current bounded cleanup batches. Worker TypeScript and all 512 hardening
+  tests pass.
+
+Trade-off: scheduled runtime grows roughly with the number of active shard
+bindings because scopes are processed sequentially. The static canary is
+bounded to two shards and twenty channels; a larger topology will need queued
+per-shard maintenance rather than one cron invocation.
+
+Deployment note: no production binding, placement variable or Worker changed.
+Cross-database complete channel deletion remains separate from these retention
+jobs.
+
 ## 2026-09-27: placement-aware maintenance scopes prepared
 
 - Added a fail-closed maintenance-scope projection from the same static map

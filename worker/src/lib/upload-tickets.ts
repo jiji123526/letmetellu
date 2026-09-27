@@ -1,4 +1,5 @@
 import type { Env } from "../types.ts";
+import type { ChannelDatabaseMaintenanceScope } from "./database-access.ts";
 
 export type UploadPurpose = "message" | "dm" | "channel-asset";
 
@@ -37,11 +38,36 @@ export async function hashUploadIp(ip: string, env: Env): Promise<string> {
   return base64UrlEncode(signature);
 }
 
-export async function cleanupExpiredUploadTickets(env: Env, limit = 50): Promise<number> {
+function maintenanceRecordIds(parentChannelIds: string[]): string[] {
+  return parentChannelIds.flatMap((channelId) => [channelId, `${channelId}_live`]);
+}
+
+export async function cleanupExpiredUploadTickets(
+  env: Env,
+  limit = 50,
+  scope?: Pick<ChannelDatabaseMaintenanceScope, "includeChannelIds" | "excludeChannelIds">,
+): Promise<number> {
   const now = new Date().toISOString();
-  const { results } = await env.DB.prepare(
-    "SELECT id, key FROM upload_tickets WHERE status = 'pending' AND expires_at <= ? ORDER BY expires_at ASC LIMIT ?"
-  ).bind(now, limit).all<{ id: string; key: string }>();
+  const includeIds = maintenanceRecordIds(scope?.includeChannelIds || []);
+  const excludeIds = maintenanceRecordIds(scope?.excludeChannelIds || []);
+  const predicates = ["status = 'pending'", "expires_at <= ?"];
+  const bindings: Array<string | number> = [now];
+  if (includeIds.length > 0) {
+    predicates.push(`channel_id IN (${includeIds.map(() => "?").join(", ")})`);
+    bindings.push(...includeIds);
+  }
+  if (excludeIds.length > 0) {
+    predicates.push(`channel_id NOT IN (${excludeIds.map(() => "?").join(", ")})`);
+    bindings.push(...excludeIds);
+  }
+  bindings.push(limit);
+  const { results } = await env.DB.prepare(`
+    SELECT id, key
+    FROM upload_tickets
+    WHERE ${predicates.join(" AND ")}
+    ORDER BY expires_at ASC
+    LIMIT ?
+  `).bind(...bindings).all<{ id: string; key: string }>();
 
   const rows = results || [];
   for (let index = 0; index < rows.length; index += UPLOAD_TICKET_CLEANUP_DELETE_CONCURRENCY) {

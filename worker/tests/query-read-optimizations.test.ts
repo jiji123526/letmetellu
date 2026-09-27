@@ -18,6 +18,7 @@ test("actor identity retention has a global age index", () => {
   );
   assert.match(
     maintenanceSource,
-    /SELECT rowid FROM \$\{table\} WHERE \$\{timestampColumn\} < \? ORDER BY \$\{timestampColumn\} ASC LIMIT \?/,
+    /SELECT rowid FROM \$\{table\} WHERE \$\{predicates\.join\(" AND "\)\} ORDER BY \$\{timestampColumn\} ASC LIMIT \?/,
   );
+  assert.match(maintenanceSource, /const predicates = \[`\$\{timestampColumn\} < \?`\]/);
 });

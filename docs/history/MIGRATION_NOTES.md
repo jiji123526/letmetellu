@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Channel-local scheduled cleanup now follows placement — 2026-09-27
+
+- Live expiry, staged delete finalization, expired upload tickets and actor
+  identity retention now run against authority-scoped channel databases.
+- Primary excludes every routed parent and live-channel copy; shard scopes are
+  include-only. Retained rollback data is therefore not mutated by cron.
+- Control-only notification, push, rate-limit, operational/audit retention and
+  channel-cleanup job retry work remains single-run on control D1.
+- Worker TypeScript and all 512 hardening tests pass.
+
+Trade-off: shard scopes run sequentially to avoid connection pressure. This is
+appropriate for the bounded two-shard canary but will eventually be replaced
+by queued per-shard maintenance when the shard count grows.
+
+Deployment note: feature branch only; no production scheduler or routing
+configuration changed.
+
 ### Placement-aware scheduled-maintenance scopes are ready — 2026-09-27
 
 - The static placement map can now produce one primary scope excluding routed

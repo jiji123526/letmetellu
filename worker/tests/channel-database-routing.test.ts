@@ -62,6 +62,18 @@ const databaseAccessSource = readFileSync(
   new URL("../src/lib/database-access.ts", import.meta.url),
   "utf8",
 );
+const maintenanceSource = readFileSync(
+  new URL("../src/lib/maintenance.ts", import.meta.url),
+  "utf8",
+);
+const uploadTicketsSource = readFileSync(
+  new URL("../src/lib/upload-tickets.ts", import.meta.url),
+  "utf8",
+);
+const pendingDeletionsSource = readFileSync(
+  new URL("../src/lib/pending-admin-deletions.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -411,4 +423,30 @@ test("maintenance scopes exclude routed channels from primary and include them o
     databaseAccessSource,
     /filter\(\(entry\) => entry\.shardId === shardId\)[\s\S]*map\(\(entry\) => entry\.channelId\)/,
   );
+});
+
+test("scheduled channel cleanup fans out through scoped databases without duplicating control cleanup", () => {
+  assert.match(maintenanceSource, /getChannelDatabaseMaintenanceScopes\(env\)/);
+  assert.match(maintenanceSource, /for \(const scope of channelScopes\)/);
+  assert.match(maintenanceSource, /const channelEnv = withDatabase\(env, scope\.database\)/);
+  assert.match(maintenanceSource, /expireTimedOutLiveSessions\(channelEnv, nowMs, scope\)/);
+  assert.match(
+    maintenanceSource,
+    /finalizeExpiredAdminDeletions\(\s*channelEnv,\s*nowMs,\s*50,\s*scope,/,
+  );
+  assert.match(maintenanceSource, /drainExpiredUploadTicketRetention\(channelEnv, scope\)/);
+  assert.match(
+    maintenanceSource,
+    /"message_actor_identities",\s*"created_at",[\s\S]*scope,/,
+  );
+  assert.equal(
+    maintenanceSource.match(/retryPendingChannelCleanups\(env, nowMs, CHANNEL_CLEANUP_RETRY_LIMIT\)/g)?.length,
+    1,
+  );
+  for (const source of [maintenanceSource, uploadTicketsSource, pendingDeletionsSource]) {
+    assert.match(source, /includeChannelIds/);
+    assert.match(source, /excludeChannelIds/);
+    assert.match(source, /channel_id IN/);
+    assert.match(source, /channel_id NOT IN/);
+  }
 });

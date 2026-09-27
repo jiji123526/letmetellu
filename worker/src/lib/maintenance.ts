@@ -3,6 +3,11 @@ import { deleteCompletedCleanupJobs, retryPendingChannelCleanups } from "./chann
 import { endLiveSession, isLiveSessionExpired, parseLiveSessionState } from "./live-sessions";
 import { cleanupExpiredUploadTickets } from "./upload-tickets";
 import { finalizeExpiredAdminDeletions } from "./pending-admin-deletions";
+import {
+  getChannelDatabaseMaintenanceScopes,
+  withDatabase,
+  type ChannelDatabaseMaintenanceScope,
+} from "./database-access";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DURABLE_RATE_LIMIT_RETENTION_MS = 7 * DAY_MS;
@@ -29,10 +34,24 @@ async function deleteRowsByRowId(
   timestampColumn: "updated_at" | "created_at",
   cutoff: string,
   limit: number,
+  scope?: Pick<ChannelDatabaseMaintenanceScope, "includeChannelIds" | "excludeChannelIds">,
 ): Promise<number> {
+  const includeIds = (scope?.includeChannelIds || []).flatMap((channelId) => [channelId, `${channelId}_live`]);
+  const excludeIds = (scope?.excludeChannelIds || []).flatMap((channelId) => [channelId, `${channelId}_live`]);
+  const predicates = [`${timestampColumn} < ?`];
+  const bindings: Array<string | number> = [cutoff];
+  if (includeIds.length > 0) {
+    predicates.push(`channel_id IN (${includeIds.map(() => "?").join(", ")})`);
+    bindings.push(...includeIds);
+  }
+  if (excludeIds.length > 0) {
+    predicates.push(`channel_id NOT IN (${excludeIds.map(() => "?").join(", ")})`);
+    bindings.push(...excludeIds);
+  }
+  bindings.push(limit);
   const { results } = await env.DB.prepare(
-    `SELECT rowid FROM ${table} WHERE ${timestampColumn} < ? ORDER BY ${timestampColumn} ASC LIMIT ?`
-  ).bind(cutoff, limit).all<{ rowid: number }>();
+    `SELECT rowid FROM ${table} WHERE ${predicates.join(" AND ")} ORDER BY ${timestampColumn} ASC LIMIT ?`
+  ).bind(...bindings).all<{ rowid: number }>();
 
   const rowIds = (results || []).map((row) => row.rowid);
   if (rowIds.length === 0) return 0;
@@ -49,20 +68,31 @@ async function drainTableRetention(
   table: "durable_rate_limits" | "operational_events" | "moderation_audit_logs" | "message_actor_identities" | "support_audit_logs",
   timestampColumn: "updated_at" | "created_at",
   cutoff: string,
+  scope?: Pick<ChannelDatabaseMaintenanceScope, "includeChannelIds" | "excludeChannelIds">,
 ): Promise<number> {
   let deleted = 0;
   for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch++) {
-    const count = await deleteRowsByRowId(env, table, timestampColumn, cutoff, CLEANUP_BATCH_LIMIT);
+    const count = await deleteRowsByRowId(
+      env,
+      table,
+      timestampColumn,
+      cutoff,
+      CLEANUP_BATCH_LIMIT,
+      scope,
+    );
     deleted += count;
     if (count < CLEANUP_BATCH_LIMIT) break;
   }
   return deleted;
 }
 
-async function drainExpiredUploadTicketRetention(env: Env): Promise<number> {
+async function drainExpiredUploadTicketRetention(
+  env: Env,
+  scope: Pick<ChannelDatabaseMaintenanceScope, "includeChannelIds" | "excludeChannelIds">,
+): Promise<number> {
   let deleted = 0;
   for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch++) {
-    const count = await cleanupExpiredUploadTickets(env, CLEANUP_BATCH_LIMIT);
+    const count = await cleanupExpiredUploadTickets(env, CLEANUP_BATCH_LIMIT, scope);
     deleted += count;
     if (count < CLEANUP_BATCH_LIMIT) break;
   }
@@ -161,10 +191,29 @@ async function drainRevokedPushSubscriptionRetention(
   return deleted;
 }
 
-async function expireTimedOutLiveSessions(env: Env, nowMs: number): Promise<number> {
-  const { results } = await env.DB.prepare(
-    "SELECT id, channel_id, text, updated_at FROM config WHERE id GLOB 'live_*' AND text IS NOT NULL AND text != 'false' ORDER BY updated_at ASC LIMIT ?"
-  ).bind(LIVE_SESSION_EXPIRY_BATCH_LIMIT).all<{ id: string; channel_id: string; text: string; updated_at: string | null }>();
+async function expireTimedOutLiveSessions(
+  env: Env,
+  nowMs: number,
+  scope: Pick<ChannelDatabaseMaintenanceScope, "includeChannelIds" | "excludeChannelIds">,
+): Promise<number> {
+  const predicates = ["id GLOB 'live_*'", "text IS NOT NULL", "text != 'false'"];
+  const bindings: Array<string | number> = [];
+  if (scope.includeChannelIds.length > 0) {
+    predicates.push(`channel_id IN (${scope.includeChannelIds.map(() => "?").join(", ")})`);
+    bindings.push(...scope.includeChannelIds);
+  }
+  if (scope.excludeChannelIds.length > 0) {
+    predicates.push(`channel_id NOT IN (${scope.excludeChannelIds.map(() => "?").join(", ")})`);
+    bindings.push(...scope.excludeChannelIds);
+  }
+  bindings.push(LIVE_SESSION_EXPIRY_BATCH_LIMIT);
+  const { results } = await env.DB.prepare(`
+    SELECT id, channel_id, text, updated_at
+    FROM config
+    WHERE ${predicates.join(" AND ")}
+    ORDER BY updated_at ASC
+    LIMIT ?
+  `).bind(...bindings).all<{ id: string; channel_id: string; text: string; updated_at: string | null }>();
 
   let expiredCount = 0;
   for (const row of results || []) {
@@ -195,10 +244,30 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
   deadNotificationOutboxDeleted: number;
   revokedPushSubscriptionsDeleted: number;
 }> {
-  const expiredLiveSessionsEnded = await expireTimedOutLiveSessions(env, nowMs);
-  const pendingAdminDeletionsFinalized = await finalizeExpiredAdminDeletions(env, nowMs);
+  const channelScopes = getChannelDatabaseMaintenanceScopes(env);
+  let expiredLiveSessionsEnded = 0;
+  let pendingAdminDeletionsFinalized = 0;
+  let uploadTicketsDeleted = 0;
+  let messageActorIdentitiesDeleted = 0;
+  for (const scope of channelScopes) {
+    const channelEnv = withDatabase(env, scope.database);
+    expiredLiveSessionsEnded += await expireTimedOutLiveSessions(channelEnv, nowMs, scope);
+    pendingAdminDeletionsFinalized += await finalizeExpiredAdminDeletions(
+      channelEnv,
+      nowMs,
+      50,
+      scope,
+    );
+    uploadTicketsDeleted += await drainExpiredUploadTicketRetention(channelEnv, scope);
+    messageActorIdentitiesDeleted += await drainTableRetention(
+      channelEnv,
+      "message_actor_identities",
+      "created_at",
+      cutoffIso(MESSAGE_ACTOR_IDENTITY_RETENTION_MS, nowMs),
+      scope,
+    );
+  }
   const channelCleanup = await retryPendingChannelCleanups(env, nowMs, CHANNEL_CLEANUP_RETRY_LIMIT);
-  const uploadTicketsDeleted = await drainExpiredUploadTicketRetention(env);
   const durableRateLimitsDeleted = await drainTableRetention(
     env,
     "durable_rate_limits",
@@ -222,12 +291,6 @@ export async function runScheduledMaintenance(env: Env, nowMs = Date.now()): Pro
     "support_audit_logs",
     "created_at",
     cutoffIso(SUPPORT_AUDIT_RETENTION_MS, nowMs),
-  );
-  const messageActorIdentitiesDeleted = await drainTableRetention(
-    env,
-    "message_actor_identities",
-    "created_at",
-    cutoffIso(MESSAGE_ACTOR_IDENTITY_RETENTION_MS, nowMs),
   );
   const completedCleanupJobsDeleted = await drainCompletedCleanupJobRetention(
     env,
