@@ -7,6 +7,52 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: report and notification ownership manifest is fixed
+
+- Classified `channel_reports`, `channel_petitions`, `channel_moderation`,
+  report-linked owner DMs and message/DM notification-owner rows as canonical
+  channel-shard state. They move with the parent channel and must never be
+  mutated through a retained primary rollback copy.
+- Kept the reports-channel inbox messages, account identities/locales,
+  notification preferences, Push subscriptions, notification outbox,
+  moderation audit and operational state in control D1. These rows either
+  belong to the platform account plane or are global delivery state and must
+  not be copied to every Chat shard.
+- Defined three non-authoritative control views for reports-channel hydration:
+  the existing report projection plus new channel-moderation and petition
+  projections. Each requires a monotonically versioned shard outbox event,
+  control watermark and idempotent consumer; the inbox must not search every
+  shard or read stale canonical report tables from primary.
+- Kept report/petition actions authoritative on the selected shard. The
+  control projections may lag by the bounded dispatcher interval, but action
+  requests continue carrying `channel_id` and verifying the canonical target
+  before mutation. Projection lag can affect displayed metadata only, never
+  authorization or moderation decisions.
+- Notification delivery remains post-commit and control-owned. A canonical
+  message or DM write succeeds independently of Push delivery; shard-local
+  notification-owner metadata identifies recipients, while preferences,
+  subscriptions, retries and terminal delivery state stay in control D1.
+- Added explicit activation checks: projection backfill/count agreement,
+  zero pending/dead report-family events, reports-inbox refresh parity,
+  canonical-action smoke tests and notification outbox drain. None may be
+  replaced by trusting copied primary rows.
+
+Trade-offs:
+
+- Reports-inbox cards become eventually consistent by up to the dispatcher
+  cadence. This is acceptable for a platform-admin review surface; canonical
+  moderation actions remain fresh and fail closed on the shard.
+- Three narrow control projections add trigger/event write amplification to
+  uncommon moderation mutations, but avoid an unbounded cross-shard search on
+  every reports-channel page load.
+- Push remains best-effort after canonical persistence. Making a channel write
+  and global Push outbox insert atomic would require a distributed transaction
+  that D1 does not provide; durable recovery can be added at the shard outbox
+  boundary if production evidence shows missed deliveries.
+
+Deployment note: documentation/contract only. No schema, Worker, binding,
+placement variable, remote database or production traffic changed.
+
 ## 2026-09-27: public channel summaries respect placement
 
 - Added a bounded summary reader for explicit channel IDs. It excludes routed
@@ -1460,8 +1506,10 @@ mutated, and no production routing changed.
 
 ## Next implementation step
 
-Define and implement the report and remaining notification/control manifest.
-The next review must decide which rows are channel-shard canonical, which stay
-control-only, and which require durable cross-database events. No physical
-binding, remote copy, or routing change should occur before those contracts,
-the final manifest audit, smoke tests, and rollback gates pass.
+Implement the moderation and petition control projections defined above, then
+switch reports-inbox hydration to report/moderation/petition projections only.
+The migration must backfill current monolith rows, shard triggers must emit
+strict bounded events, the consumer must reject stale resurrection, and parity
+tests must cover refreshed report and petition cards. Do not add a physical
+binding, run a remote migration or enable placement before this read-side gate
+and the later recoverable channel-deletion lifecycle both pass.

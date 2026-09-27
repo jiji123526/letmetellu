@@ -4,6 +4,27 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Report and notification ownership is fixed before shard activation — 2026-09-27
+
+- Canonical reports, petitions, channel moderation, owner moderation DMs and
+  message/DM notification-owner rows move with the channel shard.
+- Reports-channel inbox messages, account state, notification preferences,
+  Push subscriptions/outbox and audit/operational state remain in control D1.
+- Reports-inbox refresh will use versioned report, moderation and petition
+  control projections. It must not search shards or hydrate from the stale
+  primary canonical tables after placement.
+- Canonical report actions remain shard-authoritative even if the admin-only
+  display projection lags by one bounded dispatcher interval. Push delivery
+  remains post-commit and must not change canonical message success.
+
+Trade-off: uncommon moderation mutations gain durable projection-event write
+amplification in exchange for bounded control-plane reads and no cross-shard
+fan-out. The admin display may be briefly eventually consistent, while
+authorization and moderation writes remain fresh and fail closed.
+
+Deployment note: contract documentation only. No schema, runtime, remote
+database, deployment or production routing changed.
+
 ### Public profile and existence channel summaries follow placement — 2026-09-27
 
 - Explicit channel-summary requests now read each canonical row from its

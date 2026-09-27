@@ -34,12 +34,21 @@ Do not add these variables or a Chat binding to the production Worker until:
    controls plus channel-report creation and non-destructive platform
    moderation actions, channel-local scheduled retention and current-user
    owned/recent/public-profile/existence reads are complete; reports-inbox
-   refresh hydration and channel lifecycle coverage remains);
+   refresh hydration still requires versioned moderation and petition control
+   projections, and channel lifecycle coverage remains);
 2. control-only account, auth, push and global operational state remains on
    control D1;
 3. frozen final reconciliation and integrity checks pass;
 4. shadow comparisons produce no unexplained mismatch;
 5. rollback behavior is tested with the exact deployment configuration.
+
+Reports-channel activation additionally requires report, moderation and
+petition projection backfills to match their shard authorities, zero pending or
+dead report-family events, reports-inbox refresh parity and successful
+canonical action smoke tests. Notification activation requires an empty ready
+or retry backlog after a test message, DM and owner reply. Projection lag is
+allowed only for display metadata; authorization and moderation decisions must
+always read the selected channel database.
 
 Changing the placement version invalidates placement-aware channel read
 capabilities. Keep the old source database intact and read-only during the
