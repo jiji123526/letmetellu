@@ -3,6 +3,7 @@ import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-chann
 import { deleteChannel } from "../lib/channel-cleanup";
 import {
   getChannelDatabaseMaintenanceScopes,
+  resolveChannelDatabase,
   withDatabase,
 } from "../lib/database-access";
 
@@ -44,6 +45,72 @@ async function resolveUserIdentity(
     ? await env.DB.prepare("SELECT id, email FROM users WHERE lower(email) = ?")
       .bind(userEmail).first<{ id: string; email: string }>()
     : null;
+}
+
+async function readChannelSummariesByIds(
+  env: Env,
+  requestedIds: string[],
+  reportsChannelId: string | null,
+) {
+  const ids = requestedIds.filter((id) => id !== reportsChannelId);
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => "?").join(", ");
+  const scopedResults = await Promise.all(
+    getChannelDatabaseMaintenanceScopes(env).map((scope) => {
+      const channelEnv = withDatabase(env, scope.database);
+      const predicates = [`channels.id IN (${placeholders})`, "channels.id NOT LIKE '%_live'"];
+      const bindings: string[] = [...ids];
+      if (scope.includeChannelIds.length > 0) {
+        predicates.push(`channels.id IN (${scope.includeChannelIds.map(() => "?").join(", ")})`);
+        bindings.push(...scope.includeChannelIds);
+      }
+      if (scope.excludeChannelIds.length > 0) {
+        predicates.push(`channels.id NOT IN (${scope.excludeChannelIds.map(() => "?").join(", ")})`);
+        bindings.push(...scope.excludeChannelIds);
+      }
+      return channelEnv.DB.prepare(`
+        SELECT channels.id, channels.name, channels.profile_image,
+               channels.bubble_color, channels.created_at, channels.owner_uid,
+               channels.passcode IS NOT NULL AS has_passcode,
+               CASE WHEN live_config.id IS NOT NULL THEN 1 ELSE 0 END AS live_active
+        FROM channels
+        LEFT JOIN config AS live_config
+          ON live_config.id = 'live_' || channels.id
+         AND live_config.text IS NOT NULL
+         AND live_config.text != 'false'
+         AND json_extract(live_config.text, '$.active') = 1
+         AND COALESCE(
+           json_extract(live_config.text, '$.expiresAt'),
+           strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
+         ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE ${predicates.join(" AND ")}
+      `).bind(...bindings).all<{
+        id: string;
+        name: string;
+        profile_image: string | null;
+        bubble_color: string | null;
+        created_at: string | null;
+        owner_uid: string;
+        has_passcode: number;
+        live_active: number;
+      }>();
+    }),
+  );
+  const summaries = scopedResults.flatMap((result) => result.results || []);
+  const ownerIds = [...new Set(summaries.map((channel) => channel.owner_uid))];
+  const ownerNames = new Map<string, string | null>();
+  if (ownerIds.length > 0) {
+    const { results } = await env.DB.prepare(`
+      SELECT id, name FROM users
+      WHERE id IN (${ownerIds.map(() => "?").join(", ")})
+    `).bind(...ownerIds).all<{ id: string; name: string | null }>();
+    for (const owner of results || []) ownerNames.set(owner.id, owner.name);
+  }
+  const summariesById = new Map(summaries.map((channel) => [channel.id, channel]));
+  return ids.flatMap((id) => {
+    const channel = summariesById.get(id);
+    return channel ? [{ ...channel, owner_name: ownerNames.get(channel.owner_uid) || null }] : [];
+  });
 }
 
 async function readUserState(
@@ -132,28 +199,8 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
         existenceQuery.split(",").filter((id) => /^[a-z0-9-]{3,30}$/.test(id))
       )].slice(0, 20);
       if (ids.length === 0) return Response.json({ existingIds: [] });
-      const placeholders = ids.map(() => "?").join(", ");
-      const { results } = await env.DB.prepare(
-        `SELECT channels.id, channels.name, channels.profile_image,
-                channels.bubble_color, channels.created_at,
-                channels.passcode IS NOT NULL AS has_passcode,
-                users.name AS owner_name,
-                CASE WHEN live_config.id IS NOT NULL THEN 1 ELSE 0 END AS live_active
-         FROM channels
-         LEFT JOIN users ON users.id = channels.owner_uid
-         LEFT JOIN config AS live_config
-           ON live_config.id = 'live_' || channels.id
-          AND live_config.text IS NOT NULL
-          AND live_config.text != 'false'
-          AND json_extract(live_config.text, '$.active') = 1
-          AND COALESCE(
-            json_extract(live_config.text, '$.expiresAt'),
-            strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
-          ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE channels.id IN (${placeholders}) AND channels.id NOT LIKE '%_live'
-           ${reportsChannelId ? "AND channels.id != ?" : ""}`
-      ).bind(...ids, ...(reportsChannelId ? [reportsChannelId] : [])).all<{ id: string }>();
-      return Response.json({ existingIds: results.map((row) => row.id), channels: results });
+      const channels = await readChannelSummariesByIds(env, ids, reportsChannelId);
+      return Response.json({ existingIds: channels.map((row) => row.id), channels });
     }
 
     const channelId = url.searchParams.get("channel");
@@ -195,23 +242,27 @@ export async function handleUser(request: Request, env: Env): Promise<Response> 
 
     let profileOwnerUid = ownerUid || "";
     if (!profileOwnerUid) {
-      const channel = await env.DB.prepare("SELECT owner_uid FROM channels WHERE id = ?")
+      if (!channelId) return Response.json({ error: "channel not found" }, { status: 404 });
+      const resolvedDatabase = await resolveChannelDatabase(env, channelId);
+      const channel = await resolvedDatabase.database.prepare("SELECT owner_uid FROM channels WHERE id = ?")
         .bind(channelId).first() as { owner_uid: string } | null;
       if (!channel) return Response.json({ error: "channel not found" }, { status: 404 });
       profileOwnerUid = channel.owner_uid;
     }
 
-    const { results: channels } = await env.DB.prepare(
-      `SELECT id, name, profile_image, bubble_color,
-              passcode IS NOT NULL AS has_passcode
-       FROM channels
-       WHERE owner_uid = ?
-         AND id NOT LIKE '%_live'
-         ${reportsChannelId ? "AND id != ?" : ""}
-         AND show_on_profile = 1
-       ORDER BY created_at ASC, id ASC
-       LIMIT 5`
-    ).bind(profileOwnerUid, ...(reportsChannelId ? [reportsChannelId] : [])).all();
+    const { results: profileRows } = await env.DB.prepare(`
+      SELECT channel_id
+      FROM channel_control_projections
+      WHERE owner_uid = ? AND show_on_profile = 1
+        ${reportsChannelId ? "AND channel_id != ?" : ""}
+      ORDER BY created_at ASC, channel_id ASC
+      LIMIT 5
+    `).bind(profileOwnerUid, ...(reportsChannelId ? [reportsChannelId] : [])).all<{ channel_id: string }>();
+    const channels = await readChannelSummariesByIds(
+      env,
+      profileRows.map((row) => row.channel_id),
+      reportsChannelId,
+    );
     return Response.json({ channels });
   }
 

@@ -61,6 +61,8 @@ test("the full owner list loads by owner metadata and respects the five-channel 
   assert.match(apiRouteSource, /owner=\$\{encodeURIComponent\(ownerUid\)\}/);
   assert.match(popupSource, /fetchOwnerChannels\(ownerUid, currentChannelId\)/);
   assert.match(userSource, /let profileOwnerUid = ownerUid \|\| ""/);
-  assert.match(userSource, /ORDER BY created_at ASC, id ASC\s+LIMIT 5/);
+  assert.match(userSource, /FROM channel_control_projections/);
+  assert.match(userSource, /ORDER BY created_at ASC, channel_id ASC\s+LIMIT 5/);
+  assert.match(userSource, /readChannelSummariesByIds/);
   assert.doesNotMatch(userSource, /show_on_profile = 1[\s\S]*LIMIT 50/);
 });

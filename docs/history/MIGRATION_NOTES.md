@@ -4,6 +4,22 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Public profile and existence channel summaries follow placement — 2026-09-27
+
+- Explicit channel-summary requests now read each canonical row from its
+  authority and merge owner names from control D1.
+- Public profile lists use the control projection only to select up to five
+  visible channel IDs, then hydrate current display, passcode and live state
+  from primary/shards.
+- Channel-to-owner lookup resolves placement before reading. Worker TypeScript
+  and all 515 hardening tests pass.
+
+Trade-off: these capped endpoints use bounded scatter-gather across the static
+topology rather than one stale primary join.
+
+Deployment note: feature branch only; no production routing or deployment
+changed.
+
 ### Recent-channel details now come from authoritative channel databases — 2026-09-27
 
 - Control D1 keeps recent ordering, pins and personal bubble colors; canonical

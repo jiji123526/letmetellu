@@ -33,9 +33,8 @@ Do not add these variables or a Chat binding to the production Worker until:
    upload/media, realtime access-policy reads and existing-channel owner
    controls plus channel-report creation and non-destructive platform
    moderation actions, channel-local scheduled retention and current-user
-   owned/recent-channel reads are complete; public profile/existence channel
-   summaries, reports-inbox refresh hydration and channel lifecycle coverage
-   remains);
+   owned/recent/public-profile/existence reads are complete; reports-inbox
+   refresh hydration and channel lifecycle coverage remains);
 2. control-only account, auth, push and global operational state remains on
    control D1;
 3. frozen final reconciliation and integrity checks pass;

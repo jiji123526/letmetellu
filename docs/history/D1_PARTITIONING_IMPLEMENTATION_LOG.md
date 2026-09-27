@@ -7,6 +7,25 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: public channel summaries respect placement
+
+- Added a bounded summary reader for explicit channel IDs. It excludes routed
+  rollback copies from primary, hydrates canonical display/passcode/live state
+  from each channel authority and resolves owner names in control D1.
+- `/api/user?exists=...` now uses that reader instead of the primary channel
+  table. Public owner-profile lists select their bounded five candidate IDs
+  from `channel_control_projections` and hydrate the same authoritative details.
+- Resolving a profile owner from a current channel now reads that channel's
+  selected database and verifies the canonical row exists there.
+- Worker TypeScript and all 515 hardening tests pass.
+
+Trade-off: profile and existence summaries can perform bounded multi-database
+reads. Inputs remain capped at twenty existence IDs and five profile IDs, and
+the static topology remains primary plus at most two shards.
+
+Deployment note: no production configuration or deployment changed. The main
+remaining read-side blocker is reports-inbox hydration.
+
 ## 2026-09-27: recent-channel lists hydrate from channel authorities
 
 - Split recent-channel reads into control-owned ordering/pin/personal-color

@@ -475,6 +475,21 @@ test("current-user owned channels merge authority-scoped dashboard reads", () =>
   assert.doesNotMatch(stateSource, /LEFT JOIN users ON users\.id = channels\.owner_uid/);
 });
 
+test("public profile and existence summaries hydrate from channel authorities", () => {
+  const summaryStart = userSource.indexOf("async function readChannelSummariesByIds");
+  const stateStart = userSource.indexOf("async function readUserState");
+  assert.ok(summaryStart >= 0 && stateStart > summaryStart);
+  const summarySource = userSource.slice(summaryStart, stateStart);
+
+  assert.match(summarySource, /getChannelDatabaseMaintenanceScopes\(env\)\.map/);
+  assert.match(summarySource, /const channelEnv = withDatabase\(env, scope\.database\)/);
+  assert.match(summarySource, /channels\.id IN/);
+  assert.match(summarySource, /channels\.id NOT IN/);
+  assert.match(userSource, /resolveChannelDatabase\(env, channelId\)/);
+  assert.match(userSource, /FROM channel_control_projections[\s\S]*show_on_profile = 1/);
+  assert.match(userSource, /readChannelSummariesByIds\(\s*env,\s*profileRows\.map/);
+});
+
 test("recent channels keep account ordering while hydrating details from channel authorities", () => {
   assert.match(recentChannelsSource, /FROM user_recent_channels\s+WHERE user_id = \?/);
   assert.match(recentChannelsSource, /getChannelDatabaseMaintenanceScopes\(env\)\.map/);
