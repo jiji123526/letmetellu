@@ -1,6 +1,10 @@
 import { Env } from "../types";
 import { getReportsChannelId, isReportsChannelOwner } from "../lib/special-channels";
 import { deleteChannel } from "../lib/channel-cleanup";
+import {
+  getChannelDatabaseMaintenanceScopes,
+  withDatabase,
+} from "../lib/database-access";
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -47,17 +51,30 @@ async function readUserState(
   userId: string,
   reportsChannelId: string | null,
 ) {
-  const [channelsResult, preferences, isPlatformAdmin] = await Promise.all([
-    env.DB.prepare(
+  const scopes = getChannelDatabaseMaintenanceScopes(env);
+  const channelQueries = scopes.map((scope) => {
+    const channelEnv = withDatabase(env, scope.database);
+    const predicates = ["channels.owner_uid = ?", "channels.id NOT LIKE '%_live'"];
+    const bindings: string[] = [userId];
+    if (reportsChannelId) {
+      predicates.push("channels.id != ?");
+      bindings.push(reportsChannelId);
+    }
+    if (scope.includeChannelIds.length > 0) {
+      predicates.push(`channels.id IN (${scope.includeChannelIds.map(() => "?").join(", ")})`);
+      bindings.push(...scope.includeChannelIds);
+    }
+    if (scope.excludeChannelIds.length > 0) {
+      predicates.push(`channels.id NOT IN (${scope.excludeChannelIds.map(() => "?").join(", ")})`);
+      bindings.push(...scope.excludeChannelIds);
+    }
+    return channelEnv.DB.prepare(
       `WITH owner_channels AS (
          SELECT channels.id, channels.owner_uid, channels.name, channels.profile_image,
                 channels.bubble_color, channels.created_at,
-                channels.passcode IS NOT NULL AS has_passcode,
-                users.name AS owner_name
+                channels.passcode IS NOT NULL AS has_passcode
          FROM channels
-         LEFT JOIN users ON users.id = channels.owner_uid
-         WHERE channels.owner_uid = ? AND channels.id NOT LIKE '%_live'
-           ${reportsChannelId ? "AND channels.id != ?" : ""}
+         WHERE ${predicates.join(" AND ")}
        )
        SELECT owner_channels.id, owner_channels.name, owner_channels.profile_image,
               owner_channels.bubble_color, owner_channels.created_at,
@@ -70,7 +87,6 @@ async function readUserState(
                 LIMIT 1
               ), owner_channels.created_at) AS last_message_at,
               owner_channels.has_passcode,
-              owner_channels.owner_name,
               CASE
                 WHEN live_config.id IS NOT NULL THEN 1
                 ELSE 0
@@ -85,14 +101,20 @@ async function readUserState(
           json_extract(live_config.text, '$.expiresAt'),
           strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
         ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
-    ).bind(userId, ...(reportsChannelId ? [reportsChannelId] : [])).all(),
-    env.DB.prepare("SELECT font_size, locale FROM users WHERE id = ?")
-      .bind(userId).first<{ font_size: number | null; locale: string | null }>(),
+    ).bind(...bindings).all();
+  });
+  const [channelResults, preferences, isPlatformAdmin] = await Promise.all([
+    Promise.all(channelQueries),
+    env.DB.prepare("SELECT name, font_size, locale FROM users WHERE id = ?")
+      .bind(userId).first<{ name: string | null; font_size: number | null; locale: string | null }>(),
     isReportsChannelOwner(userId, env),
   ]);
+  const channels = channelResults
+    .flatMap((result) => result.results || [])
+    .map((channel) => ({ ...channel, owner_name: preferences?.name || null }));
 
   return {
-    channels: channelsResult.results,
+    channels,
     font_size: preferences?.font_size ?? null,
     locale: preferences?.locale === "en" ? "en" : preferences?.locale === "ko" ? "ko" : null,
     is_platform_admin: isPlatformAdmin,

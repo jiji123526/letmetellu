@@ -7,6 +7,28 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: current-user dashboard reads merge channel authorities
+
+- Replaced the single-primary owned-channel read in `/api/user` with bounded
+  authority-scoped reads. Primary excludes routed channels and each active
+  shard returns only its assigned owned channels.
+- Compute last-message and live-session state on the database that owns those
+  rows, then merge the results in the Worker. The account name, font size and
+  locale remain one control-D1 read and supply the owner label without trusting
+  copied shard user rows.
+- Scope queries execute in parallel. The current static rollout permits at
+  most primary plus two canary bindings, staying below the Worker D1 connection
+  ceiling.
+- Worker TypeScript and all 513 hardening tests pass.
+
+Trade-off: a logged-in dashboard can issue up to three small D1 queries instead
+of one while canary shards are active. This is bounded and returns authoritative
+live/activity data without introducing the larger precomputed channel-activity
+consistency project during the first cutover.
+
+Deployment note: feature branch only. Recent-channel and public owner-profile
+list reads still need the same bounded composition before activation.
+
 ## 2026-09-27: channel-local scheduled maintenance follows placement
 
 - Fan out expired-live-session handling, expired admin-deletion finalization,

@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### `/api/user` owned-channel state now merges authoritative databases — 2026-09-27
+
+- The current-user dashboard excludes routed rollback copies from primary and
+  reads each active shard only for its assigned channels.
+- Last-message and live-state calculations stay beside canonical messages and
+  config. Account name/preferences are read once from control D1 and merged in
+  the Worker.
+- Queries run in parallel across the bounded primary-plus-two-canary topology;
+  Worker TypeScript and all 513 hardening tests pass.
+
+Trade-off: the canary topology adds up to two small D1 reads to a logged-in
+dashboard request. It avoids stale dashboard state and postpones the much
+larger dual-write/backfill project required for precomputed channel activity.
+
+Deployment note: no production configuration or deployment changed. Recent
+channels and public profile channel lists remain activation blockers.
+
 ### Channel-local scheduled cleanup now follows placement — 2026-09-27
 
 - Live expiry, staged delete finalization, expired upload tickets and actor

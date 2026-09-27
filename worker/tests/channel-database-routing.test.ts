@@ -74,6 +74,10 @@ const pendingDeletionsSource = readFileSync(
   new URL("../src/lib/pending-admin-deletions.ts", import.meta.url),
   "utf8",
 );
+const userSource = readFileSync(
+  new URL("../src/routes/user.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -449,4 +453,20 @@ test("scheduled channel cleanup fans out through scoped databases without duplic
     assert.match(source, /channel_id IN/);
     assert.match(source, /channel_id NOT IN/);
   }
+});
+
+test("current-user owned channels merge authority-scoped dashboard reads", () => {
+  const stateStart = userSource.indexOf("async function readUserState");
+  const handlerStart = userSource.indexOf("export async function handleUser");
+  assert.ok(stateStart >= 0 && handlerStart > stateStart);
+  const stateSource = userSource.slice(stateStart, handlerStart);
+
+  assert.match(stateSource, /getChannelDatabaseMaintenanceScopes\(env\)/);
+  assert.match(stateSource, /const channelQueries = scopes\.map/);
+  assert.match(stateSource, /const channelEnv = withDatabase\(env, scope\.database\)/);
+  assert.match(stateSource, /channels\.id IN/);
+  assert.match(stateSource, /channels\.id NOT IN/);
+  assert.match(stateSource, /Promise\.all\(channelQueries\)/);
+  assert.match(stateSource, /SELECT name, font_size, locale FROM users WHERE id = \?/);
+  assert.doesNotMatch(stateSource, /LEFT JOIN users ON users\.id = channels\.owner_uid/);
 });
