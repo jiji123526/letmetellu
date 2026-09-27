@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### Recent-channel details now come from authoritative channel databases — 2026-09-27
+
+- Control D1 keeps recent ordering, pins and personal bubble colors; canonical
+  channel metadata and live state are read from placement-scoped databases and
+  merged without changing order.
+- Owner names remain a bounded control-account lookup. Merge/visit existence
+  checks use `channel_control_projections` rather than stale primary channel
+  rows.
+- Worker TypeScript and all 514 hardening tests pass.
+
+Trade-off: recent hydration adds bounded parallel detail reads and one owner
+lookup. The static topology caps this at primary plus two shards and preserves
+the existing 100-channel response limit.
+
+Deployment note: feature branch only; no production routing or deployment
+changed.
+
 ### `/api/user` owned-channel state now merges authoritative databases — 2026-09-27
 
 - The current-user dashboard excludes routed rollback copies from primary and

@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { getChannelDatabaseMaintenanceScopes, withDatabase } from "../lib/database-access";
 
 const CHANNEL_ID_PATTERN = /^[a-z0-9-]{3,30}$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -101,15 +102,40 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   if (!userId) return Response.json({ error: "unauthorized" }, { status: 401 });
 
   if (request.method === "GET") {
-    const { results } = await env.DB.prepare(`
+    const { results: recentRows } = await env.DB.prepare(`
+      SELECT channel_id, last_visited_at, pinned, bubble_color AS personal_bubble_color
+      FROM user_recent_channels
+      WHERE user_id = ?
+      ORDER BY pinned DESC, last_visited_at DESC, channel_id DESC
+      LIMIT ?
+    `).bind(userId, RECENT_CHANNEL_LIMIT).all<{
+      channel_id: string;
+      last_visited_at: number;
+      pinned: number;
+      personal_bubble_color: string | null;
+    }>();
+    if (recentRows.length === 0) return Response.json({ channels: [] });
+
+    const recentIds = recentRows.map((row) => row.channel_id);
+    const recentPlaceholders = recentIds.map(() => "?").join(", ");
+    const detailResults = await Promise.all(
+      getChannelDatabaseMaintenanceScopes(env).map((scope) => {
+        const channelEnv = withDatabase(env, scope.database);
+        const predicates = [`c.id IN (${recentPlaceholders})`, "c.id NOT LIKE '%_live'"];
+        const bindings: string[] = [...recentIds];
+        if (scope.includeChannelIds.length > 0) {
+          predicates.push(`c.id IN (${scope.includeChannelIds.map(() => "?").join(", ")})`);
+          bindings.push(...scope.includeChannelIds);
+        }
+        if (scope.excludeChannelIds.length > 0) {
+          predicates.push(`c.id NOT IN (${scope.excludeChannelIds.map(() => "?").join(", ")})`);
+          bindings.push(...scope.excludeChannelIds);
+        }
+        return channelEnv.DB.prepare(`
       SELECT c.id, c.name, c.profile_image, c.bubble_color, c.created_at, c.owner_uid,
              c.passcode IS NOT NULL AS has_passcode,
-             u.name AS owner_name,
-             r.last_visited_at, r.pinned, r.bubble_color AS personal_bubble_color,
              CASE WHEN live_config.id IS NOT NULL THEN 1 ELSE 0 END AS live_active
-      FROM user_recent_channels r
-      INNER JOIN channels c ON c.id = r.channel_id AND c.id NOT LIKE '%_live'
-      LEFT JOIN users u ON u.id = c.owner_uid
+      FROM channels c
       LEFT JOIN config AS live_config
         ON live_config.id = 'live_' || c.id
        AND live_config.text IS NOT NULL
@@ -119,11 +145,42 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
          json_extract(live_config.text, '$.expiresAt'),
          strftime('%Y-%m-%dT%H:%M:%fZ', live_config.updated_at, '+8 hours')
        ) > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      WHERE r.user_id = ?
-      ORDER BY r.pinned DESC, r.last_visited_at DESC, r.channel_id DESC
-      LIMIT ?
-    `).bind(userId, RECENT_CHANNEL_LIMIT).all();
-    return Response.json({ channels: results });
+      WHERE ${predicates.join(" AND ")}
+    `).bind(...bindings).all<{
+          id: string;
+          name: string;
+          profile_image: string | null;
+          bubble_color: string | null;
+          created_at: string | null;
+          owner_uid: string;
+          has_passcode: number;
+          live_active: number;
+        }>();
+      }),
+    );
+    const details = detailResults.flatMap((result) => result.results || []);
+    const ownerIds = [...new Set(details.map((channel) => channel.owner_uid))];
+    const ownerNames = new Map<string, string | null>();
+    if (ownerIds.length > 0) {
+      const { results } = await env.DB.prepare(`
+        SELECT id, name
+        FROM users
+        WHERE id IN (${ownerIds.map(() => "?").join(", ")})
+      `).bind(...ownerIds).all<{ id: string; name: string | null }>();
+      for (const owner of results || []) ownerNames.set(owner.id, owner.name);
+    }
+    const detailsById = new Map(details.map((channel) => [channel.id, channel]));
+    const channels = recentRows.flatMap((recent) => {
+      const channel = detailsById.get(recent.channel_id);
+      return channel ? [{
+        ...channel,
+        owner_name: ownerNames.get(channel.owner_uid) || null,
+        last_visited_at: recent.last_visited_at,
+        pinned: recent.pinned,
+        personal_bubble_color: recent.personal_bubble_color,
+      }] : [];
+    });
+    return Response.json({ channels });
   }
 
   if (request.method === "DELETE") {
@@ -154,13 +211,12 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
     const ids = [...new Set(candidates.map((channel) => channel.id!))];
     const placeholders = ids.map(() => "?").join(", ");
     const { results } = await env.DB.prepare(`
-      SELECT c.id, r.channel_id IS NOT NULL AS already_recent
-      FROM channels c
+      SELECT c.channel_id AS id, r.channel_id IS NOT NULL AS already_recent
+      FROM channel_control_projections c
       LEFT JOIN user_recent_channels r
         ON r.user_id = ?
-       AND r.channel_id = c.id
-      WHERE c.id IN (${placeholders})
-        AND c.id NOT LIKE '%_live'
+       AND r.channel_id = c.channel_id
+      WHERE c.channel_id IN (${placeholders})
     `).bind(userId, ...ids).all<{ id: string; already_recent: number }>();
     const existingIds = new Set(results.map((row) => row.id));
     const mayAddRows = results.some((row) => !row.already_recent);
@@ -191,7 +247,7 @@ export async function handleRecentChannels(request: Request, env: Env): Promise<
   const channelId = body.channel_id || "";
   if (!CHANNEL_ID_PATTERN.test(channelId)) return Response.json({ error: "invalid channel" }, { status: 400 });
   const channelExists = await env.DB.prepare(
-    "SELECT 1 FROM channels WHERE id = ? AND id NOT LIKE '%_live'"
+    "SELECT 1 FROM channel_control_projections WHERE channel_id = ?"
   ).bind(channelId).first();
   if (!channelExists) return Response.json({ error: "channel not found" }, { status: 404 });
 

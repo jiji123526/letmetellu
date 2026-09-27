@@ -78,6 +78,10 @@ const userSource = readFileSync(
   new URL("../src/routes/user.ts", import.meta.url),
   "utf8",
 );
+const recentChannelsSource = readFileSync(
+  new URL("../src/routes/recent-channels.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -469,4 +473,19 @@ test("current-user owned channels merge authority-scoped dashboard reads", () =>
   assert.match(stateSource, /Promise\.all\(channelQueries\)/);
   assert.match(stateSource, /SELECT name, font_size, locale FROM users WHERE id = \?/);
   assert.doesNotMatch(stateSource, /LEFT JOIN users ON users\.id = channels\.owner_uid/);
+});
+
+test("recent channels keep account ordering while hydrating details from channel authorities", () => {
+  assert.match(recentChannelsSource, /FROM user_recent_channels\s+WHERE user_id = \?/);
+  assert.match(recentChannelsSource, /getChannelDatabaseMaintenanceScopes\(env\)\.map/);
+  assert.match(recentChannelsSource, /const channelEnv = withDatabase\(env, scope\.database\)/);
+  assert.match(recentChannelsSource, /c\.id IN/);
+  assert.match(recentChannelsSource, /c\.id NOT IN/);
+  assert.match(recentChannelsSource, /const detailsById = new Map/);
+  assert.match(recentChannelsSource, /const channels = recentRows\.flatMap/);
+  assert.match(
+    recentChannelsSource,
+    /SELECT 1 FROM channel_control_projections WHERE channel_id = \?/,
+  );
+  assert.doesNotMatch(recentChannelsSource, /INNER JOIN channels c ON c\.id = r\.channel_id/);
 });

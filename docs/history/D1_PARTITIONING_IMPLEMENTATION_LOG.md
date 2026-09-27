@@ -7,6 +7,28 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: recent-channel lists hydrate from channel authorities
+
+- Split recent-channel reads into control-owned ordering/pin/personal-color
+  rows and authority-scoped channel details. The Worker hydrates current name,
+  image, color, passcode and live state from primary/shards and reconstructs the
+  original recent order.
+- Resolve owner display names in one bounded control query rather than trusting
+  copied shard user rows.
+- Recent-history merge and visit existence checks now use the control channel
+  projection directory, so moved channels are not rejected because their
+  canonical row no longer belongs to primary.
+- Worker TypeScript and all 514 hardening tests pass.
+
+Trade-off: a non-empty recent list uses one control list read, up to three
+parallel channel-detail reads and one bounded owner-name read. This costs more
+round trips than the monolith join but avoids stale details and remains bounded
+by the static canary topology and the 100-row recent limit.
+
+Deployment note: no production configuration or deployment changed. Public
+owner-profile and explicit existence-summary reads still need placement-aware
+hydration.
+
 ## 2026-09-27: current-user dashboard reads merge channel authorities
 
 - Replaced the single-primary owned-channel read in `/api/user` with bounded
