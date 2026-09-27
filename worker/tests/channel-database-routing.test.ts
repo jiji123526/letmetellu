@@ -54,6 +54,10 @@ const chatRoomSource = readFileSync(
   new URL("../src/realtime/chat-room.ts", import.meta.url),
   "utf8",
 );
+const channelReportsSource = readFileSync(
+  new URL("../src/routes/channel-reports.ts", import.meta.url),
+  "utf8",
+);
 
 test("channel state reads through the channel database boundary", () => {
   assert.match(
@@ -348,4 +352,24 @@ test("realtime access policy and live joins use channel placement", () => {
     /readLiveSessionState\(channelEnv, connection\.channelId\)/,
   );
   assert.doesNotMatch(chatRoomSource, /this\.env\.DB\.prepare/);
+});
+
+test("channel report creation keeps canonical report state on the channel database", () => {
+  const handlerStart = channelReportsSource.indexOf("export async function handleChannelReports");
+  assert.ok(handlerStart >= 0);
+  const handlerSource = channelReportsSource.slice(handlerStart);
+
+  assert.match(handlerSource, /resolveChannelDatabase\(env, channelId\)/);
+  assert.match(handlerSource, /const channelEnv = withDatabase\(env, resolvedDatabase\.database\)/);
+  assert.match(handlerSource, /const sourceChannel = await channelEnv\.DB\.prepare/);
+  assert.match(handlerSource, /await channelEnv\.DB\.prepare\(`\s*INSERT INTO channel_reports/);
+  assert.match(handlerSource, /fetchChannelReportById\(reportId, channelEnv\)/);
+  assert.match(
+    handlerSource,
+    /maybeSendAutomaticOwnerWarning\(\{\s*controlEnv: env,\s*channelEnv,/,
+  );
+  assert.match(
+    handlerSource,
+    /queueChannelNotification\(\{\s*env,\s*channelEnv,/,
+  );
 });

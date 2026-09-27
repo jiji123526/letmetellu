@@ -7,6 +7,27 @@ has been copied and verified in an unrouted Chat canary, and the branch now has
 a fail-closed static placement seam. Production placement configuration remains
 unset, so no application request is routed to the canary yet.
 
+## 2026-09-27: channel-report creation respects placement
+
+- Routed the canonical channel lookup, duplicate-report check, report insert,
+  report hydration and automatic owner-warning state through the selected
+  channel database.
+- Split the owner-warning helper so the moderation DM is written beside the
+  channel while the platform-admin sender identity and owner locale still come
+  from control D1.
+- Kept durable daily reporter limits, the reports-channel inbox message and
+  push outbox delivery on their existing control/service boundaries.
+- Added boundary coverage. Worker TypeScript and all 508 hardening tests pass.
+
+Trade-off: one report request now intentionally touches two databases, but the
+operations are separated by ownership rather than duplicated. The durable
+report projection/event ledger remains the recovery boundary for delivering
+channel-local report state to the control-plane inbox.
+
+Deployment note: feature branch only. Super-admin report and petition PATCH
+actions remain an activation blocker until they carry channel context and
+resolve the same shard. No production configuration or Worker changed.
+
 ## 2026-09-26: realtime access-policy reads respect placement
 
 - Routed the ChatRoom Durable Object's first passcode load through the same

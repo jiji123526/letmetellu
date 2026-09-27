@@ -203,14 +203,16 @@ export async function sendOwnerModerationNotice(input: {
   ownerUid: string;
   text: string;
   env: Env;
+  controlEnv?: Env;
   nick?: string;
 }): Promise<{ id: string; created_at: string }> {
   const channelId = getParentChannelId(input.channelId);
   const createdAt = new Date().toISOString();
   const id = crypto.randomUUID();
-  const reportsChannelId = getReportsChannelId(input.env);
+  const controlEnv = input.controlEnv || input.env;
+  const reportsChannelId = getReportsChannelId(controlEnv);
   const platformAdmin = reportsChannelId
-    ? await input.env.DB.prepare(`
+    ? await controlEnv.DB.prepare(`
       SELECT channels.owner_uid AS uid, users.name AS name
       FROM channels
       LEFT JOIN users ON users.id = channels.owner_uid

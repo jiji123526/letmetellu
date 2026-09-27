@@ -22,6 +22,7 @@ import type { Env } from "../types.ts";
 import { deleteChannel } from "../lib/channel-cleanup.ts";
 import { authorizeRoomToken } from "./passcode.ts";
 import { queueChannelNotification } from "../lib/notification-events.ts";
+import { resolveChannelDatabase, withDatabase } from "../lib/database-access.ts";
 
 const REPORT_REASONS = new Set([
   "spam",
@@ -536,21 +537,23 @@ async function syncChannelReportInboxMessages(
 }
 
 async function maybeSendAutomaticOwnerWarning(input: {
-  env: Env;
+  controlEnv: Env;
+  channelEnv: Env;
   channelId: string;
   channelName: string;
   ownerUid: string;
 }): Promise<void> {
-  const reportCount = await countOpenChannelReports(input.channelId, input.env);
+  const reportCount = await countOpenChannelReports(input.channelId, input.channelEnv);
   if (reportCount <= 5) return;
 
-  const moderation = await getChannelModeration(input.channelId, input.env);
+  const moderation = await getChannelModeration(input.channelId, input.channelEnv);
   if (moderation.warned_report_count > 5) return;
 
   const now = new Date().toISOString();
-  const ownerLocale = await getUserLocale(input.ownerUid, input.env);
+  const ownerLocale = await getUserLocale(input.ownerUid, input.controlEnv);
   await sendOwnerModerationNotice({
-    env: input.env,
+    env: input.channelEnv,
+    controlEnv: input.controlEnv,
     channelId: input.channelId,
     ownerUid: input.ownerUid,
     text: ownerLocale === "en"
@@ -569,7 +572,7 @@ async function maybeSendAutomaticOwnerWarning(input: {
     status: moderation.status === "active" ? "warned" : moderation.status,
     warning_sent_at: now,
     warned_report_count: reportCount,
-  }, input.env);
+  }, input.channelEnv);
 }
 
 async function handleReportResolutionAction(input: {
@@ -1320,7 +1323,9 @@ export async function handleChannelReports(request: Request, env: Env, ctx?: Exe
     return Response.json({ error: "cannot_report_reports_channel" }, { status: 403 });
   }
 
-  const sourceChannel = await env.DB.prepare(
+  const resolvedDatabase = await resolveChannelDatabase(env, channelId);
+  const channelEnv = withDatabase(env, resolvedDatabase.database);
+  const sourceChannel = await channelEnv.DB.prepare(
     "SELECT id, name, owner_uid, passcode FROM channels WHERE id = ?"
   ).bind(channelId).first<{ id: string; name: string; owner_uid: string; passcode: string | null }>();
   if (!sourceChannel) {
@@ -1354,14 +1359,14 @@ export async function handleChannelReports(request: Request, env: Env, ctx?: Exe
 
   const cooldownCutoff = new Date(Date.now() - REPORT_COOLDOWN_MS).toISOString();
   const duplicate = isVerifiedUser
-    ? await env.DB.prepare(
+    ? await channelEnv.DB.prepare(
         `SELECT id FROM channel_reports
          WHERE channel_id = ?
            AND reporter_auth_uid = ?
            AND created_at >= ?
          LIMIT 1`
       ).bind(channelId, verifiedUserId, cooldownCutoff).first<{ id: string }>()
-    : await env.DB.prepare(
+    : await channelEnv.DB.prepare(
         `SELECT id FROM channel_reports
          WHERE channel_id = ?
            AND reporter_uid = ?
@@ -1393,7 +1398,7 @@ export async function handleChannelReports(request: Request, env: Env, ctx?: Exe
   const reportMessageId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  await env.DB.prepare(`
+  await channelEnv.DB.prepare(`
     INSERT INTO channel_reports (
       id, channel_id, reporter_uid, reporter_auth_uid, reporter_device_id, reason, details, created_at, status, inbox_message_id
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
@@ -1410,13 +1415,14 @@ export async function handleChannelReports(request: Request, env: Env, ctx?: Exe
   ).run();
 
   await maybeSendAutomaticOwnerWarning({
-    env,
+    controlEnv: env,
+    channelEnv,
     channelId,
     channelName: sourceChannel.name,
     ownerUid: sourceChannel.owner_uid,
   });
 
-  const reportRow = await fetchChannelReportById(reportId, env);
+  const reportRow = await fetchChannelReportById(reportId, channelEnv);
   if (!reportRow) {
     return Response.json({ error: "report_not_found" }, { status: 404 });
   }
@@ -1455,6 +1461,7 @@ export async function handleChannelReports(request: Request, env: Env, ctx?: Exe
   if (ctx) {
     ctx.waitUntil(queueChannelNotification({
       env,
+      channelEnv,
       ctx,
       channelId,
       event: "channel_report",

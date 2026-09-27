@@ -4,6 +4,23 @@ This file records both the original CSS-to-TSX porting constraints and the datab
 
 ## Recent implementation updates
 
+### New channel reports now follow channel placement — 2026-09-27
+
+- Canonical report creation, duplicate detection, report hydration and
+  automatic warning/moderation state now use the resolved channel database.
+- Owner moderation DMs are stored with the channel; the platform-admin sender
+  identity, locale, reports inbox, durable quota and push outbox remain in
+  control infrastructure.
+- Worker TypeScript and all 508 hardening tests pass.
+
+Trade-off: report submission is a deliberate cross-database workflow rather
+than one transaction. Existing versioned report projection events provide the
+retryable control projection; super-admin PATCH actions still need explicit
+channel context before placement can be activated.
+
+Deployment note: no production binding, placement variable or deployment
+changed.
+
 ### Realtime passcode and live-join reads follow channel placement — 2026-09-26
 
 - The channel Durable Object now resolves the authoritative database before
